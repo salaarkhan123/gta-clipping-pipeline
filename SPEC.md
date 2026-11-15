@@ -160,6 +160,15 @@ Job webhooks: POST to a public https URL only (private and local addresses are r
 - [ ] Stripe Checkout session creation is untested against Stripe (webhook handling is tested with signed payloads)
 - [ ] Real SMTP delivery
 - [ ] Speed and cost on a multi-hour 1080p VOD, especially with `chat_region` set
+  - **Local development benchmark, not production.** Measured 2026-11-15 on the owner's Apple Silicon MacBook Air with `scripts/bench_pipeline.py` (card #7), `GTA_Benchmark_2Hours.mkv`, 120.29 min, 1920x1080:
+
+    | Run | wall_seconds | realtime_factor | peak_rss_mb | clips | credits | chat_region |
+    |---|---|---|---|---|---|---|
+    | No chat region | 42.68 | 169.09 | 1084.6 | 3 | 121 | none |
+    | Chat region | 279.22 | 25.85 | 1072.4 | 3 | 121 | top-right |
+
+  - Runtime: `chat_region` makes the job 6.5× slower (+236.5 s, 42.68 s → 279.22 s; realtime factor 169 → 26). Onscreen chat motion decodes the whole 1080p video; without it, only cheap audio signals scan the full source and Whisper runs on candidate windows only. Memory is flat (~1.1 GB peak) either way. Credits are `ceil(source minutes)`, so both runs charge 121.
+  - Still open: the same two runs on the production server (card #7 acceptance criterion). Apple Silicon numbers do not transfer to the server's x86 vCPUs; do not size pricing or the server from this table.
 
 ### C. Website — BUILT 2026-11-14 as a static site in `clip-api/web/` (plain HTML/CSS/JS, no build step, served by Caddy; not Next.js). Covers: homepage upload flow, signup/login/reset, pricing with subscriptions, dashboard (all four tools, jobs, clips, credits, API keys). Legal pages are still missing.
 ### C (original checklist)
