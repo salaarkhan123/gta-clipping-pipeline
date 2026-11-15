@@ -159,7 +159,19 @@ Job webhooks: POST to a public https URL only (private and local addresses are r
 - [ ] S3/R2 storage path is untested against a real bucket
 - [ ] Stripe Checkout session creation is untested against Stripe (webhook handling is tested with signed payloads)
 - [ ] Real SMTP delivery
-- [ ] Speed and cost on a multi-hour 1080p VOD, especially with `chat_region` set
+- [x] Speed and cost on a multi-hour 1080p VOD, especially with `chat_region` set
+  - **Server run (production), 2026-11-15**, through the live API (not `bench_pipeline.py`). DigitalOcean `s-4vcpu-8gb` (4 shared vCPU, 8 GB), Toronto, same Docker image as production; Whisper `small.en` (captions), `base.en` (index). Input `GTA_Benchmark_2Hours.mkv`, 2:00:18, 2,848 MB, 1080p; split layout, facecam auto, pop captions, 9:16, no chat region.
+
+    | Run | Job | Clips | Total | Real time | Transcribing | Rendering | Credits |
+    |---|---|---|---|---|---|---|---|
+    | A | `job_f176e3fb591249be9d356114` | 3 | 675.4 s | 10.7× | 200.4 s | 397.6 s | 121 |
+    | B | `job_c6d8edabf3fe44d18a33ebba` | 10 | 932.7 s | 7.7× | 257.0 s | 578.4 s | 121 |
+
+  - Run A stages: downloading 11.7 s, probing 17.6 s, audio 47.9 s, transcribing 200.4 s, rendering 397.6 s, uploading 0.1 s.
+  - Rendering is ~59% of processing (A: 58.9%, B: 62.0%); transcribing ~30% (A). 3 → 10 clips adds 257.3 s (+38%).
+  - Upload is separate from processing: ~20 min at ~19 Mbps on a home connection for 2,848 MB.
+  - Findings: clip picking was 95–100% audio-driven; AI titles missing on 8 of 10 clips in run B (reply parse failure); a re-upload of the same file is charged again (charge-once is per upload, not per file).
+  - `chat_region` was not part of the server run; its cost on the server is still unmeasured.
   - **Local development benchmark, not production.** Measured 2026-11-15 on the owner's Apple Silicon MacBook Air with `scripts/bench_pipeline.py` (card #7), `GTA_Benchmark_2Hours.mkv`, 120.29 min, 1920x1080:
 
     | Run | wall_seconds | realtime_factor | peak_rss_mb | clips | credits | chat_region |
@@ -168,7 +180,7 @@ Job webhooks: POST to a public https URL only (private and local addresses are r
     | Chat region | 279.22 | 25.85 | 1072.4 | 3 | 121 | top-right |
 
   - Runtime: `chat_region` makes the job 6.5× slower (+236.5 s, 42.68 s → 279.22 s; realtime factor 169 → 26). Onscreen chat motion decodes the whole 1080p video; without it, only cheap audio signals scan the full source and Whisper runs on candidate windows only. Memory is flat (~1.1 GB peak) either way. Credits are `ceil(source minutes)`, so both runs charge 121.
-  - Still open: the same two runs on the production server (card #7 acceptance criterion). Apple Silicon numbers do not transfer to the server's x86 vCPUs; do not size pricing or the server from this table.
+  - Apple Silicon numbers do not transfer to the server's x86 vCPUs, and this run used `bench_pipeline.py` defaults rather than the server run's layout and caption options; size pricing and the server from the server run above.
 
 ### C. Website — BUILT 2026-11-14 as a static site in `clip-api/web/` (plain HTML/CSS/JS, no build step, served by Caddy; not Next.js). Covers: homepage upload flow, signup/login/reset, pricing with subscriptions, dashboard (all four tools, jobs, clips, credits, API keys). Legal pages are still missing.
 ### C (original checklist)
