@@ -131,3 +131,6 @@ clip-api 2/
 .claude/super-board/upgrade.json
 CLAUDE.local.md
 .claude/settings.json.bak-*
+
+# Plan prices (no secrets), loaded by docker compose on the server.
+!/clip-api/plans.env

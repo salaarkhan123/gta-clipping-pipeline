@@ -7,6 +7,7 @@ import base64
 import json
 import logging
 import re
+import time
 from functools import lru_cache
 from pathlib import Path
 
@@ -28,8 +29,27 @@ SYSTEM = (
     "hook = how strongly the first 3 seconds grab attention; flow = pacing and whether it stands alone without "
     "context; value = how funny, impressive or surprising the moment is; trend = fit with what gaming audiences "
     "share. Be strict: an average clip scores around 50. Base everything only on the transcript, the frame and "
-    "the signals given. Do not invent events, names or games that are not evident."
+    "the signals given. Do not invent events, names or games that are not evident. If the frame or transcript shows "
+    "a menu, loading screen, channel branding or intro card, ad, AFK or dead air rather than a real moment, score "
+    "every part below 15."
 )
+
+TOOL = {
+    "name": "clip_meta",
+    "description": "Record the social copy and the virality rating for this clip.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "description": "Max 60 chars, no hashtags, no quotes."},
+            "description": {"type": "string", "description": "Max 150 chars."},
+            "hashtags": {"type": "array", "items": {"type": "string"}, "description": "3 to 5 tags without #."},
+            "virality": {"type": "object", "properties": {k: {"type": "integer", "minimum": 0, "maximum": 100}
+                                                          for k in PARTS}, "required": list(PARTS)},
+            "reason": {"type": "string", "description": "One sentence on why it would or would not perform."},
+        },
+        "required": ["title", "hashtags", "virality", "reason"],
+    },
+}
 
 
 def _clamp(v, lo=0, hi=100) -> int:
@@ -39,22 +59,28 @@ def _clamp(v, lo=0, hi=100) -> int:
         return 50
 
 
-def parse_meta(text: str) -> dict | None:
-    """Extract and sanitise the JSON object from a model reply."""
-    m = re.search(r"\{.*\}", text or "", re.S)
-    if not m:
-        return None
-    try:
-        raw = json.loads(m.group(0))
-    except ValueError:
-        return None
+def parse_meta(text) -> dict | None:
+    """Sanitise a model reply: a tool-call input dict, or text containing one JSON object."""
+    if isinstance(text, dict):
+        raw = text
+    else:
+        m = re.search(r"\{.*\}", text or "", re.S)
+        if not m:
+            return None
+        try:
+            raw = json.loads(m.group(0))
+        except ValueError:
+            return None
     if not isinstance(raw, dict):
         return None
     v = raw.get("virality") if isinstance(raw.get("virality"), dict) else {}
     parts = {k: _clamp(v.get(k)) for k in PARTS}
     tags = raw.get("hashtags") if isinstance(raw.get("hashtags"), list) else []
     tags = [re.sub(r"[^A-Za-z0-9_]", "", str(t))[:30] for t in tags]
-    title = str(raw.get("title") or "").strip().strip('"')[:80]
+    title = str(raw.get("title") or "").strip()
+    if len(title) >= 2 and title[0] == title[-1] and title[0] in "\"'":   # wrapped in quotes: unwrap
+        title = title[1:-1].strip()
+    title = title[:80]
     if not title:
         return None
     return {"title": title, "description": str(raw.get("description") or "").strip()[:200],
@@ -74,25 +100,38 @@ class ClaudeAI:
         self.client = client or httpx.Client(timeout=45)
 
     def clip_meta(self, transcript: str, context: dict, thumb: Path | None = None) -> dict | None:
+        context = context if isinstance(context, dict) else {}
         content = []
-        if thumb and Path(thumb).is_file():
+        if isinstance(thumb, (str, Path)) and Path(thumb).is_file():
             content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                                         "data": base64.b64encode(Path(thumb).read_bytes()).decode()}})
         content.append({"type": "text", "text": (
             f"Clip length: {context.get('length', 0):.0f} s\n"
             f"Why it was picked (signal shares): {json.dumps(context.get('signals', {}))}\n"
             f"Transcript of the clip:\n{(transcript or '(no speech detected)')[:1500]}")})
-        try:
-            r = self.client.post(API_URL, headers={"x-api-key": self.api_key, "anthropic-version": "2023-06-01",
-                                                   "content-type": "application/json"},
-                                 json={"model": self.model, "max_tokens": 500, "system": SYSTEM,
-                                       "messages": [{"role": "user", "content": content}]})
-            r.raise_for_status()
-            text = "".join(b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text")
-            return parse_meta(text)
-        except Exception as e:   # never fail a job over optional copy
-            log.warning("AI metadata failed: %s", str(e)[:200])
-            return None
+        body = {"model": self.model, "max_tokens": 600, "system": SYSTEM, "tools": [TOOL],
+                "tool_choice": {"type": "tool", "name": TOOL["name"]},
+                "messages": [{"role": "user", "content": content}]}
+        headers = {"x-api-key": self.api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
+        for attempt in (1, 2):
+            try:
+                r = self.client.post(API_URL, headers=headers, json=body)
+                if r.status_code in (429, 500, 502, 503, 529) and attempt == 1:
+                    time.sleep(float(r.headers.get("retry-after") or 3))
+                    continue
+                r.raise_for_status()
+                blocks = r.json().get("content", [])
+                reply = next((b.get("input") for b in blocks if b.get("type") == "tool_use"), None)
+                if reply is None:   # no tool call: fall back to any JSON in the text
+                    reply = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+                meta = parse_meta(reply)
+                if meta is None:
+                    log.warning("AI metadata unreadable: %s", str(reply)[:300])
+                return meta
+            except Exception as e:   # never fail a job over optional copy
+                if attempt == 2:
+                    log.warning("AI metadata failed: %s", str(e)[:200])
+        return None
 
 
 @lru_cache

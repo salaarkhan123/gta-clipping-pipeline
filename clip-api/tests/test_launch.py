@@ -5,6 +5,7 @@ import json
 import time
 
 import httpx
+from pathlib import Path
 import pytest
 
 from app import worker
@@ -153,12 +154,13 @@ def test_claude_client_request_shape_and_failure_is_swallowed(tmp_path):
 
 class FakeAI:
     def __init__(self):
-        self.calls = []
+        self.calls, self.down = [], False
 
     def clip_meta(self, transcript, context, thumb=None):
+        assert isinstance(context, dict) and (thumb is None or isinstance(thumb, Path)), "arguments in the wrong order"
         self.calls.append((transcript, context, thumb))
-        if len(self.calls) == 2:
-            return None                                # the API failed for this clip
+        if self.down:
+            return None                                # the API failed
         return {"title": "Big moment", "description": "d", "hashtags": ["gta6"],
                 "virality": {"score": 81, "hook": 90, "flow": 70, "value": 85, "trend": 79}, "reason": "r", "source": "ai"}
 
@@ -180,6 +182,7 @@ def test_clips_get_ai_titles_scores_and_subtitles(client, user, video, transcrib
     assert client.get(f"/v1/clips/{clip['id']}/subtitles?format=txt", headers=headers).text.strip()
     assert client.get(f"/v1/clips/{clip['id']}/subtitles?format=doc", headers=headers).status_code == 422
     # Second job: the AI call fails -> the clip still succeeds, with no title or score. No AI at all -> same.
+    ai.down = True
     for kw in ({"ai": ai}, {}):
         r = client.post("/v1/clips", json={"upload_id": up["upload_id"], "options": {"max_clips": 1, "clip_length": 10,
                                                                                     "captions": False}}, headers=headers)
@@ -194,3 +197,73 @@ def test_subtitle_cues_split_on_gaps_and_length():
     words.append({"start": 10.0, "end": 10.3, "text": "late"})
     cues = subtitle_cues(words)
     assert [c[2].split()[0] for c in cues] == ["w0", "w7", "late"] and cues[0][1] > cues[0][0]
+
+
+def test_claude_client_reads_forced_tool_call_and_retries_once(tmp_path):
+    calls = []
+
+    def handler(request: httpx.Request):
+        calls.append(json.loads(request.content))
+        if len(calls) == 1:
+            return httpx.Response(529, headers={"retry-after": "0"})          # overloaded: retried once
+        return httpx.Response(200, json={"content": [{"type": "tool_use", "name": "clip_meta", "input": {
+            "title": 'He said "no way"', "hashtags": ["gta6"], "reason": "r",
+            "virality": {"hook": 90, "flow": 80, "value": 70, "trend": 60}}}]})
+    ai = ClaudeAI("k", "m", httpx.Client(transport=httpx.MockTransport(handler)))
+    meta = ai.clip_meta("x", {"length": 30})
+    assert meta["title"] == 'He said "no way"' and meta["virality"]["score"] == 75 and len(calls) == 2
+    assert calls[1]["tool_choice"] == {"type": "tool", "name": "clip_meta"} and calls[1]["tools"][0]["name"] == "clip_meta"
+
+
+@pytest.fixture(scope="module")
+def three_bursts(tmp_path_factory) -> Path:
+    """60 s with three loud moments: loudest at 10 s, quieter at 30 s and 48 s."""
+    out = tmp_path_factory.mktemp("v") / "bursts.mp4"
+    import subprocess
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=60",
+                    "-f", "lavfi", "-i", "sine=frequency=440:duration=60",
+                    "-af", "volume='if(between(t,10,13),1.0,if(between(t,30,33),0.6,if(between(t,48,51),0.5,0.02)))':eval=frame",
+                    "-t", "60", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", str(out)], check=True)
+    return out
+
+
+def test_judge_picks_the_best_moment_not_the_loudest(three_bursts, tmp_path, transcriber):
+    seen = []
+
+    def judge(text, frame, ctx):
+        seen.append(frame)
+        return {"title": "t", "virality": {"score": 90 if judge.pos(frame) > 40 else 10}}
+    # Map each frame back to its candidate time via the order the pipeline wrote them.
+    starts = {}
+
+    def pos(frame):
+        return starts[frame.name]
+    judge.pos = pos
+    import app.pipeline as P
+    real_judge = P._judge
+
+    def spy(candidates, j, *a, **k):
+        for i, c in enumerate(candidates):
+            starts[f"cand{i}.jpg"] = (c.start + c.end) / 2
+        return real_judge(candidates, j, *a, **k)
+    P._judge = spy
+    try:
+        res = run_pipeline(three_bursts, PipelineOptions(max_clips=1, clip_length=8, captions=False), tmp_path / "o",
+                           transcriber=transcriber, judge=judge)
+    finally:
+        P._judge = real_judge
+    assert len(seen) >= 2 and all(f is not None for f in seen)          # every candidate was looked at, with a frame
+    assert len(res) == 1 and res[0].start > 40 and res[0].meta["virality"]["score"] == 90
+    import subprocess
+    rate = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=r_frame_rate",
+                           "-of", "csv=p=0", str(res[0].video_path)], capture_output=True, text=True).stdout.strip()
+    assert rate == "30/1"                                              # 60 fps source rendered at 30
+
+
+def test_judge_drops_junk_but_never_returns_nothing(three_bursts, tmp_path, transcriber):
+    res = run_pipeline(three_bursts, PipelineOptions(max_clips=3, clip_length=8, captions=False), tmp_path / "o",
+                       transcriber=transcriber, judge=lambda t, f, c: {"title": "menu", "virality": {"score": 5}})
+    assert len(res) == 1                                               # all junk: only the best one comes back
+    res = run_pipeline(three_bursts, PipelineOptions(max_clips=3, clip_length=8, captions=False), tmp_path / "p",
+                       transcriber=transcriber, judge=lambda t, f, c: None)
+    assert len(res) == 3 and all(r.meta is None for r in res)          # judge down: fall back to the signals
