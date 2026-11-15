@@ -70,3 +70,21 @@ def test_failed_step_exits_1_and_still_deletes(s3, capsys, monkeypatch):
     lines = capsys.readouterr().out.splitlines()
     assert lines == ["ok put", "FAIL get: download broke", "ok delete"]
     assert keys(s3) == []
+
+
+def test_signed_url_failure_exits_1_and_still_deletes(s3, capsys, monkeypatch):
+    monkeypatch.setattr(storage.S3Storage, "url", lambda self, key, *a, **k: f"{s3}/{BUCKET}/missing-{key}")
+    assert load_script().main() == 1
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[:2] == ["ok put", "ok get"]
+    assert lines[2].startswith("FAIL signed-url: signed URL returned HTTP 404")
+    assert lines[3] == "ok delete"
+    assert keys(s3) == []
+
+
+def test_put_failure_exits_1_and_skips_get(s3, capsys, monkeypatch):
+    def boom(self, key, src):
+        raise RuntimeError("upload broke")
+    monkeypatch.setattr(storage.S3Storage, "put", boom)
+    assert load_script().main() == 1
+    assert capsys.readouterr().out.splitlines() == ["FAIL put: upload broke", "ok delete"]

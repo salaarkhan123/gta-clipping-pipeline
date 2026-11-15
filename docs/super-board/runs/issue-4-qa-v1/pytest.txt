@@ -1,0 +1,6 @@
+cd clip-api && export PATH=/opt/homebrew/opt/ffmpeg-full/bin:$PATH && .venv/bin/python -m pytest -q
+58 passed, 4 skipped
+.venv/bin/python -m pytest -q tests/test_check_storage.py
+5 passed
+git diff origin/staging -- clip-api/requirements.txt
+0 lines (unchanged)
