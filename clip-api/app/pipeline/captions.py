@@ -1,14 +1,51 @@
 """Burned-in word-highlight captions (ASS). Ported from test-tools/auto_clip.py, with selectable styles."""
 from pathlib import Path
 
-# hl = highlight colour of the word being spoken (ASS &HBBGGRR&), scale = size of that word in percent.
+# hl = highlight colour of the word being spoken (ASS &HBBGGRR&), scale = size of that word in percent,
+# words / chars = the most words and characters on one caption line.
 CAPTION_STYLES = {
-    "pop":   {"hl": "&H00FFFF&", "scale": 114, "upper": True,  "box": False, "size": 1.0,  "words": 3},
-    "bold":  {"hl": "&H00FFFF&", "scale": 100, "upper": True,  "box": False, "size": 1.0,  "words": 3},
-    "neon":  {"hl": "&H66FF7A&", "scale": 110, "upper": True,  "box": False, "size": 1.0,  "words": 3},
-    "boxed": {"hl": "&H00FFFF&", "scale": 100, "upper": True,  "box": True,  "size": 0.9,  "words": 3},
-    "clean": {"hl": None,        "scale": 100, "upper": False, "box": False, "size": 0.75, "words": 5},
+    "pop":   {"hl": "&H00FFFF&", "scale": 114, "upper": True,  "box": False, "size": 1.0,  "words": 3, "chars": 18},
+    "bold":  {"hl": "&H00FFFF&", "scale": 100, "upper": True,  "box": False, "size": 1.0,  "words": 3, "chars": 18},
+    "neon":  {"hl": "&H66FF7A&", "scale": 110, "upper": True,  "box": False, "size": 1.0,  "words": 3, "chars": 18},
+    "boxed": {"hl": "&H00FFFF&", "scale": 100, "upper": True,  "box": True,  "size": 0.9,  "words": 3, "chars": 18},
+    "clean": {"hl": None,        "scale": 100, "upper": False, "box": False, "size": 0.75, "words": 5, "chars": 30},
 }
+
+PAUSE = 0.35          # a gap this long between two words always starts a new line
+GLUE = 0.2            # a short word followed this quickly belongs with the next word
+SHORT = 3             # "short word": this many letters or fewer (had, get, the, to, a)
+PUNCT = ".,!?;:…"
+
+
+def _bare(text: str) -> str:
+    return text.strip().strip(PUNCT + "\"'")
+
+
+def group_words(words, max_words: int = 3, max_chars: int = 18) -> list[list]:
+    """Split (start, end, text) words into caption lines.
+
+    A line ends at a pause (>= PAUSE s), after punctuation, or when it reaches max_words / max_chars. When a
+    full line would end on a short word that runs straight into the next one (< GLUE s), that word moves down
+    to start the next line instead, as long as the line keeps at least two words.
+    """
+    chunks, cur = [], []
+    for w in words:
+        if cur:
+            prev = cur[-1]
+            hard = w[0] - prev[1] >= PAUSE or prev[2].strip()[-1:] in PUNCT
+            length = len(" ".join(t.strip() for _, _, t in cur)) + 1 + len(w[2].strip())
+            full = len(cur) >= max_words or length > max_chars
+            if hard or full:
+                carry = []
+                if (not hard and len(cur) >= 3 and len(_bare(prev[2])) <= SHORT and w[0] - prev[1] < GLUE
+                        and cur[-2][2].strip()[-1:] not in PUNCT):
+                    carry = [cur.pop()]
+                chunks.append(cur)
+                cur = carry
+        cur.append(w)
+    if cur:
+        chunks.append(cur)
+    return chunks
 
 
 def ass_time(t: float) -> str:
@@ -42,14 +79,7 @@ def build_ass(words, path: Path, vertical: bool, caption_top: int, font: str, st
         f"Style: Cap,{font},{size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,"
         f"100,100,1,0,{border},2,60,60,{margin_v},1\n\n"
         "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
-    chunks, cur = [], []
-    for w in words:
-        if cur and (len(cur) == st["words"] or w[0] - cur[-1][1] > 0.6):
-            chunks.append(cur)
-            cur = []
-        cur.append(w)
-    if cur:
-        chunks.append(cur)
+    chunks = group_words(words, st["words"], st["chars"])
     on = ""
     if st["hl"]:
         on = "{\\c" + st["hl"] + (f"\\fscx{st['scale']}\\fscy{st['scale']}" if st["scale"] != 100 else "") + "}"
