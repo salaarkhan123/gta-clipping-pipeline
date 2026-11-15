@@ -1,0 +1,130 @@
+# ── Secrets & credentials ──────────────────────────────────────────────
+# Never commit real env files. Only the checked-in examples are allowed.
+.env
+.env.*
+*.env
+!.env.example
+!**/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa*
+id_ed25519*
+credentials*.json
+service-account*.json
+*.secret
+secrets/
+.netrc
+.npmrc
+.pypirc
+
+# ── OS / editor junk ───────────────────────────────────────────────────
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Python ─────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+*.sqlite
+*.sqlite3
+*.db
+
+# ── Node / Next.js (web-src) ───────────────────────────────────────────
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.turbo/
+.vercel/
+# NOTE: clip-api/web/ (the static export Caddy serves) is intentionally tracked.
+
+# ── Runtime data, uploads & generated media ────────────────────────────
+data/
+uploads/
+renders/
+tmp/
+_tmp/
+.visual/
+*.log
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.avi
+*.m4a
+*.mp3
+*.wav
+*.aac
+*.flac
+*.srt
+*.vtt
+*.ass
+
+# ── ML models / large binaries ─────────────────────────────────────────
+test-tools/models/
+*.bin
+*.gguf
+*.ggml
+*.onnx
+*.pt
+*.safetensors
+
+# ── Local test material & archives ─────────────────────────────────────
+test-clips/
+*.tgz
+*.tar
+*.tar.gz
+*.zip
+
+# Byte-identical partial copy of clip-api/ (kept on disk, not tracked).
+clip-api 2/
+
+# ── Kept on disk, not part of the product repo ─────────────────────────
+# Earlier multi-agent design (see CLAUDE.md "Where things are").
+/code/
+/design-docs/
+/docs/
+/gta-clipping-pipeline.pdf
+/screenshots/
+# Personal YouTube-link CLI; the service is uploads-only.
+/test-tools/
+
+# ── Claude Code / Super Board per-machine state ────────────────────────
+.claude/settings.local.json
+.claude/worktrees/
+.claude/super-board/active
+.claude/super-board/onboard-answers.json
+.claude/super-board/onboard-staged/
+.claude/super-board/backup/
+.claude/super-board/inflight/
+.claude/super-board/migrations/
+.claude/super-board/upgrade.json
+CLAUDE.local.md
