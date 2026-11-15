@@ -10,14 +10,17 @@ Project: a public clip-generation API + website for GTA 6 clippers, with credit-
 - `code/`, `design-docs/`, `docs/` belong to a different, earlier design (multi-agent business automation). Leave them alone.
 
 ## Current phase
-Backend core is done (SPEC.md section 10 A). Next: section 10 B (verify on a real server), C (website), D (deploy and go live). Tick items off in SPEC.md as they are finished.
+Re-engineering plan (SPEC.md section 13), phase by phase: a phase starts only after the owner has merged the one before. Tickets live on the ClutchClips build board (phase:N labels). Build PRs directly into `staging`; the board is for tracking only.
 
 ## Rules
-- Ingestion is uploads only. Do not add server-side link downloading, proxy rotation, client spoofing or any block-evasion.
+- Ingestion: uploads, Google Drive / Dropbox imports, and public-link import (Twitch and Kick first; YouTube best effort, "may fail, upload instead").
+  - Public, non-DRM content only. Never use logins, cookies, accounts, proxies, IP rotation, client spoofing or impersonation, or any other way around a block, paywall, age gate or rate limit. If a site refuses, fail cleanly and tell the user to upload the file.
+  - Every link import requires the user to confirm they own the content or have permission to clip it, and is logged (source URL, account, time).
+  - Every imported source can be removed through the takedown flow (all clips and files for a source URL or account).
 - The pipeline stays one importable function, `run_pipeline`, with no web, database or hardcoded-path code.
 - Credits are an append-only ledger. Never update or delete ledger rows. Every job is reserved once and settled once (`settle:<job_id>`). Any new failure path must end in a refund, with a test.
 - Credit amounts for purchases come from server-side pack config, never from client or webhook-supplied numbers.
-- Do not build deferred items (SPEC.md section 11).
+- Do not build deferred items (SPEC.md section 11). Every feature that costs money per use (AI, TTS, video generation, render or live minutes) has a credit price shown before the user confirms; credits, billing and pricing changes need the owner's explicit OK in the PR.
 - Secrets only from environment variables. Never commit `.env`. API keys are stored hashed.
 - All file access goes through `app/storage.py`. All ffmpeg inputs use `-protocol_whitelist file,pipe` and a timeout.
 - The website calls the same public API as customers; no private endpoints.
