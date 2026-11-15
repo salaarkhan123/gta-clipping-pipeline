@@ -20,7 +20,7 @@ API + website that turns long gameplay/stream recordings into short, captioned, 
 
 | Topic | Decision |
 |---|---|
-| Ingestion | **Uploads only.** No server-side link downloads; never add proxy rotation, client spoofing or other block-evasion. |
+| Ingestion | **Uploads, Google Drive / Dropbox, and public-link import** (decision changed 2026-11-15; was uploads only). Twitch and Kick first, YouTube best effort. Public, non-DRM content only; never logins, cookies, proxies, IP rotation, client spoofing or other block evasion; owner-or-permission consent and an import log per link; takedown flow per source URL or account. |
 | Launch scope | **Full public launch:** open signups and live payments. |
 | Hosting | **One VM + Docker Compose** (Postgres, api, worker, Caddy). |
 | Website login | **Built-in email + password** (backend-issued JWT). |
@@ -154,11 +154,11 @@ Job webhooks: POST to a public https URL only (private and local addresses are r
 - [x] 55 tests: all pass on Postgres 16, 54 on SQLite where the row-locking test is skipped (refund on failure/crash/cancel/worker loss, idempotent submit, parallel overspend, forged webhook)
 
 ### B. Not yet verified — do first on the server
-- [ ] `docker compose up --build` has never been run (no Docker in the build environment)
-- [ ] faster-whisper has not been run end to end (the model could not be downloaded in the build environment); captions were tested with a stand-in transcriber
-- [ ] S3/R2 storage path is untested against a real bucket
-- [ ] Stripe Checkout session creation is untested against Stripe (webhook handling is tested with signed payloads)
-- [ ] Real SMTP delivery
+- [x] `docker compose up --build`: production runs on it (DigitalOcean droplet); CI builds the image on every PR (#2 / PR #9)
+- [x] faster-whisper end to end: opt-in test (#3 / PR #10); the server benchmark below ran `small.en` captions in the production image
+- [x] S3/R2 storage against a real bucket: `scripts/check_storage.py` (#4 / PR #13), run by the owner
+- [x] Stripe Checkout session creation: test-mode check (#5 / PR #14), run by the owner
+- [x] Real SMTP delivery: `admin.py send-test-email` (#6 / PR #15), confirmed by the owner
 - [x] Speed and cost on a multi-hour 1080p VOD, especially with `chat_region` set
   - **Server run (production), 2026-11-15**, through the live API (not `bench_pipeline.py`). DigitalOcean `s-4vcpu-8gb` (4 shared vCPU, 8 GB), Toronto, same Docker image as production; Whisper `small.en` (captions), `base.en` (index). Input `GTA_Benchmark_2Hours.mkv`, 2:00:18, 2,848 MB, 1080p; split layout, facecam auto, pop captions, 9:16, no chat region.
 
@@ -196,8 +196,10 @@ Job webhooks: POST to a public https URL only (private and local addresses are r
 - [ ] Sentry DSN
 - [ ] Run the section B checks, then open signups
 
-## 11. Deferred (do NOT build before launch)
-Learned ranker, VLM re-rank, GTA HUD/event detectors (need real GTA 6 footage), viewer-made Twitch clips prior, user-supplied chat logs and live chat logger, deep scan, subscriptions and yearly plans, credit expiry, presigned direct-to-R2 uploads, Google Drive import, local download CLI, Alembic migrations (needed before the first schema change), MCP server, team seats.
+## 11. Deferred (do NOT build unless the owner asks)
+Learned ranker (`clip_feedback` collects its training data from 1.2), team seats, Chrome extension, mobile app, Enterprise features, viewer-made Twitch clips prior, user-supplied chat logs, deep scan, credit expiry, local download CLI, MCP server.
+
+Moved out of this list on 2026-11-15 because they are built or now planned (section 13): VLM re-rank (the AI judge), subscriptions and yearly plans (live), Alembic (0.7), presigned / resumable uploads (4.4b), Google Drive import (4.4c), live chat via official chat APIs (4.5), per-game detection tuning (2.4; HUD detectors only once the 0.6 eval set can measure them).
 
 ## 12. Definition of done (launch)
 - A new user can sign up, verify email, get free credits, upload, receive captioned clips, buy credits, and see the balance change correctly.
@@ -205,3 +207,18 @@ Learned ranker, VLM re-rank, GTA HUD/event detectors (need real GTA 6 footage), 
 - Duplicate submits with the same Idempotency-Key never double-charge (tested).
 - One oversized or malicious input cannot exceed the limits in section 9.
 - Cost per source minute is measured and pack prices cover it.
+
+## 13. Re-engineering plan (approved 2026-11-15)
+
+Goal: match what the leading clipping tools offer gaming clippers, with a cleaner, faster product built only for gameplay plus a facecam. Own brand and copy (palette: dark, lime `#b8ff3c`, cyan `#3cf0ff`; Poppins and Inter). Never claim an unbuilt feature: hide it or mark it "Coming soon". Every feature that costs money per use has a credit price shown before the user confirms; money paths need the owner's OK in the PR. Every non-Claude price is verified in its ticket before approval.
+
+Work phase by phase; a phase starts after the owner merges the one before. PRs into `staging` with tests. One ticket per item on the ClutchClips build board (`phase:N` labels); the board tracks, it does not run.
+
+| Phase | Items |
+|---|---|
+| 0 Foundations | 0.0 rules and spec · 0.1 deploy from git · 0.2 clip quality (variety, facecam crop, caption lines, censor, coverage check, AI truncation) · 0.3 re-upload dedupe (money) · 0.4 `WORKER_CONCURRENCY` (default 1, max 2 on s-4vcpu-8gb) · 0.5 Spaces storage · 0.6 quality eval set · 0.7 Alembic |
+| 1 Library and editor | 1.1 projects and sidebar · 1.2 sort, filter, feedback · 1.3 score as rank + tier, raw score and breakdown in a tooltip · 1.4a–d editor (edit-decision list, captions, layout and boxes, filler and pause removal) · 1.5 bulk actions and ZIP |
+| 2 Layouts, captions, templates | 2.1a–b layouts · 2.2 15+ caption presets · 2.3 multilingual + translated line · 2.4 game templates · 2.5 brand kit |
+| 3 AI editing | 3.1 noise reduction and crossfades · 3.2 AI hook, later TTS · 3.3 natural-language find · 3.4 montage (one-off royalty-free music license) · 3.5 B-roll |
+| 4 Publishing and ingestion | 4.0 platform approvals (owner) · 4.1 OAuth publishing · 4.2 calendar and scheduler · 4.3 bulk import · 4.4a–d link import, resumable uploads, Drive/Dropbox, failure alerts · 4.5a–d live clipping |
+| 5 Website | home, tool pages, gaming page, pricing from plan config, quality floor, DRAFT legal pages |
