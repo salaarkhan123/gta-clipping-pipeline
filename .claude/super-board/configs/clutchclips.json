@@ -64,7 +64,7 @@
   "usage_pause_pct": 95,
   "usage_fallback": "none",
   "verify_commands": [
-    "cd clip-api && python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt && .venv/bin/python -m pytest -q"
+    "cd clip-api && export PATH=/opt/homebrew/opt/ffmpeg-full/bin:$PATH && python3.12 -m venv .venv && .venv/bin/pip install -q -r requirements.txt pytest $([ -f requirements-dev.txt ] && echo -r requirements-dev.txt) && .venv/bin/python -m pytest -q"
   ],
   "max_workers": 1,
   "rebuild_cap": 2,
