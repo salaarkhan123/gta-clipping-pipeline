@@ -111,7 +111,9 @@ clip-api 2/
 # Earlier multi-agent design (see CLAUDE.md "Where things are").
 /code/
 /design-docs/
-/docs/
+/docs/*
+!/docs/agents/
+!/docs/super-board/
 /gta-clipping-pipeline.pdf
 /screenshots/
 # Personal YouTube-link CLI; the service is uploads-only.
@@ -128,3 +130,4 @@ clip-api 2/
 .claude/super-board/migrations/
 .claude/super-board/upgrade.json
 CLAUDE.local.md
+.claude/settings.json.bak-*

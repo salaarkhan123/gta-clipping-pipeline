@@ -1,3 +1,5 @@
+@AGENTS.md
+
 # CLAUDE.md
 
 Project: a public clip-generation API + website for GTA 6 clippers, with credit-based pricing. Full spec, decisions and checklists are in `SPEC.md`; read it before making architectural decisions.
