@@ -32,8 +32,8 @@ def even(n) -> int:
     return int(n) // 2 * 2
 
 
-def fill_crop(src_w: int, src_h: int, region, tw: int, th: int, zoom: float = 1.0) -> str:
-    """Crop `region` (fractions) to the target aspect, centred, then scale to fill tw x th exactly."""
+def crop_rect(src_w: int, src_h: int, region, tw: int, th: int, zoom: float = 1.0) -> tuple[float, float, float, float]:
+    """The centred crop of `region` (fractions) with the target aspect, in source pixels: (x, y, w, h)."""
     fx, fy, fw, fh = region
     x, y, w, h = src_w * fx, src_h * fy, src_w * fw, src_h * fh
     if w / h > tw / th:
@@ -41,8 +41,59 @@ def fill_crop(src_w: int, src_h: int, region, tw: int, th: int, zoom: float = 1.
     else:
         cw, ch = w, w * th / tw
     cw, ch = cw / zoom, ch / zoom
-    cx, cy = x + (w - cw) / 2, y + (h - ch) / 2
+    return x + (w - cw) / 2, y + (h - ch) / 2, cw, ch
+
+
+def _crop_scale(rect, tw: int, th: int) -> str:
+    cx, cy, cw, ch = rect
     return f"crop={even(cw)}:{even(ch)}:{even(cx)}:{even(cy)},scale={tw}:{th},setsar=1"
+
+
+def fill_crop(src_w: int, src_h: int, region, tw: int, th: int, zoom: float = 1.0) -> str:
+    """Crop `region` (fractions) to the target aspect, centred, then scale to fill tw x th exactly."""
+    return _crop_scale(crop_rect(src_w, src_h, region, tw, th, zoom), tw, th)
+
+
+FACECAM_PAD = 0.02     # keep this much (fraction of the frame) between the gameplay crop and the camera box
+EDGE = 0.02            # a camera box this close to a frame edge counts as sitting on that edge
+
+
+def _overlaps(a, b) -> bool:
+    return a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]
+
+
+def gameplay_crop(src_w: int, src_h: int, tw: int, th: int, zoom: float, cam) -> tuple[str, str]:
+    """The split layout's gameplay crop with the webcam overlay kept out of it.
+
+    Returns (how, filter) where how is "clear" (the centred crop misses the camera), "shifted" (the camera sits on
+    a frame edge, so the crop moves the least distance that clears it) or "blurred" (the camera is inside the
+    frame, so the crop stays and a blurred patch covers the camera). `filter` reads [b] and writes [bot].
+    """
+    cx, cy, cw, ch = crop_rect(src_w, src_h, FULL_FRAME, tw, th, zoom)
+    pad_x, pad_y = FACECAM_PAD * src_w, FACECAM_PAD * src_h
+    bx, by, bw, bh = cam[0] * src_w - pad_x, cam[1] * src_h - pad_y, cam[2] * src_w + 2 * pad_x, cam[3] * src_h + 2 * pad_y
+    box = (bx, by, bw, bh)
+    if not _overlaps((cx, cy, cw, ch), box):
+        return "clear", f"[b]{_crop_scale((cx, cy, cw, ch), tw, th)}[bot]"
+    on_left, on_right = cam[0] <= EDGE, cam[0] + cam[2] >= 1 - EDGE
+    on_top, on_bottom = cam[1] <= EDGE, cam[1] + cam[3] >= 1 - EDGE
+    moves = []
+    if on_left and bx + bw + cw <= src_w:
+        moves.append((bx + bw - cx, (bx + bw, cy)))
+    if on_right and bx - cw >= 0:
+        moves.append((cx - (bx - cw), (bx - cw, cy)))
+    if on_top and by + bh + ch <= src_h:
+        moves.append((by + bh - cy, (cx, by + bh)))
+    if on_bottom and by - ch >= 0:
+        moves.append((cy - (by - ch), (cx, by - ch)))
+    if moves:
+        _dist, (nx, ny) = min(moves, key=lambda m: m[0])
+        return "shifted", f"[b]{_crop_scale((nx, ny, cw, ch), tw, th)}[bot]"
+    # Camera in the middle of the frame: cover it with a blurred copy of itself, then crop as usual.
+    x0, y0 = even(max(0.0, bx)), even(max(0.0, by))
+    w0, h0 = even(min(src_w - x0, bw)), even(min(src_h - y0, bh))
+    return "blurred", (f"[b]split=2[b0][b1];[b1]crop={w0}:{h0}:{x0}:{y0},boxblur=20:3[cam];"
+                       f"[b0][cam]overlay={x0}:{y0},{_crop_scale((cx, cy, cw, ch), tw, th)}[bot]")
 
 
 OUT_FPS = 30
@@ -69,9 +120,10 @@ def layout_filter(src_w: int, src_h: int, layout: str, zoom: float, chat: str, f
     if layout == "split":
         top = even(oh / 3)
         region = FACECAM_REGIONS[facecam] if isinstance(facecam, str) else tuple(facecam)
+        _how, bottom = gameplay_crop(src_w, src_h, ow, oh - top, zoom, region)
         return (f"[0:v]split=2[a][b];"
                 f"[a]{fill_crop(src_w, src_h, region, ow, top)}[top];"
-                f"[b]{fill_crop(src_w, src_h, FULL_FRAME, ow, oh - top, zoom)}[bot];"
+                f"{bottom};"
                 f"[top][bot]vstack=inputs=2,format=yuv420p[v]")
     if layout == "fill":
         return f"[0:v]{fill_crop(src_w, src_h, FULL_FRAME, ow, oh, zoom)},format=yuv420p[v]"
