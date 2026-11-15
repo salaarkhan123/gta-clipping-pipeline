@@ -161,13 +161,19 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 storage.put(vkey, work / "vindex.npz")
         else:
             opts = PipelineOptions(caption_font=s.caption_font, **options)
-            results = pipeline(src, opts, work / "out", progress, transcriber, deadline)
+            # The pipeline's judge takes (text, frame, context); the AI client takes (text, context, frame).
+            extra = ({"judge": lambda text, frame, ctx: ai.clip_meta(text, ctx, frame), "fast_transcriber": indexer}
+                     if ai is not None else {})
+            results = pipeline(src, opts, work / "out", progress, transcriber, deadline, **extra)
 
         metas = [None] * len(results)
         if tool in ("clips", "find"):
             if ai is not None:
                 progress("writing_titles", 98)
             for k, r in enumerate(results):
+                if getattr(r, "meta", None) is not None:   # the judge already rated this clip
+                    metas[k] = r.meta
+                    continue
                 meta = ai.clip_meta(clip_text(r), {"length": r.end - r.start, "signals": r.signals},
                                     r.thumb_path) if ai is not None else None
                 metas[k] = meta   # no AI, no score: a number made from loudness alone would mislead
