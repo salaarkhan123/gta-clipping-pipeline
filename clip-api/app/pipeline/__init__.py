@@ -20,6 +20,7 @@ import numpy as np
 
 from .ff import SAFE_IN, Deadline, PipelineError, PipelineTimeout, probe, run  # noqa: F401 (re-exported)
 from .render import CHAT_REGIONS, FACECAM_REGIONS, render_clip, render_thumb, resolve_layout
+from .censor import mask_words
 from .facecam import resolve_facecam
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
 from .transcribe import Transcriber, Transcript, exclamation_hits, extract_wav, snap_to_speech
@@ -52,6 +53,7 @@ class PipelineOptions:
     captions: bool = True
     caption_font: str = "DejaVu Sans"
     caption_style: str = "pop"            # pop | bold | neon | boxed | clean
+    censor: bool = False                  # mask swears in captions (burned and captions.json)
     layout: str = "auto"                  # auto | split | fill | classic
     facecam_region: str | None = None     # "auto" (detect), or a preset key of FACECAM_REGIONS
     facecam_box: list | None = None       # [x, y, w, h] fractions; overrides the preset
@@ -218,6 +220,8 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                 rs, re_ = s + c.offset - c.start, e + c.offset - c.start
                 if rs >= 0 and rs < c.end - c.start:
                     words.append((round(rs, 3), round(min(re_, c.end - c.start), 3), t))
+            if options.censor:
+                words = mask_words(words)
         video = out_dir / f"clip-{i}.mp4"
         render_clip(input_path, c.start, c.end, video, src_w=info.width, src_h=info.height,
                     vertical=options.vertical, zoom=options.zoom, chat=options.chat_region,
