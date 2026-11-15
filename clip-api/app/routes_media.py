@@ -37,6 +37,7 @@ class LayoutOptions(BaseModel):
     zoom: float = Field(1.0, ge=1.0, le=1.6)
     captions: bool = True
     caption_style: Literal["pop", "bold", "neon", "boxed", "clean"] = "pop"
+    censor: bool = False          # mask swears in burned captions and subtitle downloads (f***ing)
     layout: Literal["auto", "split", "fill", "classic"] = "auto"
     facecam_region: Literal["auto", "top-left", "top-right", "bottom-left", "bottom-right"] | None = "auto"
     facecam_box: list[float] | None = Field(default=None, min_length=4, max_length=4)

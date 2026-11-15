@@ -1,0 +1,4 @@
+cd clip-api && pip install -r requirements.txt -r requirements-dev.txt && pytest -q
+head 3a5f4a2
+58 passed, 4 skipped, 1 warning in 37.01s
+ci.yml diff: installs requirements-dev.txt; requirements.txt unchanged

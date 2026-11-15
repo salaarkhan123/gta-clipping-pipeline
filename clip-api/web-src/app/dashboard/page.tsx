@@ -32,7 +32,7 @@ export default function Dashboard() {
   const [uploadId, setUploadId] = useState(""), [tool, setTool] = useState<Tool>("clips");
   const [up, setUp] = useState<{ name: string; pct: number } | null>(null);
   const [o, setO] = useState({ max_clips: 3, clip_length: 30, aspect: "9:16", caption_style: "pop", captions: true,
-    chat_region: "none", query: "", from: "", to: "" });
+    censor: false, chat_region: "none", query: "", from: "", to: "" });
   const [error, setError] = useState<{ text: string; upgrade?: boolean } | null>(null), [notice, setNotice] = useState("");
   const [starting, setStarting] = useState(false);
   const abort = useRef<(() => void) | null>(null);
@@ -93,7 +93,7 @@ export default function Dashboard() {
   async function start() {
     if (!upload) return;
     setError(null);
-    const layout = { aspect: o.aspect, caption_style: o.caption_style };
+    const layout = { aspect: o.aspect, caption_style: o.caption_style, censor: o.censor };
     let path = "/v1/clips", body: any;
     if (tool === "clips") {
       body = { upload_id: upload.upload_id, options: { ...layout, captions: o.captions, chat_region: o.chat_region,
@@ -108,7 +108,8 @@ export default function Dashboard() {
         setError({ text: "Enter both a start and an end time, like 12:30 and 13:10, or leave both empty for the whole video." }); return;
       }
       path = tool === "reframe" ? "/v1/reframe" : "/v1/captions";
-      body = { upload_id: upload.upload_id, options: tool === "reframe" ? { ...layout, captions: false } : { caption_style: o.caption_style, vertical: false } };
+      body = { upload_id: upload.upload_id, options: tool === "reframe" ? { ...layout, captions: false, censor: false }
+        : { caption_style: o.caption_style, censor: o.censor, vertical: false } };
       if (a !== null) body.segments = [{ start: a, end: b }];
     }
     setStarting(true);
@@ -205,6 +206,8 @@ export default function Dashboard() {
                   <option value="top-center">Top centre</option><option value="bottom-right">Bottom right</option><option value="bottom-left">Bottom left</option></select></label>}
                 {(tool === "clips" || tool === "find") && <label className="check"><input type="checkbox" checked={o.captions}
                   onChange={(e) => set("captions", e.target.checked)} /><span>Captions</span></label>}
+                {tool !== "reframe" && (tool === "captions" || o.captions) && <label className="check"><input type="checkbox"
+                  checked={o.censor} onChange={(e) => set("censor", e.target.checked)} /><span>Censor swears</span></label>}
               </div>
               <div className="row">
                 <button className="btn primary" disabled={starting || !upload || !me.email_verified} onClick={start}>

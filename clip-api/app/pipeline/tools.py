@@ -14,6 +14,7 @@ from . import ClipResult
 from .ff import Deadline, PipelineError, PipelineTimeout, probe
 import logging
 
+from .censor import mask_words
 from .facecam import resolve_facecam
 from .render import CHAT_REGIONS, render_clip, render_thumb
 from .transcribe import Transcriber, Transcript, extract_wav
@@ -35,6 +36,7 @@ class RenderOptions:
     captions: bool = False
     caption_style: str = "pop"
     caption_font: str = "DejaVu Sans"
+    censor: bool = False
 
 
 def _layout(src, info, options, deadline=None) -> tuple[str, object]:
@@ -66,6 +68,8 @@ def transcribe_range(src: Path, start: float, end: float, transcriber: Transcrib
 
 
 def _render_one(src, info, start, end, idx, words, options, layout, facecam, out_dir, deadline):
+    if options.censor:
+        words = mask_words(words)
     video = out_dir / f"clip-{idx}.mp4"
     render_clip(src, start, end, video, src_w=info.width, src_h=info.height, vertical=options.vertical,
                 zoom=options.zoom, chat=options.chat_region, words=words, font=options.caption_font,

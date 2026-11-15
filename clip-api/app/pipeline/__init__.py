@@ -5,19 +5,26 @@
 Flow: probe -> cheap signals (audio loudness, optional on-screen chat motion) -> fused per-second
 score -> candidate windows -> Whisper on candidates only -> re-rank -> snap edges to speech ->
 render with captions.
+
+With a `judge` (the AI), the signals only nominate ~3x more candidates than asked for; the judge rates each
+one from its transcript and a frame, and the best-rated are rendered. Loud is not the same as good: the
+judge throws out intro cards, menus and dead air that happen to be loud.
 """
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
 import numpy as np
 
-from .ff import Deadline, PipelineError, PipelineTimeout, probe  # noqa: F401 (re-exported)
+from .ff import SAFE_IN, Deadline, PipelineError, PipelineTimeout, probe, run  # noqa: F401 (re-exported)
 from .render import CHAT_REGIONS, FACECAM_REGIONS, render_clip, render_thumb, resolve_layout
+from .censor import mask_words
 from .facecam import resolve_facecam
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
 from .transcribe import Transcriber, Transcript, exclamation_hits, extract_wav, snap_to_speech
+from .variety import min_gap_for, pick_distinct
 from .windows import pick_windows
 
 WEIGHTS = {"chat_motion": 1.0, "audio": 0.7}   # hand-set; the learned ranker replaces these later
@@ -25,6 +32,13 @@ TRANSCRIPT_BONUS = 0.15                        # max re-rank bonus from exclamat
 PAD = 4.0                                      # seconds of audio transcribed either side of a candidate
 MIN_CLIP = 10.0
 MIN_RELATIVE_SCORE = 0.2                      # candidates below 20% of the best window are dropped
+MAX_CANDIDATES = 30                           # how many moments the judge may look at per video
+JUDGE_WEIGHT = 0.75                           # final rank = 0.75 * judge score + 0.25 * signal strength
+JUDGE_FLOOR = 20                              # judge scores below this are junk (menus, intro cards, dead air)
+JUDGE_THREADS = 4
+
+# judge(transcript_text, frame_path, context) -> {"virality": {"score": 0-100, ...}, ...} or None
+Judge = Callable[[str, Path | None, dict], dict | None]
 
 
 @dataclass
@@ -39,6 +53,7 @@ class PipelineOptions:
     captions: bool = True
     caption_font: str = "DejaVu Sans"
     caption_style: str = "pop"            # pop | bold | neon | boxed | clean
+    censor: bool = False                  # mask swears in captions (burned and captions.json)
     layout: str = "auto"                  # auto | split | fill | classic
     facecam_region: str | None = None     # "auto" (detect), or a preset key of FACECAM_REGIONS
     facecam_box: list | None = None       # [x, y, w, h] fractions; overrides the preset
@@ -54,6 +69,7 @@ class ClipResult:
     video_path: Path
     thumb_path: Path | None = None
     captions_path: Path | None = None
+    meta: dict | None = None      # the judge's title, hashtags and virality for this clip
 
 
 @dataclass
@@ -66,12 +82,37 @@ class _Candidate:
     transcript: Transcript = field(default_factory=Transcript)
     offset: float = 0.0           # absolute time of transcript t=0
     final: float = 0.0
+    meta: dict | None = None
+
+
+def _frame(src: Path, t: float, out: Path, deadline: Deadline | None) -> Path | None:
+    try:
+        run(["ffmpeg", "-loglevel", "error", "-y", "-ss", f"{t:.2f}", *SAFE_IN, "-i", src, "-frames:v", "1",
+             "-vf", "scale=640:-2", "-q:v", "4", out], deadline, cap=60)
+        return out if out.exists() else None
+    except PipelineTimeout:
+        raise
+    except PipelineError:
+        return None
+
+
+def _transcribe(c: "_Candidate", i: int, transcriber, src: Path, duration: float, out_dir: Path, deadline) -> None:
+    c.offset = max(0.0, c.start - PAD)
+    length = min(duration, c.end + PAD) - c.offset
+    wav = out_dir / f"cand{i}.wav"
+    extract_wav(src, c.offset, length, wav, deadline)
+    try:
+        c.transcript = transcriber.transcribe(wav)
+    finally:
+        wav.unlink(missing_ok=True)
 
 
 def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                  progress_cb: Callable[[str, int], None] | None = None,
                  transcriber: Transcriber | None = None,
-                 deadline: Deadline | None = None) -> list[ClipResult]:
+                 deadline: Deadline | None = None,
+                 judge: Judge | None = None,
+                 fast_transcriber: Transcriber | None = None) -> list[ClipResult]:
     progress = progress_cb or (lambda stage, pct: None)
     input_path, out_dir = Path(input_path), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -106,7 +147,13 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
 
     # 2. Candidate windows. Over-generate when we can re-rank with the transcript.
     use_asr = transcriber is not None and info.has_audio
-    count = min(10, options.max_clips * 2) if use_asr else options.max_clips
+    if judge is not None:
+        count = min(MAX_CANDIDATES, max(options.max_clips * 3, options.max_clips + 5))
+    else:
+        count = min(10, options.max_clips * 2) if use_asr else options.max_clips
+    # Candidates the judge will mostly reject only need a rough transcript: use the fast model for them,
+    # then the caption model for the ones that make the cut.
+    rough = fast_transcriber if (judge is not None and fast_transcriber is not None) else transcriber
     picks = pick_windows(total, options.clip_length, count, info.duration)
     if not picks:
         raise PipelineError("no_moments", "No stand-out moments were found in this video.")
@@ -129,15 +176,8 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         c.final = c.base
         if not use_asr:
             continue
-        progress("transcribing", 45 + int(25 * i / len(candidates)))
-        c.offset = max(0.0, c.start - PAD)
-        length = min(info.duration, c.end + PAD) - c.offset
-        wav = out_dir / f"cand{i}.wav"
-        extract_wav(input_path, c.offset, length, wav, deadline)
-        try:
-            c.transcript = transcriber.transcribe(wav)
-        finally:
-            wav.unlink(missing_ok=True)
+        progress("transcribing", 45 + int((15 if judge else 25) * i / len(candidates)))
+        _transcribe(c, i, rough, input_path, info.duration, out_dir, deadline)
         text = " ".join(s[2] for s in c.transcript.segments)
         hits = exclamation_hits(text)
         inside = [w for w in c.transcript.words if c.start <= w[0] + c.offset < c.end]
@@ -151,12 +191,24 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                 if k != "transcript":
                     c.signals[k] = round(c.signals[k] * scale, 3)
         c.final = c.base + bonus
-        segs = [(s + c.offset, e + c.offset, t) for s, e, t in c.transcript.segments]
-        c.start, c.end = snap_to_speech(c.start, c.end, segs, lo=0.0, hi=info.duration,
-                                        min_len=MIN_CLIP, max_len=60.0)
+        if judge is None:
+            _snap(c, info.duration)
 
-    chosen = sorted(sorted(candidates, key=lambda c: c.final, reverse=True)[: options.max_clips],
-                    key=lambda c: c.start)
+    if judge is None:
+        ranked = sorted(candidates, key=lambda c: c.final, reverse=True)
+    else:
+        ranked = _judge(candidates, judge, input_path, out_dir, progress, deadline)
+    distinct, _skipped = pick_distinct(
+        ranked, options.max_clips, window=lambda c: (c.start, c.end), meta=lambda c: c.meta,
+        speech=lambda c: " ".join(s[2] for s in c.transcript.segments),
+        min_gap=min_gap_for(info.duration, options.max_clips))
+    chosen = sorted(distinct, key=lambda c: c.start)
+    if judge is not None:
+        for i, c in enumerate(chosen):
+            progress("transcribing", 62 + int(8 * i / len(chosen)))
+            if use_asr and rough is not transcriber:
+                _transcribe(c, 100 + i, transcriber, input_path, info.duration, out_dir, deadline)
+            _snap(c, info.duration)
 
     # 4. Render.
     results: list[ClipResult] = []
@@ -168,6 +220,8 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                 rs, re_ = s + c.offset - c.start, e + c.offset - c.start
                 if rs >= 0 and rs < c.end - c.start:
                     words.append((round(rs, 3), round(min(re_, c.end - c.start), 3), t))
+            if options.censor:
+                words = mask_words(words)
         video = out_dir / f"clip-{i}.mp4"
         render_clip(input_path, c.start, c.end, video, src_w=info.width, src_h=info.height,
                     vertical=options.vertical, zoom=options.zoom, chat=options.chat_region,
@@ -187,9 +241,49 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
             caps.write_text(json.dumps({"words": [{"start": s, "end": e, "text": t} for s, e, t in words]}))
         results.append(ClipResult(start=round(c.start, 3), end=round(c.end, 3), score=round(c.final, 4),
                                   signals=c.signals, features=c.features, video_path=video,
-                                  thumb_path=thumb, captions_path=caps))
+                                  thumb_path=thumb, captions_path=caps, meta=c.meta))
     progress("done", 100)
     return results
+
+
+def _snap(c: _Candidate, duration: float) -> None:
+    segs = [(s + c.offset, e + c.offset, t) for s, e, t in c.transcript.segments]
+    c.start, c.end = snap_to_speech(c.start, c.end, segs, lo=0.0, hi=duration, min_len=MIN_CLIP, max_len=60.0)
+
+
+def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path, progress, deadline) -> list[_Candidate]:
+    """Rate every candidate, drop the junk, and return them best first."""
+    progress("judging", 60)
+    frames = [_frame(src, (c.start + c.end) / 2, out_dir / f"cand{i}.jpg", deadline) for i, c in enumerate(candidates)]
+
+    def rate(i: int):
+        c = candidates[i]
+        text = " ".join(s[2] for s in c.transcript.segments)
+        return judge(text, frames[i], {"length": c.end - c.start, "signals": c.signals})
+
+    with ThreadPoolExecutor(JUDGE_THREADS) as pool:
+        metas = list(pool.map(rate, range(len(candidates))))
+    for f in frames:
+        if f:
+            f.unlink(missing_ok=True)
+    top = max((c.final for c in candidates), default=1.0) or 1.0
+    rated, unrated = [], []
+    for c, meta in zip(candidates, metas):
+        c.meta = meta
+        score = (meta or {}).get("virality", {}).get("score") if isinstance(meta, dict) else None
+        if score is None:
+            unrated.append(c)
+            continue
+        c.features["judge_score"] = score
+        c.final = JUDGE_WEIGHT * score / 100 + (1 - JUDGE_WEIGHT) * min(1.0, c.final / top)
+        rated.append(c)
+    rated.sort(key=lambda c: c.final, reverse=True)
+    keep = [c for c in rated if c.features["judge_score"] >= JUDGE_FLOOR]
+    junk = [c for c in rated if c.features["judge_score"] < JUDGE_FLOOR]
+    # If the judge failed for some, rank them by signals after the good ones; junk only fills an otherwise empty result.
+    unrated.sort(key=lambda c: c.final, reverse=True)
+    out = keep + unrated
+    return out if out else junk[:1]
 
 
 __all__ = ["run_pipeline", "PipelineOptions", "ClipResult", "PipelineError", "PipelineTimeout",
