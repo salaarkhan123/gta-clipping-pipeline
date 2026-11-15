@@ -23,6 +23,7 @@ from .render import CHAT_REGIONS, FACECAM_REGIONS, render_clip, render_thumb, re
 from .facecam import resolve_facecam
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
 from .transcribe import Transcriber, Transcript, exclamation_hits, extract_wav, snap_to_speech
+from .variety import min_gap_for, pick_distinct
 from .windows import pick_windows
 
 WEIGHTS = {"chat_motion": 1.0, "audio": 0.7}   # hand-set; the learned ranker replaces these later
@@ -195,7 +196,11 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         ranked = sorted(candidates, key=lambda c: c.final, reverse=True)
     else:
         ranked = _judge(candidates, judge, input_path, out_dir, progress, deadline)
-    chosen = sorted(ranked[: options.max_clips], key=lambda c: c.start)
+    distinct, _skipped = pick_distinct(
+        ranked, options.max_clips, window=lambda c: (c.start, c.end), meta=lambda c: c.meta,
+        speech=lambda c: " ".join(s[2] for s in c.transcript.segments),
+        min_gap=min_gap_for(info.duration, options.max_clips))
+    chosen = sorted(distinct, key=lambda c: c.start)
     if judge is not None:
         for i, c in enumerate(chosen):
             progress("transcribing", 62 + int(8 * i / len(chosen)))
