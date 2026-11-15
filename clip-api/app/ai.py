@@ -18,6 +18,7 @@ from .config import get_settings
 log = logging.getLogger("clipapi.ai")
 API_URL = "https://api.anthropic.com/v1/messages"
 PARTS = ("hook", "flow", "value", "trend")
+MAX_TOKENS = 1024
 
 SYSTEM = (
     "You write social copy for short gaming clips (TikTok, Shorts, Reels) and rate how well a clip is likely to "
@@ -45,7 +46,8 @@ TOOL = {
             "hashtags": {"type": "array", "items": {"type": "string"}, "description": "3 to 5 tags without #."},
             "virality": {"type": "object", "properties": {k: {"type": "integer", "minimum": 0, "maximum": 100}
                                                           for k in PARTS}, "required": list(PARTS)},
-            "reason": {"type": "string", "description": "One sentence on why it would or would not perform."},
+            "reason": {"type": "string",
+                       "description": "One sentence, max 200 chars, on why it would or would not perform."},
         },
         "required": ["title", "hashtags", "virality", "reason"],
     },
@@ -109,7 +111,9 @@ class ClaudeAI:
             f"Clip length: {context.get('length', 0):.0f} s\n"
             f"Why it was picked (signal shares): {json.dumps(context.get('signals', {}))}\n"
             f"Transcript of the clip:\n{(transcript or '(no speech detected)')[:1500]}")})
-        body = {"model": self.model, "max_tokens": 600, "system": SYSTEM, "tools": [TOOL],
+        # The forced tool call means Haiku 5.5 skips thinking, so max_tokens only has to hold the tool input
+        # (~150-300 tokens). 1024 leaves room for a long reason; only the tokens produced are billed.
+        body = {"model": self.model, "max_tokens": MAX_TOKENS, "system": SYSTEM, "tools": [TOOL],
                 "tool_choice": {"type": "tool", "name": TOOL["name"]},
                 "messages": [{"role": "user", "content": content}]}
         headers = {"x-api-key": self.api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
@@ -120,7 +124,14 @@ class ClaudeAI:
                     time.sleep(float(r.headers.get("retry-after") or 3))
                     continue
                 r.raise_for_status()
-                blocks = r.json().get("content", [])
+                data = r.json()
+                stop = data.get("stop_reason")
+                if stop == "refusal":
+                    log.warning("AI metadata refused: %s", str(data.get("stop_details") or "")[:200])
+                    return None
+                if stop == "max_tokens":
+                    log.warning("AI metadata hit max_tokens (%d); keeping it only if it still has a title", MAX_TOKENS)
+                blocks = data.get("content", [])
                 reply = next((b.get("input") for b in blocks if b.get("type") == "tool_use"), None)
                 if reply is None:   # no tool call: fall back to any JSON in the text
                     reply = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
