@@ -7,6 +7,7 @@
   balance EMAIL                                 show balance and recent ledger rows
   suspend EMAIL / unsuspend EMAIL               block or unblock an account
   stuck                                         list QUEUED/RUNNING jobs
+  send-test-email --to ADDRESS                  send one email through the configured SMTP (exit 2: not configured, 1: failed)
   selftest                                      load every model and tool once (run in the worker container)
 """
 import argparse
@@ -101,6 +102,27 @@ def selftest() -> int:
     return 1 if failed else 0
 
 
+def send_test_email(to: str) -> int:
+    """Sends one message through app/emailer.py. Never prints the SMTP password."""
+    from app.config import get_settings
+    from app.emailer import deliver, missing_smtp_keys
+    missing = missing_smtp_keys()
+    if missing:
+        print(f"SMTP is not configured. Missing: {', '.join(missing)}", file=sys.stderr)
+        return 2
+    s = get_settings()
+    try:
+        deliver(to, "Clip API test email", "If you can read this, SMTP delivery works.")
+    except Exception as e:
+        detail = f"{type(e).__name__}: {e}"
+        if s.smtp_password:
+            detail = detail.replace(s.smtp_password, "***")
+        print(f"Send failed via {s.smtp_host}:{s.smtp_port}: {detail}", file=sys.stderr)
+        return 1
+    print(f"Sent one message to {to} from {s.email_from} via {s.smtp_host}:{s.smtp_port}. Check the inbox.")
+    return 0
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -112,10 +134,13 @@ def main() -> None:
     c = sub.add_parser("unsuspend"); c.add_argument("email")
     sub.add_parser("stuck")
     sub.add_parser("selftest")
+    c = sub.add_parser("send-test-email"); c.add_argument("--to", required=True)
     args = p.parse_args()
 
     if args.cmd == "selftest":
         sys.exit(selftest())
+    if args.cmd == "send-test-email":
+        sys.exit(send_test_email(args.to))
     init_db()
     with new_session() as db:
         if args.cmd == "create-account":
