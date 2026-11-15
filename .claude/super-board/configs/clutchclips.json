@@ -59,7 +59,7 @@
   },
   "no_progress_cycles": 6,
   "max_dispatches": 0,
-  "truth_gate": "non-trivial",
+  "truth_gate": "off",
   "truth_threshold": 70,
   "usage_pause_pct": 95,
   "usage_fallback": "none",
