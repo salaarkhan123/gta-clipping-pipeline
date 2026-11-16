@@ -18,15 +18,24 @@ export function ClipCard({ clip, onChange, project }: { clip: any; onChange: (c:
   const send = (body: Record<string, unknown>) => api(`/v1/clips/${clip.id}/feedback`, { body }).then((r) => onChange({ ...clip, ...r })).catch(fail);
   const keep = (kept: boolean) => send({ kept: clip.kept === kept ? null : kept });
   const react = (reaction: "like" | "dislike") => send({ reaction: clip.reaction === reaction ? null : reaction });
+  // The AI offers a few titles; picking one changes the clip's title everywhere. Nothing is re-rendered.
+  const titles: string[] = clip.titles?.length ? (clip.titles.includes(clip.title) ? clip.titles : [clip.title, ...clip.titles]) : [];
+  const retitle = (title: string) => api(`/v1/clips/${clip.id}`, { method: "PATCH", body: { title } }).then((r) => onChange({ ...clip, ...r })).catch(fail);
   return (
     <figure className={`clip ${clip.kept === false ? "dropped" : ""}`}>
       <video controls preload="none" poster={clip.thumb_url || undefined} src={clip.video_url} />
       <figcaption>
         <strong>{clip.title || `Clip ${clip.index}`}</strong>
+        {titles.length > 1 && <label className="title-pick">Title
+          <select value={clip.title} onChange={(e) => retitle(e.target.value)}>
+            {titles.map((x) => <option key={x} value={x}>{x}</option>)}
+          </select></label>}
         <ScoreBadge clip={clip} />
         <span className="muted">{clock(clip.start_sec)} to {clock(clip.end_sec)}</span>
         {project && <Link className="muted" href={`/dashboard/project/?id=${project.id}`}>From {project.name}</Link>}
+        {clip.hook && <p className="muted">{clip.hook_on_screen ? "On-screen hook" : "Hook idea (not on the video)"}: “{clip.hook}”</p>}
         {clip.description && <p>{clip.description}</p>}
+        {clip.suggestion?.text && <p className="tip"><b>Tip</b> {clip.suggestion.text}</p>}
         {clip.hashtags?.length > 0 && <p className="tags">{clip.hashtags.map((t: string) => `#${t}`).join(" ")}</p>}
         <div className="clip-actions">
           <a className="btn small primary" href={clip.video_url} download>Download</a>

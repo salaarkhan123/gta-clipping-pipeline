@@ -1,10 +1,15 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useDash } from "./Shell";
 
 type Tool = "clips" | "reframe" | "captions" | "find";
 const TOOL_NAMES: Record<Tool, string> = { clips: "Clip Maker", reframe: "Reframe", captions: "Captions", find: "Video Finder" };
+
+// What a template may fill in, and the editing switches (all on by default, like the API).
+const FORM_KEYS = ["clip_length", "caption_style", "tighten", "punch_zoom", "flash_forward", "hook_overlay"];
+const EDITS: [string, string][] = [["tighten", "Cut dead air and filler words"], ["punch_zoom", "Punch-in zoom on big moments"],
+  ["flash_forward", "Open on the best moment"], ["hook_overlay", "On-screen hook text"]];
 
 function parseTime(v: string): number | null {
   if (!v.trim()) return null;
@@ -18,9 +23,21 @@ export function ToolPanel({ upload, onStarted }: { upload: any; onStarted: (job:
   const { me, reloadMe, fail } = useDash();
   const [tool, setTool] = useState<Tool>("clips");
   const [o, setO] = useState({ max_clips: 3, clip_length: 30, aspect: "9:16", caption_style: "pop", captions: true,
-    censor: false, chat_region: "none", query: "", from: "", to: "" });
+    censor: false, chat_region: "none", query: "", from: "", to: "",
+    tighten: true, punch_zoom: true, flash_forward: true, hook_overlay: true, template: "" });
+  const [templates, setTemplates] = useState<any[]>([]);
   const [starting, setStarting] = useState(false), [problem, setProblem] = useState("");
   const set = (k: string, v: any) => setO((x) => ({ ...x, [k]: v }));
+
+  useEffect(() => { api("/v1/templates", { auth: false }).then((r) => setTemplates(r.templates)).catch(() => {}); }, []);
+  const template = templates.find((x) => x.id === o.template);
+  // Choosing a template fills in its settings; every one of them can still be changed before starting.
+  function pickTemplate(id: string) {
+    const chosen = templates.find((x) => x.id === id);
+    const fill: Record<string, any> = {};
+    for (const k of FORM_KEYS) if (chosen && k in chosen.options) fill[k] = chosen.options[k];
+    setO((x) => ({ ...x, ...fill, template: id }));
+  }
 
   async function start() {
     setProblem("");
@@ -28,7 +45,9 @@ export function ToolPanel({ upload, onStarted }: { upload: any; onStarted: (job:
     let path = "/v1/clips", body: any;
     if (tool === "clips") {
       body = { upload_id: upload.upload_id, options: { ...layout, captions: o.captions, chat_region: o.chat_region,
-        max_clips: o.max_clips, clip_length: o.clip_length } };
+        max_clips: o.max_clips, clip_length: o.clip_length, tighten: o.tighten, punch_zoom: o.punch_zoom,
+        flash_forward: o.flash_forward, hook_overlay: o.hook_overlay,
+        ...(template ? { template: template.id, layout: template.options.layout } : {}) } };
     } else if (tool === "find") {
       if (!o.query.trim()) { setProblem("Type what you're looking for first."); return; }
       path = "/v1/find";
@@ -53,13 +72,21 @@ export function ToolPanel({ upload, onStarted }: { upload: any; onStarted: (job:
         {(Object.keys(TOOL_NAMES) as Tool[]).map((t) => (
           <button key={t} role="tab" aria-selected={tool === t} className={tool === t ? "on" : ""} onClick={() => setTool(t)}>{TOOL_NAMES[t]}</button>))}
       </div>
+      {tool === "clips" && templates.length > 0 && <div className="options">
+        <label className="grow">Template
+          <select value={o.template} onChange={(e) => pickTemplate(e.target.value)}>
+            <option value="">No template</option>
+            {templates.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          </select></label>
+        <p className="muted grow">{template ? template.description : "A template sets the options below for one kind of clip. You can still change any of them."}</p>
+      </div>}
       <div className="options">
         {tool === "find" && <label className="grow">What are you looking for?
           <input value={o.query} placeholder="police chase, or something that was said" onChange={(e) => set("query", e.target.value)} /></label>}
         {tool === "clips" && <label>Clips<select value={o.max_clips} onChange={(e) => set("max_clips", +e.target.value)}>
           {[1, 2, 3, 5, 8, 10].map((n) => <option key={n}>{n}</option>)}</select></label>}
         {(tool === "clips" || tool === "find") && <label>Length<select value={o.clip_length} onChange={(e) => set("clip_length", +e.target.value)}>
-          {[15, 30, 45, 60].map((n) => <option key={n} value={n}>{n} s</option>)}</select></label>}
+          {[15, 20, 30, 40, 45, 60].map((n) => <option key={n} value={n}>{n} s</option>)}</select></label>}
         {(tool === "reframe" || tool === "captions") && <>
           <label>From<input className="time" value={o.from} placeholder="0:00" onChange={(e) => set("from", e.target.value)} /></label>
           <label>To<input className="time" value={o.to} placeholder="end" onChange={(e) => set("to", e.target.value)} /></label></>}
@@ -76,6 +103,13 @@ export function ToolPanel({ upload, onStarted }: { upload: any; onStarted: (job:
         {tool !== "reframe" && (tool === "captions" || o.captions) && <label className="check"><input type="checkbox"
           checked={o.censor} onChange={(e) => set("censor", e.target.checked)} /><span>Censor swears</span></label>}
       </div>
+      {tool === "clips" && <fieldset className="options edits">
+        <legend>Editing</legend>
+        {EDITS.map(([k, name]) => (
+          <label key={k} className="check"><input type="checkbox" checked={(o as any)[k]}
+            onChange={(e) => set(k, e.target.checked)} /><span>{name}</span></label>))}
+        <p className="muted">The opening and the on-screen hook are added to clips the AI has rated.</p>
+      </fieldset>}
       {problem && <p className="error" role="alert">{problem}</p>}
       <div className="row">
         <button className="btn primary" disabled={starting || !me.email_verified} onClick={start}>
