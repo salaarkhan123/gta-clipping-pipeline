@@ -1,5 +1,6 @@
 """Job worker. Claims QUEUED jobs from Postgres (FOR UPDATE SKIP LOCKED), runs the pipeline,
-stores results and settles credits. Run several copies to process jobs in parallel.
+stores results and settles credits. WORKER_CONCURRENCY jobs run at once in one process (default 1);
+several worker processes can also share one queue: a job is claimed by exactly one of them.
 
     python -m app.worker
 """
@@ -15,7 +16,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from . import ledger
 from .ai import default_ai
@@ -42,14 +43,21 @@ class Lost(Exception):
 
 
 def claim_job() -> str | None:
+    """Claim the oldest QUEUED job for this caller only. The conditional UPDATE decides the winner, so two
+    claimers never get the same job on any database (SKIP LOCKED only keeps Postgres claimers from waiting)."""
     with new_session() as db:
-        job = db.execute(select(Job).where(Job.status == "QUEUED").order_by(Job.created_at)
-                         .limit(1).with_for_update(skip_locked=True)).scalar_one_or_none()
-        if not job:
-            return None
-        job.status, job.started_at, job.heartbeat_at, job.stage = "RUNNING", utcnow(), utcnow(), "starting"
-        db.commit()
-        return job.id
+        for _ in range(5):
+            job_id = db.execute(select(Job.id).where(Job.status == "QUEUED").order_by(Job.created_at)
+                                .limit(1).with_for_update(skip_locked=True)).scalar_one_or_none()
+            if not job_id:
+                return None
+            now = utcnow()
+            won = db.execute(update(Job).where(Job.id == job_id, Job.status == "QUEUED")
+                             .values(status="RUNNING", started_at=now, heartbeat_at=now, stage="starting")).rowcount
+            db.commit()
+            if won:
+                return job_id
+        return None
 
 
 def default_transcriber() -> Transcriber | None:
@@ -334,19 +342,36 @@ def main() -> None:
     transcriber, indexer, embedder = default_transcriber(), default_indexer(), default_embedder()
     log.info("worker started (captions: %s, search index: %s, visual search: %s)",
              s.whisper_model, s.whisper_index_model, s.visual_search)
-    last_sweep = 0.0
-    while True:
+    log.info("running up to %s job(s) at once", s.worker_concurrency)
+    serve(s.worker_concurrency, threading.Event(), transcriber, indexer=indexer, embedder=embedder)
+
+
+def _slot(i: int, stop: threading.Event, transcriber, pipeline, indexer, embedder, ai) -> None:
+    """One job at a time until stop is set. Slot 0 also runs the sweeps."""
+    poll, last_sweep = get_settings().worker_poll_sec, 0.0
+    while not stop.is_set():
         try:
-            if time.monotonic() - last_sweep > 60:
+            if i == 0 and time.monotonic() - last_sweep > 60:
                 last_sweep = time.monotonic()
                 stale, expired = sweep_stale_jobs(), sweep_expired()
                 if stale or expired:
                     log.info("sweep: %s stale jobs refunded, %s expired files deleted", stale, expired)
-            if run_once(transcriber, indexer=indexer, embedder=embedder, ai=default_ai()) is None:
-                time.sleep(s.worker_poll_sec)
+            if run_once(transcriber, pipeline, indexer, embedder, ai or default_ai()) is None:
+                stop.wait(poll)
         except Exception:
             log.exception("worker loop error")
-            time.sleep(5)
+            stop.wait(5)
+
+
+def serve(concurrency: int, stop: threading.Event, transcriber: Transcriber | None = None, pipeline=run_pipeline,
+          indexer: Transcriber | None = None, embedder=None, ai=None) -> None:
+    """Run `concurrency` job slots until stop is set; returns when every slot has finished its current job."""
+    slots = [threading.Thread(target=_slot, args=(i, stop, transcriber, pipeline, indexer, embedder, ai),
+                              name=f"slot-{i}") for i in range(concurrency)]
+    for t in slots:
+        t.start()
+    for t in slots:
+        t.join()
 
 
 if __name__ == "__main__":

@@ -32,6 +32,27 @@ Anything that drops, renames or rewrites data needs its own PR and the owner's O
   (adding the missing columns and indexes, and making `uploads.analyzed` NOT NULL, which changes no values) and
   stamps it. After the deploy, `db-status` must report `revision 0001 · latest 0001`.
 
+## Running more than one job at once
+
+Default: one job at a time. Two ways to add capacity:
+
+- **`WORKER_CONCURRENCY=2`** in the server's env file, then `docker compose up -d worker` (when no job is
+  RUNNING). One worker process runs two jobs at once and shares one copy of the Whisper and CLIP models, so it
+  costs little extra memory. 2 is the limit on the 4 vCPU / 8 GB droplet: each job's ffmpeg and Whisper already
+  use every core, so two jobs each run slower, but a second customer no longer waits for the first to finish.
+  Values above 2 are rejected at start.
+- **A second worker container** (only on a bigger server, or a second one): each container loads its own
+  models (check the extra memory with `docker stats` before relying on it) and claims from the same queue; a
+  job is claimed by exactly one worker.
+  ```bash
+  docker compose up -d --scale worker=2 --no-recreate worker
+  ```
+  `deploy.sh` restarts with `up -d api worker`, which goes back to one container: run the scale command again
+  after each deploy. Total jobs at once = containers × `WORKER_CONCURRENCY`.
+
+After either change, run the 10-clip benchmark twice at the same time and compare with SPEC.md §10 B before
+relying on it.
+
 ## One-time switch from tarballs to git
 
 Do this when nothing is running, after `main` contains exactly the code the droplet runs
