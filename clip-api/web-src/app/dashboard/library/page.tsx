@@ -1,13 +1,65 @@
 "use client";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ClipCard, ClipFilter, ClipSort, ClipToolbar } from "@/components/dash/ClipCard";
+import { ProjectGrid } from "@/components/dash/ProjectCard";
 import { useDash } from "@/components/dash/Shell";
+import { Tabs } from "@/components/dash/Tabs";
 import { api } from "@/lib/api";
 
 const PAGE = 24;
+type View = "projects" | "clips";
 
-// Library: every clip on the account, newest first.
+// Library: everything stored on the account, as projects (one per video) or as one list of clips.
 export default function Library() {
+  const [view, setView] = useState<View>("projects");
+  useEffect(() => { if (new URLSearchParams(window.location.search).get("view") === "clips") setView("clips"); }, []);
+  function show(v: View) {
+    setView(v);
+    window.history.replaceState(null, "", v === "clips" ? "?view=clips" : window.location.pathname);
+  }
+  return (
+    <>
+      <h1 className="dash-title">Library</h1>
+      <Tabs label="Library view" panel="library-view" value={view} onChange={show} tabs={[["projects", "Projects"], ["clips", "Clips"]]} />
+      <div id="library-view" role="tabpanel" aria-label={view === "projects" ? "Projects" : "Clips"} className="stack">
+        {view === "projects" ? <AllProjects /> : <AllClips />}
+      </div>
+    </>
+  );
+}
+
+// Every stored video, newest first.
+function AllProjects() {
+  const { fail } = useDash();
+  const [projects, setProjects] = useState<any[] | null>(null), [more, setMore] = useState(false), [busy, setBusy] = useState(false);
+
+  // `quiet` refreshes the first page while something is still being worked on.
+  const load = useCallback(async (offset: number, quiet = false) => {
+    if (!quiet) setBusy(true);
+    try {
+      const r = await api(`/v1/projects?limit=${PAGE}&offset=${offset}`);
+      if (quiet) setProjects((list) => (list && list.length > PAGE ? [...r.projects, ...list.slice(PAGE)] : r.projects));
+      else { setMore(r.projects.length === PAGE); setProjects((list) => (offset ? [...(list || []), ...r.projects] : r.projects)); }
+    } catch (e) { fail(e); } finally { if (!quiet) setBusy(false); }
+  }, [fail]);
+  useEffect(() => { load(0); }, [load]);
+  const anyActive = !!projects?.slice(0, PAGE).some((p) => p.active);
+  useEffect(() => { if (!anyActive) return; const id = setInterval(() => load(0, true), 4000); return () => clearInterval(id); }, [anyActive, load]);
+
+  if (projects === null) return <p className="muted">Loading your projects…</p>;
+  if (!projects.length) return <p className="muted">No projects yet. <Link href="/dashboard/">Upload a stream recording</Link> to start one.</p>;
+  return (
+    <>
+      <p className="muted">Each video you upload is a project. Videos and clips are kept for 7 days.</p>
+      <ProjectGrid projects={projects} />
+      {more && <div><button className="btn ghost" disabled={busy} onClick={() => load(projects.length)}>{busy ? "Loading…" : "Show more"}</button></div>}
+    </>
+  );
+}
+
+// Every clip on the account, newest first.
+function AllClips() {
   const { fail } = useDash();
   const [clips, setClips] = useState<any[] | null>(null), [total, setTotal] = useState(0), [busy, setBusy] = useState(false);
   const [sort, setSort] = useState<ClipSort>("newest"), [filter, setFilter] = useState<ClipFilter>("all");
@@ -24,7 +76,6 @@ export default function Library() {
 
   return (
     <>
-      <h1 className="dash-title">Library</h1>
       <ClipToolbar sort={sort} filter={filter} sorts={["newest", "score", "time"]} onSort={setSort} onFilter={setFilter} />
       {clips === null ? <p className="muted">Loading your clips…</p>
         : !clips.length ? <p className="muted">{filter === "all" ? "No clips yet. Open a project and make some." : "No clips match this filter."}</p>
@@ -34,7 +85,7 @@ export default function Library() {
               {clips.map((c) => <ClipCard key={c.id} clip={c} project={{ id: c.upload_id, name: c.filename }}
                 onChange={(n) => setClips((list) => list!.map((x) => (x.id === n.id ? n : x)))} />)}
             </div>
-            {clips.length < total && <button className="btn ghost" disabled={busy} onClick={() => more(clips.length)}>{busy ? "Loading…" : "Show more"}</button>}
+            {clips.length < total && <div><button className="btn ghost" disabled={busy} onClick={() => more(clips.length)}>{busy ? "Loading…" : "Show more"}</button></div>}
           </>}
     </>
   );

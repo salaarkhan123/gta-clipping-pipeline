@@ -12,7 +12,8 @@ export async function downloadSubtitles(clipId: string, format = "srt") {
 }
 
 // One clip: preview, title, score, times, and its actions. `project` links back to where it came from (Library).
-export function ClipCard({ clip, onChange, project }: { clip: any; onChange: (c: any) => void; project?: { id: string; name: string } }) {
+// `lit` marks the card the timeline just jumped to.
+export function ClipCard({ clip, onChange, project, lit }: { clip: any; onChange: (c: any) => void; project?: { id: string; name: string }; lit?: boolean }) {
   const { fail } = useDash();
   // Pressing the active choice again clears it.
   const send = (body: Record<string, unknown>) => api(`/v1/clips/${clip.id}/feedback`, { body }).then((r) => onChange({ ...clip, ...r })).catch(fail);
@@ -22,7 +23,7 @@ export function ClipCard({ clip, onChange, project }: { clip: any; onChange: (c:
   const titles: string[] = clip.titles?.length ? (clip.titles.includes(clip.title) ? clip.titles : [clip.title, ...clip.titles]) : [];
   const retitle = (title: string) => api(`/v1/clips/${clip.id}`, { method: "PATCH", body: { title } }).then((r) => onChange({ ...clip, ...r })).catch(fail);
   return (
-    <figure className={`clip ${clip.kept === false ? "dropped" : ""}`}>
+    <figure id={`clip-${clip.id}`} tabIndex={-1} className={`clip ${clip.kept === false ? "dropped" : ""} ${lit ? "lit" : ""}`}>
       <video controls preload="none" poster={clip.thumb_url || undefined} src={clip.video_url} />
       <figcaption>
         <strong>{clip.title || `Clip ${clip.index}`}</strong>

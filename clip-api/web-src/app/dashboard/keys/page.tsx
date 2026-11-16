@@ -1,7 +1,8 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { Icon } from "@/components/dash/Icon";
 import { useDash } from "@/components/dash/Shell";
-import { api } from "@/lib/api";
+import { API, api } from "@/lib/api";
 
 export default function Keys() {
   const { fail } = useDash();
@@ -11,9 +12,11 @@ export default function Keys() {
 
   return (
     <>
-      <h1 className="dash-title">API keys</h1>
-      <p className="muted">Use a key to make clips from your own code. The website uses the same API. <a href="https://api.clutchclips.io/docs">API docs</a></p>
-      <section className="panel">
+      <h1 className="dash-title">API</h1>
+      <p className="muted">Use a key to make clips from your own code. The website uses the same API.</p>
+      <div><a className="btn small ghost" href={`${API}/docs`} target="_blank" rel="noreferrer">Read the API docs <Icon name="external" size={16} /></a></div>
+      <section className="panel" aria-labelledby="keys-title">
+        <h2 id="keys-title">API keys</h2>
         {fresh && <p className="notice" role="status">Copy this key now. It won't be shown again.<br /><code>{fresh}</code></p>}
         {keys === null ? <p className="muted">Loading…</p> : !keys.length ? <p className="muted">No keys yet.</p>
           : keys.map((k) => (<p key={k.id} className="key"><code>{k.prefix}…</code> {k.name}
