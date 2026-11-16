@@ -18,8 +18,9 @@ from tests.test_punchier_clips import Talker
 GOOD = {"titles": ["a", "b", "c"], "hook": "h", "hashtags": ["gta6"], "virality": {"hook": 70, "flow": 60, "value": 80, "trend": 50}, "reason": "y"}
 
 
-def test_four_to_six_gta_templates_and_every_option_is_a_real_clip_option():
-    assert 4 <= len(TEMPLATES) <= 6 and all(t["game"] == "gta" for t in TEMPLATES.values())
+def test_the_gta_templates_and_every_option_is_a_real_clip_option():
+    gta = [t for t in TEMPLATES.values() if t["game"] == "gta5"]              # the catalogue now covers more games
+    assert 4 <= len(gta) <= 6
     for tid, t in TEMPLATES.items():
         ClipOptions(template=tid, **t["options"])                             # every bundled option validates
         assert {"layout", "caption_style", "clip_length", "punch_zoom", "hook_overlay"} <= set(t["options"]), tid
