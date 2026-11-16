@@ -64,6 +64,10 @@ class PipelineOptions:
     punch_zoom: bool = True               # subtle punch-in zooms (max 1.15x) on the gameplay at loudness spikes
     flash_forward: bool = True            # open on 1.5 s of the peak when the judge names one, then cut back
     hook_overlay: bool = True             # burn the judge's on-screen hook text over the first 2.5 s
+    template: str | None = None           # the template these options came from (recorded, not interpreted here)
+    weights: dict | None = None           # per-signal weights overriding WEIGHTS, e.g. {"audio": 1.0}
+    transcript_bonus: float | None = None # overrides TRANSCRIPT_BONUS
+    judge_focus: str | None = None        # what kind of moment the judge should favour
 
 
 @dataclass
@@ -151,9 +155,10 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         raise PipelineError("no_signal", "This video has no audio track and no chat region was set, "
                                          "so there is nothing to score moments with.")
 
+    weights = {**WEIGHTS, **(options.weights or {})}
     total = np.zeros(n)
     for name, vals in series.items():
-        total += WEIGHTS[name] * vals
+        total += weights[name] * vals
 
     # 2. Candidate windows. Over-generate when we can re-rank with the transcript.
     use_asr = transcriber is not None and info.has_audio
@@ -174,7 +179,7 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     candidates: list[_Candidate] = []
     for start, end, mean in picks:
         a, b = int(start), max(int(start) + 1, int(end))
-        parts = {name: float(WEIGHTS[name] * vals[a:b].mean()) for name, vals in series.items()}
+        parts = {name: float(weights[name] * vals[a:b].mean()) for name, vals in series.items()}
         denom = sum(parts.values()) or 1.0
         candidates.append(_Candidate(
             start=start, end=end, base=mean / top,
@@ -195,7 +200,7 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         inside = [w for w in c.transcript.words if c.start <= w[0] + c.offset < c.end]
         c.features.update(exclamation_hits=hits, words=len(inside),
                           words_per_sec=round(len(inside) / max(c.end - c.start, 1), 3))
-        bonus = TRANSCRIPT_BONUS * min(hits, 3) / 3
+        bonus = (TRANSCRIPT_BONUS if options.transcript_bonus is None else options.transcript_bonus) * min(hits, 3) / 3
         if bonus:
             c.signals["transcript"] = round(bonus / (c.base + bonus), 3)
             scale = 1 - c.signals["transcript"]
@@ -209,7 +214,7 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     if judge is None:
         ranked = sorted(candidates, key=lambda c: c.final, reverse=True)
     else:
-        ranked = _judge(candidates, judge, input_path, out_dir, progress, deadline, info.duration)
+        ranked = _judge(candidates, judge, input_path, out_dir, progress, deadline, info.duration, options.judge_focus)
     distinct, _skipped = pick_distinct(
         ranked, options.max_clips, window=lambda c: (c.start, c.end), meta=lambda c: c.meta,
         speech=lambda c: " ".join(s[2] for s in c.transcript.segments),
@@ -305,7 +310,7 @@ def _apply_trim(c: _Candidate, trim: dict | None, duration: float) -> None:
 
 
 def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path, progress, deadline,
-           duration: float = float("inf")) -> list[_Candidate]:
+           duration: float = float("inf"), focus: str | None = None) -> list[_Candidate]:
     """Rate every candidate, drop the junk, and return them best first. The judge may also choose each clip's cut."""
     progress("judging", 60)
     frames = [_frame(src, (c.start + c.end) / 2, out_dir / f"cand{i}.jpg", deadline) for i, c in enumerate(candidates)]
@@ -316,7 +321,8 @@ def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path,
         # Timed lines let the judge pick where the clip starts, ends and peaks (seconds from the transcript's start).
         return judge(text, frames[i], {"length": c.end - c.start, "signals": c.signals,
                                        "lines": [(round(s, 1), t) for s, _e, t in c.transcript.segments],
-                                       "window": (round(c.start - c.offset, 1), round(c.end - c.offset, 1))})
+                                       "window": (round(c.start - c.offset, 1), round(c.end - c.offset, 1)),
+                                       **({"focus": focus} if focus else {})})
 
     with ThreadPoolExecutor(JUDGE_THREADS) as pool:
         metas = list(pool.map(rate, range(len(candidates))))
