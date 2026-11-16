@@ -1,0 +1,105 @@
+# Parity map: WayinVideo's gaming product → ClutchClips
+
+**Standard (owner, 2026-11-16): identical behaviour.** Same options, allowed values and defaults; same flow in the same number of steps or fewer; same kinds of output per clip. Ours: brand, name, logo, colours, copy, template artwork.
+
+**Source of the "Wayin" column:** their public API docs, product pages and help centre, read on 2026-11-16 (24 API pages, 2 product pages, about 25 help articles). Nothing here was observed in their app. Where their docs disagree with each other or say nothing, the row is marked **ASK** and listed under "Questions for the owner": we do not guess.
+
+**Status:** done · partial · missing · skip (not gaming-relevant).
+**Verified** (agent H, per feature, against Wayin's output for the same input in `~/Downloads/wayin-benchmark/`): options / flow / outputs, each ✓ or ✗. A feature is done only with three ✓. **No row is verified yet: that folder does not exist.**
+
+## 1. AI Clipping
+
+| Option / behaviour | Wayin (documented) | ClutchClips today | Status | Agent · ticket | Verified O/F/O |
+|---|---|---|---|---|---|
+| Input | Platform link or uploaded file id | Uploaded file only | partial | E · 4.4a | – |
+| Project name | Optional label, default empty | None | missing | A | – |
+| Source language | ISO code from a list of 100, default auto-detect | English only | missing | F · 2.3 | – |
+| Target language (titles, descriptions, subtitles) | ISO code, default same as source | English only | missing | F · 2.3 | – |
+| Clip length | Buckets 0–30, 0–90, 30–60, 60–90, 90–180, 180–300 s; default 0–90 | Fixed length 10–60 s (default 30); the AI may pick 15–45 s | partial | A | – |
+| Clip limit | Top N by score; default all | 1–10, default 3 | partial | A | – |
+| Time range | Whole video or a chosen range (web product; not in the API) | Whole video only | missing | A | – |
+| Render on request | Off by default: results are metadata; on renders every clip | Always renders every clip | partial | B · S2 | – |
+| Resolution | 480, 720, 1080, 2K, 4K; default 480; never above the source | 1080 (capped by plan) | partial | B · S2 (plan caps: money) | – |
+| Captions | Off by default | On by default | partial | B | – |
+| Caption display | Original, translation or both; default original | Original only | missing | F · 2.3 | – |
+| Caption style | 53 styles: 4 word-emphasis, 18 animated, 6 static, 25 gaming; default the 8th animated one | 5 styles | missing | B · 2.2 | – |
+| AI hook | Off by default; 13 script styles (default serious); position beginning or end | On by default; one style; beginning only | partial | B · 3.2 | – |
+| Hook keywords, hook duration | On re-export only | Fixed 2.5 s, no keywords | missing | B | – |
+| Reframe | Off by default (keeps source ratio) | On by default (9:16) | partial | B | – |
+| Ratio | 9:16, 1:1, 4:5, 16:9 | Same four | done | B | – |
+| Reframe layout | Auto, Full, Fit, Grid 4, Split 2, Trio, PiP, OTS, Screen First, Gameplay A, Gameplay B; allowed set depends on the ratio; default Auto | auto, split, fill, classic | partial | B · 2.1a/b | – |
+| More results, express mode | Enterprise-only switches | None | **ASK** | – | – |
+| Task states | Created, queued, ongoing, succeeded, failed | Queued, running, succeeded, failed, cancelled | partial | A | – |
+| Results while running | Clips appear as they are found | Clips appear as they render (PR #111) | partial | A · S1 | – |
+| Per clip: rank | Index in rank order, from 0 | Number in video order, from 1, plus rank | partial | A | – |
+| Per clip: times | Begin and end in milliseconds | Start and end in seconds | partial | A | – |
+| Per clip: title, description, tags | One each | Title (3 options), description, hashtags | done | A | – |
+| Per clip: score | 0–100 | 0–100 from the AI (hidden behind rank and tier until calibrated) | partial | A · U4/U5 | – |
+| Score breakdown | Five dimensions (Hook, Story, Value, Engagement, Reach) with grades and explanations on paid plans | Four parts (hook, flow, value, trend), one reason | partial | A · U4 | – |
+| Per clip: thumbnail | Image URL | Frame from the clip | done | B | – |
+| Per clip: download link | Only when rendered; new link on every read, valid 24 h | Signed link, valid for a configured time | partial | B | – |
+| Result expiry, cost used | Reported per task | Expiry reported; credits charged reported | done | – | – |
+| Markers on the source timeline | Results show where each clip came from | Not shown | missing | D | – |
+
+## 2. Other tools
+
+| Feature | Wayin (documented) | ClutchClips today | Status | Agent · ticket | Verified O/F/O |
+|---|---|---|---|---|---|
+| Find Moments | Prompt search; same clip format and render options as clipping; limit; no length bucket | Video Finder: speech and on-screen search, returns matches and optional clips | partial | A · 3.3 | – |
+| Re-export clips | Render all or chosen clips of a finished task again with new options | None (a clip is rendered once) | missing | B · S2 | – |
+| One-Click Highlights | Prompt-driven montage from one or several videos; ratio, duration, language, subtitles, hook, B-roll, music; five prompt presets | None | missing | B · 3.4 (music licence: owner) | – |
+| Game Clipping | Per-game templates: a layout, a subtitle style and detection tuned to the game | 5 GTA templates (options and tuning) | partial | C · 2.4 | – |
+| Game list | LoL, GTA 5, WoW, OW2, Minecraft, Apex, Valorant, Fortnite, Dota 2 / Rust, More | GTA only | partial | C | – |
+| Which templates sit under each game | Not in the docs (needs their app) | – | **ASK** | C | – |
+| Video Editor | Canvas, layered timeline, trim, transcript-based cutting, reframe, subtitles, elements, hook, text, audio, transitions, details; autosave | None | missing | D · 1.4a–d (re-render charging: money) | – |
+| AI Subtitles | 100 languages; styles; line editing; original / translated / both; punctuation toggle; max characters per line; emoji; TXT, SRT, VTT export | English; 5 styles; SRT, VTT, TXT export | partial | F · 2.3, B · 2.2 | – |
+| Video Transcripts | Segments with text, language, start, end, speaker; optional translation | Internal transcript for search; no endpoint, no speakers | partial | F · U1 | – |
+| Video Summary | Title, summary, tags, timed highlights | None | missing | F | – |
+| AI Note Taker, mind map, chat with video | Notes with prompt, length, timestamps, images | None | skip | – | – |
+| AI Reframe | Bulk, per clip, or a whole long video; automatic per scene or fixed | Reframe tool for a range, fixed layout | partial | B | – |
+| Video Enhancer | Upscale to 1080p, 2K or 4K; sharper on-screen text; range up to 10 minutes | None | missing | B (needs an upscaling model: cost to verify) | – |
+| AI Thumbnail | Generated options, an uploaded image, or a chosen frame | Frame only | partial | B · U7 (generated: paid service, money) | – |
+| AI Hook voice | Generated voiceover | None | missing | B · 3.2 (TTS: paid service, money) | – |
+| AI B-roll / AI Video | Generated, stock or own media, auto-placed | None | missing | B · 3.5 (paid services, money) | – |
+| Live Clipping | By application only; no public behaviour documented | None | missing | E · 4.5 | – |
+| Bulk edit | One format, style, hook, cleanup or template across many clips | None | missing | D · 1.5 | – |
+| Custom templates | Save hook, audio cleanup, filler and silence removal, intro and outro | None | missing | C | – |
+| Brand kit | Logos, colours, subtitle and text styles, fonts, media | None | missing | D · 2.5 | – |
+| Scheduler and publishing | Connect accounts; post now or on a schedule to YouTube, TikTok, Instagram, Facebook, LinkedIn, X; calendar; bulk schedule; cancel | None | missing | E · 4.1/4.2 (platform approvals: owner) | – |
+| Agent integration | Agent skills and a remote MCP server | A skill exists; no MCP server | partial | G | – |
+| Export | MP4; 480 to 4K, never above the source; no watermark | MP4; 1080; no watermark | partial | B · S2 | – |
+
+## 3. Ingestion
+
+| Feature | Wayin (documented) | ClutchClips today | Status | Agent · ticket | Verified O/F/O |
+|---|---|---|---|---|---|
+| File upload | Ask for an upload URL, send the file to storage, use the returned id; MP4, MOV, WEBM, AVI | Send the file to the API; more formats accepted | partial | E · 4.4b | – |
+| Link import | 17 sources in the web importer: YouTube, Instagram, TikTok, Facebook, X, Twitch, Kick, Google Drive, Dropbox, Box, Zoom, Loom, StreamYard, Vimeo, Dailymotion, Rumble, Medal. Links must be public | None | missing | E · 4.4a | – |
+| Google Drive | Connected file picker or a share link | None | missing | E · 4.4c | – |
+| Bulk import | Several videos per batch (10, 30 or 50 by plan) | None | missing | E · 4.3 (batch limits: money) | – |
+
+Our ingestion rule stays (CLAUDE.md): public, non-DRM content only; no logins, cookies, proxies or block evasion; fail cleanly and say "upload instead"; consent and a log per import. Wayin's own docs state the same access rule (links must open in a signed-out browser). Sources that need a login will fail on both; the site lists only sources we have verified.
+
+## 4. Web app flow
+
+| Step | Wayin (documented and from the owner's screenshots) | ClutchClips today | Status | Agent |
+|---|---|---|---|---|
+| Home | Link or upload box, Upload and Bulk import buttons, tool grid, recent projects | Projects page with upload | partial | D |
+| Sidebar | Home, Library, Scheduler, Brand kit, Pricing, API | Projects, Library, Brand kit and Publishing (coming soon), API keys, Billing | partial | D |
+| Settings before a run | Clip length, ratio or template, subtitle style, hook | Template, clips, length, shape, caption style, editing switches | partial | D |
+| Results | Ranked by score, sortable by time, preview, edit, export or publish | Ranked, sortable, preview, download | partial | D |
+| Template gallery | Game filter tabs, preview clip per template, "use template" | Template select | partial | C, D |
+
+## 5. Money (owner decides; nothing here is built without an OK in the PR)
+
+Their plans, credits and per-plan limits (export resolution, storage, upload size, bulk batch size, connected accounts, scheduled posts, custom templates, fonts, seats) are listed in the research notes. Parity of **prices and plan limits** is a pricing decision, not a build task: **ASK**.
+
+## Questions for the owner
+
+1. **API names.** Same options and values are planned. Should our API also use their exact parameter names and enum spellings, or our own names with a published mapping? I recommend our own names.
+2. **API defaults.** Their defaults are render off, captions off, reframe off, hook off, 480p. Ours are all on. Matching them changes what an API call without options returns. The dashboard would still send its own choices. Confirm the switch.
+3. **Clip index.** Theirs counts from 0 in rank order; ours counts from 1 in video order. Switch, or return both?
+4. **Templates per game** and what each **caption style** and the **Gameplay A / B** layouts look like are not in their docs. I need screenshots or recordings in `~/Downloads/wayin-benchmark/`.
+5. **Enterprise switches** (more results, express mode): their two pages disagree on what express mode costs. Build, skip, or wait?
+6. **Paid services** needed for parity: text-to-speech (hook voice), image generation (thumbnails), video or stock footage (B-roll), an upscaler (enhancer), hosted transcription in 100 languages. Each needs a verified price and your OK.
+7. **Plan limits and prices**: copy theirs, or keep ours?
