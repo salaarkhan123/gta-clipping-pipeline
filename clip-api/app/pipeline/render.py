@@ -114,19 +114,28 @@ def fit_layout(layout: str, aspect: str) -> str:
     return layout
 
 
+def punch_in(tw: int, th: int, expr: str) -> str:
+    """Zoom the tw x th picture by `expr` (an ffmpeg expression of t, 1 = no zoom) about its centre. Empty for "1"."""
+    if expr == "1":
+        return ""
+    return (f",scale=w='2*trunc({tw}*({expr})/2)':h='2*trunc({th}*({expr})/2)':eval=frame,crop={tw}:{th}")
+
+
 def layout_filter(src_w: int, src_h: int, layout: str, zoom: float, chat: str, facecam,
-                  ow: int = W, oh: int = H) -> str:
-    """split: facecam top third + gameplay below. fill: gameplay fills the frame. classic: old blurred layout."""
+                  ow: int = W, oh: int = H, punch: str = "1") -> str:
+    """split: facecam top third + gameplay below. fill: gameplay fills the frame. classic: old blurred layout.
+    `punch` is a zoom expression over time for the gameplay picture (split and fill only)."""
     if layout == "split":
         top = even(oh / 3)
         region = FACECAM_REGIONS[facecam] if isinstance(facecam, str) else tuple(facecam)
         _how, bottom = gameplay_crop(src_w, src_h, ow, oh - top, zoom, region)
+        bottom = bottom[: -len("[bot]")] + punch_in(ow, oh - top, punch) + "[bot]"
         return (f"[0:v]split=2[a][b];"
                 f"[a]{fill_crop(src_w, src_h, region, ow, top)}[top];"
                 f"{bottom};"
                 f"[top][bot]vstack=inputs=2,format=yuv420p[v]")
     if layout == "fill":
-        return f"[0:v]{fill_crop(src_w, src_h, FULL_FRAME, ow, oh, zoom)},format=yuv420p[v]"
+        return f"[0:v]{fill_crop(src_w, src_h, FULL_FRAME, ow, oh, zoom)}{punch_in(ow, oh, punch)},format=yuv420p[v]"
     return vertical_filter(src_w, src_h, zoom, chat)
 
 
@@ -136,6 +145,13 @@ def caption_top(src_w: int, src_h: int, layout: str, zoom: float, chat: str, oh:
     if layout == "fill":
         return int(oh * 0.70)
     return video_bottom(src_w, src_h, zoom, chat) + 30
+
+
+def hook_top(layout: str, oh: int = H) -> int:
+    """Where the on-screen hook sits, in pixels from the top: on the gameplay, clear of the camera and the captions."""
+    if layout == "split":
+        return even(oh / 3) + 120      # under the captions on the seam, at the top of the gameplay panel
+    return int(oh * 0.18)
 
 
 def capped_size(w: int, h: int, max_side: int | None) -> tuple[int, int] | None:
@@ -187,32 +203,75 @@ def video_bottom(src_w: int, src_h: int, zoom: float, chat: str) -> int:
     return top + chat_h + GAP + main_h
 
 
+CUT_FADE = 0.03      # seconds of audio fade on each side of a cut, so cuts do not click
+
+
+def segments_graph(segments: list[tuple[float, float]], lo: float, has_audio: bool) -> str:
+    """Filter graph that plays `segments` (source seconds) back to back. Reads input 0 (which starts at source
+    time `lo`), writes [cv] and, with audio, [ca]."""
+    n = len(segments)
+    parts = [f"[0:v]fps={OUT_FPS},split={n}" + "".join(f"[s{i}]" for i in range(n))]
+    if has_audio:
+        parts.append(f"[0:a]asplit={n}" + "".join(f"[t{i}]" for i in range(n)))
+    for i, (s, e) in enumerate(segments):
+        parts.append(f"[s{i}]trim=start={s - lo:.3f}:end={e - lo:.3f},setpts=PTS-STARTPTS[v{i}]")
+        if has_audio:
+            d = e - s
+            parts.append(f"[t{i}]atrim=start={s - lo:.3f}:end={e - lo:.3f},asetpts=PTS-STARTPTS,"
+                         f"afade=t=in:d={CUT_FADE},afade=t=out:st={max(0.0, d - CUT_FADE):.3f}:d={CUT_FADE}[a{i}]")
+    if has_audio:
+        parts.append("".join(f"[v{i}][a{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=1[cv][ca]")
+    else:
+        parts.append("".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[cv]")
+    return ";".join(parts)
+
+
 def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, src_h: int,
                 vertical: bool, zoom: float, chat: str, words, font: str,
                 layout: str = "fill", facecam=None, style: str = "pop", aspect: str = "9:16",
-                max_side: int | None = None, deadline: Deadline | None = None) -> None:
-    """Cut [start, end] from src and render it. `words` are clip-relative (start, end, text) or empty."""
+                max_side: int | None = None, deadline: Deadline | None = None,
+                segments: list[tuple[float, float]] | None = None, punch: str = "1", has_audio: bool = True,
+                hook: str | None = None) -> None:
+    """Cut [start, end] from src and render it. `words` are clip-relative (start, end, text) or empty.
+
+    With `segments` (source seconds, in playing order) those pieces are played back to back instead, and `words`
+    are on that rendered timeline. `punch` is a zoom expression over rendered time for the gameplay picture.
+    `hook` is a line of on-screen text for the first 2.5 s.
+    """
     # Caption files live in the system temp dir so the path has no spaces (ffmpeg filter paths are fussy).
     tmp = Path(tempfile.mkdtemp(prefix="clipcap"))
     try:
         cap_filter = ""
         ow, oh = ASPECTS.get(aspect, ASPECTS["9:16"]) if vertical else (src_w, src_h)
         layout = fit_layout(layout, aspect)
-        if words:
+        if words or hook:
             top = caption_top(src_w, src_h, layout, zoom, chat, oh) if vertical else 0
-            build_ass(words, tmp / "cap.ass", vertical, top, font, style, play=(ow, oh))
+            build_ass(words, tmp / "cap.ass", vertical, top, font, style, play=(ow, oh), hook=hook,
+                      hook_top=hook_top(layout, oh) if vertical else int(1080 * 0.1))
             cap_filter = f"ass=filename={tmp / 'cap.ass'}"
         size = capped_size(ow, oh, max_side)
         scale = ["-s", f"{size[0]}x{size[1]}"] if size else []
+        pieces = segments if segments and segments != [(start, end)] else None
+        lo, hi = (min(s for s, _ in pieces), max(e for _, e in pieces)) if pieces else (start, end)
         if vertical:
             # 30 fps out: TikTok, Shorts and Reels play it natively and it cuts render time by ~40% on 60 fps VODs.
-            graph = layout_filter(src_w, src_h, layout, zoom, chat, facecam, ow, oh).replace("[0:v]", f"[0:v]fps={OUT_FPS},", 1)
+            graph = layout_filter(src_w, src_h, layout, zoom, chat, facecam, ow, oh, punch)
+            if pieces:
+                graph = segments_graph(pieces, lo, has_audio) + ";" + graph.replace("[0:v]", "[cv]", 1)
+            else:
+                graph = graph.replace("[0:v]", f"[0:v]fps={OUT_FPS},", 1)
             if cap_filter:
                 graph = graph[: -len("[v]")] + "[pre];[pre]" + cap_filter + "[v]"
-            vf = ["-filter_complex", graph, "-map", "[v]", "-map", "0:a?"]
+            vf = ["-filter_complex", graph, "-map", "[v]"]
+        elif pieces:
+            vf = ["-filter_complex", segments_graph(pieces, lo, has_audio) + f";[cv]{cap_filter or 'null'}[v]", "-map", "[v]"]
         else:
             vf = ["-vf", f"fps={OUT_FPS}" + ("," + cap_filter if cap_filter else "")]
-        run(["ffmpeg", "-loglevel", "error", "-y", "-ss", f"{start:.3f}", "-t", f"{end - start:.3f}",
+        if pieces:
+            vf += ["-map", "[ca]"] if has_audio else []
+        elif vertical:
+            vf += ["-map", "0:a?"]
+        run(["ffmpeg", "-loglevel", "error", "-y", "-ss", f"{lo:.3f}", "-t", f"{hi - lo:.3f}",
              *SAFE_IN, "-i", src, *vf, *scale,
              "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
              "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out], deadline)
