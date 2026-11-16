@@ -59,9 +59,14 @@ def _clean(word: str, upper: bool) -> str:
     return word.upper() if upper else word
 
 
+HOOK_SECONDS = 2.5    # how long the on-screen hook stays up at the start of a clip
+HOOK_TEXT, HOOK_BOX = "&H00050D0A", "&H003CFFB8"     # near-black on the brand lime (ASS colours are BGR)
+
+
 def build_ass(words, path: Path, vertical: bool, caption_top: int, font: str, style: str = "pop",
-              play: tuple[int, int] = (1080, 1920)) -> int:
-    """A few words at a time, the word being said highlighted. Returns the number of chunks."""
+              play: tuple[int, int] = (1080, 1920), hook: str | None = None, hook_top: int = 0) -> int:
+    """A few words at a time, the word being said highlighted. Returns the number of chunks.
+    `hook` is one line of text shown in a box for the first HOOK_SECONDS, `hook_top` pixels from the top."""
     st = CAPTION_STYLES.get(style, CAPTION_STYLES["pop"])
     if vertical:
         play_w, play_h = play
@@ -77,7 +82,9 @@ def build_ass(words, path: Path, vertical: bool, caption_top: int, font: str, st
         "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, "
         "Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
         f"Style: Cap,{font},{size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,"
-        f"100,100,1,0,{border},2,60,60,{margin_v},1\n\n"
+        f"100,100,1,0,{border},2,60,60,{margin_v},1\n"
+        f"Style: Hook,{font},{int(size * 0.9)},{HOOK_TEXT},{HOOK_TEXT},{HOOK_BOX},{HOOK_BOX},1,0,0,0,"
+        f"100,100,0,0,3,14,0,8,90,90,{hook_top},1\n\n"
         "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
     chunks = group_words(words, st["words"], st["chars"])
     on = ""
@@ -85,6 +92,8 @@ def build_ass(words, path: Path, vertical: bool, caption_top: int, font: str, st
         on = "{\\c" + st["hl"] + (f"\\fscx{st['scale']}\\fscy{st['scale']}" if st["scale"] != 100 else "") + "}"
     off = "{\\c&HFFFFFF&\\fscx100\\fscy100}" if st["hl"] else ""
     lines = []
+    if hook:
+        lines.append(f"Dialogue: 1,{ass_time(0)},{ass_time(HOOK_SECONDS)},Hook,,0,0,0,,{{\\fad(120,220)}}{_clean(hook, True)}")
     for ci, chunk in enumerate(chunks):
         chunk_end = chunk[-1][1]
         if ci + 1 < len(chunks):

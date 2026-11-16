@@ -25,8 +25,10 @@ def s3(monkeypatch):
     server.start()
     host, port = server.get_host_and_port()
     url = f"http://{host}:{port}"
-    boto3.client("s3", endpoint_url=url, region_name="us-east-1",
-                 aws_access_key_id="k", aws_secret_access_key="s").create_bucket(Bucket=BUCKET)
+    c = boto3.client("s3", endpoint_url=url, region_name="us-east-1", aws_access_key_id="k", aws_secret_access_key="s")
+    c.create_bucket(Bucket=BUCKET)
+    for o in c.list_objects_v2(Bucket=BUCKET).get("Contents", []):   # moto keeps state for the whole process
+        c.delete_object(Bucket=BUCKET, Key=o["Key"])
     for name, value in dict(STORAGE_BACKEND="s3", S3_ENDPOINT_URL=url, S3_BUCKET=BUCKET, S3_ACCESS_KEY_ID="k",
                             S3_SECRET_ACCESS_KEY="s", S3_REGION="us-east-1").items():
         monkeypatch.setenv(name, value)
