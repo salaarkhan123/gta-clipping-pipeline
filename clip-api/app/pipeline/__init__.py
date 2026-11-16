@@ -11,6 +11,7 @@ one from its transcript and a frame, and the best-rated are rendered. Loud is no
 judge throws out intro cards, menus and dead air that happen to be loud.
 """
 import json
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -22,6 +23,7 @@ from .ff import SAFE_IN, Deadline, PipelineError, PipelineTimeout, probe, run  #
 from .render import CHAT_REGIONS, FACECAM_REGIONS, render_clip, render_thumb, resolve_layout
 from .censor import mask, mask_words
 from .facecam import resolve_facecam
+from .timing import Timer
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
 from .transcribe import Transcriber, Transcript, exclamation_hits, extract_wav, snap_to_speech
 from .edit import KEEP_PAUSE, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, with_flash_forward, within_budget, zoom_expr, zoom_peaks
@@ -125,30 +127,37 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                  transcriber: Transcriber | None = None,
                  deadline: Deadline | None = None,
                  judge: Judge | None = None,
-                 fast_transcriber: Transcriber | None = None) -> list[ClipResult]:
+                 fast_transcriber: Transcriber | None = None, timer: Timer | None = None) -> list[ClipResult]:
+    """`timer`, when given, receives how long each stage took and how much work it did (see timing.py)."""
     progress = progress_cb or (lambda stage, pct: None)
+    timer = timer or Timer()
     input_path, out_dir = Path(input_path), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     if options.chat_region != "none" and options.chat_region not in CHAT_REGIONS:
         raise PipelineError("bad_options", "Unknown chat_region.")
 
     progress("probing", 2)
-    info = probe(input_path, deadline)
+    with timer.stage("probe"):
+        info = probe(input_path, deadline)
     n = int(info.duration) + 1
-    layout, facecam = resolve_facecam(input_path, info, options, deadline)
+    timer.count("source_sec", round(info.duration, 1))
+    with timer.stage("facecam_detect"):
+        layout, facecam = resolve_facecam(input_path, info, options, deadline)
 
     # 1. Cheap signals over the whole source.
     series: dict[str, np.ndarray] = {}
     if options.chat_region != "none":
         progress("chat_motion", 5)
-        motion = onscreen_chat_motion(input_path, options.chat_region, deadline)
+        with timer.stage("chat_motion"):
+            motion = onscreen_chat_motion(input_path, options.chat_region, deadline)
         if motion:
             floor = max(float(np.std(motion)) * 0.1, 1e-6)
             series["chat_motion"] = normalise(baseline_z(motion, floor=floor), n, shift=CHAT_LAG)
     db: list[float] = []
     if info.has_audio:
         progress("audio", 30)
-        db = audio_rms_db(input_path, deadline) or []
+        with timer.stage("audio_signal"):
+            db = audio_rms_db(input_path, deadline) or []
         if db:
             series["audio"] = normalise(baseline_z(db, floor=1.0), n)
     if not series:
@@ -193,8 +202,10 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         if not use_asr:
             continue
         progress("transcribing", 45 + int((15 if judge else 25) * i / len(candidates)))
-        _transcribe(c, i, rough, input_path, info.duration, out_dir, deadline,
-                    pad=JUDGE_PAD if judge is not None else PAD)
+        with timer.stage("transcribe_rough"):
+            _transcribe(c, i, rough, input_path, info.duration, out_dir, deadline,
+                        pad=JUDGE_PAD if judge is not None else PAD)
+        timer.count("transcribed_rough_sec", round(c.end - c.start + 2 * (JUDGE_PAD if judge is not None else PAD), 1))
         text = " ".join(s[2] for s in c.transcript.segments)
         hits = exclamation_hits(text)
         inside = [w for w in c.transcript.words if c.start <= w[0] + c.offset < c.end]
@@ -211,10 +222,12 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         if judge is None:
             _snap(c, info.duration)
 
+    timer.count("candidates", len(candidates))
     if judge is None:
         ranked = sorted(candidates, key=lambda c: c.final, reverse=True)
     else:
-        ranked = _judge(candidates, judge, input_path, out_dir, progress, deadline, info.duration, options.judge_focus)
+        ranked = _judge(candidates, judge, input_path, out_dir, progress, deadline, info.duration, options.judge_focus,
+                        timer)
     distinct, _skipped = pick_distinct(
         ranked, options.max_clips, window=lambda c: (c.start, c.end), meta=lambda c: c.meta,
         speech=lambda c: " ".join(s[2] for s in c.transcript.segments),
@@ -224,7 +237,9 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         for i, c in enumerate(chosen):
             progress("transcribing", 62 + int(8 * i / len(chosen)))
             if use_asr and rough is not transcriber:
-                _transcribe(c, 100 + i, transcriber, input_path, info.duration, out_dir, deadline)
+                with timer.stage("transcribe_final"):
+                    _transcribe(c, 100 + i, transcriber, input_path, info.duration, out_dir, deadline)
+                timer.count("transcribed_final_sec", round(c.end - c.start + 2 * PAD, 1))
             _snap(c, info.duration)
 
     # 4. Render.
@@ -235,8 +250,9 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                   if c.start <= s + c.offset < c.end]                     # source seconds
         segments = [(round(c.start, 3), round(c.end, 3))]
         if options.tighten and info.has_audio:
-            dead = (avoid_words(silences(input_path, c.start, c.end, deadline), spoken)
-                    + speech_gaps(spoken, db, c.start, c.end))
+            with timer.stage("dead_air"):
+                dead = (avoid_words(silences(input_path, c.start, c.end, deadline), spoken)
+                        + speech_gaps(spoken, db, c.start, c.end))
             quiet = [(s + KEEP_PAUSE / 2, e - KEEP_PAUSE / 2) for s, e in within_budget(dead, c.end - c.start)]
             segments = cut(c.start, c.end, quiet + filler_spans(spoken))
         body = segments
@@ -257,15 +273,21 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         c.features["edit"] = {"segments": segments, "flash_forward": flash, "zoom_at": zooms, "hook": hook,
                               "removed_sec": round((c.end - c.start) - kept_duration(body), 2)}
         video = out_dir / f"clip-{i}.mp4"
-        render_clip(input_path, c.start, c.end, video, src_w=info.width, src_h=info.height,
-                    vertical=options.vertical, zoom=options.zoom, chat=options.chat_region,
-                    words=words, font=options.caption_font, layout=layout, facecam=facecam,
-                    style=options.caption_style, aspect=options.aspect, max_side=options.max_side,
-                    deadline=deadline, segments=segments, punch=zoom_expr(zooms), has_audio=info.has_audio,
-                    hook=hook)
+        t0 = time.monotonic()
+        with timer.stage("render"):
+            render_clip(input_path, c.start, c.end, video, src_w=info.width, src_h=info.height,
+                        vertical=options.vertical, zoom=options.zoom, chat=options.chat_region,
+                        words=words, font=options.caption_font, layout=layout, facecam=facecam,
+                        style=options.caption_style, aspect=options.aspect, max_side=options.max_side,
+                        deadline=deadline, segments=segments, punch=zoom_expr(zooms), has_audio=info.has_audio,
+                        hook=hook)
+        c.features["edit"]["render_sec"] = round(time.monotonic() - t0, 2)
+        timer.count("clips")
+        timer.count("rendered_sec", round(kept_duration(segments), 1))
         thumb = out_dir / f"clip-{i}.jpg"
         try:
-            render_thumb(video, thumb, deadline)
+            with timer.stage("thumbnail"):
+                render_thumb(video, thumb, deadline)
         except PipelineTimeout:
             raise
         except PipelineError:
@@ -310,10 +332,12 @@ def _apply_trim(c: _Candidate, trim: dict | None, duration: float) -> None:
 
 
 def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path, progress, deadline,
-           duration: float = float("inf"), focus: str | None = None) -> list[_Candidate]:
+           duration: float = float("inf"), focus: str | None = None, timer: Timer | None = None) -> list[_Candidate]:
     """Rate every candidate, drop the junk, and return them best first. The judge may also choose each clip's cut."""
+    timer = timer or Timer()
     progress("judging", 60)
-    frames = [_frame(src, (c.start + c.end) / 2, out_dir / f"cand{i}.jpg", deadline) for i, c in enumerate(candidates)]
+    with timer.stage("judge_frames"):
+        frames = [_frame(src, (c.start + c.end) / 2, out_dir / f"cand{i}.jpg", deadline) for i, c in enumerate(candidates)]
 
     def rate(i: int):
         c = candidates[i]
@@ -324,8 +348,9 @@ def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path,
                                        "window": (round(c.start - c.offset, 1), round(c.end - c.offset, 1)),
                                        **({"focus": focus} if focus else {})})
 
-    with ThreadPoolExecutor(JUDGE_THREADS) as pool:
+    with timer.stage("judge_ai"), ThreadPoolExecutor(JUDGE_THREADS) as pool:
         metas = list(pool.map(rate, range(len(candidates))))
+    timer.count("judged", sum(1 for m in metas if m))
     for f in frames:
         if f:
             f.unlink(missing_ok=True)
@@ -351,5 +376,5 @@ def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path,
     return out if out else junk[:1]
 
 
-__all__ = ["run_pipeline", "PipelineOptions", "ClipResult", "PipelineError", "PipelineTimeout",
+__all__ = ["run_pipeline", "PipelineOptions", "ClipResult", "PipelineError", "PipelineTimeout", "Timer",
            "Deadline", "probe", "asdict"]

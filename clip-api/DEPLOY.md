@@ -32,6 +32,23 @@ Anything that drops, renames or rewrites data needs its own PR and the owner's O
   (adding the missing columns and indexes, and making `uploads.analyzed` NOT NULL, which changes no values) and
   stamps it. After the deploy, `db-status` must report `revision 0001 · latest 0001`.
 
+## Measuring speed
+
+Every job records where its time went: `result.stages` (seconds per pipeline stage), `result.counts` (candidates,
+clips, seconds transcribed and rendered), `result.queue_sec` and `result.total_sec` (queue + run: what a customer
+waits). Failed and cancelled jobs record it too. The goal is a 2-hour video in 10 minutes and a 4-hour video in 15.
+
+```bash
+curl -s $API/v1/jobs/<job_id> -H "authorization: Bearer $KEY" > job.json
+python scripts/job_timings.py job.json                           # stage table and the target for that length
+python scripts/job_timings.py job.json --baseline before.json    # change against an earlier job
+python scripts/job_timings.py job.json --baseline before.json --md   # the same, as a table for a PR
+```
+
+A job from before stage timing existed has only the coarse stages shown in the dashboard; comparing with one
+uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-clips 10` runs the pipeline locally
+(no AI judge) and prints the same stages.
+
 ## Running more than one job at once
 
 Default: one job at a time. Two ways to add capacity:

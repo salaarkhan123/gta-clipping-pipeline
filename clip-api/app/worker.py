@@ -24,7 +24,7 @@ from .config import get_settings
 from .plans import plan_of
 from .db import init_db, new_session
 from .models import Account, Clip, Job, Upload, WebhookDelivery, new_id, utcnow
-from .pipeline import Deadline, PipelineError, PipelineOptions, run_pipeline
+from .pipeline import Deadline, PipelineError, PipelineOptions, Timer, run_pipeline
 from .pipeline.tools import RenderOptions, run_find, run_render
 from .pipeline.transcribe import FasterWhisperTranscriber, Transcriber
 from .pipeline.visual import FastembedClip
@@ -115,10 +115,26 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
     threading.Thread(target=_heartbeat, args=(job_id, stop), daemon=True).start()
     status, error = "FAILED", ("processing_failed", "Something went wrong while processing this video.")
     stored: list[str] = []   # storage keys written so far, removed again if the job does not succeed
+    # Two views of where the time went: `timings` follows the stage shown to the user; `timer` has the finer
+    # pipeline stages and work counts used for benchmarks (scripts/job_timings.py).
+    timings: dict[str, float] = {}
+    timer = Timer()
+    mark = [time.monotonic(), "starting"]
+    t_start = mark[0]
+
+    def measured() -> dict:
+        elapsed = time.monotonic() - t_start
+        coarse = dict(timings)
+        coarse[mark[1]] = coarse.get(mark[1], 0.0) + time.monotonic() - mark[0]
+        return {"elapsed_sec": round(elapsed, 1), "speed_x": round(duration / max(elapsed, 0.1), 1),
+                "timings": {k: round(v, 1) for k, v in coarse.items() if v >= 0.05}, **timer.as_dict()}
+
+    def waited(job: Job) -> dict:
+        """Queue time and the end-to-end time a customer sees: from submitting the job to its result."""
+        queue = max(0.0, (job.started_at - job.created_at).total_seconds()) if job.started_at else 0.0
+        return {"queue_sec": round(queue, 1), "total_sec": round(queue + time.monotonic() - t_start, 1)}
+
     try:
-        timings: dict[str, float] = {}
-        mark = [time.monotonic(), "starting"]
-        t_start = mark[0]
 
         def progress(stage: str, pct: int) -> None:
             if stage != mark[1]:
@@ -135,7 +151,8 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
 
         progress("downloading", 1)
         src = work / f"source{ext}"
-        storage.fetch(src_key, src)
+        with timer.stage("download"):
+            storage.fetch(src_key, src)
         deadline = Deadline(max(900.0, duration * s.job_timeout_factor))
         tool, result = options.pop("tool", "clips"), None
         if tool == "render":
@@ -172,9 +189,10 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             # The pipeline's judge takes (text, frame, context); the AI client takes (text, context, frame).
             extra = ({"judge": lambda text, frame, ctx: ai.clip_meta(text, ctx, frame), "fast_transcriber": indexer}
                      if ai is not None else {})
-            results = pipeline(src, opts, work / "out", progress, transcriber, deadline, **extra)
+            results = pipeline(src, opts, work / "out", progress, transcriber, deadline, timer=timer, **extra)
 
         metas = [None] * len(results)
+        t_titles = time.monotonic()
         if tool in ("clips", "find"):
             if ai is not None:
                 progress("writing_titles", 98)
@@ -186,7 +204,9 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                                     r.thumb_path) if ai is not None else None
                 metas[k] = meta   # no AI, no score: a number made from loudness alone would mislead
 
+        timer.add("titles", time.monotonic() - t_titles)
         progress("uploading", 99)
+        t_store = time.monotonic()
         rows = []
         for i, r in enumerate(results, 1):
             clip_id = new_id("clip")
@@ -205,6 +225,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             rows.append(Clip(id=clip_id, job_id=job_id, idx=i, start_sec=r.start, end_sec=r.end, score=r.score,
                              signals=r.signals, features=r.features, video_key=f"{base}.mp4",
                              thumb_key=thumb_key, captions_key=caps_key, meta=metas[i - 1]))
+        timer.add("store", time.monotonic() - t_store)
         with new_session() as db:
             job = db.execute(select(Job).where(Job.id == job_id).with_for_update()).scalar_one()
             if job.status != "RUNNING":
@@ -212,11 +233,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             if job.cancel_requested:
                 raise Canceled()
             db.add_all(rows)
-            elapsed = time.monotonic() - t_start
-            timings[mark[1]] = timings.get(mark[1], 0.0) + time.monotonic() - mark[0]
-            job.result = {**(result or {}), "elapsed_sec": round(elapsed, 1),
-                          "speed_x": round(duration / max(elapsed, 0.1), 1),
-                          "timings": {k: round(v, 1) for k, v in timings.items() if v >= 0.05}}
+            job.result = {**(result or {}), **measured(), **waited(job)}
             if tool in ("clips", "find"):
                 db.get(Upload, job.upload_id).analyzed = True
             job.status, job.progress, job.stage, job.finished_at = "SUCCEEDED", 100, "done", utcnow()
@@ -248,6 +265,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 job.status, job.finished_at = status, utcnow()
                 if error:
                     job.error_code, job.error_message = error
+                job.result = {**measured(), **waited(job)}   # where a failed or cancelled job spent its time
                 ledger.settle(db, job, success=False)   # refund
                 db.commit()
             else:
