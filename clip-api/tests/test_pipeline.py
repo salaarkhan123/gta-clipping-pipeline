@@ -61,7 +61,9 @@ def test_vertical_layout_fits_frame():
 
 def test_run_pipeline_end_to_end(video, transcriber, tmp_path):
     stages = []
-    results = run_pipeline(video, PipelineOptions(max_clips=1, clip_length=10, chat_region="top-right"),
+    # tighten off: this video is digital silence apart from one burst, and dead-air removal (tested in
+    # test_punchier_clips.py) would rightly shorten the clip.
+    results = run_pipeline(video, PipelineOptions(max_clips=1, clip_length=10, chat_region="top-right", tighten=False),
                            tmp_path / "out", lambda stage, pct: stages.append(stage), transcriber)
     assert len(results) == 1
     r = results[0]

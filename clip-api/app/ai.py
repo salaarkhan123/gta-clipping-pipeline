@@ -32,7 +32,12 @@ SYSTEM = (
     "share. Be strict: an average clip scores around 50. Base everything only on the transcript, the frame and "
     "the signals given. Do not invent events, names or games that are not evident. If the frame or transcript shows "
     "a menu, loading screen, channel branding or intro card, ad, AFK or dead air rather than a real moment, score "
-    "every part below 15."
+    "every part below 15.\n"
+    "When the transcript lines carry time marks like [12.4], also choose the cut, in seconds on those marks: "
+    "cut.start and cut.end are the best 15 to 45 second clip of this moment. Start right where the action or the "
+    "reaction begins, not on the build-up before it, and end just after the payoff, not on a trailing silence. "
+    "cut.peak is the second where the most striking 1 to 2 seconds begin (the loudest reaction or the punchline). "
+    "Stay within the marks you were given."
 )
 
 TOOL = {
@@ -48,6 +53,9 @@ TOOL = {
                                                           for k in PARTS}, "required": list(PARTS)},
             "reason": {"type": "string",
                        "description": "One sentence, max 200 chars, on why it would or would not perform."},
+            "cut": {"type": "object", "description": "Only when the transcript has time marks: the clip to cut.",
+                    "properties": {"start": {"type": "number"}, "end": {"type": "number"}, "peak": {"type": "number"}},
+                    "required": ["start", "end", "peak"]},
         },
         "required": ["title", "hashtags", "virality", "reason"],
     },
@@ -85,10 +93,17 @@ def parse_meta(text) -> dict | None:
     title = title[:80]
     if not title:
         return None
-    return {"title": title, "description": str(raw.get("description") or "").strip()[:200],
-            "hashtags": [t for t in tags if t][:5],
-            "virality": {"score": round(sum(parts.values()) / len(parts)), **parts},
-            "reason": str(raw.get("reason") or "").strip()[:240], "source": "ai"}
+    out = {"title": title, "description": str(raw.get("description") or "").strip()[:200],
+           "hashtags": [t for t in tags if t][:5],
+           "virality": {"score": round(sum(parts.values()) / len(parts)), **parts},
+           "reason": str(raw.get("reason") or "").strip()[:240], "source": "ai"}
+    cut = raw.get("cut")
+    if isinstance(cut, dict):
+        try:      # the pipeline checks the numbers against the clip; here they only have to be numbers
+            out["trim"] = {k: float(cut[k]) for k in ("start", "end", "peak")}
+        except (KeyError, TypeError, ValueError):
+            pass
+    return out
 
 
 def signal_meta(score: float) -> dict:
@@ -107,10 +122,17 @@ class ClaudeAI:
         if isinstance(thumb, (str, Path)) and Path(thumb).is_file():
             content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                                         "data": base64.b64encode(Path(thumb).read_bytes()).decode()}})
+        lines = context.get("lines")
+        if lines:      # timed lines: the judge also chooses where the clip starts, ends and peaks
+            a, b = context.get("window", (0, context.get("length", 0)))
+            said = "\n".join(f"[{s:.1f}] {text}" for s, text in lines)[:2500]
+            body_text = (f"The moment was detected between {a:.1f} and {b:.1f} on these time marks.\n"
+                         f"Transcript with time marks (seconds):\n{said}")
+        else:
+            body_text = f"Transcript of the clip:\n{(transcript or '(no speech detected)')[:1500]}"
         content.append({"type": "text", "text": (
             f"Clip length: {context.get('length', 0):.0f} s\n"
-            f"Why it was picked (signal shares): {json.dumps(context.get('signals', {}))}\n"
-            f"Transcript of the clip:\n{(transcript or '(no speech detected)')[:1500]}")})
+            f"Why it was picked (signal shares): {json.dumps(context.get('signals', {}))}\n" + body_text)})
         # The forced tool call means Haiku 5.5 skips thinking, so max_tokens only has to hold the tool input
         # (~150-300 tokens). 1024 leaves room for a long reason; only the tokens produced are billed.
         body = {"model": self.model, "max_tokens": MAX_TOKENS, "system": SYSTEM, "tools": [TOOL],

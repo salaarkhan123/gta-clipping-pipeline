@@ -56,6 +56,9 @@ class LayoutOptions(BaseModel):
 class ClipOptions(LayoutOptions):
     max_clips: int = Field(3, ge=1, le=10)
     clip_length: int = Field(30, ge=10, le=60)
+    tighten: bool = True          # cut silences over 0.6 s and filler words out of each clip
+    punch_zoom: bool = True       # subtle punch-in zooms (max 1.15x) on the gameplay at loudness spikes
+    flash_forward: bool = True    # open on 1.5 s of the clip's peak, then cut back (AI clips only)
 
 
 class ClipRequest(BaseModel):
