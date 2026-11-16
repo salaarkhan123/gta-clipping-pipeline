@@ -45,6 +45,7 @@ class ApiKey(Base):
 
 class Upload(Base):
     __tablename__ = "uploads"
+    __table_args__ = (Index("ix_uploads_account_hash", "account_id", "content_hash"),)
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
     account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
     filename: Mapped[str] = mapped_column(String(255))
@@ -55,6 +56,7 @@ class Upload(Base):
     height: Mapped[int] = mapped_column(Integer)
     has_audio: Mapped[bool] = mapped_column(Boolean)
     analyzed: Mapped[bool] = mapped_column(Boolean, default=False)   # a full-price job has succeeded on it
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)   # sha256 of the file's bytes
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
