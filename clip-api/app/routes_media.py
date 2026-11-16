@@ -22,6 +22,7 @@ from .models import Clip, ClipFeedback, CreditLedger, Job, Upload, new_id, utcno
 from .pipeline import PipelineError, probe
 from .security import is_public_https_url, read_token
 from .storage import LocalStorage, get_storage
+from .templates import TEMPLATES, public as public_template, with_tuning
 
 router = APIRouter()
 ALLOWED_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi", ".flv", ".ts"}
@@ -60,6 +61,14 @@ class ClipOptions(LayoutOptions):
     punch_zoom: bool = True       # subtle punch-in zooms (max 1.15x) on the gameplay at loudness spikes
     flash_forward: bool = True    # open on 1.5 s of the clip's peak, then cut back (AI clips only)
     hook_overlay: bool = True     # burn the AI's on-screen hook text over the first 2.5 s (AI clips only)
+    template: str | None = None   # a game template id from GET /v1/templates: tunes detection and the AI judge.
+                                  # Send the template's `options` too; they are not applied for you.
+
+    @model_validator(mode="after")
+    def check_template(self):
+        if self.template is not None and self.template not in TEMPLATES:
+            raise ValueError(f"unknown template; use one of: {', '.join(TEMPLATES)}")
+        return self
 
 
 class ClipRequest(BaseModel):
@@ -131,6 +140,7 @@ def clip_json(c: Clip, storage) -> dict:
             **{k: (c.meta or {}).get(k) for k in ("title", "description", "hashtags", "virality", "reason")},
             "titles": (c.meta or {}).get("titles") or ([c.meta["title"]] if (c.meta or {}).get("title") else []),
             "hook": (c.meta or {}).get("hook"),
+            "suggestion": (c.meta or {}).get("suggestion"),
             "video_url": storage.url(c.video_key),
             "thumb_url": storage.url(c.thumb_key) if c.thumb_key else None,
             "captions_url": storage.url(c.captions_key) if c.captions_key else None}
@@ -279,8 +289,15 @@ def create_job(body: ClipRequest, p: Principal = Depends(current_principal), db:
             cost = credits_for(body.options.max_clips * body.options.clip_length)
         else:
             cost = credits_for(upload.duration_sec)
-        return {"tool": "clips", **body.options.model_dump()}, upload.duration_sec, cost
+        return {"tool": "clips", **with_tuning(body.options.model_dump())}, upload.duration_sec, cost
     return submit_job(db, p, body.upload_id, body.webhook_url, idempotency_key, plan)
+
+
+@router.get("/v1/templates")
+def list_templates():
+    """Game templates for the Clip Maker. Send a template's `options` together with `"template": id`: the id
+    tunes what is detected and how the AI judges it, the options set the look and length. Public, no key needed."""
+    return {"templates": [public_template(tid) for tid in TEMPLATES]}
 
 
 @router.get("/v1/jobs/{job_id}")

@@ -39,6 +39,10 @@ SYSTEM = (
     "that are not evident; if the game is not clearly GTA, write for the game you see. If the frame or transcript "
     "shows a menu, loading screen, channel branding or intro card, ad, AFK or dead air rather than a real moment, "
     "score every part below 15.\n\n"
+    "TIP. One short, concrete editing tip for the person who will post this clip, 120 characters at most, about "
+    "this clip only (for example: strong reaction, weak ending: trim the last 4 s). If cutting the start or the "
+    "end would fix it, set tip.action to trim_start or trim_end and tip.seconds to how much; otherwise action is "
+    "none. If the clip needs nothing, say what makes it work.\n\n"
     "CUT. When the transcript lines carry time marks like [12.4], also choose the cut, in seconds on those marks: "
     "cut.start and cut.end are the best 15 to 45 second clip of this moment. Start right where the action or the "
     "reaction begins, not on the build-up before it, and end just after the payoff, not on a trailing silence. "
@@ -61,6 +65,11 @@ TOOL = {
                                                           for k in PARTS}, "required": list(PARTS)},
             "reason": {"type": "string",
                        "description": "One sentence, max 200 chars, on why it would or would not perform."},
+            "tip": {"type": "object", "description": "One editing tip for this clip.",
+                    "properties": {"text": {"type": "string", "description": "Max 120 chars."},
+                                   "action": {"type": "string", "enum": ["none", "trim_start", "trim_end"]},
+                                   "seconds": {"type": "number", "description": "How much to trim; 0 when action is none."}},
+                    "required": ["text", "action"]},
             "cut": {"type": "object", "description": "Only when the transcript has time marks: the clip to cut.",
                     "properties": {"start": {"type": "number"}, "end": {"type": "number"}, "peak": {"type": "number"}},
                     "required": ["start", "end", "peak"]},
@@ -123,6 +132,17 @@ def parse_meta(text) -> dict | None:
            "hashtags": [t for t in tags if t][:5],
            "virality": {"score": round(sum(parts.values()) / len(parts)), **parts},
            "reason": str(raw.get("reason") or "").strip()[:240], "source": "ai"}
+    tip = raw.get("tip")
+    if isinstance(tip, dict) and str(tip.get("text") or "").strip():
+        action = tip.get("action") if tip.get("action") in ("trim_start", "trim_end") else "none"
+        try:
+            seconds = round(min(30.0, max(0.0, float(tip.get("seconds") or 0))), 1)
+        except (TypeError, ValueError):
+            seconds = 0.0
+        if action != "none" and seconds < 0.5:
+            action = "none"                      # a trim with no usable amount is only advice
+        out["suggestion"] = {"text": " ".join(str(tip["text"]).split())[:140], "action": action,
+                             "seconds": seconds if action != "none" else 0.0}
     cut = raw.get("cut")
     if isinstance(cut, dict):
         try:      # the pipeline checks the numbers against the clip; here they only have to be numbers
@@ -156,7 +176,9 @@ class ClaudeAI:
                          f"Transcript with time marks (seconds):\n{said}")
         else:
             body_text = f"Transcript of the clip:\n{(transcript or '(no speech detected)')[:1500]}"
+        focus = f"What this clipper is looking for: {str(context['focus'])[:400]}\n" if context.get("focus") else ""
         content.append({"type": "text", "text": (
+            focus +
             f"Clip length: {context.get('length', 0):.0f} s\n"
             f"Why it was picked (signal shares): {json.dumps(context.get('signals', {}))}\n" + body_text)})
         # The forced tool call means Haiku 5.5 skips thinking, so max_tokens only has to hold the tool input
