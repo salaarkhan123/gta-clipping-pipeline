@@ -66,7 +66,10 @@ def test_baseline_builds_exactly_the_create_all_schema(db):
 
 def test_an_old_database_is_stamped_and_keeps_its_rows(db):
     old = db("old")
-    Base.metadata.create_all(old)
+    with old.connect() as c:                            # the baseline schema, without the migration bookkeeping
+        command.upgrade(config(c), BASELINE)
+        c.execute(text("DROP TABLE alembic_version"))
+        c.commit()
     with old.begin() as c:                              # as first deployed: before the patched columns existed
         c.execute(text("DROP INDEX ix_accounts_stripe_customer_id"))
         for table, col in (("clips", "meta"), ("uploads", "analyzed"), ("jobs", "result"), ("accounts", "plan"),
@@ -118,3 +121,15 @@ def test_api_and_worker_starting_together_migrate_once(db):
     [th.join() for th in threads]
     assert errors == [] and sorted(results, key=str) == sorted([(None, head()), (head(), head())], key=str)
     assert diffs(e) == []
+
+
+def test_an_old_database_missing_a_table_is_refused_not_patched(db):
+    e = db("partial")
+    with e.connect() as c:
+        command.upgrade(config(c), BASELINE)
+        c.execute(text("DROP TABLE alembic_version"))
+        c.execute(text("DROP TABLE webhook_deliveries"))
+        c.commit()
+    with pytest.raises(RuntimeError, match="webhook_deliveries"):
+        migrate(e)
+    assert current(e) is None
