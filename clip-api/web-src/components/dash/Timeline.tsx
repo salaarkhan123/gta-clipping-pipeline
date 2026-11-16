@@ -1,9 +1,10 @@
 "use client";
 import { useState } from "react";
 import { clock } from "@/lib/api";
+import { nameOf } from "./ClipCard";
 
 const TIERS: Record<string, string> = { top: "Top pick", strong: "Strong", solid: "Solid", long_shot: "Long shot" };
-const describe = (c: any) => `${c.title || `Clip ${c.index}`} · ${clock(c.start_sec)} to ${clock(c.end_sec)}${c.tier ? ` · ${TIERS[c.tier]}` : ""}`;
+const describe = (c: any) => `${nameOf(c)} · ${clock(c.start_sec)} to ${clock(c.end_sec)}${c.tier ? ` · ${TIERS[c.tier]}` : ""}`;
 
 // The source video as a strip, with one marker per clip where it was cut from. Picking a marker jumps to its card.
 export function Timeline({ duration, clips, onPick }: { duration: number; clips: any[]; onPick: (clip: any) => void }) {

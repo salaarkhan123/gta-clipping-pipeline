@@ -5,7 +5,7 @@ import { Icon } from "@/components/dash/Icon";
 import { useDash } from "@/components/dash/Shell";
 import { Tabs } from "@/components/dash/Tabs";
 import { useVideoChooser } from "@/components/dash/Upload";
-import { API, api } from "@/lib/api";
+import { api } from "@/lib/api";
 
 // Display names for the game ids the API may send. An id that is not listed here is shown tidied up.
 const GAMES: Record<string, string> = { gta: "GTA", gta5: "GTA 5", lol: "League of Legends", wow: "World of Warcraft", ow2: "Overwatch 2",
@@ -14,8 +14,9 @@ const EDITS: [string, string][] = [["tighten", "dead air cut"], ["punch_zoom", "
 const tidy = (v: string) => v.replace(/[_-]+/g, " ").replace(/^./, (c) => c.toUpperCase());
 const gameName = (id: string) => GAMES[id] || tidy(id);
 const gameOf = (t: any): string => (typeof t.game === "string" && t.game) || "other";
-// Preview files may arrive as full links or as paths on the API host.
-const media = (v: unknown) => (typeof v !== "string" || !v ? null : /^https?:\/\//.test(v) ? v : `${API}/${v.replace(/^\//, "")}`);
+// A preview file is shown only when the API sends a full link. A bare storage path has no address the browser
+// can load, so the card falls back to our sketch instead of a broken picture.
+const media = (v: unknown) => (typeof v === "string" && /^https?:\/\//.test(v) ? v : null);
 
 // What a template sets, from whichever fields this version of the API sends (in `options` or on the template itself).
 function sets(t: any): { chips: string[]; edits: string[] } {
@@ -29,16 +30,21 @@ function sets(t: any): { chips: string[]; edits: string[] } {
   return { chips, edits: EDITS.filter(([k]) => o[k] === true).map(([, name]) => name) };
 }
 
-// A template's picture: its own poster or preview clip when the API has one, otherwise a plain card in our colours.
+// A template's picture: its own poster or preview clip when the API has one. Otherwise our own sketch of a clip
+// (camera over gameplay, a caption on the seam) with the caption drawn the way the template's style renders it.
 function Preview({ t }: { t: any }) {
   const [broken, setBroken] = useState(false);
   const poster = media(t.preview?.poster), video = media(t.preview?.video);
+  const style = t.options?.caption_style || t.caption_style;
   return (
     <div className="template-art" aria-hidden={!video || broken ? true : undefined}>
       {!broken && video ? <video controls muted loop playsInline preload="none" poster={poster || undefined} src={video}
           aria-label={`${t.name} preview`} onError={() => setBroken(true)} />
         : !broken && poster ? <img src={poster} alt="" loading="lazy" onError={() => setBroken(true)} />
-        : <span className="template-blank"><Icon name="gamepad" size={30} /><b>{gameName(gameOf(t))}</b></span>}
+        : <span className="template-blank">
+            <span className={`mock ${typeof style === "string" ? `cap-${style}` : ""}`}><i /><b>No <u>way</u></b></span>
+            <span className="mock-game"><Icon name="gamepad" size={22} />{gameName(gameOf(t))}</span>
+          </span>}
     </div>
   );
 }
@@ -80,7 +86,8 @@ export default function Templates() {
               <li key={t.id} className="template">
                 <Preview t={t} />
                 <div className="template-body">
-                  <span className="badge">{gameName(gameOf(t))}</span>
+                  <p className="template-tags"><span className="badge">{gameName(gameOf(t))}</span>
+                    {t.provisional === true && <span className="soon-tag" title="This template's look is still being checked against real output and may change.">Provisional</span>}</p>
                   <h2>{t.name || tidy(String(t.id))}</h2>
                   {t.description && <p className="muted">{t.description}</p>}
                   {chips.length > 0 && <ul className="chip-row" aria-label="This template sets">{chips.map((c) => <li key={c} className="chip">{c}</li>)}</ul>}

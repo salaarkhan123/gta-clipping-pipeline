@@ -75,8 +75,8 @@ export default function Home() {
         <h2 id="tools-title">Tools</h2>
         <ul className="tiles">
           {TILES.map((t) => {
-            const body = <><span className="tile-ico"><Icon name={t.icon} size={22} /></span>
-              <strong>{t.name}{!t.tool && !t.href && <Soon />}</strong><span className="muted">{t.text}</span></>;
+            const body = <><span className="tile-top"><span className="tile-ico"><Icon name={t.icon} size={22} /></span>{!t.tool && !t.href && <Soon />}</span>
+              <strong>{t.name}</strong><span className="muted">{t.text}</span></>;
             return (
               <li key={t.name}>
                 {t.href ? <Link className="tile" href={t.href}>{body}</Link>

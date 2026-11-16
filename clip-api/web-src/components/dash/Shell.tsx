@@ -84,7 +84,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </ul>
           </nav>
           <div className="dash-who">
-            <p><b>{me.email}</b><br /><span className="muted">{me.plan[0].toUpperCase() + me.plan.slice(1)} plan</span></p>
+            <p><b title={me.email}>{me.email}</b><span className="muted">{me.plan[0].toUpperCase() + me.plan.slice(1)} plan</span></p>
             <Link href="/dashboard/billing/" aria-current={current("/dashboard/billing/") ? "page" : undefined}><Icon name="card" size={18} />Billing</Link>
             <button onClick={() => { setToken(null); router.push("/"); }}><Icon name="logout" size={18} />Log out</button>
           </div>

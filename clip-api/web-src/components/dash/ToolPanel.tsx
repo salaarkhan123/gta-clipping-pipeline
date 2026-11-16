@@ -49,25 +49,31 @@ export function ToolPanel({ upload, onStarted, open }: { upload: any; onStarted:
 
   async function start() {
     setProblem("");
-    const layout = { aspect: o.aspect, caption_style: o.caption_style, censor: o.censor };
+    // Every request states every setting it relies on, including the ones this panel has no control for, so a
+    // change to the API's defaults can never change what the dashboard makes. Only names the API accepts are sent.
+    const frame = { vertical: true, aspect: o.aspect, layout: "auto", facecam_region: "auto", zoom: 1, chat_region: "none" };
+    const text = { caption_style: o.caption_style, censor: o.censor };
     let path = "/v1/clips", body: any;
     if (tool === "clips") {
-      body = { upload_id: upload.upload_id, options: { ...layout, captions: o.captions, chat_region: o.chat_region,
+      body = { upload_id: upload.upload_id, options: { ...frame, ...text, captions: o.captions, chat_region: o.chat_region,
         max_clips: o.max_clips, clip_length: o.clip_length, tighten: o.tighten, punch_zoom: o.punch_zoom,
         flash_forward: o.flash_forward, hook_overlay: o.hook_overlay,
-        ...(template ? { template: template.id, layout: template.options?.layout } : {}) } };
+        ...(template ? { template: template.id, layout: template.options?.layout ?? "auto" } : {}) } };
     } else if (tool === "find") {
       if (!o.query.trim()) { setProblem("Type what you're looking for first."); return; }
       path = "/v1/find";
-      body = { upload_id: upload.upload_id, query: o.query.trim(), clip_length: o.clip_length, options: { ...layout, captions: o.captions } };
+      body = { upload_id: upload.upload_id, query: o.query.trim(), mode: "auto", max_results: 5, make_clips: true,
+        clip_length: o.clip_length, options: { ...frame, ...text, captions: o.captions } };
     } else {
       const a = parseTime(o.from), b = parseTime(o.to);
       if (Number.isNaN(a) || Number.isNaN(b) || ((a === null) !== (b === null)) || (a !== null && b !== null && b - a < 1)) {
         setProblem("Enter both a start and an end time, like 12:30 and 13:10, or leave both empty for the whole video."); return;
       }
       path = tool === "reframe" ? "/v1/reframe" : "/v1/captions";
-      body = { upload_id: upload.upload_id, options: tool === "reframe" ? { ...layout, captions: false, censor: false }
-        : { caption_style: o.caption_style, censor: o.censor, vertical: false } };
+      // Reframe changes the shape and adds no captions; Captions keeps the source framing (vertical: false).
+      const { aspect, ...unframed } = frame;
+      body = { upload_id: upload.upload_id, options: tool === "reframe" ? { ...frame, ...text, captions: false, censor: false }
+        : { ...unframed, ...text, vertical: false, captions: true } };
       if (a !== null) body.segments = [{ start: a, end: b }];
     }
     setStarting(true);

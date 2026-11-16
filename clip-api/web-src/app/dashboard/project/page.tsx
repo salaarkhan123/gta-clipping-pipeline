@@ -15,6 +15,20 @@ const STAGES: Record<string, string> = {
 };
 const active = (j: any) => j.status === "QUEUED" || j.status === "RUNNING";
 
+// Every read signs new links for the same files. A refresh keeps the links already on the page, so polling a
+// running job does not restart the source video or a clip that is playing. Links are valid for an hour, so
+// after half an hour the new ones are taken.
+const LINK_LIFE_MS = 30 * 60 * 1000;
+function keepLinks(old: any, next: any) {
+  const now = Date.now();
+  if (!old || old.upload_id !== next.upload_id || now - old.linksAt > LINK_LIFE_MS) return { ...next, linksAt: now };
+  const had = new Map<string, any>(old.clips.map((c: any) => [c.id, c]));
+  return { ...next, linksAt: old.linksAt, source_url: old.source_url, clips: next.clips.map((c: any) => {
+    const o = had.get(c.id);
+    return o ? { ...c, video_url: o.video_url, thumb_url: o.thumb_url || c.thumb_url, captions_url: o.captions_url || c.captions_url } : c;
+  }) };
+}
+
 // One project: the source video and where its clips came from, the tools, what is running, and every clip made from it.
 export default function Project() {
   const { fail, reloadMe } = useDash();
@@ -26,7 +40,7 @@ export default function Project() {
   const [lit, setLit] = useState<{ id: string } | null>(null);                // the clip a timeline marker jumped to
 
   const load = useCallback(async (pid: string) => {
-    try { setProject(await api(`/v1/projects/${pid}`)); }
+    try { const next = await api(`/v1/projects/${pid}`); setProject((old: any) => keepLinks(old, next)); }
     catch (e) { if (e instanceof ApiError && e.status === 404) setGone(true); else fail(e); }
   }, [fail]);
 
@@ -81,7 +95,8 @@ export default function Project() {
       <p className="crumb"><Link href="/dashboard/">Home</Link> / {project.filename}</p>
       <h1 className="dash-title">{project.filename}</h1>
       <section className="source">
-        <video controls preload="metadata" src={project.source_url} />
+        <video controls preload="metadata" src={project.source_url}
+          style={project.width && project.height ? { aspectRatio: `${project.width} / ${project.height}` } : undefined} />
         <Timeline duration={project.duration_sec} clips={project.clips} onPick={jump} />
         <p className="muted">{clock(project.duration_sec)} · {project.width}×{project.height} · kept until {new Date(project.expires_at).toLocaleDateString()}.
           {" "}If the preview doesn't play, your browser can't show this file type; clips still work.</p>
