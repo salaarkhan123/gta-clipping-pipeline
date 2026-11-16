@@ -1,9 +1,9 @@
 """Schema migrations (Alembic, app/migrations). migrate() brings any database to the latest revision.
 
 - New database: runs every revision from the baseline.
-- Database from before migrations (tables, no alembic_version): first applies what init_db used to do on every
-  start (create missing tables, add the columns added since the first deploy), so it equals the baseline, then
-  stamps it at the baseline without running it, then runs any newer revision.
+- Database from before migrations (tables, no alembic_version): first adds the columns and the index that the
+  old startup patch added or missed, so it equals the baseline, then stamps it at the baseline without running
+  it, then runs any newer revision.
 - Postgres: holds an advisory lock while migrating, so the api and the worker starting together cannot race.
 
 Add a revision: change app/models.py, then
@@ -28,6 +28,9 @@ LEGACY_COLUMNS = {"jobs": {"result": "JSON"}, "uploads": {"analyzed": "BOOLEAN D
                   "accounts": {"plan": "VARCHAR(20) DEFAULT 'free'", "stripe_customer_id": "VARCHAR(64)",
                                "stripe_subscription_id": "VARCHAR(64)"}}
 
+LEGACY_INDEXES = {"ix_accounts_stripe_customer_id": ("accounts", "stripe_customer_id")}
+BASELINE_TABLES = {"accounts", "api_keys", "uploads", "jobs", "clips", "credit_ledger", "webhook_deliveries"}
+
 
 def config(connection=None) -> Config:
     cfg = Config()
@@ -46,22 +49,22 @@ def current(engine: Engine) -> str | None:
 
 
 def _bring_legacy_to_baseline(conn) -> None:
-    from . import models  # noqa: F401  (register tables)
-    from .db import Base
-    Base.metadata.create_all(conn)
+    """Everything here is frozen at revision 0001. It must never read app/models.py: the models move on with
+    later revisions, and those revisions (not this step) are what bring an old database further."""
     insp = inspect(conn)
+    missing = BASELINE_TABLES - set(insp.get_table_names())
+    if missing:
+        raise RuntimeError(f"this database has some tables but not {sorted(missing)}: restore or repair it first")
     for table, cols in LEGACY_COLUMNS.items():
         have = {c["name"] for c in insp.get_columns(table)}
         for name, ddl in cols.items():
             if name not in have:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
-    # The patch added columns without their indexes (accounts.stripe_customer_id): create any that are missing.
-    for table in Base.metadata.sorted_tables:
-        have = {i["name"] for i in inspect(conn).get_indexes(table.name)}
-        for index in table.indexes:
-            if index.name not in have:
-                index.create(conn)
-    # The patch added uploads.analyzed as nullable; the model has it NOT NULL. NULL already read as False.
+    # The patch added columns without their indexes.
+    for name, (table, column) in LEGACY_INDEXES.items():
+        if name not in {i["name"] for i in inspect(conn).get_indexes(table)}:
+            conn.execute(text(f"CREATE INDEX {name} ON {table} ({column})"))
+    # The patch added uploads.analyzed as nullable; the baseline has it NOT NULL. NULL already read as False.
     if next(c for c in inspect(conn).get_columns("uploads") if c["name"] == "analyzed")["nullable"]:
         conn.execute(text("UPDATE uploads SET analyzed = FALSE WHERE analyzed IS NULL"))
         with Operations(MigrationContext.configure(conn)).batch_alter_table("uploads") as batch:

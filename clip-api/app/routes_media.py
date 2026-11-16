@@ -18,10 +18,11 @@ from . import ledger
 from .config import get_settings
 from .db import get_db
 from .deps import ApiError, Principal, current_principal
-from .models import Clip, CreditLedger, Job, Upload, new_id, utcnow
+from .models import Clip, ClipFeedback, CreditLedger, Job, Upload, new_id, utcnow
 from .pipeline import PipelineError, probe
 from .security import is_public_https_url, read_token
 from .storage import LocalStorage, get_storage
+from .templates import TEMPLATES, public as public_template, with_tuning
 
 router = APIRouter()
 ALLOWED_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi", ".flv", ".ts"}
@@ -56,6 +57,18 @@ class LayoutOptions(BaseModel):
 class ClipOptions(LayoutOptions):
     max_clips: int = Field(3, ge=1, le=10)
     clip_length: int = Field(30, ge=10, le=60)
+    tighten: bool = True          # cut silences over 0.6 s and filler words out of each clip
+    punch_zoom: bool = True       # subtle punch-in zooms (max 1.15x) on the gameplay at loudness spikes
+    flash_forward: bool = True    # open on 1.5 s of the clip's peak, then cut back (AI clips only)
+    hook_overlay: bool = True     # burn the AI's on-screen hook text over the first 2.5 s (AI clips only)
+    template: str | None = None   # a game template id from GET /v1/templates: tunes detection and the AI judge.
+                                  # Send the template's `options` too; they are not applied for you.
+
+    @model_validator(mode="after")
+    def check_template(self):
+        if self.template is not None and self.template not in TEMPLATES:
+            raise ValueError(f"unknown template; use one of: {', '.join(TEMPLATES)}")
+        return self
 
 
 class ClipRequest(BaseModel):
@@ -66,8 +79,19 @@ class ClipRequest(BaseModel):
 
 
 class Feedback(BaseModel):
+    """Send only what changes. `kept` and `reaction` accept null to clear them."""
     model_config = ConfigDict(extra="forbid")
-    kept: bool
+    kept: bool | None = None
+    reaction: Literal["like", "dislike"] | None = None
+    bookmarked: bool | None = None
+
+    @model_validator(mode="after")
+    def _something(self):
+        if not self.model_fields_set:
+            raise ValueError("send at least one of kept, reaction, bookmarked")
+        if "bookmarked" in self.model_fields_set and self.bookmarked is None:
+            raise ValueError("bookmarked must be true or false")
+        return self
 
 
 def iso(dt):
@@ -85,6 +109,43 @@ def upload_json(u: Upload) -> dict:
             "created_at": iso(u.created_at), "expires_at": iso(u.expires_at)}
 
 
+TIERS = ((75, "top"), (55, "strong"), (35, "solid"), (0, "long_shot"))
+
+
+def tier_of(meta: dict | None) -> str | None:
+    """A fixed label for the AI's 0-100 score. None when the AI did not rate the clip: a score derived from
+    loudness alone says how a moment compares inside its own video, not how good it is."""
+    v = (meta or {}).get("virality") or {}
+    if (meta or {}).get("source") == "signals" or not isinstance(v.get("score"), (int, float)):
+        return None
+    return next(name for floor, name in TIERS if v["score"] >= floor)
+
+
+def with_ranks(db: Session, clips: list[dict]) -> list[dict]:
+    """Adds rank and rank_of: each clip's position by score among the stored clips of its own run."""
+    job_ids = {c["job_id"] for c in clips}
+    order: dict[str, list[str]] = {}
+    if job_ids:
+        for clip_id, job_id in db.execute(select(Clip.id, Clip.job_id).where(
+                Clip.job_id.in_(job_ids), Clip.deleted_at.is_(None)).order_by(Clip.score.desc(), Clip.idx)):
+            order.setdefault(job_id, []).append(clip_id)
+    return [{**c, "rank": order[c["job_id"]].index(c["id"]) + 1, "rank_of": len(order[c["job_id"]])} for c in clips]
+
+
+def clip_json(c: Clip, storage) -> dict:
+    return {"id": c.id, "job_id": c.job_id, "index": c.idx, "start_sec": c.start_sec, "end_sec": c.end_sec,
+            "tier": tier_of(c.meta),
+            "score": c.score, "signals": c.signals, "kept": c.kept, "reaction": c.reaction,
+            "bookmarked": bool(c.bookmarked),
+            **{k: (c.meta or {}).get(k) for k in ("title", "description", "hashtags", "virality", "reason")},
+            "titles": (c.meta or {}).get("titles") or ([c.meta["title"]] if (c.meta or {}).get("title") else []),
+            "hook": (c.meta or {}).get("hook"),
+            "suggestion": (c.meta or {}).get("suggestion"),
+            "video_url": storage.url(c.video_key),
+            "thumb_url": storage.url(c.thumb_key) if c.thumb_key else None,
+            "captions_url": storage.url(c.captions_key) if c.captions_key else None}
+
+
 def job_json(db: Session, job: Job, with_clips: bool = True) -> dict:
     out = {"job_id": job.id, "tool": (job.options or {}).get("tool", "clips"), "status": job.status,
            "progress": job.progress, "stage": job.stage, "upload_id": job.upload_id, "options": job.options,
@@ -96,13 +157,7 @@ def job_json(db: Session, job: Job, with_clips: bool = True) -> dict:
         clips = db.execute(select(Clip).where(Clip.job_id == job.id, Clip.deleted_at.is_(None))
                            .order_by(Clip.idx)).scalars()
         out["result"] = job.result
-        out["clips"] = [{"id": c.id, "index": c.idx, "start_sec": c.start_sec, "end_sec": c.end_sec,
-                         "score": c.score, "signals": c.signals, "kept": c.kept,
-                         **{k: (c.meta or {}).get(k) for k in ("title", "description", "hashtags", "virality", "reason")},
-                         "video_url": storage.url(c.video_key),
-                         "thumb_url": storage.url(c.thumb_key) if c.thumb_key else None,
-                         "captions_url": storage.url(c.captions_key) if c.captions_key else None}
-                        for c in clips]
+        out["clips"] = with_ranks(db, [clip_json(c, storage) for c in clips])
     return out
 
 
@@ -234,8 +289,15 @@ def create_job(body: ClipRequest, p: Principal = Depends(current_principal), db:
             cost = credits_for(body.options.max_clips * body.options.clip_length)
         else:
             cost = credits_for(upload.duration_sec)
-        return {"tool": "clips", **body.options.model_dump()}, upload.duration_sec, cost
+        return {"tool": "clips", **with_tuning(body.options.model_dump())}, upload.duration_sec, cost
     return submit_job(db, p, body.upload_id, body.webhook_url, idempotency_key, plan)
+
+
+@router.get("/v1/templates")
+def list_templates():
+    """Game templates for the Clip Maker. Send a template's `options` together with `"template": id`: the id
+    tunes what is detected and how the AI judges it, the options set the look and length. Public, no key needed."""
+    return {"templates": [public_template(tid) for tid in TEMPLATES]}
 
 
 @router.get("/v1/jobs/{job_id}")
@@ -273,9 +335,35 @@ def clip_feedback(clip_id: str, body: Feedback, p: Principal = Depends(current_p
     if not clip:
         raise ApiError(404, "not_found", "No such clip.")
     own_job(db, p, clip.job_id)
-    clip.kept = body.kept
+    for field in sorted(body.model_fields_set):
+        value = getattr(body, field)
+        if getattr(clip, field) == value:
+            continue                      # no change: nothing to log
+        setattr(clip, field, value)
+        logged = None if value is None else (str(value).lower() if isinstance(value, bool) else value)
+        db.add(ClipFeedback(clip_id=clip.id, account_id=p.account.id, kind=field, value=logged))
     db.commit()
-    return {"id": clip.id, "kept": clip.kept}
+    return {"id": clip.id, "kept": clip.kept, "reaction": clip.reaction, "bookmarked": bool(clip.bookmarked)}
+
+
+class ClipEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=80)
+
+
+@router.patch("/v1/clips/{clip_id}")
+def edit_clip(clip_id: str, body: ClipEdit, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
+    """Choose the clip's title: one of its `titles`, or your own words. Free: nothing is re-rendered."""
+    clip = db.get(Clip, clip_id)
+    if not clip or clip.deleted_at:
+        raise ApiError(404, "not_found", "No such clip.")
+    own_job(db, p, clip.job_id)
+    title = " ".join(body.title.split())
+    if not title:
+        raise ApiError(422, "validation_error", "The title is empty.")
+    clip.meta = {**(clip.meta or {}), "title": title}      # a new dict, so the JSON column is saved
+    db.commit()
+    return with_ranks(db, [clip_json(clip, get_storage())])[0]
 
 
 def _stamp(t: float, sep: str) -> str:
