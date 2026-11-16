@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check the S3/R2 bucket end to end through app/storage.py.
 
-Needs STORAGE_BACKEND=s3 and the S3_* settings from .env.example. Writes and deletes one small
+Needs STORAGE_BACKEND=s3 and the S3_* settings (DEPLOY.md, "Moving files to DigitalOcean Spaces"). Writes and deletes one small
 object under healthcheck/. Prints `ok <step>` or `FAIL <step>: <error>` per step.
 Exit 0 = all ok, 1 = a step failed, 2 = not running against S3.
 """

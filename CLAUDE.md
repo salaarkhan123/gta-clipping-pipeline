@@ -24,7 +24,7 @@ Re-engineering plan (SPEC.md section 13), phase by phase: a phase starts only af
 - Secrets only from environment variables. Never commit `.env`. API keys are stored hashed.
 - All file access goes through `app/storage.py`. All ffmpeg inputs use `-protocol_whitelist file,pipe` and a timeout.
 - The website calls the same public API as customers; no private endpoints.
-- There are no migrations yet: adding or changing a column needs Alembic first (tables are created with `create_all`).
+- Schema changes go through Alembic (`app/migrations/`, see `app/migrate.py`): one reviewed revision per change, additive only (anything that drops, renames or rewrites data needs the owner's OK). `deploy.sh` migrates before the restart.
 
 ## Commands (run inside `clip-api/`)
 - Tests: `pytest -q` (SQLite) or `TEST_DATABASE_URL=postgresql+psycopg://... pytest -q`
