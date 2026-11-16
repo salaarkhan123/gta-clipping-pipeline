@@ -53,6 +53,34 @@ Default: one job at a time. Two ways to add capacity:
 After either change, run the 10-clip benchmark twice at the same time and compare with SPEC.md §10 B before
 relying on it.
 
+## Moving files to DigitalOcean Spaces
+
+Uploads and clips are stored on the droplet's disk by default (`STORAGE_BACKEND=local`). Spaces moves them to a
+private bucket; download links become signed URLs straight from the bucket, valid for `SIGNED_URL_TTL_SEC`.
+
+**Price** (docs.digitalocean.com/products/spaces/details/pricing, checked 2026-11-15): $5.00 per month, which
+includes 250 GiB stored and 1,024 GiB of downloads; beyond that $0.02 per GiB stored per month and $0.01 per
+GiB downloaded. Transfer from a Space to a Droplet in the same region group is free, so create the Space in the
+droplet's region.
+
+1. In the DigitalOcean panel: create a Space in the droplet's region with **file listing restricted**, and a
+   Spaces access key limited to that bucket.
+2. Add to the server's env file (keep `STORAGE_BACKEND=local` for now):
+   `S3_ENDPOINT_URL=https://<region>.digitaloceanspaces.com`, `S3_REGION=<region>` (for example `nyc3`),
+   `S3_BUCKET=<space name>`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`. Then `docker compose up -d api worker`
+   when no job is RUNNING.
+3. Check the bucket, then copy the existing files (safe to repeat; nothing local is deleted):
+   ```bash
+   docker compose exec -T -e STORAGE_BACKEND=s3 api python scripts/check_storage.py
+   docker compose exec -T api python scripts/migrate_storage.py --dry-run
+   docker compose exec -T api python scripts/migrate_storage.py
+   ```
+4. Switch: set `STORAGE_BACKEND=s3`, `docker compose up -d api worker` (when no job is RUNNING), then run
+   `migrate_storage.py` once more to pick up anything written in between. It must end with `failed 0`.
+5. Run one job and download a clip. Keep the local files for a week (`data/storage` in the `data` volume), then
+   delete them. **Roll back:** set `STORAGE_BACKEND=local` and restart; files created while on Spaces are only
+   in the bucket.
+
 ## One-time switch from tarballs to git
 
 Do this when nothing is running, after `main` contains exactly the code the droplet runs
