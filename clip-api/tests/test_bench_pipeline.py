@@ -40,6 +40,7 @@ def test_benchmark_reports_every_key(clip20, transcriber):
     assert result["clips"] >= 1
     assert result["credits"] == 1                      # 20 s rounds up to one credit minute
     assert result["chat_region"] == "none"
+    assert result["stages"]["render"] > 0 and result["counts"]["clips"] == result["clips"]   # where the time went
     json.dumps(result)
 
 

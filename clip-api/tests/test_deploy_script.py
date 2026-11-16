@@ -13,6 +13,7 @@ STUB = """#!/usr/bin/env bash
 echo "$*" >> "$DOCKER_LOG"
 case "$*" in
   *"admin.py stuck"*) [ -n "${STUCK_FAIL:-}" ] && exit 1; printf '%b' "${STUCK_OUT:-}";;
+  *"admin.py migrate"*) [ -n "${MIGRATE_FAIL:-}" ] && { echo "boom" >&2; exit 1; }; echo "schema 0001 -> 0002";;
   *"admin.py selftest"*) [ -n "${SELFTEST_FAIL:-}" ] && { echo "FAIL  whisper"; exit 1; }; echo "OK    all";;
 esac
 exit 0
@@ -86,8 +87,21 @@ def test_pulls_rebuilds_then_selftests(server):
     assert r.returncode == 0, r.stderr
     assert (work / "new.txt").exists()
     order = [line for line in calls(log).splitlines() if "stuck" not in line and "health" not in line and "urllib" not in line]
-    assert order == ["compose build api worker", "compose up -d api worker",
-                     "compose exec -T api python scripts/admin.py selftest"]
+    assert order == ["compose build api worker", "compose run --rm -T api python scripts/admin.py migrate",
+                     "compose up -d api worker", "compose exec -T api python scripts/admin.py selftest"]
+
+
+def test_a_failed_migration_restarts_nothing(server):
+    work, env, log = server
+    r = deploy(work, env, MIGRATE_FAIL="1")
+    assert r.returncode == 1 and "migration FAILED" in r.stderr and "git checkout --detach" in r.stderr
+    assert "compose up" not in calls(log) and "selftest" not in calls(log)
+
+
+def test_no_migration_while_a_job_runs(server):
+    work, env, log = server
+    r = deploy(work, env, STUCK_OUT="job_abc RUNNING  stage=rendering progress=71\\n")
+    assert r.returncode == 1 and "migrate" not in calls(log)
 
 
 def test_selftest_failure_prints_rollback(server):

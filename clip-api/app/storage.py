@@ -1,4 +1,5 @@
-"""Object storage behind one interface: local disk (dev/tests) or S3-compatible (Cloudflare R2)."""
+"""Object storage behind one interface: local disk (dev/tests) or S3-compatible (DigitalOcean Spaces, R2)."""
+import mimetypes
 import shutil
 from datetime import timedelta
 from functools import lru_cache
@@ -39,21 +40,37 @@ class LocalStorage:
 
 
 class S3Storage:
+    """Private bucket; downloads are presigned URLs straight from the bucket (no bytes through the api)."""
+
     def __init__(self):
         import boto3
         from botocore.config import Config
         s = get_settings()
         self.bucket = s.s3_bucket
+        # Checksums only when the API requires them: boto3's newer default (a CRC on every upload) is
+        # rejected by some S3-compatible services.
         self.client = boto3.client(
             "s3", endpoint_url=s.s3_endpoint_url or None, region_name=s.s3_region,
             aws_access_key_id=s.s3_access_key_id, aws_secret_access_key=s.s3_secret_access_key,
-            config=Config(signature_version="s3v4"))
+            config=Config(signature_version="s3v4", request_checksum_calculation="when_required",
+                          response_checksum_validation="when_required"))
 
     def put(self, key: str, src: Path) -> None:
-        self.client.upload_file(str(src), self.bucket, key)
+        content_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
+        self.client.upload_file(str(src), self.bucket, key, ExtraArgs={"ContentType": content_type})
 
     def fetch(self, key: str, dest: Path) -> None:
         self.client.download_file(self.bucket, key, str(dest))
+
+    def size(self, key: str) -> int | None:
+        """Bytes stored under key, or None if there is no such object."""
+        from botocore.exceptions import ClientError
+        try:
+            return int(self.client.head_object(Bucket=self.bucket, Key=key)["ContentLength"])
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+                return None
+            raise
 
     def exists(self, key: str) -> bool:
         from botocore.exceptions import ClientError
@@ -64,8 +81,12 @@ class S3Storage:
             return False
 
     def url(self, key: str) -> str:
+        # attachment: the site's Download link is cross-origin, where the browser ignores <a download>.
+        # <video> and <img> ignore this header, so previews still play from the same URL.
+        name = Path(key).name.replace('"', "")
         return self.client.generate_presigned_url(
-            "get_object", Params={"Bucket": self.bucket, "Key": key},
+            "get_object", Params={"Bucket": self.bucket, "Key": key,
+                                  "ResponseContentDisposition": f'attachment; filename="{name}"'},
             ExpiresIn=get_settings().signed_url_ttl_sec)
 
     def delete(self, key: str) -> None:
