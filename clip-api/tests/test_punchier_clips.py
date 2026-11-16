@@ -82,8 +82,11 @@ def gappy(tmp_path_factory):
 
 class UmTalker:
     def transcribe(self, wav) -> Transcript:      # clip-relative: the excerpt starts 4 s before the clip
-        return Transcript(words=[(5.0, 5.4, "watch"), (6.0, 6.3, "um"), (6.5, 7.0, "this"), (20.0, 20.5, "wow")],
-                          segments=[(5.0, 7.0, "watch um this"), (20.0, 20.5, "wow")])
+        # Times are relative to the excerpt, which starts 4 s before the clip (the clip here runs 9.85-25.75).
+        # "um" lands at 11.2 s: more than 1.2 s after the clip's start and before the silence at 13-16 s, so
+        # cutting it leaves no fragment. Nearer either one, the cut is (rightly) not made.
+        return Transcript(words=[(4.2, 4.6, "watch"), (5.35, 5.65, "um"), (5.8, 6.3, "this"), (20.0, 20.5, "wow")],
+                          segments=[(4.2, 6.3, "watch um this"), (20.0, 20.5, "wow")])
 
 
 def test_dead_air_and_fillers_are_cut_and_captions_follow(gappy, tmp_path):

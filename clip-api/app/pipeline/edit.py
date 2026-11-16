@@ -18,6 +18,8 @@ KEEP_PAUSE = 0.25         # what is left of a removed silence, split between bot
 MIN_PIECE = 0.4           # never leave a sliver shorter than this between two cuts
 LOUD_DB = 2.0             # a speech gap this much louder than the clip's typical level is action, not dead air
 MAX_REMOVED = 0.35        # never cut more than this share of a clip as dead air
+MAX_CUTS = 4              # jump cuts per clip: more than this looks like a glitch, not an edit
+MIN_KEEP = 1.2            # seconds of video that must remain between two cuts
 FILLERS = {"um", "uh", "uhh", "umm", "uhm", "erm", "er", "hmm", "mm", "mhm"}
 FLASH_LEN = 1.5           # seconds of the peak shown first
 FLASH_MIN_LEAD = 4.0      # no flash-forward when the peak is already this close to the start
@@ -82,14 +84,27 @@ def avoid_words(spans: list[Segment], words: list[tuple[float, float, str]], mar
     return sorted(out)
 
 
-def within_budget(spans: list[Segment], length: float, share: float = MAX_REMOVED) -> list[Segment]:
-    """The longest spans first, until removing more would take more than `share` of the clip."""
-    kept, used = [], 0.0
+def select_cuts(spans: list[Segment], start: float, end: float, share: float = MAX_REMOVED,
+                max_cuts: int = MAX_CUTS, min_piece: float = MIN_KEEP) -> list[Segment]:
+    """Which of the candidate removals to make, longest first, so the clip stays watchable: never more than
+    `share` of the clip removed, never more than `max_cuts` cuts, and never a cut that would leave a piece of
+    video shorter than `min_piece` between it and a neighbouring cut or the clip's own start or end."""
+    chosen: list[Segment] = []
+    used = 0.0
     for s, e in sorted(spans, key=lambda x: x[0] - x[1]):
-        if used + (e - s) <= share * length:
-            kept.append((s, e))
-            used += e - s
-    return sorted(kept)
+        s, e = max(s, start), min(e, end)
+        if e - s <= 0.05 or len(chosen) >= max_cuts or used + (e - s) > share * (end - start):
+            continue
+        if any(s < ce and cs < e for cs, ce in chosen):
+            continue                                        # overlaps a cut already chosen
+        before = max([ce for _cs, ce in chosen if ce <= s] + [start])
+        after = min([cs for cs, _ce in chosen if cs >= e] + [end])
+        # A cut flush with the clip's start or end only trims it; anywhere else both neighbours must be long enough.
+        if (s - before < min_piece and s > start + 0.05) or (after - e < min_piece and e < end - 0.05):
+            continue
+        chosen.append((s, e))
+        used += e - s
+    return sorted(chosen)
 
 
 def filler_spans(words: list[tuple[float, float, str]]) -> list[Segment]:

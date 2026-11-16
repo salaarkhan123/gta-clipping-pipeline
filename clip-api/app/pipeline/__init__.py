@@ -27,7 +27,7 @@ from .timing import Timer
 from .stt import SourceAudio, slice_wav, window as transcript_window
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
 from .transcribe import Transcriber, Transcript, exclamation_hits, extract_wav, snap_to_speech
-from .edit import KEEP_PAUSE, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, with_flash_forward, within_budget, zoom_expr, zoom_peaks
+from .edit import KEEP_PAUSE, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, select_cuts, with_flash_forward, zoom_expr, zoom_peaks
 from .variety import min_gap_for, pick_distinct
 from .windows import pick_spread, pick_windows
 
@@ -280,8 +280,8 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
             with timer.stage("dead_air"):
                 dead = (avoid_words(silences(audio or input_path, c.start, c.end, deadline), spoken)
                         + speech_gaps(spoken, db, c.start, c.end))
-            quiet = [(s + KEEP_PAUSE / 2, e - KEEP_PAUSE / 2) for s, e in within_budget(dead, c.end - c.start)]
-            segments = cut(c.start, c.end, quiet + filler_spans(spoken))
+            quiet = [(s + KEEP_PAUSE / 2, e - KEEP_PAUSE / 2) for s, e in dead]      # leave a short pause behind
+            segments = cut(c.start, c.end, select_cuts(quiet + filler_spans(spoken), c.start, c.end))
         body = segments
         if options.flash_forward:
             segments = with_flash_forward(body, c.peak, c.end)
@@ -307,7 +307,7 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                         words=words, font=options.caption_font, layout=layout, facecam=facecam,
                         style=options.caption_style, aspect=options.aspect, max_side=options.max_side,
                         deadline=deadline, segments=segments, punch=zoom_expr(zooms), has_audio=info.has_audio,
-                        hook=hook)
+                        hook=hook, flash=flash)
         c.features["edit"]["render_sec"] = round(time.monotonic() - t0, 2)
         timer.count("clips")
         timer.count("rendered_sec", round(kept_duration(segments), 1))

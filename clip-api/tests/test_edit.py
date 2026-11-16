@@ -82,10 +82,26 @@ def test_speech_gaps_are_dead_air_only_when_the_game_is_quiet_too():
     assert E.speech_gaps(words[:1], db, 8.0, 38.0) == [] and E.speech_gaps([], db, 8.0, 38.0) == []
 
 
-def test_dead_air_budget_keeps_the_longest_cuts_and_stops_at_a_third():
-    spans = [(0.0, 4.0), (10.0, 13.0), (20.0, 26.0), (28.0, 29.0)]           # 14 s of gaps in a 30 s clip
-    kept = E.within_budget(spans, 30.0)
-    assert kept == [(0.0, 4.0), (20.0, 26.0)] and sum(e - s for s, e in kept) <= 0.35 * 30
+def test_cuts_are_chosen_longest_first_within_a_third_of_the_clip():
+    spans = [(2.0, 6.0), (10.0, 13.0), (20.0, 26.0), (27.5, 28.5)]           # 14 s of gaps in a 30 s clip
+    chosen = E.select_cuts(spans, 0.0, 30.0)
+    assert chosen == [(2.0, 6.0), (20.0, 26.0)] and sum(e - s for s, e in chosen) <= 0.35 * 30
+
+
+def test_no_cut_leaves_a_fragment_and_there_are_at_most_four():
+    # The 8-piece clip from the audit: gaps that would leave pieces of 0.8 s and 1.2 s between them.
+    gaps = [(23.1, 24.6), (25.4, 25.9), (28.9, 29.3), (37.0, 37.5), (41.6, 45.0), (45.8, 49.4)]
+    chosen = E.select_cuts(gaps, 21.9, 50.6)
+    pieces = E.cut(21.9, 50.6, chosen)
+    assert len(chosen) <= 4 and all(e - s >= 1.2 for s, e in pieces[1:-1])          # every piece between cuts is watchable
+    assert (45.8, 49.4) in chosen and (41.6, 45.0) not in chosen                    # the longer gap goes; the 0.8 s of speech between them is not orphaned
+    six = [(float(k), k + 0.9) for k in range(3, 60, 5)]                            # twelve short gaps in a minute
+    assert len(E.select_cuts(six, 0.0, 60.0)) == 4
+
+
+def test_a_cut_at_the_very_start_or_end_just_trims_the_clip():
+    assert E.select_cuts([(0.0, 1.0), (29.2, 30.0)], 0.0, 30.0) == [(0.0, 1.0), (29.2, 30.0)]
+    assert E.select_cuts([(0.5, 1.5)], 0.0, 30.0) == []                             # would leave half a second at the front
 
 
 def test_a_cut_never_removes_a_spoken_word():
