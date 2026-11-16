@@ -43,6 +43,7 @@ def load(path: Path) -> dict:
     source = counts.get("source_sec") or (speed * elapsed)             # older jobs: back out of the speed factor
     return {"job_id": data.get("job_id"), "status": data.get("status"), "elapsed": elapsed,
             "queue": result.get("queue_sec", 0.0), "total": result.get("total_sec", elapsed), "source": source,
+            "first_clip": result.get("first_clip_sec"),
             "clips": counts.get("clips", len(data.get("clips") or [])), "counts": counts,
             "fine": result.get("stages"), "coarse": result.get("timings") or {}}
 
@@ -84,6 +85,7 @@ def compare(job: dict, base: dict | None = None) -> dict:
     return {"job_id": job["job_id"], "detail": "fine" if fine else "coarse", "source_min": round(job["source"] / 60, 1),
             "clips": job["clips"], "queue_sec": job["queue"], "run_sec": job["elapsed"], "total_sec": job["total"],
             "target_sec": round(goal, 1), "meets_target": job["total"] <= goal, "rates": rates, "stages": rows,
+            "first_clip_sec": None if job["first_clip"] is None else round(job["queue"] + job["first_clip"], 1),
             **({"baseline": {"job_id": base["job_id"], "total_sec": base["total"], "clips": base["clips"],
                              "change_sec": round(job["total"] - base["total"], 1)}} if base else {})}
 
@@ -93,6 +95,8 @@ def render(c: dict, md: bool = False) -> str:
     verdict = "meets the target" if c["meets_target"] else f"misses the target by {over / 60:.1f} min"
     head = [f"{c['source_min']} min of video, {c['clips']} clips: {c['total_sec']:.0f} s end to end "
             f"({c['queue_sec']:.0f} s queued + {c['run_sec']:.0f} s running). Target {c['target_sec']:.0f} s: {verdict}."]
+    if c.get("first_clip_sec") is not None:
+        head.append(f"First clip watchable after {c['first_clip_sec']:.0f} s (queue included).")
     if "baseline" in c:
         b = c["baseline"]
         head.append(f"Before: {b['total_sec']:.0f} s for {b['clips']} clips. Change: {b['change_sec']:+.0f} s.")

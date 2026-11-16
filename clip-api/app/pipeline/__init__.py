@@ -84,6 +84,7 @@ class ClipResult:
     thumb_path: Path | None = None
     captions_path: Path | None = None
     meta: dict | None = None      # the judge's title, hashtags and virality for this clip
+    index: int = 0                # the clip's number within the job, in the order the moments happen (1 = earliest)
 
 
 @dataclass
@@ -134,13 +135,17 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                  deadline: Deadline | None = None,
                  judge: Judge | None = None,
                  fast_transcriber: Transcriber | None = None, timer: Timer | None = None,
-                 transcript: Transcript | None = None, source_audio: SourceAudio | None = None) -> list[ClipResult]:
+                 transcript: Transcript | None = None, source_audio: SourceAudio | None = None,
+                 on_clip: Callable[[ClipResult], None] | None = None) -> list[ClipResult]:
     """`timer`, when given, receives how long each stage took and how much work it did (see timing.py).
     `transcript` is an existing transcript of the whole recording (absolute seconds), if there is one.
     `source_audio` is the recording's audio already decoded by the caller (stt.extract_audio): candidates are
-    then cut from it. Without it nothing is extracted up front, which is faster when only candidates are read."""
+    then cut from it. Without it nothing is extracted up front, which is faster when only candidates are read.
+    `on_clip` is called with each clip as soon as it is rendered (best first); the return value is every clip in
+    the order of the video."""
     progress = progress_cb or (lambda stage, pct: None)
     timer = timer or Timer()
+    t_begin = time.monotonic()
     input_path, out_dir = Path(input_path), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     if options.chat_region != "none" and options.chat_region not in CHAT_REGIONS:
@@ -263,10 +268,11 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                 timer.count("transcribed_final_sec", round(c.end - c.start + 2 * PAD, 1))
             _snap(c, info.duration)
 
-    # 4. Render.
+    # 4. Render, best first: with `on_clip` each clip is handed over the moment it is done, so the strongest
+    #    ones can be watched while the rest are still rendering. Clip numbers stay in the order of the video.
     results: list[ClipResult] = []
-    for i, c in enumerate(chosen, 1):
-        progress("rendering", 70 + int(28 * (i - 1) / len(chosen)))
+    for done, (i, c) in enumerate(sorted(enumerate(chosen, 1), key=lambda ic: -ic[1].final)):
+        progress("rendering", 70 + int(28 * done / len(chosen)))
         spoken = [(s + c.offset, e + c.offset, w) for s, e, w in c.transcript.words
                   if c.start <= s + c.offset < c.end]                     # source seconds
         segments = [(round(c.start, 3), round(c.end, 3))]
@@ -319,9 +325,13 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
             caps.write_text(json.dumps({"words": [{"start": s, "end": e, "text": t} for s, e, t in words]}))
         results.append(ClipResult(start=round(c.start, 3), end=round(c.end, 3), score=round(c.final, 4),
                                   signals=c.signals, features=c.features, video_path=video,
-                                  thumb_path=thumb, captions_path=caps, meta=c.meta))
+                                  thumb_path=thumb, captions_path=caps, meta=c.meta, index=i))
+        if done == 0:
+            timer.count("first_clip_sec", round(time.monotonic() - t_begin, 1))
+        if on_clip is not None:
+            on_clip(results[-1])
     progress("done", 100)
-    return results
+    return sorted(results, key=lambda r: r.index)
 
 
 def _snap(c: _Candidate, duration: float) -> None:

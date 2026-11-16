@@ -73,7 +73,8 @@ def test_a_finished_job_reports_stages_counts_queue_and_end_to_end_time(client, 
     time.sleep(1.1)                                                     # the job waits in the queue
     assert worker.run_once(transcriber) == "SUCCEEDED"
     r = client.get(f"/v1/jobs/{job_id}", headers=headers).json()["result"]
-    assert {"download", "probe", "audio_signal", "render", "titles", "store"} <= set(r["stages"])
+    assert {"download", "probe", "audio_signal", "render", "store"} <= set(r["stages"])
+    assert "titles" not in r["stages"]                                  # no AI wrote titles in this job
     assert r["counts"]["clips"] == 1 and r["queue_sec"] >= 1.0
     assert r["total_sec"] == pytest.approx(r["queue_sec"] + r["elapsed_sec"], abs=0.3) and r["speed_x"] > 0
     assert "rendering" in r["timings"]                                  # the dashboard's coarse stages are still there
