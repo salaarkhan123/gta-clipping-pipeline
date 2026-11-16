@@ -33,7 +33,7 @@ export function ClipCard({ clip, onChange, project }: { clip: any; onChange: (c:
         <ScoreBadge clip={clip} />
         <span className="muted">{clock(clip.start_sec)} to {clock(clip.end_sec)}</span>
         {project && <Link className="muted" href={`/dashboard/project/?id=${project.id}`}>From {project.name}</Link>}
-        {clip.hook && <p className="muted">On-screen hook: “{clip.hook}”</p>}
+        {clip.hook && <p className="muted">{clip.hook_on_screen ? "On-screen hook" : "Hook idea (not on the video)"}: “{clip.hook}”</p>}
         {clip.description && <p>{clip.description}</p>}
         {clip.suggestion?.text && <p className="tip"><b>Tip</b> {clip.suggestion.text}</p>}
         {clip.hashtags?.length > 0 && <p className="tags">{clip.hashtags.map((t: string) => `#${t}`).join(" ")}</p>}
