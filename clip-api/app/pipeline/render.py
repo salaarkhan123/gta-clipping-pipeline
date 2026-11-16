@@ -147,6 +147,13 @@ def caption_top(src_w: int, src_h: int, layout: str, zoom: float, chat: str, oh:
     return video_bottom(src_w, src_h, zoom, chat) + 30
 
 
+def hook_top(layout: str, oh: int = H) -> int:
+    """Where the on-screen hook sits, in pixels from the top: on the gameplay, clear of the camera and the captions."""
+    if layout == "split":
+        return even(oh / 3) + 120      # under the captions on the seam, at the top of the gameplay panel
+    return int(oh * 0.18)
+
+
 def capped_size(w: int, h: int, max_side: int | None) -> tuple[int, int] | None:
     """Output size when the plan caps resolution (max_side = short side, e.g. 720), else None."""
     if not max_side or min(w, h) <= max_side:
@@ -223,11 +230,13 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
                 vertical: bool, zoom: float, chat: str, words, font: str,
                 layout: str = "fill", facecam=None, style: str = "pop", aspect: str = "9:16",
                 max_side: int | None = None, deadline: Deadline | None = None,
-                segments: list[tuple[float, float]] | None = None, punch: str = "1", has_audio: bool = True) -> None:
+                segments: list[tuple[float, float]] | None = None, punch: str = "1", has_audio: bool = True,
+                hook: str | None = None) -> None:
     """Cut [start, end] from src and render it. `words` are clip-relative (start, end, text) or empty.
 
     With `segments` (source seconds, in playing order) those pieces are played back to back instead, and `words`
     are on that rendered timeline. `punch` is a zoom expression over rendered time for the gameplay picture.
+    `hook` is a line of on-screen text for the first 2.5 s.
     """
     # Caption files live in the system temp dir so the path has no spaces (ffmpeg filter paths are fussy).
     tmp = Path(tempfile.mkdtemp(prefix="clipcap"))
@@ -235,9 +244,10 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
         cap_filter = ""
         ow, oh = ASPECTS.get(aspect, ASPECTS["9:16"]) if vertical else (src_w, src_h)
         layout = fit_layout(layout, aspect)
-        if words:
+        if words or hook:
             top = caption_top(src_w, src_h, layout, zoom, chat, oh) if vertical else 0
-            build_ass(words, tmp / "cap.ass", vertical, top, font, style, play=(ow, oh))
+            build_ass(words, tmp / "cap.ass", vertical, top, font, style, play=(ow, oh), hook=hook,
+                      hook_top=hook_top(layout, oh) if vertical else int(1080 * 0.1))
             cap_filter = f"ass=filename={tmp / 'cap.ass'}"
         size = capped_size(ow, oh, max_side)
         scale = ["-s", f"{size[0]}x{size[1]}"] if size else []
