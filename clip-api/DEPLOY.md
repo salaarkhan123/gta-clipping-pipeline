@@ -11,10 +11,26 @@ cd /root/clip-api && bash scripts/deploy.sh
 
 `scripts/deploy.sh` refuses while a job is RUNNING (it checks `admin.py stuck` before the pull and again right
 before the restart), refuses if the job list cannot be read, if tracked files were edited on the server, or if
-the checkout is not on the deploy branch. It then fast-forwards, builds `api` and `worker`, restarts only those
-two, and runs `admin.py selftest`. On a selftest failure it prints the rollback command. Caddy and Postgres are
+the checkout is not on the deploy branch. It then fast-forwards, builds `api` and `worker`, runs the schema
+migrations from the new image (`admin.py migrate`), restarts only `api` and `worker`, and runs
+`admin.py selftest`. A failed migration stops before the restart, so the old code keeps serving on an unchanged
+schema. On a selftest failure it prints the rollback command. Caddy and Postgres are
 not restarted; `web/` is served straight from the checkout, so the site updates with the pull. A change to the
 `Caddyfile` needs `docker compose up -d caddy` as well.
+
+## Schema migrations
+
+Alembic, in `app/migrations/`. Migrations are additive only (new tables, new nullable or defaulted columns, new
+indexes), so the old code keeps working while it still serves and a code rollback needs no schema rollback.
+Anything that drops, renames or rewrites data needs its own PR and the owner's OK, with a backup first.
+
+- **See where the database is (read-only):** `docker compose exec -T api python scripts/admin.py db-status`.
+  Exit 0 means it is at the latest revision. It lists anything that differs from the models.
+- **First deploy with migrations:** the production database predates them. Before that deploy, run `db-status`
+  and back up the database (`pg_dump`, as in step 1 below). It should report "from before migrations" plus, at
+  most, a missing `ix_accounts_stripe_customer_id` index. `deploy.sh` then brings the database to the baseline
+  (adding the missing columns and indexes, and making `uploads.analyzed` NOT NULL, which changes no values) and
+  stamps it. After the deploy, `db-status` must report `revision 0001 · latest 0001`.
 
 ## Running more than one job at once
 
