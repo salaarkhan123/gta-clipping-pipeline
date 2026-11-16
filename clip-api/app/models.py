@@ -57,6 +57,9 @@ class Upload(Base):
     has_audio: Mapped[bool] = mapped_column(Boolean)
     analyzed: Mapped[bool] = mapped_column(Boolean, default=False)   # a full-price job has succeeded on it
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)   # sha256 of the file's bytes
+    source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)   # where a link import came from
+    source_platform: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    language: Mapped[str | None] = mapped_column(String(8), nullable=True)        # spoken language, once detected
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -84,6 +87,7 @@ class Job(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     idempotency_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(120), nullable=True)          # the project name the user gave
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -109,6 +113,12 @@ class Clip(Base):
     kept: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     reaction: Mapped[str | None] = mapped_column(String(8), nullable=True)   # like | dislike
     bookmarked: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    rank: Mapped[int | None] = mapped_column(Integer, nullable=True)              # 0 = best in its run
+    kind: Mapped[str | None] = mapped_column(String(16), nullable=True)           # funny | argument | reaction | clutch | fail | story
+    preview_key: Mapped[str | None] = mapped_column(String(400), nullable=True)   # fast low-resolution render
+    export_key: Mapped[str | None] = mapped_column(String(400), nullable=True)    # latest full-quality render
+    export_res: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    edit: Mapped[dict | None] = mapped_column(JSON, nullable=True)                # edit decisions saved by the editor
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -121,6 +131,30 @@ class ClipFeedback(Base):
     account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
     kind: Mapped[str] = mapped_column(String(12))    # kept | reaction | bookmarked
     value: Mapped[str | None] = mapped_column(String(8), nullable=True)   # true/false, like/dislike, or NULL = cleared
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Export(Base):
+    """One request to render a clip at full quality with given options."""
+    __tablename__ = "exports"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    clip_id: Mapped[str] = mapped_column(ForeignKey("clips.id"), index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    resolution: Mapped[str] = mapped_column(String(8))
+    options: Mapped[dict] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(12), default="QUEUED")
+    storage_key: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ImportLog(Base):
+    """Append-only record of every link import: who asked for which URL and that they confirmed their rights."""
+    __tablename__ = "import_log"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    source_url: Mapped[str] = mapped_column(String(1000))
+    platform: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    consent: Mapped[bool] = mapped_column(Boolean)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
