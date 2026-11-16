@@ -85,6 +85,15 @@ def upload_json(u: Upload) -> dict:
             "created_at": iso(u.created_at), "expires_at": iso(u.expires_at)}
 
 
+def clip_json(c: Clip, storage) -> dict:
+    return {"id": c.id, "index": c.idx, "start_sec": c.start_sec, "end_sec": c.end_sec,
+            "score": c.score, "signals": c.signals, "kept": c.kept,
+            **{k: (c.meta or {}).get(k) for k in ("title", "description", "hashtags", "virality", "reason")},
+            "video_url": storage.url(c.video_key),
+            "thumb_url": storage.url(c.thumb_key) if c.thumb_key else None,
+            "captions_url": storage.url(c.captions_key) if c.captions_key else None}
+
+
 def job_json(db: Session, job: Job, with_clips: bool = True) -> dict:
     out = {"job_id": job.id, "tool": (job.options or {}).get("tool", "clips"), "status": job.status,
            "progress": job.progress, "stage": job.stage, "upload_id": job.upload_id, "options": job.options,
@@ -96,13 +105,7 @@ def job_json(db: Session, job: Job, with_clips: bool = True) -> dict:
         clips = db.execute(select(Clip).where(Clip.job_id == job.id, Clip.deleted_at.is_(None))
                            .order_by(Clip.idx)).scalars()
         out["result"] = job.result
-        out["clips"] = [{"id": c.id, "index": c.idx, "start_sec": c.start_sec, "end_sec": c.end_sec,
-                         "score": c.score, "signals": c.signals, "kept": c.kept,
-                         **{k: (c.meta or {}).get(k) for k in ("title", "description", "hashtags", "virality", "reason")},
-                         "video_url": storage.url(c.video_key),
-                         "thumb_url": storage.url(c.thumb_key) if c.thumb_key else None,
-                         "captions_url": storage.url(c.captions_key) if c.captions_key else None}
-                        for c in clips]
+        out["clips"] = [clip_json(c, storage) for c in clips]
     return out
 
 
