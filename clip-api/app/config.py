@@ -3,6 +3,7 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_PACKS = json.dumps([
@@ -78,6 +79,9 @@ class Settings(BaseSettings):
     whisper_index_model: str = "base.en"   # full-video search index: smaller and several times faster
     caption_font: str = "DejaVu Sans"
     worker_poll_sec: float = 2.0
+    # Jobs one worker process runs at once. 2 is the most a 4 vCPU / 8 GB server holds (ffmpeg and Whisper
+    # both use every core); raise the limit only with a bigger server and a new benchmark.
+    worker_concurrency: int = Field(1, ge=1, le=2)
     sentry_dsn: str = ""
 
     @property

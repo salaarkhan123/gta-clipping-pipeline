@@ -3,6 +3,7 @@
 In-game faces move around; a webcam overlay does not. Uses OpenCV's bundled Haar face detector (no model download).
 """
 import logging
+import threading
 
 import numpy as np
 
@@ -10,18 +11,17 @@ from .ff import SAFE_IN, Deadline, MediaInfo, PipelineError, PipelineTimeout, ru
 from .render import FACECAM_REGIONS, even, resolve_layout
 
 log = logging.getLogger("clipapi.facecam")
-_cascade = None
+_local = threading.local()   # one detector per thread: a cascade is not safe to call from two jobs at once
 
 
 def _detector():
-    global _cascade
-    if _cascade is None:
+    if getattr(_local, "cascade", None) is None:
         import cv2
         c = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
         if c.empty():
             raise RuntimeError("face detector data is missing")
-        _cascade = c
-    return _cascade
+        _local.cascade = c
+    return _local.cascade
 
 
 def sample_gray(src, info: MediaInfo, n: int, deadline: Deadline | None = None, width: int = 640) -> list:
