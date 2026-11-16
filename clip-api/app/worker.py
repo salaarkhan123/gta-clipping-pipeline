@@ -123,12 +123,15 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
     mark = [time.monotonic(), "starting"]
     t_start = mark[0]
 
+    first_clip: list[float] = []      # seconds from the start of the run to the first clip being watchable
+
     def measured() -> dict:
         elapsed = time.monotonic() - t_start
         coarse = dict(timings)
         coarse[mark[1]] = coarse.get(mark[1], 0.0) + time.monotonic() - mark[0]
         return {"elapsed_sec": round(elapsed, 1), "speed_x": round(duration / max(elapsed, 0.1), 1),
-                "timings": {k: round(v, 1) for k, v in coarse.items() if v >= 0.05}, **timer.as_dict()}
+                "timings": {k: round(v, 1) for k, v in coarse.items() if v >= 0.05}, **timer.as_dict(),
+                **({"first_clip_sec": round(first_clip[0], 1)} if first_clip else {})}
 
     def waited(job: Job) -> dict:
         """Queue time and the end-to-end time a customer sees: from submitting the job to its result."""
@@ -156,6 +159,42 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             storage.fetch(src_key, src)
         deadline = Deadline(max(900.0, duration * s.job_timeout_factor))
         tool, result = options.pop("tool", "clips"), None
+        handed_over: set[int] = set()      # clips already stored (by object), so none is stored twice
+
+        def save_clip(r, idx: int) -> None:
+            """Store one finished clip and make it visible now, while the job is still running."""
+            meta = getattr(r, "meta", None)             # the judge already rated it, or:
+            if meta is None and ai is not None and tool in ("clips", "find"):
+                with timer.stage("titles"):
+                    meta = ai.clip_meta(clip_text(r), {"length": r.end - r.start, "signals": r.signals}, r.thumb_path)
+            # No AI, no score: a number made from loudness alone would mislead.
+            clip_id = new_id("clip")
+            base = f"clips/{job_id}/{clip_id}"
+            thumb_key = caps_key = None
+            with timer.stage("store"):
+                storage.put(f"{base}.mp4", r.video_path)
+                stored.append(f"{base}.mp4")
+                if r.thumb_path and r.thumb_path.exists():
+                    thumb_key = f"{base}.jpg"
+                    storage.put(thumb_key, r.thumb_path)
+                    stored.append(thumb_key)
+                if r.captions_path and r.captions_path.exists():
+                    caps_key = f"{base}.captions.json"
+                    storage.put(caps_key, r.captions_path)
+                    stored.append(caps_key)
+            with new_session() as db:
+                job = db.execute(select(Job).where(Job.id == job_id).with_for_update()).scalar_one()
+                if job.status != "RUNNING":
+                    raise Lost()
+                if job.cancel_requested:
+                    raise Canceled()
+                db.add(Clip(id=clip_id, job_id=job_id, idx=idx, start_sec=r.start, end_sec=r.end, score=r.score,
+                            signals=r.signals, features=r.features, video_key=f"{base}.mp4",
+                            thumb_key=thumb_key, captions_key=caps_key, meta=meta))
+                db.commit()
+            if not handed_over:
+                first_clip.append(time.monotonic() - t_start)
+            handed_over.add(id(r))
         if tool == "render":
             segments = options.pop("segments")
             results = run_render(src, segments, RenderOptions(caption_font=s.caption_font, **options),
@@ -198,50 +237,19 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 saved = json.loads((work / "transcript.json").read_text())
                 extra["transcript"] = Transcript(words=[tuple(w) for w in saved.get("words", [])],
                                                  segments=[(x["start"], x["end"], x["text"]) for x in saved.get("segments", [])])
-            results = pipeline(src, opts, work / "out", progress, transcriber, deadline, timer=timer, **extra)
+            results = pipeline(src, opts, work / "out", progress, transcriber, deadline, timer=timer,
+                               on_clip=lambda r: save_clip(r, r.index), **extra)
 
-        metas = [None] * len(results)
-        t_titles = time.monotonic()
-        if tool in ("clips", "find"):
-            if ai is not None:
-                progress("writing_titles", 98)
-            for k, r in enumerate(results):
-                if getattr(r, "meta", None) is not None:   # the judge already rated this clip
-                    metas[k] = r.meta
-                    continue
-                meta = ai.clip_meta(clip_text(r), {"length": r.end - r.start, "signals": r.signals},
-                                    r.thumb_path) if ai is not None else None
-                metas[k] = meta   # no AI, no score: a number made from loudness alone would mislead
-
-        timer.add("titles", time.monotonic() - t_titles)
         progress("uploading", 99)
-        t_store = time.monotonic()
-        rows = []
-        for i, r in enumerate(results, 1):
-            clip_id = new_id("clip")
-            base = f"clips/{job_id}/{clip_id}"
-            storage.put(f"{base}.mp4", r.video_path)
-            stored.append(f"{base}.mp4")
-            thumb_key = caps_key = None
-            if r.thumb_path and r.thumb_path.exists():
-                thumb_key = f"{base}.jpg"
-                storage.put(thumb_key, r.thumb_path)
-                stored.append(thumb_key)
-            if r.captions_path and r.captions_path.exists():
-                caps_key = f"{base}.captions.json"
-                storage.put(caps_key, r.captions_path)
-                stored.append(caps_key)
-            rows.append(Clip(id=clip_id, job_id=job_id, idx=i, start_sec=r.start, end_sec=r.end, score=r.score,
-                             signals=r.signals, features=r.features, video_key=f"{base}.mp4",
-                             thumb_key=thumb_key, captions_key=caps_key, meta=metas[i - 1]))
-        timer.add("store", time.monotonic() - t_store)
+        for i, r in enumerate(results, 1):          # tools that hand their clips over at the end
+            if id(r) not in handed_over:
+                save_clip(r, r.index or i)
         with new_session() as db:
             job = db.execute(select(Job).where(Job.id == job_id).with_for_update()).scalar_one()
             if job.status != "RUNNING":
                 raise Lost()
             if job.cancel_requested:
                 raise Canceled()
-            db.add_all(rows)
             job.result = {**(result or {}), **measured(), **waited(job)}
             if tool in ("clips", "find"):
                 db.get(Upload, job.upload_id).analyzed = True
@@ -270,6 +278,8 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 log.exception("could not remove %s", key)
         with new_session() as db:
             job = db.execute(select(Job).where(Job.id == job_id).with_for_update()).scalar_one()
+            # Clips stored while the job ran are gone with it: a job that did not succeed shows nothing.
+            db.execute(update(Clip).where(Clip.job_id == job_id, Clip.deleted_at.is_(None)).values(deleted_at=utcnow()))
             if job.status == "RUNNING":
                 job.status, job.finished_at = status, utcnow()
                 if error:
@@ -279,6 +289,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 db.commit()
             else:
                 status = job.status   # already finalised and settled elsewhere; leave it alone
+                db.commit()           # (the clips above still go)
     send_webhook(job_id)
     return status
 
@@ -317,12 +328,23 @@ def sweep_stale_jobs() -> int:
     with new_session() as db:
         stale = db.execute(select(Job).where(Job.status == "RUNNING", Job.heartbeat_at < cutoff)
                            .with_for_update(skip_locked=True)).scalars().all()
+        orphans: list[str] = []
         for job in stale:
             job.status, job.finished_at = "FAILED", utcnow()
             job.error_code, job.error_message = "worker_lost", "Processing was interrupted. Your credits were refunded."
             ledger.settle(db, job, success=False)
+            # Clips the dead worker had already stored: hide them and remove their files.
+            for clip in db.execute(select(Clip).where(Clip.job_id == job.id, Clip.deleted_at.is_(None))).scalars():
+                orphans += [k for k in (clip.video_key, clip.thumb_key, clip.captions_key) if k]
+                clip.deleted_at = utcnow()
             n += 1
         db.commit()
+    storage = get_storage()
+    for key in orphans:
+        try:
+            storage.delete(key)
+        except Exception:
+            log.exception("could not remove %s", key)
     return n
 
 
