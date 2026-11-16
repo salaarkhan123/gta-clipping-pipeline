@@ -49,6 +49,18 @@ A job from before stage timing existed has only the coarse stages shown in the d
 uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-clips 10` runs the pipeline locally
 (no AI judge) and prints the same stages.
 
+## Transcription settings
+
+- `TRANSCRIPTION_PROVIDER=local` (the only provider so far): whole recordings are transcribed by the local Whisper
+  models, in chunks cut at quiet points. Hosted providers are added with their adapters; an unknown name stops the
+  worker at start with a clear message.
+- `TRANSCRIBE_PARALLEL` (default 1, up to 8): chunks transcribed at once, for whole-recording transcription (Video
+  Finder's index today). Leave it at 1 on the 4 vCPU droplet: one model already uses every core. On a machine
+  with 8 or more cores try 2 to 4 and compare with `scripts/job_timings.py`. Each extra one adds memory.
+- `TRANSCRIBE_CHUNK_SEC` (default 300): the chunk length.
+- A transcript that Video Finder made for an upload is reused by Clip Maker for its first, rough pass, so that
+  pass costs nothing on the second job. Captions are still made by the caption model.
+
 ## Running more than one job at once
 
 Default: one job at a time. Two ways to add capacity:

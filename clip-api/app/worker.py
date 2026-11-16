@@ -26,7 +26,8 @@ from .db import init_db, new_session
 from .models import Account, Clip, Job, Upload, WebhookDelivery, new_id, utcnow
 from .pipeline import Deadline, PipelineError, PipelineOptions, Timer, run_pipeline
 from .pipeline.tools import RenderOptions, run_find, run_render
-from .pipeline.transcribe import FasterWhisperTranscriber, Transcriber
+from .pipeline.stt import provider_for
+from .pipeline.transcribe import FasterWhisperTranscriber, Transcriber, Transcript
 from .pipeline.visual import FastembedClip
 from .security import is_public_https_url
 from .storage import get_storage, transcript_key, vindex_key
@@ -175,7 +176,9 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             results, result, new_t, new_v = run_find(
                 src, query, max_results, make_clips, clip_length,
                 RenderOptions(caption_font=s.caption_font, **options), work / "out", progress, transcriber,
-                deadline, cached_t, mode=mode, embedder=embedder, vindex=cached_v, indexer=indexer)
+                deadline, cached_t, mode=mode, embedder=embedder, vindex=cached_v, indexer=indexer,
+                provider=provider_for(s.transcription_provider, indexer or transcriber, s.transcribe_chunk_sec,
+                                      s.transcribe_parallel))
             # Keep both indexes so later searches on this upload skip the expensive part.
             if new_t is not None:
                 (work / "transcript.json").write_text(json.dumps(new_t))
@@ -189,6 +192,12 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             # The pipeline's judge takes (text, frame, context); the AI client takes (text, context, frame).
             extra = ({"judge": lambda text, frame, ctx: ai.clip_meta(text, ctx, frame), "fast_transcriber": indexer}
                      if ai is not None else {})
+            # A transcript this upload already has (Video Finder made one) replaces the rough pass.
+            if ai is not None and indexer is not None and storage.exists(transcript_key(upload_id)):
+                storage.fetch(transcript_key(upload_id), work / "transcript.json")
+                saved = json.loads((work / "transcript.json").read_text())
+                extra["transcript"] = Transcript(words=[tuple(w) for w in saved.get("words", [])],
+                                                 segments=[(x["start"], x["end"], x["text"]) for x in saved.get("segments", [])])
             results = pipeline(src, opts, work / "out", progress, transcriber, deadline, timer=timer, **extra)
 
         metas = [None] * len(results)
@@ -357,6 +366,8 @@ def main() -> None:
         import sentry_sdk
         sentry_sdk.init(dsn=s.sentry_dsn, traces_sample_rate=0.0)
     init_db()
+    provider_for(s.transcription_provider, None)                 # an unknown provider stops the worker here, not mid-job
+    FasterWhisperTranscriber.workers = s.transcribe_parallel     # before the models load
     transcriber, indexer, embedder = default_transcriber(), default_indexer(), default_embedder()
     log.info("worker started (captions: %s, search index: %s, visual search: %s)",
              s.whisper_model, s.whisper_index_model, s.visual_search)

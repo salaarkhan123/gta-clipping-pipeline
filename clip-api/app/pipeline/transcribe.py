@@ -24,6 +24,7 @@ class FasterWhisperTranscriber:
     """Lazy-loaded faster-whisper model, CPU int8. One model per process."""
     _lock = threading.Lock()
     _models: dict = {}
+    workers = 1      # transcriptions one model runs at once (set before first use; see TRANSCRIBE_PARALLEL)
 
     def __init__(self, model_name: str, beam_size: int = 5, words: bool = True):
         self.model_name, self.beam_size, self.words = model_name, beam_size, words
@@ -32,7 +33,8 @@ class FasterWhisperTranscriber:
         with self._lock:
             if self.model_name not in self._models:
                 from faster_whisper import WhisperModel
-                self._models[self.model_name] = WhisperModel(self.model_name, device="cpu", compute_type="int8")
+                self._models[self.model_name] = WhisperModel(self.model_name, device="cpu", compute_type="int8",
+                                                             num_workers=max(1, FasterWhisperTranscriber.workers))
         return self._models[self.model_name]
 
     def transcribe(self, wav: Path) -> Transcript:
