@@ -25,7 +25,7 @@ from .facecam import resolve_facecam
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
 from .transcribe import Transcriber, Transcript, exclamation_hits, extract_wav, snap_to_speech
 from .variety import min_gap_for, pick_distinct
-from .windows import pick_windows
+from .windows import pick_spread, pick_windows
 
 WEIGHTS = {"chat_motion": 1.0, "audio": 0.7}   # hand-set; the learned ranker replaces these later
 TRANSCRIPT_BONUS = 0.15                        # max re-rank bonus from exclamation phrases
@@ -154,7 +154,8 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     # Candidates the judge will mostly reject only need a rough transcript: use the fast model for them,
     # then the caption model for the ones that make the cut.
     rough = fast_transcriber if (judge is not None and fast_transcriber is not None) else transcriber
-    picks = pick_windows(total, options.clip_length, count, info.duration)
+    # With a judge, nominate from every quarter of a long video so it sees the whole thing; it still decides.
+    picks = (pick_spread if judge is not None else pick_windows)(total, options.clip_length, count, info.duration)
     if not picks:
         raise PipelineError("no_moments", "No stand-out moments were found in this video.")
     top = max(p[2] for p in picks) or 1.0
