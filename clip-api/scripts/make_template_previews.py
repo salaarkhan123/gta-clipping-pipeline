@@ -38,15 +38,17 @@ LAYOUT_NAMES = {"auto": "Auto", "full": "Full", "fit": "Fit", "split2": "Split 2
 # Where the gameplay and the camera sit in each layout, as (x, y, w, h) fractions of the frame, plus where the
 # captions and the hook go (fraction of the frame height). This is OUR reading of each layout's name: the
 # renderer (app/pipeline/layouts.py) is the authority. When its boxes are final, change them here and re-run.
+# gameplay_a and gameplay_b are provisional (PROVISIONAL_LAYOUTS in app/templates.py): their posters say so.
 SCHEMATICS = {
     "auto":         {"game": (0, 0, 1, 1), "cam": (0, 0, 1, 1 / 3), "cam_dashed": True, "captions": 0.70, "hook": 0.42},
     "full":         {"game": (0, 0, 1, 1), "cam": None, "captions": 0.70, "hook": 0.16},
     "fit":          {"game": "fit", "cam": None, "captions": 0.74, "hook": 0.16},
     "split2":       {"game": (0, 1 / 3, 1, 2 / 3), "cam": (0, 0, 1, 1 / 3), "captions": 0.36, "hook": 0.50},
     "pip":          {"game": (0, 0, 1, 1), "cam": (0.60, 0.04, 0.36, 0.20), "captions": 0.70, "hook": 0.32},
-    "screen_first": {"game": (0, 0, 1, 0.64), "cam": (0, 0.64, 1, 0.36), "captions": 0.54, "hook": 0.14},
+    "screen_first": {"game": (0, 0, 1, 0.64), "cam": (0, 0.64, 1, 0.36), "captions": 0.48, "hook": 0.14},
     "gameplay_a":   {"game": (0, 0, 1, 1), "cam": (0.18, 0.05, 0.64, 0.22), "captions": 0.70, "hook": 0.34},
-    "gameplay_b":   {"game": (0, 0, 1, 1), "cam": (0.18, 0.73, 0.64, 0.22), "captions": 0.60, "hook": 0.16},
+    "gameplay_b":   {"game": (0, 0, 1, 1), "cam": (0.18, 0.73, 0.64, 0.22), "captions": 0.60, "hook": 0.20,
+                     "label_top": True},
 }
 
 
@@ -60,11 +62,13 @@ def _zone(box, fx: float, fy: float, fw: float, fh: float) -> tuple[float, float
 
 
 def _pill(cx: float, cy: float, label: str, fill: str, ink: str, stroke: str | None = None) -> str:
-    w, h = 16 + 7.4 * len(label), 26
+    # textLength pins the text to the pill whatever font the browser falls back to.
+    inner, h = 8.2 * len(label), 28
+    w = inner + 28
     edge = f' stroke="{stroke}" stroke-width="1.5"' if stroke else ""
-    return (f'<rect x="{_n(cx - w / 2)}" y="{_n(cy - h / 2)}" width="{_n(w)}" height="{h}" rx="13" fill="{fill}"{edge}/>'
+    return (f'<rect x="{_n(cx - w / 2)}" y="{_n(cy - h / 2)}" width="{_n(w)}" height="{h}" rx="14" fill="{fill}"{edge}/>'
             f'<text x="{_n(cx)}" y="{_n(cy + 4.5)}" text-anchor="middle" font-size="12.5" font-weight="700" '
-            f'letter-spacing="0.6" fill="{ink}">{escape(label)}</text>')
+            f'textLength="{_n(inner)}" lengthAdjust="spacingAndGlyphs" fill="{ink}">{escape(label)}</text>')
 
 
 def poster_svg(t: dict) -> str:
@@ -100,19 +104,19 @@ def poster_svg(t: dict) -> str:
         f'<rect x="{_n(gx + 3)}" y="{_n(gy + 3)}" width="{_n(gw - 6)}" height="{_n(gh - 6)}" rx="11" fill="{CARD}"/>',
         f'<rect x="{_n(gx + 3)}" y="{_n(gy + 3)}" width="{_n(gw - 6)}" height="{_n(gh - 6)}" rx="11" fill="url(#grid)" '
         f'stroke="{LIME}" stroke-width="2"/>',
-        f'<text x="{_n(gx + gw / 2)}" y="{_n(gy + gh - 20)}" text-anchor="middle" font-size="12.5" font-weight="700" '
-        f'letter-spacing="2" fill="{LIME}">GAMEPLAY</text>',
+        f'<text x="{_n(gx + gw / 2)}" y="{_n(gy + 30 if s.get("label_top") else gy + gh - 20)}" text-anchor="middle" '
+        f'font-size="12.5" font-weight="700" letter-spacing="2" fill="{LIME}">GAMEPLAY</text>',
     ]
     if cam_box:
         cx, cy, cw, ch = _zone(cam_box, fx, fy, fw, fh)
         dash = ' stroke-dasharray="7 6"' if s.get("cam_dashed") else ""
         fill = "none" if s.get("cam_dashed") else PANEL
-        r = min(cw, ch) * 0.17
+        r = min(cw, ch) * 0.15
         parts += [
             f'<rect x="{_n(cx + 3)}" y="{_n(cy + 3)}" width="{_n(cw - 6)}" height="{_n(ch - 6)}" rx="11" fill="{fill}" '
             f'stroke="{CYAN}" stroke-width="2"{dash}/>',
-            f'<circle cx="{_n(cx + cw / 2)}" cy="{_n(cy + ch * 0.40)}" r="{_n(r)}" fill="none" stroke="{CYAN}" stroke-width="2"/>',
-            f'<path d="M{_n(cx + cw / 2 - r * 1.9)} {_n(cy + ch * 0.40 + r * 2.5)}a{_n(r * 1.9)} {_n(r * 1.5)} 0 0 1 '
+            f'<circle cx="{_n(cx + cw / 2)}" cy="{_n(cy + ch * 0.34)}" r="{_n(r)}" fill="none" stroke="{CYAN}" stroke-width="2"/>',
+            f'<path d="M{_n(cx + cw / 2 - r * 1.9)} {_n(cy + ch * 0.34 + r * 2.4)}a{_n(r * 1.9)} {_n(r * 1.3)} 0 0 1 '
             f'{_n(r * 3.8)} 0" fill="none" stroke="{CYAN}" stroke-width="2"/>',
             f'<text x="{_n(cx + cw / 2)}" y="{_n(cy + ch - 12)}" text-anchor="middle" font-size="11" font-weight="700" '
             f'letter-spacing="1.6" fill="{CYAN}">{"CAMERA IF FOUND" if s.get("cam_dashed") else "CAMERA"}</text>',
@@ -129,7 +133,7 @@ def poster_svg(t: dict) -> str:
         f'{LAYOUT_NAMES[t["layout"]]}  ·  {t["aspect"]}  ·  {lo}–{hi} s</text>',
         f'<rect x="{CANVAS_W / 2 - 60:.0f}" y="800" width="120" height="5" rx="2.5" fill="{LIME}"/>',
         f'<text x="{CANVAS_W / 2:.0f}" y="846" text-anchor="middle" font-size="14" letter-spacing="1.4" fill="{MUTED}">'
-        'LAYOUT SCHEMATIC · NOT GAME FOOTAGE</text>',
+        f'{"PROVISIONAL LAYOUT · " if t["provisional"] else ""}LAYOUT SCHEMATIC · NOT GAME FOOTAGE</text>',
         '</svg>',
     ]
     return "\n".join(parts) + "\n"

@@ -11,6 +11,7 @@ The format is in docs/CONTRACTS.md ("Template format"). Every template has:
   lift a moment); `judge_focus` tells the AI judge what this kind of clip is about. Those three are attached
   on the server from the template id: a request cannot send them and the public list never shows them.
 - `preview`: our own assets under clip-api/templates/<id>/ (see the README there).
+- `provisional` and `provisional_reason`: set when the template sits on a layout whose look is not settled.
 """
 
 GAMES = ("lol", "gta5", "wow", "ow2", "minecraft", "apex", "valorant", "fortnite", "dota2", "rust", "cs2", "other")
@@ -36,11 +37,17 @@ HOOK_POSITIONS = ("beginning", "end")
 # the new names. Layouts with no equivalent yet fall back to auto: camera on top when one is found.
 TODAY_LAYOUT = {"auto": "auto", "full": "fill", "fit": "classic", "split2": "split", "pip": "auto",
                 "screen_first": "auto", "gameplay_a": "auto", "gameplay_b": "auto"}
+# Layouts whose look is not settled: how the product we match draws them is not documented, so ours is a first
+# reading. Templates on them say so in the public list (`provisional`, `provisional_reason`).
+PROVISIONAL_LAYOUTS = {
+    "gameplay_a": "The Gameplay A layout is provisional: its final look is not confirmed and may change.",
+    "gameplay_b": "The Gameplay B layout is provisional: its final look is not confirmed and may change.",
+}
 MAX_CLIP_LENGTH = 60        # the longest `clip_length` POST /v1/clips takes today
 JUDGE_FOCUS_MAX = 400       # app/ai.py sends the judge this many characters of the focus and drops the rest
 
 PUBLIC_FIELDS = ("id", "name", "game", "genre", "description", "layout", "aspect", "caption_style", "duration",
-                 "hook", "options", "preview")
+                 "hook", "options", "preview", "provisional", "provisional_reason")
 TUNING_FIELDS = ("weights", "transcript_bonus", "judge_focus")
 
 # Ids whose rights-cleared preview clip is committed at clip-api/templates/<id>/preview.mp4
@@ -65,6 +72,7 @@ def _template(template_id: str, name: str, game: str, genre: str, description: s
         "weights": {"audio": audio, "chat_motion": chat}, "transcript_bonus": bonus, "judge_focus": focus,
         "preview": {"video": f"templates/{template_id}/preview.mp4" if template_id in PREVIEW_VIDEOS else None,
                     "poster": f"templates/{template_id}/poster.svg"},
+        "provisional": layout in PROVISIONAL_LAYOUTS, "provisional_reason": PROVISIONAL_LAYOUTS.get(layout),
     }
 
 
@@ -396,6 +404,8 @@ def problems(template_id: str, t: dict) -> list[str]:
         (0 <= t.get("transcript_bonus", -1) <= 0.3, "transcript_bonus is outside 0-0.3"),
         (40 < len(t.get("judge_focus") or "") <= JUDGE_FOCUS_MAX, f"judge_focus must be 41-{JUDGE_FOCUS_MAX} characters"),
         (set(t.get("preview") or {}) == {"video", "poster"}, "preview needs video and poster"),
+        (t.get("provisional") is (t.get("layout") in PROVISIONAL_LAYOUTS)
+         and t.get("provisional_reason") == PROVISIONAL_LAYOUTS.get(t.get("layout")), "provisional disagrees with layout"),
     ]
     return [f"{template_id}: {message}" for ok, message in checks if not ok]
 
