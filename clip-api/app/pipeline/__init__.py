@@ -20,7 +20,7 @@ import numpy as np
 
 from .ff import SAFE_IN, Deadline, PipelineError, PipelineTimeout, probe, run  # noqa: F401 (re-exported)
 from .render import CHAT_REGIONS, FACECAM_REGIONS, render_clip, render_thumb, resolve_layout
-from .censor import mask_words
+from .censor import mask, mask_words
 from .facecam import resolve_facecam
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
 from .transcribe import Transcriber, Transcript, exclamation_hits, extract_wav, snap_to_speech
@@ -63,6 +63,7 @@ class PipelineOptions:
     tighten: bool = True                  # cut silences over 0.6 s and filler words out of each clip
     punch_zoom: bool = True               # subtle punch-in zooms (max 1.15x) on the gameplay at loudness spikes
     flash_forward: bool = True            # open on 1.5 s of the peak when the judge names one, then cut back
+    hook_overlay: bool = True             # burn the judge's on-screen hook text over the first 2.5 s
 
 
 @dataclass
@@ -245,14 +246,18 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
             words = remap_words(spoken, segments)
             if options.censor:
                 words = mask_words(words)
-        c.features["edit"] = {"segments": segments, "flash_forward": flash, "zoom_at": zooms,
+        hook = (c.meta or {}).get("hook") if options.hook_overlay else None
+        if hook and options.censor:
+            hook = " ".join(mask(w) for w in hook.split())
+        c.features["edit"] = {"segments": segments, "flash_forward": flash, "zoom_at": zooms, "hook": hook,
                               "removed_sec": round((c.end - c.start) - kept_duration(body), 2)}
         video = out_dir / f"clip-{i}.mp4"
         render_clip(input_path, c.start, c.end, video, src_w=info.width, src_h=info.height,
                     vertical=options.vertical, zoom=options.zoom, chat=options.chat_region,
                     words=words, font=options.caption_font, layout=layout, facecam=facecam,
                     style=options.caption_style, aspect=options.aspect, max_side=options.max_side,
-                    deadline=deadline, segments=segments, punch=zoom_expr(zooms), has_audio=info.has_audio)
+                    deadline=deadline, segments=segments, punch=zoom_expr(zooms), has_audio=info.has_audio,
+                    hook=hook)
         thumb = out_dir / f"clip-{i}.jpg"
         try:
             render_thumb(video, thumb, deadline)

@@ -59,6 +59,7 @@ class ClipOptions(LayoutOptions):
     tighten: bool = True          # cut silences over 0.6 s and filler words out of each clip
     punch_zoom: bool = True       # subtle punch-in zooms (max 1.15x) on the gameplay at loudness spikes
     flash_forward: bool = True    # open on 1.5 s of the clip's peak, then cut back (AI clips only)
+    hook_overlay: bool = True     # burn the AI's on-screen hook text over the first 2.5 s (AI clips only)
 
 
 class ClipRequest(BaseModel):
@@ -128,6 +129,8 @@ def clip_json(c: Clip, storage) -> dict:
             "score": c.score, "signals": c.signals, "kept": c.kept, "reaction": c.reaction,
             "bookmarked": bool(c.bookmarked),
             **{k: (c.meta or {}).get(k) for k in ("title", "description", "hashtags", "virality", "reason")},
+            "titles": (c.meta or {}).get("titles") or ([c.meta["title"]] if (c.meta or {}).get("title") else []),
+            "hook": (c.meta or {}).get("hook"),
             "video_url": storage.url(c.video_key),
             "thumb_url": storage.url(c.thumb_key) if c.thumb_key else None,
             "captions_url": storage.url(c.captions_key) if c.captions_key else None}
@@ -324,6 +327,26 @@ def clip_feedback(clip_id: str, body: Feedback, p: Principal = Depends(current_p
         db.add(ClipFeedback(clip_id=clip.id, account_id=p.account.id, kind=field, value=logged))
     db.commit()
     return {"id": clip.id, "kept": clip.kept, "reaction": clip.reaction, "bookmarked": bool(clip.bookmarked)}
+
+
+class ClipEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=80)
+
+
+@router.patch("/v1/clips/{clip_id}")
+def edit_clip(clip_id: str, body: ClipEdit, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
+    """Choose the clip's title: one of its `titles`, or your own words. Free: nothing is re-rendered."""
+    clip = db.get(Clip, clip_id)
+    if not clip or clip.deleted_at:
+        raise ApiError(404, "not_found", "No such clip.")
+    own_job(db, p, clip.job_id)
+    title = " ".join(body.title.split())
+    if not title:
+        raise ApiError(422, "validation_error", "The title is empty.")
+    clip.meta = {**(clip.meta or {}), "title": title}      # a new dict, so the JSON column is saved
+    db.commit()
+    return with_ranks(db, [clip_json(clip, get_storage())])[0]
 
 
 def _stamp(t: float, sep: str) -> str:
