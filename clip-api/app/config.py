@@ -77,6 +77,12 @@ class Settings(BaseSettings):
     # Pipeline
     whisper_model: str = "small.en"   # captions. "none" disables transcription and captions
     whisper_index_model: str = "base.en"   # full-video search index: smaller and several times faster
+    # Whole-recording transcription. "local" runs the Whisper models above; hosted providers are added with
+    # their adapters. TRANSCRIBE_PARALLEL chunks run at once: leave it at 1 on a 4 vCPU server (one model already
+    # uses every core) and raise it on a machine with 8 or more (see DEPLOY.md, "Measuring speed").
+    transcription_provider: str = "local"
+    transcribe_parallel: int = Field(1, ge=1, le=8)
+    transcribe_chunk_sec: int = Field(300, ge=60, le=1800)
     caption_font: str = "DejaVu Sans"
     worker_poll_sec: float = 2.0
     # Jobs one worker process runs at once. 2 is the most a 4 vCPU / 8 GB server holds (ffmpeg and Whisper

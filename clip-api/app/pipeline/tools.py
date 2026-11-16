@@ -17,6 +17,7 @@ import logging
 from .censor import mask_words
 from .facecam import resolve_facecam
 from .render import CHAT_REGIONS, render_clip, render_thumb
+from .stt import LocalProvider, extract_audio
 from .transcribe import Transcriber, Transcript, extract_wav
 from .visual import build_visual_index, search_visual
 
@@ -167,7 +168,8 @@ def search_transcript(transcript: dict, query: str, limit: int = 5) -> list[dict
 def run_find(src: Path, query: str, max_results: int, make_clips: bool, clip_length: int,
              options: RenderOptions, out_dir: Path, progress_cb=None, transcriber: Transcriber | None = None,
              deadline: Deadline | None = None, transcript: dict | None = None, mode: str = "auto",
-             embedder=None, vindex: dict | None = None, indexer: Transcriber | None = None):
+             embedder=None, vindex: dict | None = None, indexer: Transcriber | None = None,
+             provider=None):
     """Search an upload by what was said (transcript) and what is on screen (CLIP frame index).
 
     mode: "auto" uses whatever is available, "speech" or "visual" require that one.
@@ -186,8 +188,15 @@ def run_find(src: Path, query: str, max_results: int, make_clips: bool, clip_len
         tr = indexer or transcriber
         if info.has_audio and tr is not None:
             progress("transcribing", 5)
-            t = transcribe_range(src, 0.0, info.duration, tr, out_dir, deadline,
-                                 lambda k, m: progress("transcribing", 5 + int(35 * k / m)))
+            # Decode the audio once, then let the provider transcribe the whole file (chunks cut at quiet points,
+            # several at once where the machine allows). Default: the local model, one chunk at a time.
+            stt = provider or LocalProvider(tr)
+            audio = out_dir / "source-audio.wav"
+            try:
+                t = stt.transcribe_file(extract_audio(src, audio, deadline).path, out_dir, deadline,
+                                        lambda k, m: progress("transcribing", 5 + int(35 * k / m)))
+            finally:
+                audio.unlink(missing_ok=True)
             transcript = new_t = {"duration": round(info.duration, 3),
                                   "segments": [{"start": s, "end": e, "text": x} for s, e, x in t.segments],
                                   "words": [[s, e, w] for s, e, w in t.words]}
