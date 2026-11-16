@@ -158,6 +158,18 @@ class ImportLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class CustomTemplate(Base):
+    """A look an account saved for reuse: a name and the clip options it sets. Never changes what a job costs."""
+    __tablename__ = "custom_templates"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    options: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class CreditLedger(Base):
     """Append-only. Balance is SUM(delta). Rows are never updated or deleted."""
     __tablename__ = "credit_ledger"

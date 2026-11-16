@@ -52,6 +52,8 @@ def test_score_counts_good_great_duplicates_and_quarters(tmp_path):
     s = ev.score(rows, clips, duration=7200)
     assert s["clips"] == 5 and s["good_rate"] == 0.6                 # a, b, d are on 2-3 rows
     assert s["great_found"] == "1 of 2" and s["great_recall"] == 0.5
+    assert s["great_missed"] == [{"id": "4", "start": 5400.0, "end": 5430.0}]
+    assert "missed row 4  1:30:00 to 1:30:30" in ev.report(s)
     assert s["unlabelled"] == 1 and s["duplicate_pairs"] == 1
     assert s["per_quarter"] == [3, 0, 1, 1]
     assert s["mean_label"] == round((3 + 3 + 0 + 2) / 4, 2)
@@ -95,3 +97,11 @@ def test_sheet_csv_has_empty_label_columns(tmp_path):
     rows = list(csv.DictReader(open(tmp_path / "s.csv")))
     assert rows[0]["start"] == "0:01:05" and rows[1]["end"] == "1:07:10" and rows[0]["label"] == ""
     assert ev.load_labels(tmp_path / "s.csv") == []                                  # nothing labelled yet
+
+
+def test_wayin_benchmark_sheet_loads_fifteen_moments():
+    rows = ev.load_labels(Path(__file__).resolve().parent.parent / "eval" / "wayin-zias-iceman.csv")
+    assert len(rows) == 15 and all(r["label"] == 3 and r["end"] > r["start"] for r in rows)
+    assert (rows[0]["start"], rows[0]["end"]) == (2338.0, 2430.0)            # their #1: 38:58 to 40:30
+    found = ev.score(rows, [{"start": 2340, "end": 2400, "title": "a"}], duration=4680)
+    assert found["great_found"] == "1 of 15" and len(found["great_missed"]) == 14

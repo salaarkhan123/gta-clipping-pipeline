@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from . import routes_auth, routes_billing, routes_media, routes_projects, routes_templates, routes_tools
+from . import routes_auth, routes_billing, routes_media, routes_meta, routes_projects, routes_templates, routes_tools
 from .config import get_settings
 from .db import get_engine, init_db
 from .deps import ApiError
@@ -35,6 +35,7 @@ app.include_router(routes_media.router, tags=["clips"])
 app.include_router(routes_tools.router, tags=["tools"])
 app.include_router(routes_projects.router, tags=["projects"])
 app.include_router(routes_templates.router, tags=["templates"])
+app.include_router(routes_meta.router, tags=["clips"])
 app.include_router(routes_billing.router, tags=["billing"])
 
 

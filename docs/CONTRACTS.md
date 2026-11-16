@@ -82,7 +82,16 @@ Owner's decisions (2026-11-16, PARITY.md "Decisions"):
 | | `layout` | `LAYOUTS`, checked against `ALLOWED[aspect]` | `auto` | B |
 | `POST /v1/clips/export` | `job_id`, `clips` (ids or null = all), the render options above, `hook_keywords`, `hook_duration_ms` | | | B (charging: money, owner) |
 | Clip object | `rank_index` (0 = best), `timeline_index` (1 = earliest), `start_ms`, `end_ms`, `virality_score` (0–100), `scores` (five dimensions), `preview_url`, `export_url`, `kind`, `why` | added next to today's fields | | A, B |
-| `GET /v1/templates` | `?game=` filter; each template as below | | | C |
+| | `prompt` | text, max 300: what moments to find; goes to the judge with the template's focus | null | A |
+| | `caption_style` | adds `impact` (see "Caption style: impact") | `impact` | B |
+| | `caption_position` | `auto`, `seam`, `lower`, `center` | `auto` (seam in split layouts, lower third otherwise) | B |
+| | `caption_accent` | `#RRGGBB` or null (the style's own) | null | B |
+| | `caption_emoji` | bool | false | B |
+| Clip object | `display_score` (calibrated per job, see "Score calibration"), next to the raw `score` and `scores` | | | A |
+| `GET /v1/options` | every option `POST /v1/clips` accepts, with values, default and limits, read from the request model. The website builds its form from it: a control appears only once the API accepts the option | | | orchestrator (`app/routes_meta.py`) |
+| `GET /v1/templates` | `?game=` filter; `?kind=preset` for the game-type presets; each template as below | | | C |
+| `GET /v1/templates/{id}/poster` | the template's poster image; `preview.poster` is this path | | | C |
+| `GET`, `POST /v1/templates/custom`; `PATCH`, `DELETE /v1/templates/custom/{id}` | an account's saved looks: `name` (max 80) and `options` (validated as clip options; never `template`, `max_clips`, `limit` or anything that sets a price) | | | C |
 | `POST /v1/transcripts`, `POST /v1/summaries` | `upload_id`, `source_lang`, `target_lang` | | | F |
 | `POST /v1/imports` | `url`, `consent: true` (required) | | | E |
 
@@ -100,6 +109,46 @@ GAMES = ("lol", "gta5", "wow", "ow2", "minecraft", "apex", "valorant", "fortnite
 
 A template never changes what a job costs: the client sends the template's options (see PR #92).
 
+## Game-type presets (C), from the owner's screenshots
+
+Presets are templates with `kind: "preset"` and no game: a layout, panel sizes and the `impact` caption style. Names are ours; the set matches what the screenshots show.
+
+| Preset id | Layout | Top | Bottom |
+|---|---|---|---|
+| `racing-gameplay` | split | gameplay 60% | camera 40% |
+| `racing-camera-top` | split | camera 33% | gameplay 67% |
+| `shooter-gameplay` | full | gameplay | – |
+| `fighting-screen-first` | split | gameplay 57% | camera 43% |
+| `moba-screen-first` | split | gameplay 63% | camera 37% |
+| `moba-full` | full | gameplay | – |
+| `moba-gameplay` | split | gameplay 66% | camera 34% |
+
+Panel sizes travel as `split_ratio` (the top panel's share of the height, 0.25 to 0.75) and `camera` (`top` or `bottom`) in the template's `options`; B's renderer reads them. The camera panel is always cropped tight on the person.
+
+## Caption style: impact (B), from the owner's screenshots
+
+- One or two words at a time; a third only when all three are short (12 characters in total).
+- Upper case, our own heavy font (bundled, open licence), size about 9% of the frame height, dark outline about 8% of the font size, soft shadow.
+- One keyword per caption in the accent colour: the longest word that is not a stop word. Default accent: our lime.
+- Position `auto`: centred on the line between the panels in split layouts, in the lower third (about 70% down) otherwise.
+- It is the default `caption_style`. The five existing styles stay.
+
+## Score calibration (A)
+
+`display_score` is computed per job when clips are read, never stored. With raw AI scores `s` (0 to 100) for the job's rated clips, `hi = max(s)`, `lo = min(s)`:
+
+- `top = 90 + 9 * clamp((hi - 40) / 50, 0, 1)`: the best clip shows 90 to 99, higher when its raw score is higher.
+- `floor = max(55, top - 40)`.
+- `display = round(floor + (top - floor) * (s - lo) / (hi - lo))`; one rated clip, or all equal, shows `top`.
+- Order never changes: sorting by `display_score` gives the same order as sorting by the raw score (ties stay ties). Clips the AI did not rate have no `display_score`.
+- `score` and `scores` stay raw. The website shows `display_score` as "N /100" and the raw numbers in the tooltip.
+
+## Schema: revision 0005 (shipped by the orchestrator, additive)
+
+| Table | Columns |
+|---|---|
+| `custom_templates` (new) | `id`, `account_id`, `name` text(80), `options` JSON, `created_at`, `updated_at`, `deleted_at` null |
+
 ## Schema: revision 0004 (shipped by the orchestrator, additive)
 
 | Table | Columns |
@@ -112,7 +161,8 @@ A template never changes what a job costs: the client sends the template's optio
 
 ## Merge order
 
-1. Base: #111 (progressive clips), the production-readiness PR, then the interface PR (this file, revision 0004, `app/render_options.py`).
-2. Wave 1, in this order when green and checked by H: B (layouts and render options) → A (buckets, limit, range, moments) → C (templates on B's layouts) → D (web on all three).
-3. Wave 2: F, E, G. H runs throughout and gates every merge.
+1. Done: #111, #112, #113 (this file, revision 0004), #115 (templates, C), #116 (app shell, D).
+2. Open: B (layouts and render options), then the worker wiring for B's and A's options; #117 (A: buckets, limit, range) waits for the owner's answers on what those options cost.
+3. Wave 1b, from the screenshots: A2 (prompt, score calibration), B2 (`impact` captions), C2 (presets, posters, custom templates), D2 (job form, pre-editing, results grid).
+4. Wave 2: F, E, G. H gates every merge once Wayin clips exist to compare with.
 Money PRs stay open for the owner.
