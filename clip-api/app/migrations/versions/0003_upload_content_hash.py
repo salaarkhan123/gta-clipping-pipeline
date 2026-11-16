@@ -1,7 +1,7 @@
 """uploads.content_hash: sha256 of the uploaded bytes, to reuse a re-upload of the same file (0.3).
 
-Revision ID: 0002
-Revises: 0001
+Revision ID: 0003
+Revises: 0002
 Create Date: 2026-11-15
 
 Additive: a nullable column and an index. Uploads from before this revision keep NULL and are never matched.
@@ -9,8 +9,8 @@ Additive: a nullable column and an index. Uploads from before this revision keep
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0002"
-down_revision = "0001"
+revision = "0003"
+down_revision = "0002"
 branch_labels = None
 depends_on = None
 
