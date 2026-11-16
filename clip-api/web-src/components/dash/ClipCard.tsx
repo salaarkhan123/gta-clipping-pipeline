@@ -1,6 +1,5 @@
 "use client";
 import Link from "next/link";
-import { Stars } from "@/components/Chrome";
 import { API, api, ApiError, clock, getToken } from "@/lib/api";
 import { useDash } from "./Shell";
 
@@ -24,7 +23,7 @@ export function ClipCard({ clip, onChange, project }: { clip: any; onChange: (c:
       <video controls preload="none" poster={clip.thumb_url || undefined} src={clip.video_url} />
       <figcaption>
         <strong>{clip.title || `Clip ${clip.index}`}</strong>
-        {clip.virality && <Stars score={clip.virality.score} />}
+        <ScoreBadge clip={clip} />
         <span className="muted">{clock(clip.start_sec)} to {clock(clip.end_sec)}</span>
         {project && <Link className="muted" href={`/dashboard/project/?id=${project.id}`}>From {project.name}</Link>}
         {clip.description && <p>{clip.description}</p>}
@@ -71,4 +70,31 @@ export function arrange(clips: any[], sort: ClipSort, filter: ClipFilter): any[]
   if (sort === "time") out.sort((a, b) => a.start_sec - b.start_sec);
   else if (sort === "score") out.sort((a, b) => b.score - a.score);
   return out;
+}
+
+const TIER_NAMES: Record<string, string> = { top: "Top pick", strong: "Strong", solid: "Solid", long_shot: "Long shot" };
+const PART_NAMES: [string, string][] = [["hook", "Hook"], ["flow", "Flow"], ["value", "Value"], ["trend", "Trend"]];
+const SIGNAL_NAMES: Record<string, string> = { audio: "Loud reaction", chat_motion: "Chat activity", transcript: "What was said" };
+
+// Rank and tier on the card; the numbers behind them only on hover, focus or tap.
+export function ScoreBadge({ clip }: { clip: any }) {
+  if (!clip.rank) return null;
+  const v = clip.virality, tip = `score-${clip.id}`;
+  const signals = Object.entries(clip.signals || {}).filter(([, share]) => (share as number) >= 0.05).sort((a, b) => (b[1] as number) - (a[1] as number));
+  return (
+    <span className="score-badge">
+      <button type="button" className={`rank ${clip.tier || "unrated"}`} aria-describedby={tip}>
+        <b>#{clip.rank}</b> of {clip.rank_of}{clip.tier && <> · {TIER_NAMES[clip.tier]}</>}
+      </button>
+      <span role="tooltip" id={tip} className="score-tip">
+        {clip.tier
+          ? <><strong>AI score {v.score} of 100</strong>
+              <span className="parts">{PART_NAMES.filter(([k]) => typeof v[k] === "number").map(([k, name]) => <span key={k}>{name} <b>{v[k]}</b></span>)}</span></>
+          : <strong>Ranked by how strongly this moment stood out in the video. It has no AI rating.</strong>}
+        {signals.length > 0 && <span>Picked for: {signals.map(([k, share]) => `${SIGNAL_NAMES[k] || k} ${Math.round((share as number) * 100)}%`).join(", ")}</span>}
+        {clip.reason && <span>{clip.reason}</span>}
+        {clip.tier && <span className="muted">The score is an AI opinion of the clip, not a forecast of views.</span>}
+      </span>
+    </span>
+  );
 }

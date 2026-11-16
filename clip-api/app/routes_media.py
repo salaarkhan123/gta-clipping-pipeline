@@ -96,8 +96,32 @@ def upload_json(u: Upload) -> dict:
             "created_at": iso(u.created_at), "expires_at": iso(u.expires_at)}
 
 
+TIERS = ((75, "top"), (55, "strong"), (35, "solid"), (0, "long_shot"))
+
+
+def tier_of(meta: dict | None) -> str | None:
+    """A fixed label for the AI's 0-100 score. None when the AI did not rate the clip: a score derived from
+    loudness alone says how a moment compares inside its own video, not how good it is."""
+    v = (meta or {}).get("virality") or {}
+    if (meta or {}).get("source") == "signals" or not isinstance(v.get("score"), (int, float)):
+        return None
+    return next(name for floor, name in TIERS if v["score"] >= floor)
+
+
+def with_ranks(db: Session, clips: list[dict]) -> list[dict]:
+    """Adds rank and rank_of: each clip's position by score among the stored clips of its own run."""
+    job_ids = {c["job_id"] for c in clips}
+    order: dict[str, list[str]] = {}
+    if job_ids:
+        for clip_id, job_id in db.execute(select(Clip.id, Clip.job_id).where(
+                Clip.job_id.in_(job_ids), Clip.deleted_at.is_(None)).order_by(Clip.score.desc(), Clip.idx)):
+            order.setdefault(job_id, []).append(clip_id)
+    return [{**c, "rank": order[c["job_id"]].index(c["id"]) + 1, "rank_of": len(order[c["job_id"]])} for c in clips]
+
+
 def clip_json(c: Clip, storage) -> dict:
-    return {"id": c.id, "index": c.idx, "start_sec": c.start_sec, "end_sec": c.end_sec,
+    return {"id": c.id, "job_id": c.job_id, "index": c.idx, "start_sec": c.start_sec, "end_sec": c.end_sec,
+            "tier": tier_of(c.meta),
             "score": c.score, "signals": c.signals, "kept": c.kept, "reaction": c.reaction,
             "bookmarked": bool(c.bookmarked),
             **{k: (c.meta or {}).get(k) for k in ("title", "description", "hashtags", "virality", "reason")},
@@ -117,7 +141,7 @@ def job_json(db: Session, job: Job, with_clips: bool = True) -> dict:
         clips = db.execute(select(Clip).where(Clip.job_id == job.id, Clip.deleted_at.is_(None))
                            .order_by(Clip.idx)).scalars()
         out["result"] = job.result
-        out["clips"] = [clip_json(c, storage) for c in clips]
+        out["clips"] = with_ranks(db, [clip_json(c, storage) for c in clips])
     return out
 
 
