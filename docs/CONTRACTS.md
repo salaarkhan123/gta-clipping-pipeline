@@ -123,7 +123,7 @@ Presets are templates with `kind: "preset"` and no game: a layout, panel sizes a
 | `moba-full` | full | gameplay | – |
 | `moba-gameplay` | split | gameplay 66% | camera 34% |
 
-Panel sizes travel as `split_ratio` (the top panel's share of the height, 0.25 to 0.75) and `camera` (`top` or `bottom`) in the template's `options`; B's renderer reads them. The camera panel is always cropped tight on the person.
+Panel sizes are a public template field, `panels: {"camera": "top" | "bottom" | null, "split_ratio": 0.25 to 0.75}` (the top panel's share of the height). They are not in the template's `options` until the renderer accepts `camera` and `split_ratio` as clip options (B); the client copies them into the request only when `GET /v1/options` lists both. The camera panel is always cropped tight on the person.
 
 ## Caption style: impact (B), from the owner's screenshots
 
