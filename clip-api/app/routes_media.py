@@ -1,4 +1,5 @@
 """Uploads, clip jobs, results and credits."""
+import hashlib
 import json
 import math
 import re
@@ -7,7 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Callable, Literal
 
-from fastapi import APIRouter, Depends, Header, Query, Request
+from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -168,7 +169,7 @@ def submit_job(db: Session, p: Principal, upload_id: str, webhook_url: str | Non
 
 
 @router.post("/v1/uploads", status_code=201)
-async def create_upload(request: Request, filename: str = Query("upload.mp4", max_length=255),
+async def create_upload(request: Request, response: Response, filename: str = Query("upload.mp4", max_length=255),
                         p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
     """Send the video as the raw request body (e.g. `curl -T video.mp4`). Streamed to disk with a size cap."""
     s = get_settings()
@@ -179,17 +180,28 @@ async def create_upload(request: Request, filename: str = Query("upload.mp4", ma
     if ext not in ALLOWED_EXT:
         raise ApiError(415, "unsupported_type", f"Upload a video file ({', '.join(sorted(ALLOWED_EXT))}).")
     tmp = s.work_dir / f"up_{uuid.uuid4().hex}{ext}"
-    size = 0
+    size, digest = 0, hashlib.sha256()
     try:
         with open(tmp, "wb") as fh:
             async for chunk in request.stream():
                 size += len(chunk)
+                digest.update(chunk)
                 if size > s.max_upload_bytes:
                     raise ApiError(413, "file_too_large",
                                    f"Maximum upload size is {s.max_upload_bytes // 1024 ** 2} MB.")
                 fh.write(chunk)
         if size == 0:
             raise ApiError(422, "empty_body", "The request body was empty. Send the video file as the body.")
+        content_hash = digest.hexdigest()
+        # The same bytes from the same account, while the first copy is still stored: hand back that upload.
+        # Nothing new is stored, and jobs on it are priced as on any upload that was already analysed.
+        same = db.execute(select(Upload).where(
+            Upload.account_id == p.account.id, Upload.content_hash == content_hash, Upload.size_bytes == size,
+            Upload.deleted_at.is_(None), Upload.expires_at > utcnow()).order_by(Upload.created_at.desc()).limit(1)
+        ).scalar_one_or_none()
+        if same is not None:
+            response.status_code = 200
+            return {**upload_json(same), "reused": True}
         try:
             info = await run_in_threadpool(probe, tmp)
         except PipelineError as e:
@@ -206,10 +218,10 @@ async def create_upload(request: Request, filename: str = Query("upload.mp4", ma
     safe_name = re.sub(r"[^\w.\- ]+", "_", Path(filename).name)[:255] or "upload" + ext
     upload = Upload(id=upload_id, account_id=p.account.id, filename=safe_name, storage_key=key, size_bytes=size,
                     duration_sec=info.duration, width=info.width, height=info.height, has_audio=info.has_audio,
-                    expires_at=utcnow() + timedelta(days=s.retention_days))
+                    content_hash=content_hash, expires_at=utcnow() + timedelta(days=s.retention_days))
     db.add(upload)
     db.commit()
-    return upload_json(upload)
+    return {**upload_json(upload), "reused": False}
 
 
 @router.get("/v1/uploads")
