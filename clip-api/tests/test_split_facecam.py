@@ -42,10 +42,16 @@ def test_camera_clear_of_the_crop_leaves_it_alone():
     assert how == "clear" and crop_of(filt)[0] == int(centred[0]) // 2 * 2
 
 
-def test_camera_inside_the_frame_is_blurred_not_dodged():
+def test_camera_inside_the_frame_is_never_blurred_it_stays_where_it_is():
     cam = [0.42, 0.35, 0.16, 0.25]        # overlay in the middle of the frame, touching no edge
     how, filt = gameplay_crop(SRC_W, SRC_H, TW, TH, 1.0, cam)
-    assert how == "blurred" and "boxblur" in filt and "overlay" in filt
+    assert how == "blocked" and filt == ""             # no step clears it, and nothing is ever patched over it
+    # The split layout is not drawn for it: one picture, the camera whole and sharp where the streamer put it.
+    graph = layout_filter(SRC_W, SRC_H, "split", 1.0, "none", cam)
+    assert "boxblur" not in graph and "vstack" not in graph
+    x, y, w, h = crop_of(graph)
+    cx, cy, cw, ch = px(cam)
+    assert x <= cx and y <= cy and x + w >= cx + cw and y + h >= cy + ch
 
 
 def test_only_the_split_layout_changes():
