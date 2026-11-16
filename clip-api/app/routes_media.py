@@ -19,7 +19,7 @@ from . import ledger
 from .config import get_settings
 from .db import get_db
 from .deps import ApiError, Principal, current_principal
-from .models import Clip, CreditLedger, Job, Upload, new_id, utcnow
+from .models import Clip, ClipFeedback, CreditLedger, Job, Upload, new_id, utcnow
 from .pipeline import PipelineError, probe
 from .security import is_public_https_url, read_token
 from .storage import LocalStorage, get_storage
@@ -67,8 +67,19 @@ class ClipRequest(BaseModel):
 
 
 class Feedback(BaseModel):
+    """Send only what changes. `kept` and `reaction` accept null to clear them."""
     model_config = ConfigDict(extra="forbid")
-    kept: bool
+    kept: bool | None = None
+    reaction: Literal["like", "dislike"] | None = None
+    bookmarked: bool | None = None
+
+    @model_validator(mode="after")
+    def _something(self):
+        if not self.model_fields_set:
+            raise ValueError("send at least one of kept, reaction, bookmarked")
+        if "bookmarked" in self.model_fields_set and self.bookmarked is None:
+            raise ValueError("bookmarked must be true or false")
+        return self
 
 
 def iso(dt):
@@ -86,6 +97,16 @@ def upload_json(u: Upload) -> dict:
             "created_at": iso(u.created_at), "expires_at": iso(u.expires_at)}
 
 
+def clip_json(c: Clip, storage) -> dict:
+    return {"id": c.id, "index": c.idx, "start_sec": c.start_sec, "end_sec": c.end_sec,
+            "score": c.score, "signals": c.signals, "kept": c.kept, "reaction": c.reaction,
+            "bookmarked": bool(c.bookmarked),
+            **{k: (c.meta or {}).get(k) for k in ("title", "description", "hashtags", "virality", "reason")},
+            "video_url": storage.url(c.video_key),
+            "thumb_url": storage.url(c.thumb_key) if c.thumb_key else None,
+            "captions_url": storage.url(c.captions_key) if c.captions_key else None}
+
+
 def job_json(db: Session, job: Job, with_clips: bool = True) -> dict:
     out = {"job_id": job.id, "tool": (job.options or {}).get("tool", "clips"), "status": job.status,
            "progress": job.progress, "stage": job.stage, "upload_id": job.upload_id, "options": job.options,
@@ -97,13 +118,7 @@ def job_json(db: Session, job: Job, with_clips: bool = True) -> dict:
         clips = db.execute(select(Clip).where(Clip.job_id == job.id, Clip.deleted_at.is_(None))
                            .order_by(Clip.idx)).scalars()
         out["result"] = job.result
-        out["clips"] = [{"id": c.id, "index": c.idx, "start_sec": c.start_sec, "end_sec": c.end_sec,
-                         "score": c.score, "signals": c.signals, "kept": c.kept,
-                         **{k: (c.meta or {}).get(k) for k in ("title", "description", "hashtags", "virality", "reason")},
-                         "video_url": storage.url(c.video_key),
-                         "thumb_url": storage.url(c.thumb_key) if c.thumb_key else None,
-                         "captions_url": storage.url(c.captions_key) if c.captions_key else None}
-                        for c in clips]
+        out["clips"] = [clip_json(c, storage) for c in clips]
     return out
 
 
@@ -285,9 +300,15 @@ def clip_feedback(clip_id: str, body: Feedback, p: Principal = Depends(current_p
     if not clip:
         raise ApiError(404, "not_found", "No such clip.")
     own_job(db, p, clip.job_id)
-    clip.kept = body.kept
+    for field in sorted(body.model_fields_set):
+        value = getattr(body, field)
+        if getattr(clip, field) == value:
+            continue                      # no change: nothing to log
+        setattr(clip, field, value)
+        logged = None if value is None else (str(value).lower() if isinstance(value, bool) else value)
+        db.add(ClipFeedback(clip_id=clip.id, account_id=p.account.id, kind=field, value=logged))
     db.commit()
-    return {"id": clip.id, "kept": clip.kept}
+    return {"id": clip.id, "kept": clip.kept, "reaction": clip.reaction, "bookmarked": bool(clip.bookmarked)}
 
 
 def _stamp(t: float, sep: str) -> str:

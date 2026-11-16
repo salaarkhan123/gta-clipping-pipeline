@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -107,8 +107,21 @@ class Clip(Base):
     captions_key: Mapped[str | None] = mapped_column(String(400), nullable=True)
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)   # title, description, hashtags, virality
     kept: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    reaction: Mapped[str | None] = mapped_column(String(8), nullable=True)   # like | dislike
+    bookmarked: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class ClipFeedback(Base):
+    """Append-only log of what users did with clips: training data for the future ranker. Current state is on Clip."""
+    __tablename__ = "clip_feedback"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clip_id: Mapped[str] = mapped_column(ForeignKey("clips.id"), index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(12))    # kept | reaction | bookmarked
+    value: Mapped[str | None] = mapped_column(String(8), nullable=True)   # true/false, like/dislike, or NULL = cleared
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class CreditLedger(Base):
