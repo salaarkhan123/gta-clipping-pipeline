@@ -29,7 +29,7 @@ API + website that turns long gameplay/stream recordings into short, captioned, 
 
 - Python 3.12 in Docker (code runs on 3.10+), FastAPI, Pydantic v2, SQLAlchemy 2 (sync), Postgres 16; SQLite for local dev and tests.
 - **Job queue is the `jobs` table**: workers claim with `SELECT ... FOR UPDATE SKIP LOCKED`. No Redis, no Arq.
-- Tables are created with `create_all` at startup. **Alembic migrations are not set up yet**; add them before the first schema change after launch.
+- Schema: Alembic migrations (`app/migrations/`), run by `scripts/deploy.sh` before the restart and at every start (`init_db`). Revision `0001` is the baseline; the pre-migration production database is stamped at it.
 - ffmpeg (needs libass), faster-whisper (`small.en`, CPU int8, baked into the image), numpy.
 - Storage interface with local-disk and S3/R2 implementations. Stripe Checkout (one-time packs). argon2 password hashes, HS256 JWTs. Caddy for HTTPS.
 - Website (to build): Next.js App Router + Tailwind.
@@ -76,7 +76,7 @@ run_pipeline(input_path, options: PipelineOptions, out_dir, progress_cb=None, tr
 - Video Finder searches speech only. It does not understand visuals (no "find the car chase").
 - The facecam position is supplied by the user (`facecam_region` corner preset or `facecam_box`); there is no automatic facecam detection yet.
 - Captions skip low-confidence segments (music lyrics, background chatter). Captioning only the main speaker needs diarization (deferred).
-- Job results that are not clips (search matches) are returned in `job.result`. The `jobs.result` column is added at startup by a small forward-only migration in `app/db.py`.
+- Job results that are not clips (search matches) are returned in `job.result`. The `jobs.result` column is part of the baseline migration.
 
 ### Launch-tier additions (2026-11-14, second pass)
 
