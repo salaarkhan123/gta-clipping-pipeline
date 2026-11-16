@@ -26,7 +26,8 @@ Default: one job at a time. Two ways to add capacity:
   use every core, so two jobs each run slower, but a second customer no longer waits for the first to finish.
   Values above 2 are rejected at start.
 - **A second worker container** (only on a bigger server, or a second one): each container loads its own
-  models (about 1.5 GB more memory) and claims from the same queue; a job is claimed by exactly one worker.
+  models (check the extra memory with `docker stats` before relying on it) and claims from the same queue; a
+  job is claimed by exactly one worker.
   ```bash
   docker compose up -d --scale worker=2 --no-recreate worker
   ```
