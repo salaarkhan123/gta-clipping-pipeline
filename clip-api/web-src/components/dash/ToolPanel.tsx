@@ -2,9 +2,11 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useDash } from "./Shell";
+import { Tabs } from "./Tabs";
 
-type Tool = "clips" | "reframe" | "captions" | "find";
+export type Tool = "clips" | "reframe" | "captions" | "find";
 const TOOL_NAMES: Record<Tool, string> = { clips: "Clip Maker", reframe: "Reframe", captions: "Captions", find: "Video Finder" };
+export const isTool = (v: string | null): v is Tool => !!v && v in TOOL_NAMES;
 
 // What a template may fill in, and the editing switches (all on by default, like the API).
 const FORM_KEYS = ["clip_length", "caption_style", "tighten", "punch_zoom", "flash_forward", "hook_overlay"];
@@ -19,9 +21,10 @@ function parseTime(v: string): number | null {
 }
 
 // The four tools for one upload. Shows the credit price before the user starts anything.
-export function ToolPanel({ upload, onStarted }: { upload: any; onStarted: (job: any) => void }) {
+// `open` is how Home and the template gallery hand over: the tool to show first, and a template to apply once.
+export function ToolPanel({ upload, onStarted, open }: { upload: any; onStarted: (job: any) => void; open?: { tool?: Tool; template?: string } }) {
   const { me, reloadMe, fail } = useDash();
-  const [tool, setTool] = useState<Tool>("clips");
+  const [tool, setTool] = useState<Tool>(open?.tool || "clips");
   const [o, setO] = useState({ max_clips: 3, clip_length: 30, aspect: "9:16", caption_style: "pop", captions: true,
     censor: false, chat_region: "none", query: "", from: "", to: "",
     tighten: true, punch_zoom: true, flash_forward: true, hook_overlay: true, template: "" });
@@ -29,37 +32,48 @@ export function ToolPanel({ upload, onStarted }: { upload: any; onStarted: (job:
   const [starting, setStarting] = useState(false), [problem, setProblem] = useState("");
   const set = (k: string, v: any) => setO((x) => ({ ...x, [k]: v }));
 
-  useEffect(() => { api("/v1/templates", { auth: false }).then((r) => setTemplates(r.templates)).catch(() => {}); }, []);
-  const template = templates.find((x) => x.id === o.template);
   // Choosing a template fills in its settings; every one of them can still be changed before starting.
-  function pickTemplate(id: string) {
-    const chosen = templates.find((x) => x.id === id);
+  function pickTemplate(id: string, from = templates) {
+    const chosen = from.find((x) => x.id === id);
     const fill: Record<string, any> = {};
-    for (const k of FORM_KEYS) if (chosen && k in chosen.options) fill[k] = chosen.options[k];
-    setO((x) => ({ ...x, ...fill, template: id }));
+    for (const k of FORM_KEYS) if (chosen?.options && k in chosen.options) fill[k] = chosen.options[k];
+    setO((x) => ({ ...x, ...fill, template: chosen ? id : "" }));
   }
+  useEffect(() => {
+    api("/v1/templates", { auth: false }).then((r) => {
+      setTemplates(r.templates);
+      if (open?.template) pickTemplate(open.template, r.templates);     // "Use template" in the gallery
+    }).catch(() => {});
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  const template = templates.find((x) => x.id === o.template);
 
   async function start() {
     setProblem("");
-    const layout = { aspect: o.aspect, caption_style: o.caption_style, censor: o.censor };
+    // Every request states every setting it relies on, including the ones this panel has no control for, so a
+    // change to the API's defaults can never change what the dashboard makes. Only names the API accepts are sent.
+    const frame = { vertical: true, aspect: o.aspect, layout: "auto", facecam_region: "auto", zoom: 1, chat_region: "none" };
+    const text = { caption_style: o.caption_style, censor: o.censor };
     let path = "/v1/clips", body: any;
     if (tool === "clips") {
-      body = { upload_id: upload.upload_id, options: { ...layout, captions: o.captions, chat_region: o.chat_region,
+      body = { upload_id: upload.upload_id, options: { ...frame, ...text, captions: o.captions, chat_region: o.chat_region,
         max_clips: o.max_clips, clip_length: o.clip_length, tighten: o.tighten, punch_zoom: o.punch_zoom,
         flash_forward: o.flash_forward, hook_overlay: o.hook_overlay,
-        ...(template ? { template: template.id, layout: template.options.layout } : {}) } };
+        ...(template ? { template: template.id, layout: template.options?.layout ?? "auto" } : {}) } };
     } else if (tool === "find") {
       if (!o.query.trim()) { setProblem("Type what you're looking for first."); return; }
       path = "/v1/find";
-      body = { upload_id: upload.upload_id, query: o.query.trim(), clip_length: o.clip_length, options: { ...layout, captions: o.captions } };
+      body = { upload_id: upload.upload_id, query: o.query.trim(), mode: "auto", max_results: 5, make_clips: true,
+        clip_length: o.clip_length, options: { ...frame, ...text, captions: o.captions } };
     } else {
       const a = parseTime(o.from), b = parseTime(o.to);
       if (Number.isNaN(a) || Number.isNaN(b) || ((a === null) !== (b === null)) || (a !== null && b !== null && b - a < 1)) {
         setProblem("Enter both a start and an end time, like 12:30 and 13:10, or leave both empty for the whole video."); return;
       }
       path = tool === "reframe" ? "/v1/reframe" : "/v1/captions";
-      body = { upload_id: upload.upload_id, options: tool === "reframe" ? { ...layout, captions: false, censor: false }
-        : { caption_style: o.caption_style, censor: o.censor, vertical: false } };
+      // Reframe changes the shape and adds no captions; Captions keeps the source framing (vertical: false).
+      const { aspect, ...unframed } = frame;
+      body = { upload_id: upload.upload_id, options: tool === "reframe" ? { ...frame, ...text, captions: false, censor: false }
+        : { ...unframed, ...text, vertical: false, captions: true } };
       if (a !== null) body.segments = [{ start: a, end: b }];
     }
     setStarting(true);
@@ -67,11 +81,8 @@ export function ToolPanel({ upload, onStarted }: { upload: any; onStarted: (job:
   }
 
   return (
-    <section className="panel" aria-label="Make something from this video">
-      <div className="tabs" role="tablist">
-        {(Object.keys(TOOL_NAMES) as Tool[]).map((t) => (
-          <button key={t} role="tab" aria-selected={tool === t} className={tool === t ? "on" : ""} onClick={() => setTool(t)}>{TOOL_NAMES[t]}</button>))}
-      </div>
+    <section className="panel" id="tools" aria-label="Make something from this video">
+      <Tabs label="Tool" tabs={Object.entries(TOOL_NAMES) as [Tool, string][]} value={tool} onChange={setTool} />
       {tool === "clips" && templates.length > 0 && <div className="options">
         <label className="grow">Template
           <select value={o.template} onChange={(e) => pickTemplate(e.target.value)}>
