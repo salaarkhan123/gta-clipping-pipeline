@@ -60,7 +60,11 @@ BUCKETS = {"0-30": (0, 30), "0-90": (0, 90), "30-60": (30, 60), "60-90": (60, 90
 
 ## API (our names; the values and allowed sets are Wayin's)
 
-Until the owner answers PARITY.md questions 1 to 3, existing defaults stay as they are and new options are additions.
+Owner's decisions (2026-11-16, PARITY.md "Decisions"):
+- Our own names, with the mapping to Wayin's options published in the API docs.
+- Defaults become Wayin's: `render` `none`, captions off, reframe off, hook off, `resolution` `480`. This is one change, made in a single PR by the engine and render agents together with the dashboard, which must send every choice explicitly from then on. Every existing field stays accepted; nothing is removed.
+- Every clip returns `rank_index` (from 0, by virality score) and `timeline_index` (from 1, by position in the video). The existing `rank` and `index` fields stay as aliases for compatibility.
+- Enterprise-only switches are not built. Paid services are researched and priced, never integrated without approval.
 
 | Where | Field | Values | Default | Owner |
 |---|---|---|---|---|
@@ -69,15 +73,15 @@ Until the owner answers PARITY.md questions 1 to 3, existing defaults stay as th
 | | `range` | `{start, end}` seconds or null | null | A |
 | | `source_lang`, `target_lang` | codes in `app/languages.py` or null | null | F (A reads) |
 | | `project_name` | text, max 120 | null | A |
-| | `render` | `none`, `preview`, `full` | `full` (today's behaviour) | B |
-| | `resolution` | `480`, `720`, `1080`, `2k`, `4k` | `1080` | B |
+| | `render` | `none`, `preview`, `full` | `none` (after the defaults PR; `full` until then) | B |
+| | `resolution` | `480`, `720`, `1080`, `2k`, `4k` | `480` (after the defaults PR; `1080` until then) | B |
 | | `caption_style` | style ids in `app/render_options.py` | `pop` | B |
 | | `caption_display` | `original`, `translation`, `both` | `original` | F |
 | | `hook_style` | the 13 script styles | `serious` | B |
 | | `hook_position` | `beginning`, `end` | `beginning` | B |
 | | `layout` | `LAYOUTS`, checked against `ALLOWED[aspect]` | `auto` | B |
 | `POST /v1/clips/export` | `job_id`, `clips` (ids or null = all), the render options above, `hook_keywords`, `hook_duration_ms` | | | B (charging: money, owner) |
-| Clip object | `rank` (0 = best), `start_ms`, `end_ms`, `score` (0–100), `scores` (five dimensions), `preview_url`, `export_url`, `kind`, `why` | added next to today's fields | | A, B |
+| Clip object | `rank_index` (0 = best), `timeline_index` (1 = earliest), `start_ms`, `end_ms`, `virality_score` (0–100), `scores` (five dimensions), `preview_url`, `export_url`, `kind`, `why` | added next to today's fields | | A, B |
 | `GET /v1/templates` | `?game=` filter; each template as below | | | C |
 | `POST /v1/transcripts`, `POST /v1/summaries` | `upload_id`, `source_lang`, `target_lang` | | | F |
 | `POST /v1/imports` | `url`, `consent: true` (required) | | | E |
