@@ -96,6 +96,12 @@ def test_clips_list_their_titles_and_the_owner_can_pick_one(client, user, video,
         db.commit()
     got = client.get(f"/v1/jobs/{job_id}", headers=headers).json()["clips"][0]
     assert got["titles"] == parse_meta(REPLY)["titles"] and got["title"] == got["titles"][0] and got["hook"].startswith("wait for")
+    assert got["hook_on_screen"] is False                                             # offered, but this clip was made without it
+    with new_session() as db:
+        clip = db.get(Clip, clip_id)
+        clip.features = {**(clip.features or {}), "edit": {"hook": "wait for the cop car"}}
+        db.commit()
+    assert client.get(f"/v1/jobs/{job_id}", headers=headers).json()["clips"][0]["hook_on_screen"] is True
     picked = client.patch(f"/v1/clips/{clip_id}", json={"title": got["titles"][2]}, headers=headers)
     assert picked.status_code == 200 and picked.json()["title"] == "Did he stick the landing?" and picked.json()["rank"] == 1
     own = client.patch(f"/v1/clips/{clip_id}", json={"title": "  my   own words  "}, headers=headers).json()

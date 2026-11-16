@@ -233,6 +233,15 @@ label.check input { width: 18px; height: 18px; accent-color: var(--accent); }
 .score-badge:hover .score-tip, .score-badge .rank:focus + .score-tip { display: grid; gap: 6px; }
 .score-tip .parts { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); }
 .score-tip .parts b { color: var(--text); font-variant-numeric: tabular-nums; }
+.options.edits { border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px 10px; align-items: center; }
+.options.edits legend { padding: 0 6px; font-size: 13px; color: var(--muted); }
+.options.edits label.check { padding-bottom: 0; }
+.options.edits p { flex-basis: 100%; font-size: 13px; }
+.options p.grow { align-self: center; font-size: 14px; }
+.title-pick { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.title-pick select { width: 100%; padding: 8px 10px; font-size: 14px; }
+.clip .tip { padding: 8px 10px; border-radius: 10px; background: rgba(60,240,255,.08); border: 1px solid rgba(60,240,255,.35); }
+.clip .tip b { color: var(--accent-2); margin-right: 4px; }
 .clips-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .clips-head h2 { margin: 0; }
 .clip-toolbar { display: flex; flex-wrap: wrap; gap: 12px; }
