@@ -1,4 +1,6 @@
 """Projects and the clip library. A project is an upload seen with its jobs and clips; nothing new is stored."""
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -61,15 +63,24 @@ def get_project(upload_id: str, p: Principal = Depends(current_principal), db: S
                        "created_at": iso(c.created_at)} for c in clips]}
 
 
+SORTS = {"newest": (Clip.created_at.desc(), Clip.idx), "score": (Clip.score.desc(), Clip.created_at.desc()),
+         "time": (Job.upload_id, Clip.start_sec)}
+FILTERS = {"all": (), "kept": (Clip.kept.is_(True),), "discarded": (Clip.kept.is_(False),),
+           "bookmarked": (Clip.bookmarked.is_(True),), "liked": (Clip.reaction == "like",)}
+
+
 @router.get("/v1/clips")
 def list_clips(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+               sort: Literal["newest", "score", "time"] = "newest",
+               filter: Literal["all", "kept", "discarded", "bookmarked", "liked"] = "all",
                p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
-    """The library: every stored clip on the account, newest first."""
-    where = (Job.account_id == p.account.id, Clip.deleted_at.is_(None))
+    """The library: every stored clip on the account. sort: newest, score (highest first) or time (earliest
+    moment first, grouped by video). filter: all, kept, discarded, bookmarked or liked."""
+    where = (Job.account_id == p.account.id, Clip.deleted_at.is_(None), *FILTERS[filter])
     total = db.execute(select(func.count(Clip.id)).join(Job, Clip.job_id == Job.id).where(*where)).scalar_one()
     rows = db.execute(select(Clip, Job.upload_id, Upload.filename).join(Job, Clip.job_id == Job.id)
                       .join(Upload, Upload.id == Job.upload_id).where(*where)
-                      .order_by(Clip.created_at.desc(), Clip.idx).limit(limit).offset(offset)).all()
+                      .order_by(*SORTS[sort]).limit(limit).offset(offset)).all()
     storage = get_storage()
     return {"total": total, "clips": [{**clip_json(c, storage), "job_id": c.job_id, "upload_id": upload_id,
                                        "filename": filename, "created_at": iso(c.created_at)}

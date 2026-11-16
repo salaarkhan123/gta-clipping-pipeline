@@ -222,6 +222,11 @@ label.check input { width: 18px; height: 18px; accent-color: var(--accent); }
 .dash { max-width: 1100px; width: 100%; margin: 0 auto; padding: 28px 24px 64px; display: grid; gap: 24px; align-content: start; }
 .dash > section:not(.panel) { padding: 0; }   /* the marketing pages' section spacing does not apply here */
 .dash-title { font-size: 28px; overflow-wrap: anywhere; }
+.clips-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.clips-head h2 { margin: 0; }
+.clip-toolbar { display: flex; flex-wrap: wrap; gap: 12px; }
+.clip-toolbar label { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.clip-toolbar select { padding: 8px 12px; }
 .crumb { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
 .crumb a, .dash p a { color: var(--accent); }
 .small { font-size: 13px; }
