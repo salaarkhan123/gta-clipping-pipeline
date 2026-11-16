@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ClipCard } from "@/components/dash/ClipCard";
+import { arrange, ClipCard, ClipFilter, ClipSort, ClipToolbar } from "@/components/dash/ClipCard";
 import { useDash } from "@/components/dash/Shell";
 import { ToolPanel } from "@/components/dash/ToolPanel";
 import { api, ApiError, clock } from "@/lib/api";
@@ -20,6 +20,7 @@ export default function Project() {
   const [id, setId] = useState<string | null>(null);
   const [project, setProject] = useState<any>(null), [gone, setGone] = useState(false);
   const [finds, setFinds] = useState<Record<string, any>>({});
+  const [sort, setSort] = useState<ClipSort>("score"), [filter, setFilter] = useState<ClipFilter>("all");
 
   const load = useCallback(async (pid: string) => {
     try { setProject(await api(`/v1/projects/${pid}`)); }
@@ -51,6 +52,7 @@ export default function Project() {
   if (!project) return <p className="muted">Loading…</p>;
 
   const cancel = (jobId: string) => api(`/v1/jobs/${jobId}/cancel`, { body: {} }).then(() => load(project.upload_id)).catch(fail);
+  const shown = arrange(project.clips, sort, filter);
   const notes = project.jobs.filter((j: any) => active(j) || j.status === "FAILED" || finds[j.job_id]).slice(0, 6);
 
   return (
@@ -80,10 +82,14 @@ export default function Project() {
           </article>))}
       </section>}
       <section>
-        <h2>Clips</h2>
+        <div className="clips-head">
+          <h2>Clips</h2>
+          {project.clips.length > 0 && <ClipToolbar sort={sort} filter={filter} sorts={["score", "time"]} onSort={setSort} onFilter={setFilter} />}
+        </div>
         {!project.clips.length && <p className="muted">{anyActive ? "Your clips will show up here when they're ready." : "No clips yet. Pick a tool above to make some."}</p>}
+        {project.clips.length > 0 && !shown.length && <p className="muted">No clips match this filter.</p>}
         <div className="clips">
-          {project.clips.map((c: any) => (
+          {shown.map((c: any) => (
             <ClipCard key={c.id} clip={c}
               onChange={(n) => setProject((p: any) => ({ ...p, clips: p.clips.map((x: any) => (x.id === n.id ? n : x)) }))} />))}
         </div>

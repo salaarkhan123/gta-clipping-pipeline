@@ -15,7 +15,10 @@ export async function downloadSubtitles(clipId: string, format = "srt") {
 // One clip: preview, title, score, times, and its actions. `project` links back to where it came from (Library).
 export function ClipCard({ clip, onChange, project }: { clip: any; onChange: (c: any) => void; project?: { id: string; name: string } }) {
   const { fail } = useDash();
-  const keep = (kept: boolean) => api(`/v1/clips/${clip.id}/feedback`, { body: { kept } }).then(() => onChange({ ...clip, kept })).catch(fail);
+  // Pressing the active choice again clears it.
+  const send = (body: Record<string, unknown>) => api(`/v1/clips/${clip.id}/feedback`, { body }).then((r) => onChange({ ...clip, ...r })).catch(fail);
+  const keep = (kept: boolean) => send({ kept: clip.kept === kept ? null : kept });
+  const react = (reaction: "like" | "dislike") => send({ reaction: clip.reaction === reaction ? null : reaction });
   return (
     <figure className={`clip ${clip.kept === false ? "dropped" : ""}`}>
       <video controls preload="none" poster={clip.thumb_url || undefined} src={clip.video_url} />
@@ -32,7 +35,40 @@ export function ClipCard({ clip, onChange, project }: { clip: any; onChange: (c:
           <button className="btn small ghost" aria-pressed={clip.kept === true} onClick={() => keep(true)}>Keep</button>
           <button className="btn small ghost" aria-pressed={clip.kept === false} onClick={() => keep(false)}>Discard</button>
         </div>
+        <div className="clip-actions" role="group" aria-label="Rate this clip">
+          <button className="btn small ghost" aria-pressed={clip.reaction === "like"} onClick={() => react("like")}>Like</button>
+          <button className="btn small ghost" aria-pressed={clip.reaction === "dislike"} onClick={() => react("dislike")}>Dislike</button>
+          <button className="btn small ghost" aria-pressed={!!clip.bookmarked} onClick={() => send({ bookmarked: !clip.bookmarked })}>
+            {clip.bookmarked ? "Bookmarked" : "Bookmark"}</button>
+        </div>
       </figcaption>
     </figure>
   );
+}
+
+export type ClipSort = "score" | "time" | "newest";
+export type ClipFilter = "all" | "kept" | "discarded" | "bookmarked" | "liked";
+const FILTER_NAMES: Record<ClipFilter, string> = { all: "All clips", kept: "Kept", discarded: "Discarded", bookmarked: "Bookmarked", liked: "Liked" };
+const SORT_NAMES: Record<ClipSort, string> = { score: "Best first", time: "Earliest first", newest: "Newest first" };
+
+export function ClipToolbar({ sort, filter, sorts, onSort, onFilter }: { sort: ClipSort; filter: ClipFilter; sorts: ClipSort[];
+  onSort: (s: ClipSort) => void; onFilter: (f: ClipFilter) => void }) {
+  return (
+    <div className="clip-toolbar">
+      <label>Sort<select value={sort} onChange={(e) => onSort(e.target.value as ClipSort)}>
+        {sorts.map((s) => <option key={s} value={s}>{SORT_NAMES[s]}</option>)}</select></label>
+      <label>Show<select value={filter} onChange={(e) => onFilter(e.target.value as ClipFilter)}>
+        {(Object.keys(FILTER_NAMES) as ClipFilter[]).map((f) => <option key={f} value={f}>{FILTER_NAMES[f]}</option>)}</select></label>
+    </div>
+  );
+}
+
+const MATCH: Record<ClipFilter, (c: any) => boolean> = { all: () => true, kept: (c) => c.kept === true, discarded: (c) => c.kept === false,
+  bookmarked: (c) => !!c.bookmarked, liked: (c) => c.reaction === "like" };
+// For lists already in the browser (a project). The Library asks the server instead.
+export function arrange(clips: any[], sort: ClipSort, filter: ClipFilter): any[] {
+  const out = clips.filter(MATCH[filter]);
+  if (sort === "time") out.sort((a, b) => a.start_sec - b.start_sec);
+  else if (sort === "score") out.sort((a, b) => b.score - a.score);
+  return out;
 }

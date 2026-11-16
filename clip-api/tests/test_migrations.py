@@ -97,7 +97,8 @@ def test_the_baseline_refuses_to_downgrade(db):
     migrate(e)
     with e.connect() as c, pytest.raises(RuntimeError, match="not reversible"):
         command.downgrade(config(c), "base")
-    assert current(e) == BASELINE
+    # Never below the baseline. Postgres rolls the whole failed downgrade back; SQLite stops at the baseline.
+    assert current(e) in (BASELINE, head()) and "credit_ledger" in inspect(e).get_table_names()
 
 
 def test_the_app_database_is_at_head_and_matches_the_models(client):
