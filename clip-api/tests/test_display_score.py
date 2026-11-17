@@ -6,7 +6,7 @@ import pytest
 
 from app.db import new_session
 from app.models import Clip, new_id, utcnow
-from app.scoring import ai_score, display_scores
+from app.scoring import display_scores
 from tests.test_api import upload
 from tests.test_projects import make_clips, new_user
 from tests.test_score_display import rated
@@ -58,13 +58,6 @@ def test_any_set_of_scores_keeps_its_order_and_stays_in_range():
 def test_a_higher_best_raw_score_shows_a_higher_top():
     tops = [display_scores([hi, 0])[0] for hi in range(0, 101)]
     assert tops == sorted(tops) and tops[0] == tops[40] == 90 and tops[90] == tops[100] == 99 and tops[65] == 95
-
-
-def test_only_an_ai_rating_counts_as_a_raw_score():
-    assert ai_score(rated(64)) == 64 and ai_score(rated(0)) == 0
-    assert ai_score(None) is None and ai_score({}) is None and ai_score({"title": "x"}) is None
-    assert ai_score({"virality": {"score": 97}, "source": "signals"}) is None      # loudness alone is not a rating
-    assert ai_score({"virality": {"score": "high"}, "source": "ai"}) is None
 
 
 # ---- the API -------------------------------------------------------------------------------------------------
@@ -126,6 +119,8 @@ def test_every_clip_response_carries_the_display_score_and_the_raw_numbers_stay(
         for key in set(RAW) - {"rank", "rank_of"}:
             assert after[place][first_id][key] == before[place][first_id][key], (place, key)
     assert all("display_score" in c for clips in after.values() for c in clips.values())
+    assert all((c["display_score"] is None) == (c["virality_score"] is None)            # rated by the AI, or neither
+               for clips in after.values() for c in clips.values())
 
     patched = client.patch(f"/v1/clips/{first_id}", json={"title": "mine"}, headers=headers).json()
     assert (patched["display_score"], patched["rank"], patched["title"], patched["virality"]["score"]) == (79, 2, "mine", 64)

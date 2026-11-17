@@ -1,6 +1,6 @@
 """The score a clip shows: the AI's raw 0-100 rating, calibrated across the clips of one job.
 
-Pure functions, no database and no web code. The formula is the one in docs/CONTRACTS.md, "Score calibration (A)":
+A pure function, no database and no web code. The formula is the one in docs/CONTRACTS.md, "Score calibration (A)":
 the best clip of a job shows 90 to 99 (higher when its raw score is higher), the weakest sits up to 40 points
 below it and never under 55, and the others are spread between the two in proportion to their raw scores.
 Nothing here is stored: the display score is worked out each time clips are read. The raw numbers are untouched.
@@ -11,16 +11,6 @@ from typing import Sequence
 TOP_MIN, TOP_MAX = 90, 99      # what the best clip of a job shows
 RAW_LOW, RAW_SPAN = 40, 50     # a best raw score of 40 or less shows TOP_MIN; 90 or more shows TOP_MAX
 FLOOR, SPREAD = 55, 40         # the lowest score ever shown; how far below the top the weakest clip sits
-
-
-def ai_score(meta: dict | None) -> int | float | None:
-    """The AI's raw 0-100 score from a clip's stored meta, or None when the AI did not rate the clip. The same
-    test as the tier (routes_media.tier_of), so a clip has a display score exactly when it has a tier: a number
-    made from loudness alone (source "signals") is not a rating."""
-    virality = (meta or {}).get("virality") or {}
-    if (meta or {}).get("source") == "signals" or not isinstance(virality.get("score"), (int, float)):
-        return None
-    return virality["score"]
 
 
 def display_scores(raw: Sequence[int | float | None]) -> list[int | None]:

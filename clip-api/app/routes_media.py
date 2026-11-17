@@ -25,7 +25,7 @@ from .pipeline import MIN_CLIP, PipelineError, probe
 from .pipeline.moments import BUCKETS, MAX_CLIPS, kind_of
 from .security import is_public_https_url, read_token
 from .render_options import LayoutOptions  # noqa: F401  (re-exported: routes_tools imports it from here)
-from .scoring import ai_score, display_scores
+from .scoring import display_scores
 from .storage import LocalStorage, get_storage
 from .templates import TEMPLATES, with_tuning
 
@@ -222,7 +222,7 @@ def with_display_scores(db: Session, clips: list[dict]) -> list[dict]:
     if job_ids:
         for clip_id, job_id, meta in db.execute(select(Clip.id, Clip.job_id, Clip.meta).where(
                 Clip.job_id.in_(job_ids), Clip.deleted_at.is_(None))):
-            raw.setdefault(job_id, {})[clip_id] = ai_score(meta)
+            raw.setdefault(job_id, {})[clip_id] = _ai_score(meta)
     shown: dict[str, int | None] = {}
     for scores in raw.values():                       # one run at a time: each has its own scale
         shown.update(zip(scores, display_scores(list(scores.values()))))
