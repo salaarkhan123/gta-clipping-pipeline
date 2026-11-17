@@ -461,7 +461,7 @@ def caption_y(oh: int, position: str, half: float, seam: int | None = None, head
         want = seam
     lo, hi = SAFE_ROWS[0] * oh + half, SAFE_ROWS[1] * oh - half
     y = _clamp(want, lo, hi)
-    if head is not None and (reach is None or (head[0] < reach[1] and head[2] > reach[0])):
+    if head is not None and (reach is None or (head[0] < reach[1] - 1 and head[2] > reach[0] + 1)):
         gap = FACE_GAP * oh / 1920
         top, bottom = head[1] - gap, head[3] + gap
         if y + half > top and y - half < bottom:

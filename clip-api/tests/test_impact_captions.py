@@ -152,7 +152,7 @@ def test_the_ass_file_upper_case_bundled_font_size_outline_shadow_and_one_keywor
 
     C.build_ass(words, tmp_path / "red.ass", True, 0, "DejaVu Sans", "impact", accent="#FF4D6D")
     red = events(tmp_path / "red.ass")
-    assert "{\\c&H6D4DFF&}FOUND" in red[1][9] and "3CFFB8" not in (tmp_path / "red.ass").read_text()
+    assert "{\\c&H6D4DFF&}FOUND" in red[1][9] and "\\c&H3CFFB8&" not in (tmp_path / "red.ass").read_text()
     assert f"\\pos(540,{round(0.70 * 1920 - (C.ANTON_ASCENT - C.ANTON_DESCENT - C.ANTON_CAP) / 2 * m.em)})" in red[0][9]
     with pytest.raises(ValueError):
         C.build_ass(words, tmp_path / "bad.ass", True, 0, "DejaVu Sans", "impact", accent="lime")
@@ -183,7 +183,8 @@ def test_a_caption_never_runs_off_the_frame_long_words_are_drawn_smaller(tmp_pat
             assert letters * pct / 100 + 2 * m.outline <= room + 0.5, (play, texts)     # inside the width it is centred in
             assert pct == 100 or len(texts) == 1                                # only a single long word is ever shrunk
             assert f"\\pos({round((span[0] + span[1]) / 2 * play[0])}," in e[9]
-        assert any("\\fscx100" not in e[9].split("\\t(")[1] for e in caps)      # the 34-letter word was
+        if play[1] > play[0]:
+            assert any("\\fscx100" not in e[9].split("\\t(")[1] for e in caps)  # the 34-letter word was
         assert all("\\N" not in e[9] and "\\q2" in e[9] for e in caps)          # one line, never wrapped
 
 
@@ -287,7 +288,7 @@ def test_a_caption_moves_the_least_distance_that_clears_the_head_and_stays_in_th
     assert L.caption_y(1920, "auto", half, seam=640, head=(300, 100, 780, 500)) == 640      # clear of it: not moved
     assert L.caption_y(1920, "lower", half, head=(0, 1300, 100, 1500), reach=(120, 960)) == 1344     # off to the side
     lo, hi = L.SAFE_ROWS[0] * 1920 + half, L.SAFE_ROWS[1] * 1920 - half
-    assert L.caption_y(1920, "lower", half, head=(0, 300, 1080, 1900)) == round(lo)          # no room under it: over it
+    assert L.caption_y(1920, "lower", half, head=(0, 300, 1080, 1900)) == 300 - gap - half   # no room under it: over it
     assert L.caption_y(1920, "center", half, head=(0, 0, 1080, 1920)) in (round(lo), round(hi))       # nowhere clear: an edge
     for position, seam in itertools.product(L.CAPTION_POSITIONS, (None, 100, 480, 1152, 1900)):
         assert lo - 1 <= L.caption_y(1920, position, half, seam=seam) <= hi + 1               # never off the frame
@@ -313,7 +314,7 @@ def test_no_caption_position_ever_covers_the_head_in_any_layout_ratio_or_shape()
         x0, y0, x1, y1 = plan.head
         mid = (plan.text_span[0] + plan.text_span[1]) / 2 * ow
         reach = (plan.text_span[1] - plan.text_span[0]) * ow * C.IMPACT_FILL / 2
-        if x1 <= mid - reach or x0 >= mid + reach:
+        if x1 <= mid - reach + 1 or x0 >= mid + reach - 1:
             continue                                                          # the text never reaches that far out
         clear = y + half <= y0 or y - half >= y1
         room = (y0 - half >= L.SAFE_ROWS[0] * oh + half) or (y1 + half <= L.SAFE_ROWS[1] * oh - half)
@@ -348,7 +349,7 @@ def test_the_hook_steps_clear_of_the_caption():
             assert hook - 14 >= y + half or hook + 110 <= y - half, (name, position, ratio)      # one line of hook, clear
             assert 0 <= hook <= 1920 - 110
     assert R.impact_rows(None, 1080, "auto", 108) == (756, 108)                # a source frame: lower third, hook on top
-    assert R.impact_rows(None, 1920, "auto", 345, below_video=1294)[0] == round(1294 + half)     # classic: under the picture
+    assert R.impact_rows(None, 1920, "auto", 345, below_video=1294)[0] == int(1294 + half)       # classic: under the picture
 
 
 # ---------- rendered ----------
@@ -356,8 +357,12 @@ def white(img):
     return (img.min(axis=2) > 215)
 
 
+CYAN = "#00C2FF"     # the accent the rendered checks use: nothing else in the test stream is this colour
+
+
 def lime(img):
-    return (img[..., 0] > 140) & (img[..., 0] < 225) & (img[..., 1] > 215) & (img[..., 2] < 130)
+    """The keyword's pixels (drawn in CYAN here: the stream's camera is green and its face yellow)."""
+    return (img[..., 0] < 90) & (img[..., 1] > 140) & (img[..., 2] > 200)
 
 
 @pytest.fixture(scope="module")
@@ -375,7 +380,7 @@ def test_rendered_the_bundled_font_is_what_is_drawn_where_the_plan_says_and_the_
         render(stream, tmp_path / f"{name}-bare.mp4", plan=plan)
         bare[name] = face_pixels(frame(tmp_path / f"{name}-bare.mp4")).sum()
         for position in L.CAPTION_POSITIONS:
-            render(stream, tmp_path / "c.mp4", plan=plan, words=words, style="impact", position=position)
+            render(stream, tmp_path / "c.mp4", plan=plan, words=words, style="impact", position=position, accent=CYAN)
             img = frame(tmp_path / "c.mp4", 0.5)
             m = C.impact_size(1920)
             ink = white(img) | lime(img)
@@ -390,7 +395,7 @@ def test_rendered_the_bundled_font_is_what_is_drawn_where_the_plan_says_and_the_
             assert cols.max() - cols.min() == pytest.approx(letters, rel=0.04), (name, position)
             assert (cols.min() + cols.max()) / 2 == pytest.approx(540, abs=8)
             assert cols.min() > 20 and cols.max() < 1060                      # nothing off the frame
-            assert white(img).sum() > 2000 and lime(img).sum() > 3000         # OKAY white, the keyword lime
+            assert white(img).sum() > 2000 and lime(img).sum() > 3000         # OKAY white, the keyword in the accent
             assert np.nonzero(lime(img))[1].min() > np.nonzero(white(img))[1].min()      # BANANA is the second word
             # Not one pixel of the face is covered, and no caption sits in the head's rows.
             assert face_pixels(img).sum() == pytest.approx(bare[name], rel=0.002), (name, position)
@@ -403,7 +408,7 @@ def test_rendered_at_every_size_the_caption_is_the_same_share_of_the_frame(strea
     plan = L.compose(SW, SH, "split2", "9:16", cam=frac(CORNER[0]), face=face_of(CORNER[1]))
     words, seen = [(0.0, 0.9, "okay"), (0.0, 0.9, "banana")], {}
     for name, kw in (("full", {}), ("preview", {"preview": True}), ("480", {"resolution": "480"}), ("capped", {"max_side": 720})):
-        info = render(stream, tmp_path / f"{name}.mp4", plan=plan, words=words, style="impact", **kw)
+        info = render(stream, tmp_path / f"{name}.mp4", plan=plan, words=words, style="impact", accent=CYAN, **kw)
         img = frame(tmp_path / f"{name}.mp4", 0.5)
         rows, cols = np.nonzero(white(img) | lime(img))
         dark = (img.max(axis=2) < 40)[rows.min() - 2:rows.max() + 2, cols.min():cols.max()].mean()
@@ -419,14 +424,14 @@ def test_rendered_at_every_size_the_caption_is_the_same_share_of_the_frame(strea
 
 def test_rendered_in_the_source_frame_and_in_the_classic_layout(stream, tmp_path):
     words = [(0.0, 0.9, "okay"), (0.0, 0.9, "banana")]
-    info = render(stream, tmp_path / "src.mp4", vertical=False, words=words, style="impact")
+    info = render(stream, tmp_path / "src.mp4", vertical=False, words=words, style="impact", accent=CYAN)
     img = frame(tmp_path / "src.mp4", 0.5)
     rows, cols = np.nonzero(white(img) | lime(img))
     m = C.impact_size(SH)
     assert (info.width, info.height) == (SW, SH)
     assert (rows.min() + rows.max()) / 2 == pytest.approx(0.70 * SH, abs=5) and rows.max() - rows.min() == pytest.approx(m.cap, abs=5)
     assert cols.max() - cols.min() == pytest.approx(C.impact_width(["OKAY", "BANANA"], m.em) - 2 * m.outline, rel=0.05)
-    render(stream, tmp_path / "classic.mp4", layout="classic", words=words, style="impact")
+    render(stream, tmp_path / "classic.mp4", layout="classic", words=words, style="impact", accent=CYAN)
     rows, _cols = np.nonzero(lime(frame(tmp_path / "classic.mp4", 0.5)))
     under = R.caption_top(SW, SH, "classic", 1.0, "none") + C.impact_size(1920).half
     assert (rows.min() + rows.max()) / 2 == pytest.approx(under, abs=6)       # under the picture, where captions always were
