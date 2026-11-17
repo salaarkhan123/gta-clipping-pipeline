@@ -106,7 +106,7 @@ def test_a_request_without_the_new_options_is_stored_and_runs_as_before(client, 
 
 
 # ---------- money ----------
-def test_the_new_options_never_change_what_a_job_reserves(client, user, video):
+def test_what_a_job_reserves_with_the_new_options(client, user, video):
     headers, _ = user
     up = upload(client, headers, video)
     extras = [{}, {"duration": "0-30"}, {"duration": "30-60", "limit": 50}, {"limit": 9}, {"range": {"start": 5, "end": 35}},
@@ -125,10 +125,12 @@ def test_the_new_options_never_change_what_a_job_reserves(client, user, video):
     with new_session() as db:
         db.get(Upload, up["upload_id"]).analyzed = True
         db.commit()
-    # Already analysed: ceil(max_clips * clip_length / 60), read from the same two fields as before.
-    assert reserved({"max_clips": 2, "clip_length": 40}) == [2] * len(extras)
-    assert reserved({"max_clips": 3, "clip_length": 60}) == [3] * len(extras)
-    assert reserved({}) == [2] * len(extras)                                  # the defaults: 3 clips of 30 s
+    # Already analysed, none of the new options: ceil(max_clips * clip_length / 60), as before. With one of them:
+    # the most the request can render, never more than the video (40 s) or the range (30 s) holds: 1 credit here.
+    # The rule itself is tested in test_rerun_charging.py.
+    assert reserved({"max_clips": 2, "clip_length": 40}) == [2, 1, 1, 1, 1, 1]
+    assert reserved({"max_clips": 3, "clip_length": 60}) == [3, 1, 1, 1, 1, 1]
+    assert reserved({}) == [2, 1, 1, 1, 1, 1]                                 # the defaults: 3 clips of 30 s
     assert balance(client, headers) == 30                                     # every cancelled job was refunded in full
 
 

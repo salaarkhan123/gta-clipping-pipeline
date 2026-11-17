@@ -123,6 +123,22 @@ def credits_for(duration_sec: float) -> int:
     return max(1, math.ceil(duration_sec / 60))
 
 
+def rerun_seconds(options: "ClipOptions", video_sec: float) -> float:
+    """The most a run on an already-analysed upload can render, in seconds: what is reserved for it. The job is
+    then charged for the seconds it did render and the rest is returned (worker, ledger.settle).
+    Without duration, limit or range it is max_clips * clip_length, as it always was. With any of them: the number
+    of clips asked for (every moment, capped at MAX_CLIPS, when a duration is set without a limit) times the
+    longest clip the request allows, never more than the video or the chosen range holds."""
+    if options.duration is None and options.limit is None and options.range is None:
+        return options.max_clips * options.clip_length
+    count = options.limit if options.limit is not None else (MAX_CLIPS if options.duration else options.max_clips)
+    longest = BUCKETS[options.duration][1] if options.duration else options.clip_length
+    span = video_sec
+    if options.range is not None:
+        span = max(0.0, min(options.range.end, video_sec) - options.range.start)
+    return min(count * longest, span)
+
+
 def upload_json(u: Upload) -> dict:
     return {"upload_id": u.id, "filename": u.filename, "size_bytes": u.size_bytes,
             "duration_sec": round(u.duration_sec, 2), "width": u.width, "height": u.height,
@@ -340,11 +356,13 @@ def create_job(body: ClipRequest, p: Principal = Depends(current_principal), db:
                            "This video has no audio track. Set chat_region so on-screen chat can be used.")
         check_span(body.options, upload.duration_sec)
         s = get_settings()
+        basis = {}
         if upload.analyzed and s.charge_once_per_upload:   # already paid for once: charge only what is rendered
-            cost = credits_for(body.options.max_clips * body.options.clip_length)
+            cost = credits_for(rerun_seconds(body.options, upload.duration_sec))     # the worst case is reserved
+            basis = {"charge_basis": "rendered"}           # and the job settles on the seconds it rendered
         else:
             cost = credits_for(upload.duration_sec)
-        return {"tool": "clips", **with_tuning(body.options.model_dump())}, upload.duration_sec, cost
+        return {"tool": "clips", **basis, **with_tuning(body.options.model_dump())}, upload.duration_sec, cost
     out = submit_job(db, p, body.upload_id, body.webhook_url, idempotency_key, plan)
     if body.options.project_name:
         job = db.get(Job, out["job_id"])
