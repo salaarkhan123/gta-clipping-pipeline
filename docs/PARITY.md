@@ -157,7 +157,7 @@ The 15 moments above, with their times, are in `clip-api/eval/wayin-zias-iceman.
 python scripts/eval_clips.py eval/wayin-zias-iceman.csv job.json     # found, and the rows no clip landed on
 ```
 
-Not run yet: `~/Downloads/wayin-benchmark/source-videos/` holds only an unfinished download. One time differs between the owner's list and the screenshot (#4 ends 1:13:41 in the list, 1:13:31 in the picture); the sheet uses the picture.
+Run on 2026-11-16 without the AI judge (selection only): 7 of the 15 found, 8 missed. Details and causes in `docs/super-board/runs/2026-11-16-swarm.md`, "Moment benchmark". Clip #4 ends 1:13:31 (the screenshot; confirmed by the owner).
 
 ### Their pricing (w11), for the cost model only
 
@@ -183,5 +183,5 @@ Not run yet: `~/Downloads/wayin-benchmark/source-videos/` holds only an unfinish
 
 - Which screenshot (w01 to w07) belongs to which preset name, and the preset names below the fold in w09.
 - What Gameplay A and Gameplay B look like next to each other: still **provisional**.
-- Rendered clips from Wayin and the source videos they came from. Without them no row can be verified on output.
-- The Zias source video for the moment benchmark.
+- Rendered clips from Wayin: the owner will not pay for exports now, so **output parity stays unverified**. We benchmark against the 12 screenshots and the 15 documented moments.
+- The moment benchmark with the AI judge (no key on the build machine).
