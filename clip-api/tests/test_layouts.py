@@ -86,7 +86,7 @@ def smeared(img) -> float:
 def render(src, out, plan=None, **kw):
     info = probe(src)
     render_clip(src, 0.5, 1.5, out, src_w=info.width, src_h=info.height, vertical=kw.pop("vertical", True), zoom=1.0,
-                chat="none", words=[], font="DejaVu Sans", plan=plan, **kw)
+                chat="none", words=kw.pop("words", []), font="DejaVu Sans", plan=plan, **kw)
     return probe(out)
 
 
@@ -225,6 +225,10 @@ def test_a_face_is_never_cut_by_a_panel_edge_wherever_the_camera_is():
             for x in (0.0, 0.17, 0.42, 1 - w) for y in (0.0, 0.35, 1 - h)]
     spots = ((0.5, 0.45), (0.2, 0.2), (0.8, 0.25), (0.5, 0.8))          # where in the camera box the face is
     names = [n for n in L.BUILT] + ["split", "fill"]
+    # The two-panel layouts are also checked with the camera on either side and at every panel size a user can ask for.
+    plain = [(None, None)]
+    adjusted = [(side, ratio) for side in (None, "top", "bottom") for ratio in (None, 0.25, 0.4, 0.6, 0.75)]
+    resized = 0
     for (sw, sh), cam, spot, aspect, name in itertools.product(sources, cams, spots, L.ALLOWED, names):
         fw, fh = 0.3 * cam[2], 0.3 * cam[2] * sw / sh * 1.2
         if fh > 0.8 * cam[3]:
@@ -232,11 +236,22 @@ def test_a_face_is_never_cut_by_a_panel_edge_wherever_the_camera_is():
         cx = cam[0] + fw / 2 + spot[0] * (cam[2] - fw)
         cy = cam[1] + fh / 2 + spot[1] * (cam[3] - fh)
         for face in ((cx, cy, fw, fh), None):
-            plan = L.compose(sw, sh, name, aspect, cam=cam, face=face)
-            check_people(plan, sw, sh)
-            assert "boxblur" not in L.layout_graph(plan) or plan.layout == "fit"
-            checked, _ = checked + 1, drawn.add(plan.layout)
-    assert checked > 5000 and drawn == set(L.BUILT) - {"auto"}
+            for side, ratio in (adjusted if name in L.TWO_PANEL + ("split", "auto") else plain):
+                plan = L.compose(sw, sh, name, aspect, cam=cam, face=face, camera=side, split_ratio=ratio)
+                check_people(plan, sw, sh)
+                assert "boxblur" not in L.layout_graph(plan) or plan.layout == "fit"
+                checked, _ = checked + 1, drawn.add(plan.layout)
+                if plan.layout in L.TWO_PANEL and (side or ratio):
+                    first, second = plan.panels
+                    stacked = first.out[2] == plan.size[0]
+                    if side:
+                        assert (first.kind == "camera") == (side == "top")
+                    if ratio:
+                        length = plan.size[1] if stacked else plan.size[0]
+                        assert first.out[3 if stacked else 2] == L.even(length * ratio)
+                    assert first.out[2] * first.out[3] + second.out[2] * second.out[3] == plan.size[0] * plan.size[1]
+                    resized += 1
+    assert checked > 50000 and resized > 10000 and drawn == set(L.BUILT) - {"auto"}
 
 
 def test_the_camera_that_used_to_be_blurred_is_now_shown_where_it_is(streams, tmp_path):

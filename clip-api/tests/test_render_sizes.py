@@ -144,12 +144,15 @@ def test_the_picture_and_the_captions_are_in_the_same_place_at_every_size(tmp_pa
 # ---------- the options ----------
 def test_the_new_options_change_no_default_and_no_stored_job():
     o = LayoutOptions()
+    # The one default that has changed since: the caption style is impact (tests/test_impact_captions.py).
     assert (o.layout, o.resolution, o.aspect, o.vertical, o.captions, o.caption_style, o.facecam_region) == (
-        "auto", "1080", "9:16", True, True, "pop", "auto")
-    # What a job stores when the request names no resolution is what it stored before the option existed, so the
-    # worker's RenderOptions(**options) and PipelineOptions(**options) get no key they do not know.
+        "auto", "1080", "9:16", True, True, "impact", "auto")
+    # What a job stores when the request names no resolution has no resolution in it, and every key it does have
+    # is one the worker's RenderOptions(**options) and PipelineOptions(**options) know.
     assert set(o.model_dump()) == {"vertical", "aspect", "chat_region", "zoom", "captions", "caption_style", "censor",
-                                   "layout", "facecam_region", "facecam_box"}
+                                   "layout", "facecam_region", "facecam_box", "caption_position", "caption_accent",
+                                   "camera", "split_ratio"}
+    assert set(o.model_dump()) <= {f.name for f in fields(RenderOptions)}
     assert "resolution" not in ClipOptions().model_dump() and "resolution" not in ReframeOptions().model_dump()
     sent = ReframeOptions(resolution="720", layout="pip").model_dump()
     assert sent["resolution"] == "720" and sent["layout"] == "pip"

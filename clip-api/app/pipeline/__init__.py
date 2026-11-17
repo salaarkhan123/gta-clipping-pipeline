@@ -70,7 +70,11 @@ class PipelineOptions:
     zoom: float = 1.0
     captions: bool = True
     caption_font: str = "DejaVu Sans"
-    caption_style: str = "pop"            # pop | bold | neon | boxed | clean
+    caption_style: str = "pop"            # impact | pop | bold | neon | boxed | clean
+    caption_position: str = "auto"        # impact only: auto | seam | lower | center
+    caption_accent: str | None = None     # impact only: the keyword's colour, #RRGGBB; None = the brand lime
+    camera: str | None = None             # two-panel layouts: "top" | "bottom"; None = the layout's own
+    split_ratio: float | None = None      # two-panel layouts: the top panel's share of the height, 0.25 to 0.75
     censor: bool = False                  # mask swears in captions (burned and captions.json)
     layout: str = "auto"                  # a name from layouts.LAYOUTS, or split | fill | classic from before them
     resolution: str | None = None         # 480 | 720 | 1080 | 2k | 4k: the short side, never above the source or max_side
@@ -373,7 +377,8 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                         words=words, font=options.caption_font, layout=layout, facecam=facecam,
                         style=options.caption_style, aspect=options.aspect, max_side=options.max_side,
                         deadline=deadline, segments=segments, punch=zoom_expr(zooms), has_audio=info.has_audio,
-                        hook=hook, flash=flash, resolution=options.resolution)
+                        hook=hook, flash=flash, resolution=options.resolution, position=options.caption_position,
+                        accent=options.caption_accent, camera=options.camera, split_ratio=options.split_ratio)
         c.features["edit"]["render_sec"] = round(time.monotonic() - t0, 2)
         timer.count("clips")
         timer.count("rendered_sec", round(kept_duration(segments), 1))

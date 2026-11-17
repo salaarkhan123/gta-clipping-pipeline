@@ -23,10 +23,23 @@ class LayoutOptions(BaseModel):
     chat_region: Literal["none", "top-right", "top-center", "top-left", "bottom-right", "bottom-left"] = "none"
     zoom: float = Field(1.0, ge=1.0, le=1.6)
     captions: bool = True
-    caption_style: Literal["pop", "bold", "neon", "boxed", "clean"] = "pop"
+    # impact: one or two big words at a time, the keyword in the accent colour. The other five highlight the word
+    # being said.
+    caption_style: Literal["impact", "pop", "bold", "neon", "boxed", "clean"] = "impact"
+    # The next two are for the impact style; the other styles ignore them. auto: on the line between the panels
+    # of a two-panel layout, in the lower third otherwise. A caption never covers the streamer's face, wherever
+    # it is asked to sit.
+    caption_position: Literal["auto", "seam", "lower", "center"] = "auto"
+    caption_accent: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")     # null: the brand lime
     censor: bool = False          # mask swears in burned captions and subtitle downloads (f***ing)
     # Which layouts an aspect offers is in layouts.ALLOWED. trio, grid4 and ots are not built yet and are refused.
     layout: Layout = "auto"
+    # The two-panel layouts (split2 and the old split, screen_first, gameplay_a, gameplay_b, and auto when it
+    # draws one): which panel the camera is, and the top panel's share of the height. Null keeps the layout's
+    # own. In 16:9 the panels sit side by side: top is the left panel, the ratio its share of the width. Every
+    # other layout ignores both.
+    camera: Literal["top", "bottom"] | None = None
+    split_ratio: float | None = Field(default=None, ge=0.25, le=0.75)
     # The export's short side. Never above the source's own: "4k" from a 1080p upload is a 1080p clip. Left out,
     # a clip is rendered as it always was (the 1080 canvas, whatever the source); the plan's cap always applies.
     resolution: Resolution = "1080"
