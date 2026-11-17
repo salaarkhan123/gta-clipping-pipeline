@@ -204,7 +204,11 @@ def download(platform: str, url: str, dest_dir: Path, limits: Limits,
         ydl.process_ie_result(info, download=True)
     except DownloadError as e:
         log.warning("import download refused by %s for %s: %s", platform, url, e)
+        _remove_partials(dest_dir)
         raise _refusal(platform, str(e)) from None
+    except Refused:                     # a cap in the progress hook: yt-dlp leaves .part and .ytdl files behind
+        _remove_partials(dest_dir)
+        raise
     files = sorted((p for p in dest_dir.glob("download.*") if p.is_file() and not p.name.endswith((".part", ".ytdl"))),
                    key=lambda p: p.stat().st_size, reverse=True)
     if not files or files[0].stat().st_size == 0:
@@ -213,6 +217,11 @@ def download(platform: str, url: str, dest_dir: Path, limits: Limits,
     path = as_video_file(files[0], Deadline(left))
     title = re.sub(r"[^\w.\- ]+", "_", str(info.get("title") or info.get("id") or platform)).strip(" ._")[:200]
     return Downloaded(path, f"{title or platform}{path.suffix}")
+
+
+def _remove_partials(dest_dir: Path) -> None:
+    for p in dest_dir.glob("download.*"):
+        p.unlink(missing_ok=True)
 
 
 def as_video_file(path: Path, deadline: Deadline) -> Path:
