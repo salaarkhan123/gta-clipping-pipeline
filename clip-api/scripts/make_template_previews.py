@@ -3,8 +3,9 @@
 
 Usage:
   python scripts/make_template_previews.py --posters
-      Rewrite clip-api/templates/<id>/poster.svg for every template. No video needed. The posters are drawn
-      here from the catalogue (app/templates.py), so they contain no footage and no third-party artwork.
+      Rewrite clip-api/templates/<id>/poster.svg for every template and preset. No video needed. The posters
+      are drawn here from the catalogue (app/templates.py), so they contain no footage and no third-party
+      artwork. A preset's poster shows its panels with their sizes and one caption word where captions sit.
 
   python scripts/make_template_previews.py <video> --i-have-rights [--start 30] [--seconds 6]
                                            [--only id,id] [--game lol] [--out DIR]
@@ -37,19 +38,33 @@ LAYOUT_NAMES = {"auto": "Auto", "full": "Full", "fit": "Fit", "split2": "Split 2
 
 # Where the gameplay and the camera sit in each layout, as (x, y, w, h) fractions of the frame, plus where the
 # captions and the hook go (fraction of the frame height). This is OUR reading of each layout's name: the
-# renderer (app/pipeline/layouts.py) is the authority. When its boxes are final, change them here and re-run.
+# renderer (app/pipeline/layouts.py) is the authority. The stacked layouts (split2, screen_first, gameplay_a,
+# gameplay_b) are not listed: their boxes come from the template's own `panels` (see `_stacked`).
 # gameplay_a and gameplay_b are provisional (PROVISIONAL_LAYOUTS in app/templates.py): their posters say so.
 SCHEMATICS = {
     "auto":         {"game": (0, 0, 1, 1), "cam": (0, 0, 1, 1 / 3), "cam_dashed": True, "captions": 0.70, "hook": 0.42},
     "full":         {"game": (0, 0, 1, 1), "cam": None, "captions": 0.70, "hook": 0.16},
     "fit":          {"game": "fit", "cam": None, "captions": 0.74, "hook": 0.16},
-    "split2":       {"game": (0, 1 / 3, 1, 2 / 3), "cam": (0, 0, 1, 1 / 3), "captions": 0.36, "hook": 0.50},
     "pip":          {"game": (0, 0, 1, 1), "cam": (0.60, 0.04, 0.36, 0.20), "captions": 0.70, "hook": 0.32},
-    "screen_first": {"game": (0, 0, 1, 0.64), "cam": (0, 0.64, 1, 0.36), "captions": 0.48, "hook": 0.14},
-    "gameplay_a":   {"game": (0, 0, 1, 1), "cam": (0.18, 0.05, 0.64, 0.22), "captions": 0.70, "hook": 0.34},
-    "gameplay_b":   {"game": (0, 0, 1, 1), "cam": (0.18, 0.73, 0.64, 0.22), "captions": 0.60, "hook": 0.20,
-                     "label_top": True},
 }
+# The one word each preset's poster shows as its caption: ours, in our own lettering. A preset that is not
+# listed gets the last one.
+CAPTION_WORDS = {"racing-gameplay": "DRIFT", "racing-camera-top": "OVERTAKE", "shooter-gameplay": "HEADSHOT",
+                 "fighting-screen-first": "COMBO", "moba-screen-first": "GANK", "moba-full": "WIPEOUT",
+                 "moba-gameplay": "STEAL", None: "CLUTCH"}
+WORD_SIZE = 46          # about 9% of the frame height, like the caption style the presets are made for
+
+
+def _stacked(camera: str, ratio: float) -> dict:
+    """The schematic of a camera panel over or under a gameplay panel. `ratio` is the top panel's share of the
+    height. Each panel's label sits on its outer edge and says its share; `seam` is the line between them."""
+    top, bottom = (0, 0, 1, ratio), (0, ratio, 1, 1 - ratio)
+    shares = (f"{round(ratio * 100)}%", f"{100 - round(ratio * 100)}%")
+    if camera == "top":         # captions on the line between the panels, the hook under them on the gameplay
+        return {"cam": top, "game": bottom, "cam_share": shares[0], "game_share": shares[1], "cam_label_top": True,
+                "seam": ratio, "captions": ratio + 0.03, "hook": ratio + 0.17}
+    return {"game": top, "cam": bottom, "game_share": shares[0], "cam_share": shares[1], "label_top": True,
+            "seam": ratio, "captions": ratio - 0.09, "hook": 0.14}
 
 
 def _n(v: float) -> str:
@@ -71,19 +86,41 @@ def _pill(cx: float, cy: float, label: str, fill: str, ink: str, stroke: str | N
             f'textLength="{_n(inner)}" lengthAdjust="spacingAndGlyphs" fill="{ink}">{escape(label)}</text>')
 
 
+def _caption_word(cx: float, cy: float, word: str, room: float) -> str:
+    """One caption word the way the presets caption a clip: heavy capitals in our lime with a dark outline.
+    Drawn twice (outline, then fill) so it looks the same in every viewer; the bar behind it keeps the panel
+    edges from showing through the gaps in the letters."""
+    width = min(len(word) * WORD_SIZE * 0.66, room)
+    text = (f'<text x="{_n(cx)}" y="{_n(cy + WORD_SIZE * 0.35)}" text-anchor="middle" font-size="{WORD_SIZE}" '
+            f'font-weight="900" textLength="{_n(width)}" lengthAdjust="spacingAndGlyphs" ')
+    return (f'<rect x="{_n(cx - width / 2)}" y="{_n(cy - 11)}" width="{_n(width)}" height="22" fill="{INK}"/>'
+            f'{text}fill="{INK}" stroke="{INK}" stroke-width="16" stroke-linejoin="round">{escape(word)}</text>'
+            f'{text}fill="{LIME}">{escape(word)}</text>')
+
+
 def poster_svg(t: dict) -> str:
     """The poster for one template: its layout as a schematic, its name and its settings. Same input, same text."""
-    s = SCHEMATICS[t["layout"]]
     fw, fh = SIZES[t["aspect"]]
     fx, fy = (CANVAS_W - fw) / 2, FRAME_TOP + (FRAME_MAX - fh) / 2
     wide = fw > fh
+    preset = t["kind"] == "preset"
+    if t["panels"]["camera"]:
+        if wide:
+            raise ValueError(f'{t["id"]}: no schematic for a stacked layout in a wide frame; add one')
+        s = _stacked(t["panels"]["camera"], t["panels"]["split_ratio"])
+    else:
+        s = SCHEMATICS[t["layout"]]
     game_box = s["game"]
     if game_box == "fit":            # the whole 16:9 picture, bars above and below when the frame is taller
         h = min(1.0, (fw * 9 / 16) / fh)
         game_box = (0, (1 - h) / 2, 1, h)
     cam_box = None if (wide and s.get("cam_dashed")) else s["cam"]     # a wide frame has no room for a stacked camera
-    lo, hi = t["duration"].split("-")
     name_size = 44 if len(t["name"]) <= 18 else 36
+    header = f'{t["genre"].replace("_", " ")} preset' if preset else GAME_NAMES[t["game"]]
+    if preset:                       # a preset is a look: its line gives the panel sizes, not a clip length
+        detail = f'{s["game_share"]} gameplay  ·  {s["cam_share"]} camera' if "seam" in s else "gameplay only"
+    else:
+        detail = "{}–{} s".format(*t["duration"].split("-"))
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {CANVAS_W} {CANVAS_H}" width="{CANVAS_W}" '
         f'height="{CANVAS_H}" role="img" aria-label="{escape(t["name"])}: {LAYOUT_NAMES[t["layout"]]} layout, '
@@ -94,7 +131,7 @@ def poster_svg(t: dict) -> str:
         f'<rect width="{CANVAS_W}" height="{CANVAS_H}" fill="{BG}"/>',
         f'<rect x="16" y="16" width="{CANVAS_W - 32}" height="{CANVAS_H - 32}" rx="28" fill="{PANEL}" stroke="{LINE}"/>',
         f'<text x="48" y="66" font-size="17" font-weight="700" letter-spacing="2.2" fill="{CYAN}">'
-        f'{escape(GAME_NAMES[t["game"]].upper())}</text>',
+        f'{escape(header.upper())}</text>',
         f'<text x="{CANVAS_W - 48}" y="66" text-anchor="end" font-size="15" font-weight="700" letter-spacing="2" '
         f'fill="{MUTED}">CLUTCHCLIPS</text>',
         f'<rect x="{_n(fx)}" y="{_n(fy)}" width="{fw}" height="{fh}" rx="14" fill="{BG}" stroke="{LINE}" stroke-width="2"/>',
@@ -105,35 +142,43 @@ def poster_svg(t: dict) -> str:
         f'<rect x="{_n(gx + 3)}" y="{_n(gy + 3)}" width="{_n(gw - 6)}" height="{_n(gh - 6)}" rx="11" fill="url(#grid)" '
         f'stroke="{LIME}" stroke-width="2"/>',
         f'<text x="{_n(gx + gw / 2)}" y="{_n(gy + 30 if s.get("label_top") else gy + gh - 20)}" text-anchor="middle" '
-        f'font-size="12.5" font-weight="700" letter-spacing="2" fill="{LIME}">GAMEPLAY</text>',
+        f'font-size="12.5" font-weight="700" letter-spacing="2" fill="{LIME}">'
+        f'GAMEPLAY{" · " + s["game_share"] if "game_share" in s else ""}</text>',
     ]
     if cam_box:
         cx, cy, cw, ch = _zone(cam_box, fx, fy, fw, fh)
         dash = ' stroke-dasharray="7 6"' if s.get("cam_dashed") else ""
         fill = "none" if s.get("cam_dashed") else PANEL
         r = min(cw, ch) * 0.15
+        head = cy + ch / 2 - r * 0.7          # the head and shoulders together sit in the middle of the panel
+        label = "CAMERA IF FOUND" if s.get("cam_dashed") else "CAMERA" + (" · " + s["cam_share"] if "cam_share" in s else "")
         parts += [
             f'<rect x="{_n(cx + 3)}" y="{_n(cy + 3)}" width="{_n(cw - 6)}" height="{_n(ch - 6)}" rx="11" fill="{fill}" '
             f'stroke="{CYAN}" stroke-width="2"{dash}/>',
-            f'<circle cx="{_n(cx + cw / 2)}" cy="{_n(cy + ch * 0.34)}" r="{_n(r)}" fill="none" stroke="{CYAN}" stroke-width="2"/>',
-            f'<path d="M{_n(cx + cw / 2 - r * 1.9)} {_n(cy + ch * 0.34 + r * 2.4)}a{_n(r * 1.9)} {_n(r * 1.3)} 0 0 1 '
+            f'<circle cx="{_n(cx + cw / 2)}" cy="{_n(head)}" r="{_n(r)}" fill="none" stroke="{CYAN}" stroke-width="2"/>',
+            f'<path d="M{_n(cx + cw / 2 - r * 1.9)} {_n(head + r * 2.4)}a{_n(r * 1.9)} {_n(r * 1.3)} 0 0 1 '
             f'{_n(r * 3.8)} 0" fill="none" stroke="{CYAN}" stroke-width="2"/>',
-            f'<text x="{_n(cx + cw / 2)}" y="{_n(cy + ch - 12)}" text-anchor="middle" font-size="11" font-weight="700" '
-            f'letter-spacing="1.6" fill="{CYAN}">{"CAMERA IF FOUND" if s.get("cam_dashed") else "CAMERA"}</text>',
+            f'<text x="{_n(cx + cw / 2)}" y="{_n(cy + 24 if s.get("cam_label_top") else cy + ch - 12)}" text-anchor="middle" '
+            f'font-size="11" font-weight="700" letter-spacing="1.6" fill="{CYAN}">{label}</text>',
         ]
     mid = fx + fw / 2
-    if t["hook"]["enabled"]:
+    if t["hook"] and t["hook"]["enabled"]:
         label = f'HOOK · {t["hook"]["style"].upper()}' + (" · AT END" if t["hook"]["position"] == "end" else "")
         parts.append(_pill(mid, fy + s["hook"] * fh, label, LIME, INK))
-    parts.append(_pill(mid, fy + s["captions"] * fh, f'CAPTIONS · {t["caption_style"].upper()}', BG, TEXT, TEXT))
+    if preset:                       # one word: on the line between the panels, or in the lower third without one
+        word = CAPTION_WORDS.get(t["id"], CAPTION_WORDS[None])
+        parts.append(_caption_word(mid, fy + s.get("seam", s["captions"]) * fh, word, fw - 36))
+    else:
+        parts.append(_pill(mid, fy + s["captions"] * fh, f'CAPTIONS · {t["caption_style"].upper()}', BG, TEXT, TEXT))
     parts += [
         f'<text x="{CANVAS_W / 2:.0f}" y="712" text-anchor="middle" font-size="{name_size}" font-weight="800" '
         f'fill="{TEXT}">{escape(t["name"])}</text>',
         f'<text x="{CANVAS_W / 2:.0f}" y="760" text-anchor="middle" font-size="21" font-weight="600" fill="{MUTED}">'
-        f'{LAYOUT_NAMES[t["layout"]]}  ·  {t["aspect"]}  ·  {lo}–{hi} s</text>',
+        f'{LAYOUT_NAMES[t["layout"]]}  ·  {t["aspect"]}  ·  {detail}</text>',
         f'<rect x="{CANVAS_W / 2 - 60:.0f}" y="800" width="120" height="5" rx="2.5" fill="{LIME}"/>',
         f'<text x="{CANVAS_W / 2:.0f}" y="846" text-anchor="middle" font-size="14" letter-spacing="1.4" fill="{MUTED}">'
-        f'{"PROVISIONAL LAYOUT · " if t["provisional"] else ""}LAYOUT SCHEMATIC · NOT GAME FOOTAGE</text>',
+        f'{("PROVISIONAL PRESET · " if preset else "PROVISIONAL LAYOUT · ") if t["provisional"] else ""}'
+        f'LAYOUT SCHEMATIC · NOT GAME FOOTAGE</text>',
         '</svg>',
     ]
     return "\n".join(parts) + "\n"

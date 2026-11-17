@@ -85,6 +85,7 @@ class PipelineOptions:
     flash_forward: bool = True            # open on 1.5 s of the peak when the judge names one, then cut back
     hook_overlay: bool = True             # burn the judge's on-screen hook text over the first 2.5 s
     template: str | None = None           # the template these options came from (recorded, not interpreted here)
+    prompt: str | None = None             # the user's words for the moments they want: handed to the judge as data
     weights: dict | None = None           # per-signal weights overriding WEIGHTS, e.g. {"audio": 1.0}
     transcript_bonus: float | None = None # overrides TRANSCRIPT_BONUS
     judge_focus: str | None = None        # what kind of moment the judge should favour
@@ -151,6 +152,12 @@ def _transcribe(c: "_Candidate", i: int, transcriber, src: Path, duration: float
         wav.unlink(missing_ok=True)
 
 
+def _with_prompt(judge: Judge, prompt: str) -> Judge:
+    """The same judge, told what the user asked to find: `prompt` rides along in each candidate's context, next
+    to the template's focus. Nothing else changes: the same candidates are judged, once each."""
+    return lambda text, frame, context: judge(text, frame, {**context, "prompt": prompt})
+
+
 def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                  progress_cb: Callable[[str, int], None] | None = None,
                  transcriber: Transcriber | None = None,
@@ -174,6 +181,8 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     out_dir.mkdir(parents=True, exist_ok=True)
     if options.chat_region != "none" and options.chat_region not in CHAT_REGIONS:
         raise PipelineError("bad_options", "Unknown chat_region.")
+    if judge is not None and options.prompt:
+        judge = _with_prompt(judge, options.prompt)
 
     progress("probing", 2)
     with timer.stage("probe"):

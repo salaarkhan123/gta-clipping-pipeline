@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from .db import get_db
 from .deps import Principal, current_principal
 from .models import Clip, Job, Upload, utcnow
-from .routes_media import clip_json, iso, job_json, own_upload, upload_json, with_ranks
+from .routes_media import clip_json, iso, job_json, own_upload, upload_json, with_display_scores, with_ranks
 from .storage import get_storage
 
 router = APIRouter()
@@ -59,8 +59,8 @@ def get_project(upload_id: str, p: Principal = Depends(current_principal), db: S
                        .order_by(Clip.score.desc(), Clip.start_sec)).scalars().all() if tool_of else []
     return {**upload_json(upload), "source_url": storage.url(upload.storage_key),
             "jobs": [job_json(db, j, with_clips=False) for j in jobs],
-            "clips": with_ranks(db, [{**clip_json(c, storage), "tool": tool_of[c.job_id],
-                                      "created_at": iso(c.created_at)} for c in clips])}
+            "clips": with_display_scores(db, with_ranks(db, [{**clip_json(c, storage), "tool": tool_of[c.job_id],
+                                                              "created_at": iso(c.created_at)} for c in clips]))}
 
 
 SORTS = {"newest": (Clip.created_at.desc(), Clip.idx), "score": (Clip.score.desc(), Clip.created_at.desc()),
@@ -82,6 +82,6 @@ def list_clips(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0
                       .join(Upload, Upload.id == Job.upload_id).where(*where)
                       .order_by(*SORTS[sort]).limit(limit).offset(offset)).all()
     storage = get_storage()
-    return {"total": total, "clips": with_ranks(db, [{**clip_json(c, storage), "upload_id": upload_id,
-                                                      "filename": filename, "created_at": iso(c.created_at)}
-                                                     for c, upload_id, filename in rows])}
+    return {"total": total, "clips": with_display_scores(db, with_ranks(db, [
+        {**clip_json(c, storage), "upload_id": upload_id, "filename": filename, "created_at": iso(c.created_at)}
+        for c, upload_id, filename in rows]))}

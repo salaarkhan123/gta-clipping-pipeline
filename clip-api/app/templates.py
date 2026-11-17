@@ -1,19 +1,33 @@
-"""Game templates: one choice that sets how clips are found, cut and styled. Data only; add one by adding an entry.
+"""Templates: one choice that sets how clips are found, cut and styled. Data only; add one by adding an entry.
 
-The format is in docs/CONTRACTS.md ("Template format"). Every template has:
+The format is in docs/CONTRACTS.md ("Template format", "Game-type presets"). There are two kinds:
+
+- `kind: "game"`: tuned to one game. It sets the look, the clip length and the hook.
+- `kind: "preset"`: a look for a type of game (racing, shooter, fighting, MOBA): a layout, panel sizes and a
+  caption style, and nothing else. It has no game, so `game`, `duration` and `hook` are null and its `options`
+  never hold a length, a clip count or anything else a job is priced on.
+
+Every template has:
 
 - `layout`, `aspect`, `caption_style`, `duration` and `hook`: what the template looks like, in the parity
   vocabulary (layouts from app/pipeline/layouts.py, length buckets, the 13 hook styles).
+- `panels`: where the camera panel sits ("top", "bottom", or null when the layout has none) and `split_ratio`,
+  the top panel's share of the frame height. It is NOT inside `options`: `POST /v1/clips` does not take
+  `camera` and `split_ratio` yet. A client copies them into its request once `GET /v1/options` lists both.
 - `options`: the Clip Maker options the template recommends, using only fields `POST /v1/clips` accepts today.
   A client applies them by sending them with the template id (the dashboard does). The server never fills
   them in, so a template id alone cannot change what a job renders or costs.
 - `weights` and `transcript_bonus` tune detection (how much each signal counts, and how much exciting words
   lift a moment); `judge_focus` tells the AI judge what this kind of clip is about. Those three are attached
   on the server from the template id: a request cannot send them and the public list never shows them.
-- `preview`: our own assets under clip-api/templates/<id>/ (see the README there).
-- `provisional` and `provisional_reason`: set when the template sits on a layout whose look is not settled.
+- `preview`: our own assets under clip-api/templates/<id>/ (see the README there). `poster` is the path of
+  the route that serves the image, `GET /v1/templates/<id>/poster`.
+- `provisional` and `provisional_reason`: set when the template's look is not settled.
 """
+import re
+from pathlib import Path
 
+KINDS =("game", "preset")
 GAMES = ("lol", "gta5", "wow", "ow2", "minecraft", "apex", "valorant", "fortnite", "dota2", "rust", "cs2", "other")
 GAME_NAMES = {
     "lol": "League of Legends", "gta5": "GTA 5", "wow": "World of Warcraft", "ow2": "Overwatch 2",
@@ -21,9 +35,9 @@ GAME_NAMES = {
     "dota2": "Dota 2", "rust": "Rust", "cs2": "Counter-Strike 2", "other": "Other games",
 }
 GENRES = ("moba", "open_world", "roleplay", "racing", "mmo", "hero_shooter", "tactical_shooter", "battle_royale",
-          "sandbox", "survival", "variety")
+          "sandbox", "survival", "variety", "shooter", "fighting")
 
-# The layouts a template may name: the ones the render agent is building. trio, grid4 and ots are not built.
+# The layouts a template may name: the ones the renderer draws. trio, grid4 and ots are not built.
 LAYOUTS = ("auto", "full", "fit", "split2", "pip", "screen_first", "gameplay_a", "gameplay_b")
 ASPECTS = ("9:16", "4:5", "1:1", "16:9")
 CAPTION_STYLES = ("pop", "bold", "neon", "boxed", "clean")          # the keys of pipeline/captions.py CAPTION_STYLES
@@ -33,46 +47,109 @@ HOOK_STYLES = ("serious", "casual", "informative", "conversational", "humorous",
                "dramatic", "empathetic", "persuasive", "neutral", "excited", "calm")
 HOOK_POSITIONS = ("beginning", "end")
 
-# Today's `options.layout` (auto, split, fill, classic) for each template layout, until POST /v1/clips takes
-# the new names. Layouts with no equivalent yet fall back to auto: camera on top when one is found.
-TODAY_LAYOUT = {"auto": "auto", "full": "fill", "fit": "classic", "split2": "split", "pip": "auto",
-                "screen_first": "auto", "gameplay_a": "auto", "gameplay_b": "auto"}
+# The stacked layouts: where the camera panel sits and the top panel's share of the frame height, as the renderer
+# draws them in a tall frame today (app/pipeline/layouts.py; a test compares the two). Every other layout has no
+# camera panel (full, fit), a small inset instead of one (pip), or decides per video (auto): null and null.
+LAYOUT_PANELS = {"split2": ("top", 0.33), "screen_first": ("bottom", 0.7), "gameplay_a": ("top", 0.5),
+                 "gameplay_b": ("bottom", 0.5)}
+SPLIT_RATIO_RANGE = (0.25, 0.75)
 # Layouts whose look is not settled: how the product we match draws them is not documented, so ours is a first
 # reading. Templates on them say so in the public list (`provisional`, `provisional_reason`).
 PROVISIONAL_LAYOUTS = {
     "gameplay_a": "The Gameplay A layout is provisional: its final look is not confirmed and may change.",
     "gameplay_b": "The Gameplay B layout is provisional: its final look is not confirmed and may change.",
 }
+# Owner's decision (2026-11-16): which reference picture belongs to which preset is not proven, so every
+# preset is provisional. The sizes follow the pictures and will be adjustable by the user.
+PRESET_PROVISIONAL = ("This preset is provisional: which reference layout it matches is not confirmed, so its "
+                      "panel order and sizes are a first reading and may change. You will be able to adjust the sizes.")
+# The caption style every preset uses. It becomes "impact" when the renderer ships that style (CONTRACTS.md
+# "Caption style: impact"); until then `POST /v1/clips` rejects it, so presets carry the nearest style we have.
+PRESET_CAPTION_STYLE = "pop"
+# The only options a preset sets. None of them is something a job is priced on.
+PRESET_OPTIONS = ("layout", "aspect", "captions", "caption_style")
 MAX_CLIP_LENGTH = 60        # the longest `clip_length` POST /v1/clips takes today
 JUDGE_FOCUS_MAX = 400       # app/ai.py sends the judge this many characters of the focus and drops the rest
 
-PUBLIC_FIELDS = ("id", "name", "game", "genre", "description", "layout", "aspect", "caption_style", "duration",
-                 "hook", "options", "preview", "provisional", "provisional_reason")
+PUBLIC_FIELDS = ("id", "kind", "name", "game", "genre", "description", "layout", "aspect", "caption_style",
+                 "duration", "hook", "panels", "options", "preview", "provisional", "provisional_reason")
 TUNING_FIELDS = ("weights", "transcript_bonus", "judge_focus")
 
 # Ids whose rights-cleared preview clip is committed at clip-api/templates/<id>/preview.mp4
 # (rendered by scripts/make_template_previews.py). Empty until the owner supplies footage.
 PREVIEW_VIDEOS: frozenset[str] = frozenset()
+ASSETS = Path(__file__).resolve().parent.parent / "templates"       # clip-api/templates: one folder per id
+# The poster file names looked for in a template's folder, in this order, and what each is served as.
+POSTER_TYPES = {"poster.svg": "image/svg+xml", "poster.webp": "image/webp", "poster.png": "image/png",
+                "poster.jpg": "image/jpeg"}
+# Path segments that follow /v1/templates/ in a route of their own: never a template id.
+RESERVED_IDS = ("custom", "games")
+ID_FORMAT = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*", re.ASCII)
+
+
+def _preview(template_id: str) -> dict:
+    return {"video": f"templates/{template_id}/preview.mp4" if template_id in PREVIEW_VIDEOS else None,
+            "poster": f"/v1/templates/{template_id}/poster"}
+
+
+def _panels(layout: str) -> dict:
+    camera, ratio = LAYOUT_PANELS.get(layout, (None, None))
+    return {"camera": camera, "split_ratio": ratio}
 
 
 def _template(template_id: str, name: str, game: str, genre: str, description: str, *, layout: str, caption_style: str,
               duration: str, clip_length: int, hook: str, audio: float, chat: float, bonus: float, focus: str,
               aspect: str = "9:16", tighten: bool = True, punch_zoom: bool = True, flash_forward: bool = True,
               hook_enabled: bool = True, hook_position: str = "beginning", hook_ms: int = 2500) -> dict:
-    """One catalogue entry. `options` is derived from the look so the two cannot disagree."""
-    options = {"layout": TODAY_LAYOUT[layout], "caption_style": caption_style, "clip_length": clip_length,
+    """One game template. `options` and `panels` are derived from the look so they cannot disagree with it."""
+    options = {"layout": layout, "caption_style": caption_style, "clip_length": clip_length,
                "tighten": tighten, "punch_zoom": punch_zoom, "flash_forward": flash_forward, "hook_overlay": hook_enabled}
     if aspect != "9:16":            # 9:16 is the API default; only a different shape needs sending
         options["aspect"] = aspect
     return {
-        "id": template_id, "name": name, "game": game, "genre": genre, "description": description,
+        "id": template_id, "kind": "game", "name": name, "game": game, "genre": genre, "description": description,
         "layout": layout, "aspect": aspect, "caption_style": caption_style, "duration": duration,
         "hook": {"enabled": hook_enabled, "style": hook, "position": hook_position, "duration_ms": hook_ms},
-        "options": options,
+        "panels": _panels(layout), "options": options,
         "weights": {"audio": audio, "chat_motion": chat}, "transcript_bonus": bonus, "judge_focus": focus,
-        "preview": {"video": f"templates/{template_id}/preview.mp4" if template_id in PREVIEW_VIDEOS else None,
-                    "poster": f"templates/{template_id}/poster.svg"},
+        "preview": _preview(template_id),
         "provisional": layout in PROVISIONAL_LAYOUTS, "provisional_reason": PROVISIONAL_LAYOUTS.get(layout),
+    }
+
+
+# What the judge and detection look for in each type of game a preset is made for.
+PRESET_TUNING = {
+    "racing": {"weights": {"audio": 1.0, "chat_motion": 0.7}, "transcript_bonus": 0.1, "judge_focus": (
+        "Racing games: overtakes, near misses, drifts, crashes, photo finishes and wipeouts on the last corner. "
+        "Speed and a clear ending matter: keep the run-up and the finish line, the crash or the save, then the "
+        "driver's reaction. Skip menus, lobbies, countdowns and long straights where nothing happens.")},
+    "shooter": {"weights": {"audio": 1.0, "chat_motion": 0.85}, "transcript_bonus": 0.15, "judge_focus": (
+        "Shooter games: multi-kills, a clutch with one player left, flicks and long shots, a fight won on a "
+        "sliver of health, and the shout after it. Start just before the first shot and end on the last kill or "
+        "the round result. Skip buy menus, looting, walking and fights that decide nothing.")},
+    "fighting": {"weights": {"audio": 1.0, "chat_motion": 0.9}, "transcript_bonus": 0.15, "judge_focus": (
+        "Fighting games: long combos, perfect rounds, comebacks from a sliver of health, a super move that ends "
+        "the round, a punish on a missed attack, and the players' reaction. Keep the hit that starts it and the "
+        "knockout or the round call. Skip character select, loading screens and slow footsies.")},
+    "moba": {"weights": {"audio": 0.9, "chat_motion": 0.9}, "transcript_bonus": 0.15, "judge_focus": (
+        "MOBA games: team fights, solo outplays, multi-kills, stolen objectives, escapes on a sliver of health "
+        "and base races. Keep the engage, the fight and its result; announcer lines and shouting mark the peak. "
+        "Skip laning, farming, shopping, recalls and death screens.")},
+}
+
+
+def _preset(preset_id: str, name: str, genre: str, description: str, *, camera: str | None = None,
+            split_ratio: float | None = None) -> dict:
+    """One game-type preset: a look only. `camera` is where the camera panel sits ("top", "bottom", or None for
+    gameplay alone) and `split_ratio` is the top panel's share of the frame height."""
+    layout = {"top": "split2", "bottom": "screen_first", None: "full"}[camera]
+    return {
+        "id": preset_id, "kind": "preset", "name": name, "game": None, "genre": genre, "description": description,
+        "layout": layout, "aspect": "9:16", "caption_style": PRESET_CAPTION_STYLE, "duration": None, "hook": None,
+        "panels": {"camera": camera, "split_ratio": split_ratio},
+        "options": {"layout": layout, "aspect": "9:16", "captions": True, "caption_style": PRESET_CAPTION_STYLE},
+        **PRESET_TUNING[genre],
+        "preview": _preview(preset_id), "provisional": True, "provisional_reason": PRESET_PROVISIONAL,
     }
 
 
@@ -368,51 +445,102 @@ _CATALOGUE = [
               "problems and silence."),
 ]
 
-TEMPLATES: dict[str, dict] = {t["id"]: t for t in _CATALOGUE}
+# Game-type presets (CONTRACTS.md "Game-type presets"). The names are ours. The panel order and sizes are read
+# off the owner's reference pictures (docs/PARITY.md section 6): provisional, every one.
+_PRESETS = [
+    _preset("racing-gameplay", "Racing: track over driver", "racing",
+            "The track on top, 60% of the frame, with the driver's camera under it. Captions sit on the line between them.",
+            camera="bottom", split_ratio=0.6),
+    _preset("racing-camera-top", "Racing: driver over track", "racing",
+            "The driver's camera in the top third and the track in the two thirds under it. Captions sit on the line between them.",
+            camera="top", split_ratio=0.33),
+    _preset("shooter-gameplay", "Shooter: full screen", "shooter",
+            "Gameplay fills the whole frame, with no camera panel. Captions sit in the lower third.",
+            ),
+    _preset("fighting-screen-first", "Fighting: stage over player", "fighting",
+            "The stage on top, 57% of the frame, and a large player camera under it. Captions sit on the line between them.",
+            camera="bottom", split_ratio=0.57),
+    _preset("moba-screen-first", "MOBA: map over player", "moba",
+            "The fight on top, 63% of the frame, with the player's camera under it. Captions sit on the line between them.",
+            camera="bottom", split_ratio=0.63),
+    _preset("moba-full", "MOBA: full screen", "moba",
+            "Gameplay fills the whole frame, with no camera panel. Captions sit in the lower third.",
+            ),
+    _preset("moba-gameplay", "MOBA: big map, small camera", "moba",
+            "The fight on top, 66% of the frame, and a smaller player camera under it. Captions sit on the line between them.",
+            camera="bottom", split_ratio=0.66),
+]
+
+# Game templates first, grouped by game in GAMES order, then the presets.
+TEMPLATES: dict[str, dict] = {t["id"]: t for t in _CATALOGUE + _PRESETS}
 
 
 def problems(template_id: str, t: dict) -> list[str]:
     """Everything wrong with one template, as plain sentences. Empty when it follows the format."""
-    hook, options, bad = t.get("hook") or {}, t.get("options") or {}, []
+    kind, hook, options = t.get("kind"), t.get("hook") or {}, t.get("options") or {}
+    panels = t.get("panels") or {}
+    camera, ratio = panels.get("camera"), panels.get("split_ratio")
+    layout_camera, layout_ratio = LAYOUT_PANELS.get(t.get("layout"), (None, None))
     lo, hi = DURATIONS.get(t.get("duration"), (0, 0))
     length = options.get("clip_length", 0)
     checks = [
         (t.get("id") == template_id, "id does not match its key"),
+        # The id is a URL segment and a folder name: lower-case words joined by hyphens, nothing else.
+        (bool(ID_FORMAT.fullmatch(template_id)) and template_id not in RESERVED_IDS, "id is not a url-safe word or is reserved"),
+        (kind in KINDS, "unknown kind"),
         (bool(t.get("name")) and len(t.get("name", "")) <= 28, "name is missing or over 28 characters"),
         (bool(t.get("description")), "description is missing"),
-        (t.get("game") in GAMES, "unknown game"),
         (t.get("genre") in GENRES, "unknown genre"),
         (t.get("layout") in LAYOUTS, "unknown layout"),
         (t.get("aspect") in ASPECTS, "unknown aspect"),
         (t.get("caption_style") in CAPTION_STYLES, "unknown caption_style"),
-        (t.get("duration") in DURATIONS, "unknown duration bucket"),
-        (set(hook) == {"enabled", "style", "position", "duration_ms"}, "hook needs enabled, style, position, duration_ms"),
-        (isinstance(hook.get("enabled"), bool), "hook.enabled is not true or false"),
-        (hook.get("style") in HOOK_STYLES, "unknown hook style"),
-        (hook.get("position") in HOOK_POSITIONS, "unknown hook position"),
-        (isinstance(hook.get("duration_ms"), int) and 1000 <= hook.get("duration_ms", 0) <= 6000, "hook.duration_ms is outside 1000-6000"),
-        (options.get("layout") == TODAY_LAYOUT.get(t.get("layout")), "options.layout disagrees with layout"),
+        (set(panels) == {"camera", "split_ratio"}, "panels needs camera and split_ratio"),
+        # A camera panel exactly where the layout draws one, with a size; no camera panel, no size.
+        (camera == layout_camera, "panels.camera disagrees with layout"),
+        (isinstance(ratio, float) and SPLIT_RATIO_RANGE[0] <= ratio <= SPLIT_RATIO_RANGE[1] if camera else ratio is None,
+         f"panels.split_ratio must be {SPLIT_RATIO_RANGE[0]}-{SPLIT_RATIO_RANGE[1]} with a camera panel, null without"),
+        (not {"camera", "split_ratio", "panels"} & set(options), "panel sizes inside options"),
+        (options.get("layout") == t.get("layout"), "options.layout disagrees with layout"),
         (options.get("caption_style") == t.get("caption_style"), "options.caption_style disagrees with caption_style"),
-        (options.get("hook_overlay") == hook.get("enabled"), "options.hook_overlay disagrees with hook.enabled"),
         (options.get("aspect", "9:16") == t.get("aspect"), "options.aspect disagrees with aspect"),
-        # The clip length sits inside the bucket, or is today's longest when the bucket starts above it.
-        (max(lo, 10) <= length <= hi or (lo >= MAX_CLIP_LENGTH and length == MAX_CLIP_LENGTH),
-         "options.clip_length is outside the duration bucket"),
         (not set(options) & set(TUNING_FIELDS), "tuning inside options"),
         (set(t.get("weights") or {}) == {"audio", "chat_motion"}
          and all(0 < v <= 1.5 for v in (t.get("weights") or {}).values()), "weights must be audio and chat_motion, 0-1.5"),
         (0 <= t.get("transcript_bonus", -1) <= 0.3, "transcript_bonus is outside 0-0.3"),
         (40 < len(t.get("judge_focus") or "") <= JUDGE_FOCUS_MAX, f"judge_focus must be 41-{JUDGE_FOCUS_MAX} characters"),
-        (set(t.get("preview") or {}) == {"video", "poster"}, "preview needs video and poster"),
-        (t.get("provisional") is (t.get("layout") in PROVISIONAL_LAYOUTS)
-         and t.get("provisional_reason") == PROVISIONAL_LAYOUTS.get(t.get("layout")), "provisional disagrees with layout"),
+        (t.get("preview") == _preview(template_id), "preview must be the video path (or null) and the poster route"),
     ]
+    if kind == "preset":
+        checks += [
+            (t.get("game") is None, "a preset has no game"),
+            (t.get("duration") is None and t.get("hook") is None, "a preset sets no duration and no hook"),
+            (set(options) == set(PRESET_OPTIONS), f"a preset's options are exactly: {', '.join(PRESET_OPTIONS)}"),
+            (options.get("captions") is True, "a preset turns captions on"),
+            (t.get("provisional") is True and t.get("provisional_reason") == PRESET_PROVISIONAL, "a preset is provisional"),
+        ]
+    else:
+        checks += [
+            (t.get("game") in GAMES, "unknown game"),
+            (ratio == layout_ratio, "panels.split_ratio disagrees with layout"),
+            (t.get("duration") in DURATIONS, "unknown duration bucket"),
+            (set(hook) == {"enabled", "style", "position", "duration_ms"}, "hook needs enabled, style, position, duration_ms"),
+            (isinstance(hook.get("enabled"), bool), "hook.enabled is not true or false"),
+            (hook.get("style") in HOOK_STYLES, "unknown hook style"),
+            (hook.get("position") in HOOK_POSITIONS, "unknown hook position"),
+            (isinstance(hook.get("duration_ms"), int) and 1000 <= hook.get("duration_ms", 0) <= 6000, "hook.duration_ms is outside 1000-6000"),
+            (options.get("hook_overlay") == hook.get("enabled"), "options.hook_overlay disagrees with hook.enabled"),
+            # The clip length sits inside the bucket, or is today's longest when the bucket starts above it.
+            (max(lo, 10) <= length <= hi or (lo >= MAX_CLIP_LENGTH and length == MAX_CLIP_LENGTH),
+             "options.clip_length is outside the duration bucket"),
+            (t.get("provisional") is (t.get("layout") in PROVISIONAL_LAYOUTS)
+             and t.get("provisional_reason") == PROVISIONAL_LAYOUTS.get(t.get("layout")), "provisional disagrees with layout"),
+        ]
     return [f"{template_id}: {message}" for ok, message in checks if not ok]
 
 
 # A bad entry stops the API at start-up, not at the first request that reads it.
 _problems = [p for tid, t in TEMPLATES.items() for p in problems(tid, t)]
-if len(TEMPLATES) != len(_CATALOGUE):
+if len(TEMPLATES) != len(_CATALOGUE) + len(_PRESETS):
     _problems.append("two templates share an id")
 if _problems:
     raise ValueError("bad template catalogue: " + "; ".join(_problems))
@@ -424,14 +552,31 @@ def public(template_id: str) -> dict:
     return {k: t[k] for k in PUBLIC_FIELDS}
 
 
-def for_game(game: str | None = None) -> list[dict]:
-    """Public templates in catalogue order (grouped by game, in GAMES order). `game` narrows to one game."""
-    return [public(tid) for tid, t in TEMPLATES.items() if game is None or t["game"] == game]
+def listing(game: str | None = None, kind: str | None = None) -> list[dict]:
+    """Public templates in catalogue order: game templates grouped by game in GAMES order, then the presets.
+    `game` narrows to one game and `kind` to one kind. A preset has no game, so it is never in a game's list."""
+    return [public(tid) for tid, t in TEMPLATES.items()
+            if (game is None or t["game"] == game) and (kind is None or t["kind"] == kind)]
 
 
 def games() -> list[dict]:
-    """Every game with its display name and how many templates it has, in GAMES order."""
+    """Every game with its display name and how many templates it has, in GAMES order. Presets belong to no
+    game and are not counted."""
     return [{"id": g, "name": GAME_NAMES[g], "templates": sum(t["game"] == g for t in TEMPLATES.values())} for g in GAMES]
+
+
+def poster_file(template_id: str) -> tuple[Path, str] | None:
+    """The poster image of a catalogue template and its media type, or None when there is no such template or
+    it has no poster on disk. The path is built from the catalogue's own id, never from the text it was asked
+    with, so no request can point it outside clip-api/templates/<id>/."""
+    template = TEMPLATES.get(template_id)
+    if template is None:
+        return None
+    for name, media_type in POSTER_TYPES.items():
+        path = ASSETS / template["id"] / name
+        if path.is_file():
+            return path, media_type
+    return None
 
 
 def with_tuning(options: dict) -> dict:
