@@ -22,7 +22,7 @@
 | Resolution | 480, 720, 1080, 2K, 4K; default 480; never above the source | 1080 (capped by plan) | partial | B · S2 (plan caps: money) | – |
 | Captions | Off by default | On by default | partial | B | – |
 | Caption display | Original, translation or both; default original | Original only | missing | F · 2.3 | – |
-| Caption style | 53 styles: 4 word-emphasis, 18 animated, 6 static, 25 gaming; default the 8th animated one | 5 styles | missing | B · 2.2 | – |
+| Caption style | 53 styles: 4 word-emphasis, 18 animated, 6 static, 25 gaming; default the 8th animated one | 6 styles: `impact` (the default: one or two big words, the keyword in the accent colour; `caption_position`, `caption_accent`) and the five word-highlight styles. No animated or per-game sets | partial | B · 2.2 | – |
 | AI hook | Off by default; 13 script styles (default serious); position beginning or end | On by default; one style; beginning only | partial | B · 3.2 | – |
 | Hook keywords, hook duration | On re-export only | Fixed 2.5 s, no keywords | missing | B | – |
 | Reframe | Off by default (keeps source ratio) | On by default (9:16) | partial | B | – |
@@ -110,7 +110,7 @@ Twelve screenshots of their web app, in `~/Downloads/wayin-benchmark/` (`w01` to
 | w06 | – | Gameplay, about 66% | Camera | One word in the accent colour, on the line between the panels |
 | w07 | Fighting | Gameplay, about 57% | Camera, about 43% | none shown |
 
-- The owner describes the split as "about 50/50". The seven shots measure between 57% and 70% for the larger panel. Ours: gameplay 60%, camera 40% when gameplay is on top; camera 33%, gameplay 67% when the camera is on top; adjustable per template.
+- The owner describes the split as "about 50/50". The seven shots measure between 57% and 70% for the larger panel. Ours: gameplay 60%, camera 40% when gameplay is on top; camera 33%, gameplay 67% when the camera is on top; adjustable per template. **Built (B):** two clip options on the two-panel layouts (`split2` and the old `split`, `screen_first`, `gameplay_a`, `gameplay_b`, and `auto` when it draws two panels): `camera` (`top` or `bottom`) and `split_ratio` (0.25 to 0.75, the top panel's share of the height). Null keeps each layout's own panels, so nothing that renders today changes. Every other layout ignores both. In 16:9 the panels sit side by side: `top` is the left panel and the ratio its share of the width. Not compared with a Wayin clip.
 - The camera panel is cropped tight on the person (head and shoulders fill it), never the whole webcam box with its border.
 - Shooter and "MOBA Full" presets show gameplay only.
 
@@ -121,6 +121,9 @@ Twelve screenshots of their web app, in `~/Downloads/wayin-benchmark/` (`w01` to
 - One keyword per caption in an accent colour (green in w06; yellow, red and blue appear in the tiles).
 - Position: on the line between the two panels in split layouts; in the lower third when gameplay fills the frame.
 - Ours: a new style, `impact`, in our own font, becomes the default caption style. Agent B.
+- **Built (B), not compared with a Wayin clip:** `impact` is the default `caption_style`. Font: Anton (SIL Open Font License 1.1), shipped in `clip-api/app/fonts/` and handed to the subtitle renderer directly, so it does not depend on what the server has installed. Capitals are 6% of the frame height (the shots measure 4.4% to 5.9%), the outline 8% of the font size, with a soft shadow. One or two words, a third when the three have 12 characters or fewer; the keyword (longest word that is not a stop word) in the accent colour, lime unless `caption_accent` is sent. `caption_position`: `auto` (the line between the panels, else the lower third), `seam`, `lower`, `center`; a caption moves off the streamer's head wherever it is asked to sit. A word too long for the line is drawn smaller.
+- Not built: `caption_emoji`. The caption font has no emoji and the subtitle renderer found no other font that could draw one (tested with three emoji: "failed to find any fallback"); it draws outline fonts, not colour emoji. The option is left out of the API until emoji are drawn as images or an outline emoji font is shipped.
+- Not checked: in the source's own frame (reframing off) no camera is detected, so a caption there is not moved off a face.
 
 ### Job form (w08)
 
