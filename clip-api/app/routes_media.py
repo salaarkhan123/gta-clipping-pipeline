@@ -85,8 +85,6 @@ class ClipOptions(LayoutOptions):
     def check_template(self):
         if self.template is not None and self.template not in TEMPLATES:
             raise ValueError(f"unknown template; use one of: {', '.join(TEMPLATES)}")
-        if self.caption_display != "original" and self.target_lang is None:
-            raise ValueError("caption_display translation or both needs target_lang")
         return self
 
 
