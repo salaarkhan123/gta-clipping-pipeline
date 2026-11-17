@@ -21,7 +21,8 @@ from tests.test_api import balance, upload
 BEFORE = {"id", "job_id", "index", "start_sec", "end_sec", "tier", "score", "signals", "kept", "reaction", "bookmarked",
           "title", "description", "hashtags", "virality", "reason", "titles", "hook", "hook_on_screen", "suggestion",
           "video_url", "thumb_url", "captions_url", "rank", "rank_of"}       # every clip field before this change
-NEW = {"start_ms", "end_ms", "virality_score", "kind", "why", "rank_index", "timeline_index"}
+NEW = {"start_ms", "end_ms", "virality_score", "kind", "why", "rank_index", "timeline_index",
+       "display_score"}                                                      # display_score: the calibrated score (app/scoring.py)
 GOOD = {"titles": ["a", "b", "c"], "hook": "h", "hashtags": ["gta6"], "virality": {"hook": 70, "flow": 60, "value": 80, "trend": 50},
         "reason": "He never saw the cop coming."}
 
