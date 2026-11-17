@@ -43,7 +43,7 @@ curl -s $API/v1/jobs/job_... -H "authorization: Bearer $KEY"
    docker compose ps                     # api should be "healthy"
    curl https://api.yourdomain.com/health
    ```
-4. Stripe: add a webhook endpoint `https://api.yourdomain.com/webhooks/stripe` for the event `checkout.session.completed`, put its signing secret in `.env`, then `docker compose up -d`.
+4. Stripe: add a webhook endpoint `https://api.yourdomain.com/webhooks/stripe` (payload style Snapshot) for these events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted`, `charge.refunded`, `charge.dispute.created`, put its signing secret in `.env`, then `docker compose up -d`.
 5. More throughput: `docker compose up -d --scale worker=2` (each worker runs one job at a time).
 
 ## Operate

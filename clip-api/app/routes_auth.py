@@ -53,7 +53,10 @@ class KeyCreate(BaseModel):
 
 def account_json(db: Session, a: Account) -> dict:
     return {"id": a.id, "email": a.email, "email_verified": a.email_verified, "plan": a.plan or "free",
-            "credits": ledger.balance(db, a.id), "created_at": a.created_at.isoformat() + "Z"}
+            "credits": ledger.balance(db, a.id), "created_at": a.created_at.isoformat() + "Z",
+            # What Stripe last reported: null without a subscription; "past_due" means the last payment failed.
+            "subscription_status": a.subscription_status,
+            "subscription_cancel_at": a.subscription_cancel_at.isoformat() + "Z" if a.subscription_cancel_at else None}
 
 
 def session_token(a: Account) -> str:
