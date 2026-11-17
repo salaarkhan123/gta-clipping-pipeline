@@ -175,7 +175,7 @@ CUT_FADE = 0.03      # seconds of audio fade on each side of a cut, so cuts do n
 FLASH_FADE = 0.12    # seconds of white on each side of the cut from the flash-forward back to the start
 # Every clip leaves at the loudness the platforms play at, with headroom so peaks do not distort.
 TARGET_LUFS = -14.0
-PEAK_LIMIT_DB = -1.5
+PEAK_LIMIT_DB = -2.0     # AAC encoding overshoots the limiter by up to ~0.6 dB; -2.0 keeps encoded peaks under -1 dB
 MAX_GAIN_DB = 20.0      # never turn a near-silent clip up further than this: it would only amplify noise
 QUIET_LUFS = -50.0      # below this there is nothing to normalise (a muted or silent clip)
 
@@ -280,7 +280,7 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
     With `segments` (source seconds, in playing order) those pieces are played back to back instead, and `words`
     are on that rendered timeline. `punch` is a zoom expression over rendered time for the gameplay picture.
     `hook` is a line of on-screen text for the first 2.5 s. `flash` marks the first segment as a flash-forward.
-    `loudness` normalises the audio to -14 LUFS with peaks under -1.5 dB (on by default).
+    `loudness` normalises the audio to -14 LUFS with peaks under -2 dB before encoding, -1 dB after (on by default).
 
     When reframing (`vertical`), what is drawn is a layout plan: `plan` if one is given (layouts.plan_layout),
     otherwise the one for `layout` (any name in layouts.LAYOUTS, or an old one) and `facecam` (a preset name, a
