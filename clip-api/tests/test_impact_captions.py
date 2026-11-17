@@ -69,15 +69,16 @@ def test_the_five_older_styles_write_exactly_what_they_wrote_before(tmp_path):
         assert (tmp_path / "d.ass").read_text(encoding="utf-8") == was["ass"], key
 
 
-def test_impact_is_the_default_and_every_template_keeps_its_own_style():
+def test_impact_is_the_default_and_every_game_template_keeps_its_own_style():
     assert LayoutOptions().caption_style == "impact" and ClipOptions().caption_style == "impact"
     assert ClipOptions().model_dump()["caption_style"] == "impact"            # stored with the job, so the worker draws it
     assert (LayoutOptions().caption_position, LayoutOptions().caption_accent) == ("auto", None)
     assert tuple(C.CAPTION_STYLES) == ("impact",) + OLD_STYLES
     for style in OLD_STYLES:
         assert LayoutOptions(caption_style=style).caption_style == style
-    for tid, t in TEMPLATES.items():
-        assert t["options"]["caption_style"] in OLD_STYLES and t["caption_style"] == t["options"]["caption_style"], tid
+    for tid, t in TEMPLATES.items():                                          # game templates keep their own style;
+        wanted = ("impact",) if t["kind"] == "preset" else OLD_STYLES         # the game-type presets use the new one
+        assert t["options"]["caption_style"] in wanted and t["caption_style"] == t["options"]["caption_style"], tid
     for bad in ({"caption_style": "comic"}, {"caption_position": "top"}, {"caption_accent": "lime"},
                 {"caption_accent": "#12345"}, {"caption_accent": "#12345G"}):
         with pytest.raises(ValidationError):
