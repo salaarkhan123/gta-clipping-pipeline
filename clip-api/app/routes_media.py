@@ -142,7 +142,9 @@ def with_display_scores(db: Session, clips: list[dict]) -> list[dict]:
         for clip_id, job_id, meta in db.execute(select(Clip.id, Clip.job_id, Clip.meta).where(
                 Clip.job_id.in_(job_ids), Clip.deleted_at.is_(None))):
             raw.setdefault(job_id, {})[clip_id] = ai_score(meta)
-    shown = {clip_id: score for scores in raw.values() for clip_id, score in zip(scores, display_scores(list(scores.values())))}
+    shown: dict[str, int | None] = {}
+    for scores in raw.values():                       # one run at a time: each has its own scale
+        shown.update(zip(scores, display_scores(list(scores.values()))))
     return [{**c, "display_score": shown.get(c["id"])} for c in clips]
 
 

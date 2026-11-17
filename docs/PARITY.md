@@ -28,13 +28,14 @@
 | Reframe | Off by default (keeps source ratio) | On by default (9:16) | partial | B | – |
 | Ratio | 9:16, 1:1, 4:5, 16:9 | Same four | done | B | – |
 | Reframe layout | Auto, Full, Fit, Grid 4, Split 2, Trio, PiP, OTS, Screen First, Gameplay A, Gameplay B; allowed set depends on the ratio; default Auto | auto, split, fill, classic | partial | B · 2.1a/b | – |
+| What moments to find | Optional free text with five quick picks (their app, w08; not in the API docs) | `prompt` clip option, max 300 characters: handed to the AI judge as the viewer's interest, next to the template's focus. It moves ratings only: the same candidates, AI calls and price. Not tried with the real judge; the form field and quick picks are D's | partial | A, D | – |
 | More results, express mode | Enterprise-only switches | None | skip (owner: wait) | – | – |
 | Task states | Created, queued, ongoing, succeeded, failed | Queued, running, succeeded, failed, cancelled | partial | A | – |
 | Results while running | Clips appear as they are found | Clips appear as they render (PR #111) | partial | A · S1 | – |
 | Per clip: rank | Index in rank order, from 0 | Number in video order, from 1, plus rank | partial | A | – |
 | Per clip: times | Begin and end in milliseconds | Start and end in seconds | partial | A | – |
 | Per clip: title, description, tags | One each | Title (3 options), description, hashtags | done | A | – |
-| Per clip: score | 0–100 | 0–100 from the AI (hidden behind rank and tier until calibrated) | partial | A · U4/U5 | – |
+| Per clip: score | 0–100 | Raw 0–100 from the AI, plus `display_score`: calibrated per job on every read (best clip 90 to 99, none under 55, order kept), in the job, project, library and clip-edit responses. The website still shows rank and tier | partial | A · U4/U5; D shows it | – |
 | Score breakdown | Five dimensions (Hook, Story, Value, Engagement, Reach) with grades and explanations on paid plans | Four parts (hook, flow, value, trend), one reason | partial | A · U4 | – |
 | Per clip: thumbnail | Image URL | Frame from the clip | done | B | – |
 | Per clip: download link | Only when rendered; new link on every read, valid 24 h | Signed link, valid for a configured time | partial | B | – |
