@@ -1,4 +1,5 @@
-"""The per-game template catalogue: format, game filter, preview posters, and that a template never changes a price."""
+"""The template catalogue: format, game filter, preview posters, and that a template never changes a price.
+The game-type presets, the kind filter and the poster route are in test_template_presets.py."""
 import importlib.util
 import json
 import re
@@ -12,13 +13,16 @@ from app import templates as catalogue
 from app.pipeline import PipelineOptions
 from app.pipeline.captions import CAPTION_STYLES
 from app.routes_media import ClipOptions
-from app.templates import (DURATIONS, GAME_NAMES, GAMES, HOOK_POSITIONS, HOOK_STYLES, LAYOUTS, PREVIEW_VIDEOS,
-                           PROVISIONAL_LAYOUTS, PUBLIC_FIELDS, TEMPLATES, TUNING_FIELDS, problems, with_tuning)
+from app.templates import (DURATIONS, GAME_NAMES, GAMES, HOOK_POSITIONS, HOOK_STYLES, KINDS, LAYOUT_PANELS, LAYOUTS,
+                           PREVIEW_VIDEOS, PROVISIONAL_LAYOUTS, PUBLIC_FIELDS, RESERVED_IDS, TEMPLATES, TUNING_FIELDS,
+                           problems, with_tuning)
 from tests.test_api import balance, upload
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "templates"
 SCRIPT = ROOT / "scripts" / "make_template_previews.py"
+GAME_TEMPLATES = {tid: t for tid, t in TEMPLATES.items() if t["kind"] == "game"}
+PRESETS = {tid: t for tid, t in TEMPLATES.items() if t["kind"] == "preset"}
 
 # The five templates that were live before the catalogue grew: their options and tuning are frozen.
 LEGACY = {
@@ -48,10 +52,41 @@ def test_every_template_follows_the_format():
     assert [p for tid, t in TEMPLATES.items() for p in problems(tid, t)] == []
     for tid, t in TEMPLATES.items():
         assert set(t) == set(PUBLIC_FIELDS) | set(TUNING_FIELDS), tid          # nothing extra, nothing missing
-        assert t["game"] in GAMES and t["layout"] in LAYOUTS and t["duration"] in DURATIONS, tid
+        assert t["kind"] in KINDS and t["layout"] in LAYOUTS, tid
         assert t["caption_style"] in CAPTION_STYLES, tid                       # a style the renderer has today
+        assert t["preview"] == {"video": None, "poster": f"/v1/templates/{tid}/poster"}, tid
+    assert len(GAME_TEMPLATES) == 31 and len(GAME_TEMPLATES) + len(PRESETS) == len(TEMPLATES)
+    for tid, t in GAME_TEMPLATES.items():
+        assert t["game"] in GAMES and t["duration"] in DURATIONS, tid
         assert t["hook"]["style"] in HOOK_STYLES and t["hook"]["position"] in HOOK_POSITIONS, tid
-        assert t["preview"] == {"video": None, "poster": f"templates/{tid}/poster.svg"}, tid
+        assert t["options"]["layout"] == t["layout"], tid                      # the layout's own name, not an older one
+
+
+def test_panels_say_where_the_camera_is_and_never_sit_in_the_options():
+    for tid, t in TEMPLATES.items():
+        camera, ratio = t["panels"]["camera"], t["panels"]["split_ratio"]
+        assert set(t["panels"]) == {"camera", "split_ratio"}, tid
+        assert camera in ("top", "bottom", None) and (ratio is None) is (camera is None), tid
+        assert ratio is None or 0.25 <= ratio <= 0.75, tid
+        assert not {"camera", "split_ratio", "panels"} & set(t["options"]), tid   # not clip options yet
+    for tid, t in GAME_TEMPLATES.items():                                      # a game template: its layout's own boxes
+        assert (t["panels"]["camera"], t["panels"]["split_ratio"]) == LAYOUT_PANELS.get(t["layout"], (None, None)), tid
+    assert {t["layout"] for t in TEMPLATES.values() if t["panels"]["camera"]} == set(LAYOUT_PANELS)
+    assert TEMPLATES["lol-voice-comms"]["panels"] == {"camera": "top", "split_ratio": 0.33}
+    assert TEMPLATES["lol-teamfight"]["panels"] == {"camera": "bottom", "split_ratio": 0.7}
+    assert TEMPLATES["cs2-clutch"]["panels"] == TEMPLATES["car-chase"]["panels"] == {"camera": None, "split_ratio": None}
+
+
+def test_panels_match_the_boxes_the_renderer_draws():
+    layouts = pytest.importorskip("app.pipeline.layouts")
+    splits = getattr(layouts, "_SPLITS", None)                                 # name: (camera first?, camera's share stacked, ...)
+    if splits is None:
+        pytest.skip("the renderer no longer keeps its stacked layouts in _SPLITS")
+    assert set(splits) == set(LAYOUT_PANELS)
+    for name, (camera_first, share, *_rest) in splits.items():
+        camera, ratio = LAYOUT_PANELS[name]
+        assert camera == ("top" if camera_first else "bottom"), name
+        assert ratio == round(share if camera_first else 1 - share, 2), name   # the top panel's share of the height
 
 
 def test_the_format_check_catches_a_bad_template():
@@ -62,37 +97,49 @@ def test_the_format_check_catches_a_bad_template():
                          ({"hook": {**good["hook"], "position": "middle"}}, "hook position"),
                          ({"options": {**good["options"], "clip_length": 12}}, "clip_length"),
                          ({"options": {**good["options"], "judge_focus": "x"}}, "tuning"),
-                         ({"weights": {"audio": 1.0}}, "weights"), ({"provisional": True}, "provisional")]:
+                         ({"weights": {"audio": 1.0}}, "weights"), ({"provisional": True}, "provisional"),
+                         ({"kind": "bundle"}, "kind"), ({"panels": {"camera": "bottom", "split_ratio": 0.33}}, "panels.camera"),
+                         ({"panels": {"camera": "top", "split_ratio": 0.9}}, "split_ratio"),
+                         ({"panels": {"camera": "top", "split_ratio": 0.4}}, "split_ratio disagrees"),
+                         ({"panels": {"camera": "top"}}, "panels needs"),
+                         ({"options": {**good["options"], "split_ratio": 0.33}}, "panel sizes inside options"),
+                         ({"options": {**good["options"], "layout": "auto"}}, "options.layout"),
+                         ({"preview": {"video": None, "poster": "templates/valorant-clutch/poster.svg"}}, "preview")]:
         found = problems("valorant-clutch", {**good, **change})
         assert found and any(word in p for p in found), (change, found)
 
 
 def test_ids_and_names_are_unique_and_ids_are_url_safe():
-    assert len(TEMPLATES) == len(catalogue._CATALOGUE)                         # no id used twice
+    assert len(TEMPLATES) == len(catalogue._CATALOGUE) + len(catalogue._PRESETS)   # no id used twice
     assert all(re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", tid) and len(tid) <= 40 for tid in TEMPLATES)
     assert len({t["name"] for t in TEMPLATES.values()}) == len(TEMPLATES)
     assert not set(TEMPLATES) & set(GAMES)                                     # an id is never just a game name
+    assert RESERVED_IDS == ("custom", "games") and not set(TEMPLATES) & set(RESERVED_IDS)   # nor a fixed path
+    for bad in ("custom", "games", "Valorant-Clutch", "valorant_clutch", "../valorant-clutch", "valorant-clutch/x", ""):
+        assert any("url-safe" in p for p in problems(bad, {**TEMPLATES["valorant-clutch"], "id": bad})), bad
 
 
 def test_every_game_has_at_least_two_different_templates():
     assert GAMES == ("lol", "gta5", "wow", "ow2", "minecraft", "apex", "valorant", "fortnite", "dota2", "rust", "cs2", "other")
     assert set(GAME_NAMES) == set(GAMES)
     for game in GAMES:
-        mine = [t for t in TEMPLATES.values() if t["game"] == game]
+        mine = [t for t in GAME_TEMPLATES.values() if t["game"] == game]
         assert len(mine) >= 2, game
         looks = {(t["layout"], t["caption_style"], t["duration"], t["hook"]["style"]) for t in mine}
         assert len(looks) == len(mine), game                                   # no two of a game look alike
         assert len({t["judge_focus"] for t in mine}) == len(mine), game
     # across the catalogue: no two option sets alike, and every layout we may name is used
-    assert len({json.dumps(t["options"], sort_keys=True) for t in TEMPLATES.values()}) == len(TEMPLATES)
-    assert {t["layout"] for t in TEMPLATES.values()} == set(LAYOUTS)
+    assert len({json.dumps(t["options"], sort_keys=True) for t in GAME_TEMPLATES.values()}) == len(GAME_TEMPLATES)
+    assert {t["layout"] for t in GAME_TEMPLATES.values()} == set(LAYOUTS)
     assert not {"trio", "grid4", "ots"} & set(LAYOUTS)
-    assert list(TEMPLATES) == [tid for g in GAMES for tid, t in TEMPLATES.items() if t["game"] == g]   # grouped, in GAMES order
+    # game templates grouped by game in GAMES order, then the presets
+    assert list(TEMPLATES) == [tid for g in GAMES for tid, t in TEMPLATES.items() if t["game"] == g] + list(PRESETS)
 
 
 def test_the_judge_focus_names_its_game_and_fits_what_the_judge_reads():
     for tid, t in TEMPLATES.items():
         assert len(t["judge_focus"]) <= 400, tid                               # app/ai.py cuts the focus at 400 characters
+    for tid, t in GAME_TEMPLATES.items():
         if t["game"] not in ("gta5", "other") or tid == "gta5-street-race":
             first = GAME_NAMES.get(t["game"], "").split()[0] if t["game"] != "gta5" else "GTA"
             assert first in t["judge_focus"], tid
@@ -126,10 +173,11 @@ def test_template_layouts_are_ones_the_renderer_has():
 
 def test_gameplay_a_and_b_templates_are_marked_provisional():
     assert set(PROVISIONAL_LAYOUTS) == {"gameplay_a", "gameplay_b"}
-    for tid, t in TEMPLATES.items():
+    for tid, t in GAME_TEMPLATES.items():
         assert t["provisional"] is (t["layout"] in PROVISIONAL_LAYOUTS), tid
+    for tid, t in TEMPLATES.items():
         assert (t["provisional_reason"] is not None) is t["provisional"], tid
-    assert sum(t["provisional"] for t in TEMPLATES.values()) >= 2
+    assert sum(t["provisional"] for t in GAME_TEMPLATES.values()) >= 2
 
 
 # --- the API ----------------------------------------------------------------------------------------------------
@@ -141,7 +189,8 @@ def test_the_list_shows_the_public_fields_and_never_the_tuning(client):
     for t in listed:
         assert set(t) == set(PUBLIC_FIELDS), t["id"]
         assert not set(t) & set(TUNING_FIELDS) and not set(t["options"]) & set(TUNING_FIELDS), t["id"]
-        assert set(t["hook"]) == {"enabled", "style", "position", "duration_ms"} and set(t["preview"]) == {"video", "poster"}
+        assert set(t["preview"]) == {"video", "poster"} and set(t["panels"]) == {"camera", "split_ratio"}, t["id"]
+        assert t["hook"] is None if t["kind"] == "preset" else set(t["hook"]) == {"enabled", "style", "position", "duration_ms"}
         assert TEMPLATES[t["id"]]["judge_focus"] not in raw                    # not even inside another field
     assert "judge_focus" not in raw and "transcript_bonus" not in raw and "weights" not in raw
     street = next(t for t in listed if t["id"] == "gta5-street-race")
@@ -161,7 +210,7 @@ def test_the_game_filter_and_the_games_list(client):
     games = client.get("/v1/templates/games").json()
     assert [g["id"] for g in games["games"]] == list(GAMES)
     assert all(g["name"] == GAME_NAMES[g["id"]] and g["templates"] >= 2 for g in games["games"])
-    assert sum(g["templates"] for g in games["games"]) == games["total"] == len(TEMPLATES)
+    assert sum(g["templates"] for g in games["games"]) == games["total"] == len(GAME_TEMPLATES)   # presets: no game
     assert next(g for g in games["games"] if g["id"] == "gta5") == {"id": "gta5", "name": "GTA 5", "templates": 6}
 
 
@@ -176,7 +225,7 @@ def test_no_template_id_changes_what_a_job_costs_or_renders(client, user, video)
         client.post(f"/v1/jobs/{r.json()['job_id']}/cancel", headers=headers)
         return r.json()
     plain = reserve({"max_clips": 2})
-    for tid in ("wow-boss-kill", "minecraft-smp-story", "cs2-frag-highlight", "dota2-teamfight"):   # 60 s, 60 s, 12 s, 16:9
+    for tid in TEMPLATES:                                                      # every game template and every preset
         tuned = reserve({"max_clips": 2, "template": tid})
         assert tuned["credits_reserved"] == plain["credits_reserved"], tid
         assert {k: v for k, v in tuned["options"].items() if k not in ("template", *TUNING_FIELDS)} == \
@@ -189,14 +238,15 @@ def test_no_template_id_changes_what_a_job_costs_or_renders(client, user, video)
 def test_every_template_has_its_poster_and_it_is_what_the_script_draws():
     script = load_script()
     for tid, t in TEMPLATES.items():
-        path = ROOT / t["preview"]["poster"]
-        assert path.is_file() and path == ASSETS / tid / "poster.svg", tid
+        path = ASSETS / tid / "poster.svg"
+        assert path.is_file() and catalogue.poster_file(tid) == (path, "image/svg+xml"), tid
         text = path.read_text(encoding="utf-8")
         assert text == script.poster_svg(t), f"{tid}: run scripts/make_template_previews.py --posters"
         xml.dom.minidom.parseString(text)                                      # well-formed
         assert t["name"] in text and "#b8ff3c" in text and "#3cf0ff" in text, tid
         assert "<image" not in text and "href" not in text and "data:" not in text, tid   # drawn, nothing embedded or linked
-        assert ("PROVISIONAL LAYOUT" in text) is t["provisional"], tid
+        assert ("PROVISIONAL" in text) is t["provisional"], tid
+        assert ("PROVISIONAL PRESET" in text) is (t["kind"] == "preset"), tid
     assert {p.name for p in ASSETS.iterdir() if p.is_dir()} == set(TEMPLATES)  # no folder for a template that is gone
 
 

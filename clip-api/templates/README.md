@@ -1,13 +1,13 @@
 # Template preview assets
 
-One folder per template id from `app/templates.py`. Everything here is ours: drawn by our script, or rendered from footage the owner has the rights to publish. No third-party artwork, screenshots or gameplay.
+One folder per template id from `app/templates.py`: the game templates and the game-type presets. Everything here is ours: drawn by our script, or rendered from footage the owner has the rights to publish. No third-party artwork, screenshots or gameplay.
 
 | File | What it is | Where it comes from |
 |---|---|---|
-| `<id>/poster.svg` | A schematic of the template's layout in the ClutchClips colours, with its name, shape, length, caption style and hook. It says "layout schematic, not game footage" on it. | `python scripts/make_template_previews.py --posters` |
+| `<id>/poster.svg` | A schematic of the template's layout in the ClutchClips colours, with its name and shape. A game template's shows its length, caption style and hook; a preset's shows its panel sizes and one caption word where captions sit. It says "layout schematic, not game footage" on it. | `python scripts/make_template_previews.py --posters` |
 | `<id>/preview.mp4` | A short real clip in the template's look. None are committed yet. | `python scripts/make_template_previews.py <video> --i-have-rights` |
 
-The public list (`GET /v1/templates`) points at these as `preview.poster` and `preview.video`, relative to the site root: `templates/<id>/poster.svg`. `preview.video` is `null` until a clip is committed and listed (below).
+In the public list (`GET /v1/templates`), `preview.poster` is the path of the API route that serves the poster, `/v1/templates/<id>/poster`. `preview.video` is `templates/<id>/preview.mp4`, relative to the site root, and `null` until a clip is committed and listed (below).
 
 ## Posters
 
@@ -19,7 +19,16 @@ python scripts/make_template_previews.py --posters
 
 It rewrites every poster from the catalogue. Run it after adding or changing a template; a test fails when a committed poster no longer matches what the script draws.
 
-The boxes for each layout are in `SCHEMATICS` in the script. They are our reading of the layout names. The renderer (`app/pipeline/layouts.py`) decides the real boxes: when those are final, update `SCHEMATICS` and re-run. Posters for `gameplay_a` and `gameplay_b` carry "provisional layout" because those two layouts are provisional (`PROVISIONAL_LAYOUTS` in `app/templates.py`).
+Where the boxes come from:
+
+- A layout with a camera panel over or under the gameplay (`split2`, `screen_first`, `gameplay_a`, `gameplay_b`, and every preset with a camera) is drawn from the template's own `panels`: where the camera is and the top panel's share of the height. Each panel is labelled with its share.
+- The other layouts (`auto`, `full`, `fit`, `pip`) are in `SCHEMATICS` in the script. They are our reading of the layout names.
+
+The renderer (`app/pipeline/layouts.py`) decides the real boxes. A test compares `LAYOUT_PANELS` in `app/templates.py` with the renderer's own numbers; when it fails, update `LAYOUT_PANELS` and re-run the script.
+
+Posters for `gameplay_a` and `gameplay_b` carry "provisional layout" because those two layouts are provisional (`PROVISIONAL_LAYOUTS` in `app/templates.py`). Every preset's poster carries "provisional preset": which reference layout each preset matches is not confirmed.
+
+The caption word on a preset's poster is ours (`CAPTION_WORDS` in the script). It sits on the line between the panels, or in the lower third when gameplay fills the frame, which is where the presets' caption style puts captions.
 
 ## Real preview clips
 
@@ -43,4 +52,8 @@ Use footage of the right game for each template: a Valorant template should prev
 
 ## Serving
 
-These are static files. The site must serve this folder at `/templates/` (see the pull request's "Wiring needed").
+Posters are served by the API: `GET /v1/templates/<id>/poster` reads `<id>/poster.svg` from this folder (or `poster.webp`, `poster.png`, `poster.jpg`, in that order, when there is no SVG). The file is found from the catalogue entry, never from the text of the URL. It is sent as an image only: its own media type, `X-Content-Type-Options: nosniff`, and a content security policy that lets an SVG run no script and load nothing.
+
+This folder must therefore be inside the API image, next to `app/` (see the pull request's "Wiring needed"). Without it the route answers 404 `no_poster`.
+
+Preview clips are static files: when one is committed, the site must serve it at `/templates/<id>/preview.mp4`.

@@ -48,7 +48,7 @@
 | Find Moments | Prompt search; same clip format and render options as clipping; limit; no length bucket | Video Finder: speech and on-screen search, returns matches and optional clips | partial | A · 3.3 | – |
 | Re-export clips | Render all or chosen clips of a finished task again with new options | None (a clip is rendered once) | missing | B · S2 | – |
 | One-Click Highlights | Prompt-driven montage from one or several videos; ratio, duration, language, subtitles, hook, B-roll, music; five prompt presets | None | missing | B · 3.4 (music licence: owner) | – |
-| Game Clipping | Per-game templates: a layout, a subtitle style and detection tuned to the game | 5 GTA templates (options and tuning) | partial: 31 templates for 12 games built on `feat/game-template-gallery`; their layouts, length buckets and hook styles reach a job only after B's and A's PRs and D's wiring; Gameplay A / B are provisional; not verified | C · 2.4 | – |
+| Game Clipping | Per-game templates: a layout, a subtitle style and detection tuned to the game | 5 GTA templates (options and tuning) | partial: 31 game templates for 12 games, and 7 game-type presets (`GET /v1/templates?kind=preset`: a layout, panel sizes in `panels`, a caption style; all provisional). Template options now carry the real layout names. Not reaching a job yet: panel sizes (B: `camera`, `split_ratio`), the `impact` caption style (B; presets use `pop` until then), length buckets and hook styles (A, B), and the dashboard (D). Gameplay A / B are provisional; not verified | C · 2.4 | – |
 | Game list | LoL, GTA 5, WoW, OW2, Minecraft, Apex, Valorant, Fortnite, Dota 2 / Rust, More | GTA only | partial: all 11 games plus "other" built on `feat/game-template-gallery` (`GET /v1/templates/games`, `?game=`); not verified | C | – |
 | Which templates sit under each game | Not in the docs (needs their app) | – | **ASK** (still open: the built catalogue is our own choice of template kinds per game) | C | – |
 | Video Editor | Canvas, layered timeline, trim, transcript-based cutting, reframe, subtitles, elements, hook, text, audio, transitions, details; autosave | None | missing | D · 1.4a–d (re-render charging: money) | – |
@@ -63,7 +63,7 @@
 | AI B-roll / AI Video | Generated, stock or own media, auto-placed | None | missing | B · 3.5 (paid services, money) | – |
 | Live Clipping | By application only; no public behaviour documented | None | missing | E · 4.5 | – |
 | Bulk edit | One format, style, hook, cleanup or template across many clips | None | missing | D · 1.5 | – |
-| Custom templates | Save hook, audio cleanup, filler and silence removal, intro and outro | None | missing | C | – |
+| Custom templates | Save hook, audio cleanup, filler and silence removal, intro and outro | Saved looks on `feat/template-presets-custom`: `GET`, `POST /v1/templates/custom`, `PATCH`, `DELETE /v1/templates/custom/{id}`. A look is a name and clip options (layout, shape, captions, the editing switches incl. dead-air cut and on-screen hook); never an option that sets a price or a quality. 20 per account, the same on every plan. Not built: intro and outro, audio cleanup, the website's "add template" tile (D) | partial; not verified | C | – |
 | Brand kit | Logos, colours, subtitle and text styles, fonts, media | None | missing | D · 2.5 | – |
 | Scheduler and publishing | Connect accounts; post now or on a schedule to YouTube, TikTok, Instagram, Facebook, LinkedIn, X; calendar; bulk schedule; cancel | None | missing | E · 4.1/4.2 (platform approvals: owner) | – |
 | Agent integration | Agent skills and a remote MCP server | A skill exists; no MCP server | partial | G | – |
@@ -88,7 +88,7 @@ Our ingestion rule stays (CLAUDE.md): public, non-DRM content only; no logins, c
 | Sidebar | Home, Library, Scheduler, Brand kit, Pricing, API | Projects, Library, Brand kit and Publishing (coming soon), API keys, Billing | partial | D |
 | Settings before a run | Clip length, ratio or template, subtitle style, hook | Template, clips, length, shape, caption style, editing switches | partial | D |
 | Results | Ranked by score, sortable by time, preview, edit, export or publish | Ranked, sortable, preview, download | partial | D |
-| Template gallery | Game filter tabs, preview clip per template, "use template" | Template select | partial: API side built on `feat/game-template-gallery` (game list, filter, schematic posters); gallery page is D's; no preview clips (no rights-cleared footage) | C, D |
+| Template gallery | Game filter tabs, preview clip per template, "use template" | Template select | partial: API side built (game list, game and kind filters, schematic posters served at `GET /v1/templates/{id}/poster`, one per template and per preset); the gallery page and the preset tiles are D's; no preview clips (no rights-cleared footage) | C, D |
 
 ## 5. Money (owner decides; nothing here is built without an OK in the PR)
 

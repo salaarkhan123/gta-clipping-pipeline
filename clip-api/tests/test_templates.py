@@ -23,10 +23,12 @@ def test_the_gta_templates_and_every_option_is_a_real_clip_option():
     assert 4 <= len(gta) <= 6
     for tid, t in TEMPLATES.items():
         ClipOptions(template=tid, **t["options"])                             # every bundled option validates
-        assert {"layout", "caption_style", "clip_length", "punch_zoom", "hook_overlay"} <= set(t["options"]), tid
+        assert {"layout", "caption_style"} <= set(t["options"]), tid
         assert set(t["weights"]) == {"audio", "chat_motion"} and 0 <= t["transcript_bonus"] <= 0.3 and len(t["judge_focus"]) > 40
         PipelineOptions(**with_tuning({"template": tid, **t["options"]}))     # and the pipeline accepts the tuned set
-    assert len({json.dumps(t["options"], sort_keys=True) for t in TEMPLATES.values()}) == len(TEMPLATES)   # no two alike
+    games = [t for t in TEMPLATES.values() if t["kind"] == "game"]            # a preset sets a look only (test_template_presets.py)
+    assert all({"clip_length", "punch_zoom", "hook_overlay"} <= set(t["options"]) for t in games)
+    assert len({json.dumps(t["options"], sort_keys=True) for t in games}) == len(games)   # no two alike
 
 
 def test_a_template_adds_tuning_and_never_touches_the_options():

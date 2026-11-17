@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 900" width="720" height="900" role="img" aria-label="MOBA: big map, small camera: Screen first layout, 9:16" font-family="Inter, 'Helvetica Neue', Arial, sans-serif">
+<title>MOBA: big map, small camera</title>
+<defs><pattern id="grid" width="26" height="26" patternUnits="userSpaceOnUse"><path d="M26 0H0V26" fill="none" stroke="#b8ff3c" stroke-opacity="0.13" stroke-width="1"/></pattern></defs>
+<rect width="720" height="900" fill="#07080a"/>
+<rect x="16" y="16" width="688" height="868" rx="28" fill="#0d0f12" stroke="#23272e"/>
+<text x="48" y="66" font-size="17" font-weight="700" letter-spacing="2.2" fill="#3cf0ff">MOBA PRESET</text>
+<text x="672" y="66" text-anchor="end" font-size="15" font-weight="700" letter-spacing="2" fill="#9aa3ad">CLUTCHCLIPS</text>
+<rect x="214" y="96" width="292" height="520" rx="14" fill="#07080a" stroke="#23272e" stroke-width="2"/>
+<rect x="217" y="99" width="286" height="337.2" rx="11" fill="#121418"/>
+<rect x="217" y="99" width="286" height="337.2" rx="11" fill="url(#grid)" stroke="#b8ff3c" stroke-width="2"/>
+<text x="360" y="126" text-anchor="middle" font-size="12.5" font-weight="700" letter-spacing="2" fill="#b8ff3c">GAMEPLAY · 66%</text>
+<rect x="217" y="442.2" width="286" height="170.8" rx="11" fill="#0d0f12" stroke="#3cf0ff" stroke-width="2"/>
+<circle cx="360" cy="509" r="26.5" fill="none" stroke="#3cf0ff" stroke-width="2"/>
+<path d="M309.6 572.7a50.4 34.5 0 0 1 100.8 0" fill="none" stroke="#3cf0ff" stroke-width="2"/>
+<text x="360" y="604" text-anchor="middle" font-size="11" font-weight="700" letter-spacing="1.6" fill="#3cf0ff">CAMERA · 34%</text>
+<rect x="284.1" y="428.2" width="151.8" height="22" fill="#0a0d05"/><text x="360" y="455.3" text-anchor="middle" font-size="46" font-weight="900" textLength="151.8" lengthAdjust="spacingAndGlyphs" fill="#0a0d05" stroke="#0a0d05" stroke-width="16" stroke-linejoin="round">STEAL</text><text x="360" y="455.3" text-anchor="middle" font-size="46" font-weight="900" textLength="151.8" lengthAdjust="spacingAndGlyphs" fill="#b8ff3c">STEAL</text>
+<text x="360" y="712" text-anchor="middle" font-size="36" font-weight="800" fill="#f4f6f8">MOBA: big map, small camera</text>
+<text x="360" y="760" text-anchor="middle" font-size="21" font-weight="600" fill="#9aa3ad">Screen first  ·  9:16  ·  66% gameplay  ·  34% camera</text>
+<rect x="300" y="800" width="120" height="5" rx="2.5" fill="#b8ff3c"/>
+<text x="360" y="846" text-anchor="middle" font-size="14" letter-spacing="1.4" fill="#9aa3ad">PROVISIONAL PRESET · LAYOUT SCHEMATIC · NOT GAME FOOTAGE</text>
+</svg>
