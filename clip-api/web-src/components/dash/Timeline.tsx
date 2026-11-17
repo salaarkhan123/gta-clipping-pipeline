@@ -4,11 +4,12 @@ import { clock } from "@/lib/api";
 import { nameOf } from "./ClipCard";
 
 const TIERS: Record<string, string> = { top: "Top pick", strong: "Strong", solid: "Solid", long_shot: "Long shot" };
-const describe = (c: any) => `${nameOf(c)} · ${clock(c.start_sec)} to ${clock(c.end_sec)}${c.tier ? ` · ${TIERS[c.tier]}` : ""}`;
 
 // The source video as a strip, with one marker per clip where it was cut from. Picking a marker jumps to its card.
-export function Timeline({ duration, clips, onPick }: { duration: number; clips: any[]; onPick: (clip: any) => void }) {
+// `numbers` names the untitled clips the way their cards do.
+export function Timeline({ duration, clips, numbers, onPick }: { duration: number; clips: any[]; numbers?: Map<string, number>; onPick: (clip: any) => void }) {
   const [over, setOver] = useState<any>(null);
+  const describe = (c: any) => `${nameOf(c, numbers?.get(c.id))} · ${clock(c.start_sec)} to ${clock(c.end_sec)}${c.tier ? ` · ${TIERS[c.tier]}` : ""}`;
   const marks = clips.filter((c) => duration > 0 && c.start_sec < duration).sort((a, b) => a.start_sec - b.start_sec);
   const pct = (sec: number) => Math.min(100, Math.max(0, (sec / duration) * 100));
   return (
