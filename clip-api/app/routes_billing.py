@@ -137,13 +137,15 @@ def _when(ts) -> datetime | None:
     return datetime.fromtimestamp(int(ts), timezone.utc).replace(tzinfo=None) if ts else None
 
 
-def _fresh(acct: Account, event: dict) -> bool:
-    """False when a newer subscription event was already applied: Stripe does not deliver in order, and an old
-    "past due" must not overwrite a newer "active". Marks this event as the newest when it is."""
+def _fresh(acct: Account, event: dict, mark: bool = True) -> bool:
+    """False when a newer subscription snapshot was already applied: Stripe does not deliver in order, and an old
+    "past due" must not overwrite a newer "active". Subscription events `mark` themselves as the newest; invoice
+    events only compare, because the subscription events that follow them carry the authoritative status."""
     at = _when(event.get("created"))
     if at and acct.subscription_event_at and at < acct.subscription_event_at:
         return False
-    acct.subscription_event_at = at or acct.subscription_event_at
+    if mark:
+        acct.subscription_event_at = at or acct.subscription_event_at
     return True
 
 
@@ -246,6 +248,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             if obj.get("mode") == "subscription":
                 if obj.get("subscription") and get_plan(meta.get("plan_id"))["id"] == meta.get("plan_id"):
                     acct.stripe_subscription_id, acct.plan = obj["subscription"], meta["plan_id"]
+                    acct.subscription_status = acct.subscription_status or "active"
             elif obj.get("payment_status") == "paid":
                 pack = find_pack(meta.get("pack_id", ""))
                 if pack:   # keyed on the Checkout Session id, so redelivered events never grant twice
@@ -267,7 +270,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                                    f"stripe-inv:{obj['id']}", f"{plan['name']} plan credits")
             _record_payment(db, acct.id, "plan", obj["id"], int(plan["monthly_credits"]) * months, obj.get("amount_paid"),
                             obj.get("payment_intent"))
-            if _invoice_subscription(obj) in (None, acct.stripe_subscription_id) and _fresh(acct, event):
+            if _invoice_subscription(obj) in (None, acct.stripe_subscription_id) and _fresh(acct, event, mark=False):
                 acct.subscription_status = "active"      # a payment went through: clears "past_due"
             db.commit()
             log.info("invoice paid account=%s plan=%s granted=%s", acct.id, plan["id"], granted)
@@ -278,7 +281,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         # subscription ends and arrives as customer.subscription.deleted (or "unpaid" in an update).
         acct = _account(db, _invoice_meta(obj).get("account_id"), obj.get("customer"))
         if (acct and acct.stripe_subscription_id and _invoice_subscription(obj) in (None, acct.stripe_subscription_id)
-                and _fresh(acct, event)):
+                and _fresh(acct, event, mark=False)):
             acct.subscription_status = "past_due"
             db.commit()
             log.warning("invoice payment failed account=%s invoice=%s", acct.id, obj.get("id"))
@@ -287,9 +290,11 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         acct = _account(db, meta.get("account_id"), obj.get("customer"))
         status, plan_id = obj.get("status"), meta.get("plan_id")
         known_plan = bool(plan_id) and get_plan(plan_id)["id"] == plan_id and bool(get_plan(plan_id).get("monthly_credits"))
-        if acct and not acct.stripe_subscription_id and status in ("active", "trialing") and known_plan:
-            acct.stripe_subscription_id = obj.get("id")           # this event beat checkout.session.completed
-        if acct and acct.stripe_subscription_id == obj.get("id") and _fresh(acct, event):
+        mine = bool(acct) and (acct.stripe_subscription_id == obj.get("id") or (
+            # This event beat checkout.session.completed: a live subscription for a plan we sell, on an account without one.
+            not acct.stripe_subscription_id and status in ("active", "trialing") and known_plan))
+        if mine and _fresh(acct, event):                          # an event older than the newest applied changes nothing
+            acct.stripe_subscription_id = obj.get("id")
             if status in ("canceled", "incomplete_expired"):      # over: same as customer.subscription.deleted
                 acct.plan, acct.stripe_subscription_id = "free", None
                 acct.subscription_status, acct.subscription_cancel_at = "canceled", None

@@ -202,8 +202,28 @@ def test_a_failed_payment_marks_the_account_past_due_and_a_paid_invoice_clears_i
     assert rows(account["id"]) == before                                                # no credits moved
     send(client, "invoice.paid", invoice(account, meta, inv=i("in_2")), T0 + 200)
     assert me(client, headers)["subscription_status"] == "active" and balance(client, headers) == 1030
+    send(client, "customer.subscription.updated", sub_obj(account, meta), T0 + 201)    # Stripe's own word: active again
     send(client, "invoice.payment_failed", invoice(account, meta, inv=i("in_2")), T0 + 100, event_id="evt_stale")
     assert me(client, headers)["subscription_status"] == "active"                       # the old failure arrives late
+
+
+def test_a_late_cancel_notice_is_not_hidden_by_a_newer_invoice(client, user):
+    headers, account = user
+    meta = subscribe(client, account)
+    send(client, "invoice.paid", invoice(account, meta), T0 + 200)
+    send(client, "customer.subscription.updated", sub_obj(account, meta, cancel_at=T0 + 86400), T0 + 150)
+    assert me(client, headers)["subscription_cancel_at"] is not None
+
+
+def test_a_stale_update_cannot_bring_back_a_cancelled_subscription(client, user):
+    headers, account = user
+    meta = subscribe(client, account)
+    send(client, "customer.subscription.deleted", sub_obj(account, meta, status="canceled"), T0 + 50)
+    send(client, "customer.subscription.updated", sub_obj(account, meta, status="active"), T0 + 20)    # sent before, arrives after
+    got = me(client, headers)
+    assert got["plan"] == "free" and got["subscription_status"] == "canceled"
+    with new_session() as db:
+        assert db.get(Account, account["id"]).stripe_subscription_id is None
 
 
 def test_a_failed_payment_without_a_subscription_does_nothing(client, user):
