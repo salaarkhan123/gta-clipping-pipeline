@@ -3,7 +3,10 @@
 The website builds its job form from this, so a control appears only once the API accepts the option behind it.
 Owned by the orchestrator (docs/CONTRACTS.md).
 """
+from functools import lru_cache
+
 from fastapi import APIRouter
+from pydantic import ValidationError
 
 from .routes_media import ClipOptions
 
@@ -36,10 +39,29 @@ def describe(prop: dict, defs: dict) -> dict:
     return out
 
 
+def accepted(name: str, value, **others) -> bool:
+    try:
+        ClipOptions(**{name: value, **others})
+        return True
+    except ValidationError:
+        return False
+
+
+@lru_cache
 def clip_options() -> dict:
+    """Only values a request can actually send: a value the model names but refuses (a layout that is not built
+    yet) is left out. Layouts depend on the aspect, so `layout.by_aspect` lists them per aspect."""
     schema = ClipOptions.model_json_schema()
     defs = schema.get("$defs", {})
-    return {name: describe(prop, defs) for name, prop in schema.get("properties", {}).items()}
+    out = {name: describe(prop, defs) for name, prop in schema.get("properties", {}).items()}
+    for name, o in out.items():
+        if "values" in o and name != "layout":
+            o["values"] = [v for v in o["values"] if accepted(name, v)]
+    layouts, aspects = out["layout"]["values"], out["aspect"]["values"]
+    by_aspect = {a: [x for x in layouts if accepted("layout", x, aspect=a)] for a in aspects}
+    out["layout"]["values"] = [x for x in layouts if any(x in by_aspect[a] for a in aspects)]
+    out["layout"]["by_aspect"] = by_aspect
+    return out
 
 
 @router.get("/v1/options")
