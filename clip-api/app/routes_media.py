@@ -16,6 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import ledger
+from .ai import MomentPrompt
 from .config import get_settings
 from .db import get_db
 from .deps import ApiError, Principal, current_principal
@@ -23,6 +24,7 @@ from .models import Clip, ClipFeedback, CreditLedger, Job, Upload, new_id, utcno
 from .pipeline import PipelineError, probe
 from .security import is_public_https_url, read_token
 from .render_options import LayoutOptions  # noqa: F401  (re-exported: routes_tools imports it from here)
+from .scoring import ai_score, display_scores
 from .storage import LocalStorage, get_storage
 from .templates import TEMPLATES, with_tuning
 
@@ -38,6 +40,8 @@ class ClipOptions(LayoutOptions):
     punch_zoom: bool = True       # subtle punch-in zooms (max 1.15x) on the gameplay at loudness spikes
     flash_forward: bool = True    # open on 1.5 s of the clip's peak, then cut back (AI clips only)
     hook_overlay: bool = True     # burn the AI's on-screen hook text over the first 2.5 s (AI clips only)
+    prompt: MomentPrompt = None   # what moments to find, in your own words (max 300 characters). The AI judge
+                                  # reads it as your interest; it never changes what a job costs.
     template: str | None = None   # a game template id from GET /v1/templates: tunes detection and the AI judge.
                                   # Send the template's `options` too; they are not applied for you.
 
@@ -124,6 +128,24 @@ def clip_json(c: Clip, storage) -> dict:
             "captions_url": storage.url(c.captions_key) if c.captions_key else None}
 
 
+def with_display_scores(db: Session, clips: list[dict]) -> list[dict]:
+    """Adds display_score: the AI's raw score calibrated across the clips of the same run (scoring.display_scores;
+    the best clip of a run shows 90 to 99). Worked out on every read and never stored. None for a clip the AI did
+    not rate. The raw numbers (`score`, `virality`) are left as they are.
+
+    The scale is set by the run's stored clips only, the same set `rank` counts: a deleted clip no longer takes
+    part, so after the best or the weakest clip is deleted the others are spread over what remains, and while a
+    job is still running it covers the clips stored so far."""
+    job_ids = {c["job_id"] for c in clips}
+    raw: dict[str, dict[str, int | float | None]] = {}
+    if job_ids:
+        for clip_id, job_id, meta in db.execute(select(Clip.id, Clip.job_id, Clip.meta).where(
+                Clip.job_id.in_(job_ids), Clip.deleted_at.is_(None))):
+            raw.setdefault(job_id, {})[clip_id] = ai_score(meta)
+    shown = {clip_id: score for scores in raw.values() for clip_id, score in zip(scores, display_scores(list(scores.values())))}
+    return [{**c, "display_score": shown.get(c["id"])} for c in clips]
+
+
 def job_json(db: Session, job: Job, with_clips: bool = True) -> dict:
     out = {"job_id": job.id, "tool": (job.options or {}).get("tool", "clips"), "status": job.status,
            "progress": job.progress, "stage": job.stage, "upload_id": job.upload_id, "options": job.options,
@@ -135,7 +157,7 @@ def job_json(db: Session, job: Job, with_clips: bool = True) -> dict:
         clips = db.execute(select(Clip).where(Clip.job_id == job.id, Clip.deleted_at.is_(None))
                            .order_by(Clip.idx)).scalars()
         out["result"] = job.result
-        out["clips"] = with_ranks(db, [clip_json(c, storage) for c in clips])
+        out["clips"] = with_display_scores(db, with_ranks(db, [clip_json(c, storage) for c in clips]))
     return out
 
 
@@ -345,7 +367,7 @@ def edit_clip(clip_id: str, body: ClipEdit, p: Principal = Depends(current_princ
         raise ApiError(422, "validation_error", "The title is empty.")
     clip.meta = {**(clip.meta or {}), "title": title}      # a new dict, so the JSON column is saved
     db.commit()
-    return with_ranks(db, [clip_json(clip, get_storage())])[0]
+    return with_display_scores(db, with_ranks(db, [clip_json(clip, get_storage())]))[0]
 
 
 def _stamp(t: float, sep: str) -> str:
