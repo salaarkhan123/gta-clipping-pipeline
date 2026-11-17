@@ -194,7 +194,7 @@ export function ScoreBadge({ clip }: { clip: any }) {
           : <strong>Ranked by how strongly this moment stood out in the video. It has no AI rating.</strong>}
         {shown !== null && <span>The {shown} on the card is the AI score scaled across this video's clips, so the best one lands in the 90s. The order is the AI's own.</span>}
         {signals.length > 0 && <span>Picked for: {signals.map(([k, share]) => `${SIGNAL_NAMES[k] || k} ${Math.round((share as number) * 100)}%`).join(", ")}</span>}
-        {clip.reason && <span>{clip.reason}</span>}
+        {(clip.reason || clip.why) && <span>{clip.reason || clip.why}</span>}
         {rated && <span className="muted">The score is an AI opinion of the clip, not a forecast of views.</span>}
       </span>
     </span>

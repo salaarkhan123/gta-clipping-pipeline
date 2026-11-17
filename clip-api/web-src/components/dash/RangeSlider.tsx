@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export type Span = { start: number; end: number };
 // Always h:mm:ss, so the two fields line up and read the same for a short clip and a six-hour stream.
@@ -17,13 +17,12 @@ function parse(v: string): number | null {
 // One end of the range as text. The typed value is taken on Enter or when the field is left; anything that is
 // not a time puts the old value back.
 function TimeField({ label, sec, onSet }: { label: string; sec: number; onSet: (sec: number) => void }) {
-  const [text, setText] = useState(hms(sec));
-  useEffect(() => { setText(hms(sec)); }, [sec]);
-  const commit = () => { const n = parse(text); if (n === null) setText(hms(sec)); else { onSet(Math.round(n)); setText(hms(sec)); } };
+  const [typed, setTyped] = useState<string | null>(null);      // what is being typed; null shows the time itself
+  const commit = () => { const n = typed === null ? null : parse(typed); if (n !== null) onSet(Math.round(n)); setTyped(null); };
   return (
     <label className="range2-time">{label}
-      <input className="time" inputMode="numeric" value={text} aria-label={`${label} time, hours:minutes:seconds`}
-        onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }} />
+      <input className="time" inputMode="numeric" value={typed ?? hms(sec)} aria-label={`${label} time, hours:minutes:seconds`}
+        onChange={(e) => setTyped(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }} />
     </label>
   );
 }

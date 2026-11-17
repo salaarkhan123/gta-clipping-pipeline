@@ -284,7 +284,7 @@ a.tile:hover, button.tile:hover { border-color: var(--accent); transform: transl
 .mock i.inset { position: absolute; right: 6%; bottom: 6%; width: 32%; aspect-ratio: 1; border-radius: 4px; border: 1px solid rgba(255,255,255,.7); }
 .mock b { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); white-space: nowrap; text-transform: uppercase;
   font: 800 11px var(--display); color: #fff; text-shadow: 0 1px 0 #000, 0 0 5px rgba(0,0,0,.9); }
-.mock.cap-impact b { font-size: 13px; font-weight: 900; -webkit-text-stroke: .6px #000; }
+.mock.cap-impact b { font-size: 13px; font-weight: 900; text-shadow: 0 0 2px #000, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000; }
 .mock.cap-impact u { color: var(--accent); }
 .mock.cap-bold b { font-weight: 900; }
 .mock u { text-decoration: none; color: #ffee00; }
@@ -340,8 +340,10 @@ a.tile:hover, button.tile:hover { border-color: var(--accent); transform: transl
 .score-badge .rank.strong { border-color: var(--accent-2); color: var(--accent-2); }
 .score-tip { display: none; position: absolute; z-index: 10; left: 0; top: calc(100% + 8px); width: min(280px, 80vw); padding: 12px 14px;
   background: var(--card-2); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,.5); font-size: 13px; }
-.score-badge:hover .score-tip, .score-badge .rank:focus-visible + .score-tip, .score-badge.open .score-tip { display: grid; gap: 6px; }
-.score-badge.shut .score-tip { display: none; }
+.score-badge .rank:focus-visible + .score-tip, .score-badge.open .score-tip { display: grid; gap: 6px; }
+/* Hover only where there is a pointer that hovers: on a touch screen the last thing tapped stays "hovered". */
+@media (hover: hover) { .score-badge:hover .score-tip { display: grid; gap: 6px; } }
+.score-badge.shut .score-tip { display: none !important; }   /* Escape, or a second press: closed until the pointer or focus leaves */
 .score-badge .rank.score { display: inline-flex; align-items: baseline; gap: 4px; padding: 0 2px; border: 0; background: none; color: var(--accent); }
 .score-badge .rank.score b { font: 700 26px/1.1 var(--display); }
 .score-badge .rank.score small { font: 500 13px var(--body); color: var(--muted); }
@@ -521,6 +523,7 @@ progress::-moz-progress-bar { background: var(--accent); }
 .panels { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; min-width: 0; padding: 6px 14px 14px; border: 1px solid var(--line); border-radius: 12px; }
 .panels legend { padding: 0 6px; font-size: 13px; color: var(--muted); }
 .panel-sketch { flex: none; display: grid; place-items: center; width: 104px; height: 150px; border-radius: 10px; background: var(--bg); }
+.panels > .stack-s { max-width: 440px; }
 .slider { width: 100%; min-height: 28px; padding: 0; border: 0; background: none; accent-color: var(--accent); }
 .swatch { width: 46px; height: 38px; padding: 3px; border-radius: 10px; cursor: pointer; }
 .accent { display: flex; align-items: center; gap: 10px; min-height: 46px; }
