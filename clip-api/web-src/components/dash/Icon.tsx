@@ -27,6 +27,15 @@ const PATHS = {
   close: <path d="m6 6 12 12M18 6 6 18" />,
   film: <><rect x="3.5" y="5" width="17" height="14" rx="2.5" /><path d="m10 9.5 4.5 2.5-4.5 2.5v-5Z" /></>,
   logout: <path d="M10 4.5H6A1.5 1.5 0 0 0 4.5 6v12A1.5 1.5 0 0 0 6 19.5h4M15 8l4 4-4 4M19 12H9.5" />,
+  check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
+  plus: <path d="M12 5v14M5 12h14" />,
+  pencil: <><path d="m14.5 5.5 4 4L8 20H4v-4L14.5 5.5Z" /><path d="m12.5 7.5 4 4" /></>,
+  trash: <><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5h9l1-12.5" /><path d="M10 11v5M14 11v5" /></>,
+  download: <><path d="M12 4.5v11M7.5 11l4.5 4.5 4.5-4.5" /><path d="M4.5 15v3A1.5 1.5 0 0 0 6 19.5h12a1.5 1.5 0 0 0 1.5-1.5v-3" /></>,
+  like: <><path d="M7.5 10.5 11 4a2.2 2.2 0 0 1 2.6 2.6l-.8 3.4h5a2 2 0 0 1 2 2.4l-1.1 5.5a2 2 0 0 1-2 1.6H7.5v-9Z" /><path d="M7.5 10.5h-3v9h3" /></>,
+  dislike: <><path d="M16.5 13.5 13 20a2.2 2.2 0 0 1-2.6-2.6l.8-3.4h-5a2 2 0 0 1-2-2.4l1.1-5.5a2 2 0 0 1 2-1.6H16.5v9Z" /><path d="M16.5 13.5h3v-9h-3" /></>,
+  bookmark: <path d="M7 4.5h10a1 1 0 0 1 1 1V20l-6-4-6 4V5.5a1 1 0 0 1 1-1Z" />,
+  send: <path d="M20 4 10.5 13.5M20 4l-6 16-3.5-6.5L4 10l16-6Z" />,
 } as const;
 
 export type IconName = keyof typeof PATHS;
