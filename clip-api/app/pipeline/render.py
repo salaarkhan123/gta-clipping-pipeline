@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 
 from . import layouts
-from .captions import build_ass
+from .captions import FONT_DIR, IMPACT_FILE, IMPACT_FILL, build_ass, impact_size
 from .ff import SAFE_IN, Deadline, PipelineError, PipelineTimeout, run
 # The geometry lives in layouts.py; these names are re-exported because callers and tests import them from here.
 from .layouts import (ASPECTS, EDGE, FACECAM_PAD, FACECAM_REGIONS, FULL_FRAME, MAX_DODGE, LayoutPlan,  # noqa: F401
@@ -65,10 +65,13 @@ def _camera(facecam):
     return box, getattr(facecam, "face", None), getattr(facecam, "scene", None)
 
 
-def plan_for(src_w: int, src_h: int, layout: str, facecam, aspect: str = "9:16", zoom: float = 1.0) -> LayoutPlan:
-    """The layout plan for callers that pass a layout name and a camera instead of a plan."""
+def plan_for(src_w: int, src_h: int, layout: str, facecam, aspect: str = "9:16", zoom: float = 1.0,
+             camera: str | None = None, split_ratio: float | None = None) -> LayoutPlan:
+    """The layout plan for callers that pass a layout name and a camera instead of a plan. `camera` and
+    `split_ratio` adjust the two-panel layouts (layouts.compose)."""
     box, face, scene = _camera(facecam)
-    return layouts.compose(src_w, src_h, layout, aspect, scene=scene, cam=box, face=face, zoom=zoom)
+    return layouts.compose(src_w, src_h, layout, aspect, scene=scene, cam=box, face=face, zoom=zoom, camera=camera,
+                           split_ratio=split_ratio)
 
 
 def layout_filter(src_w: int, src_h: int, layout: str, zoom: float, chat: str, facecam,
@@ -172,7 +175,7 @@ CUT_FADE = 0.03      # seconds of audio fade on each side of a cut, so cuts do n
 FLASH_FADE = 0.12    # seconds of white on each side of the cut from the flash-forward back to the start
 # Every clip leaves at the loudness the platforms play at, with headroom so peaks do not distort.
 TARGET_LUFS = -14.0
-PEAK_LIMIT_DB = -1.5
+PEAK_LIMIT_DB = -2.0     # AAC encoding overshoots the limiter by up to ~0.6 dB; -2.0 keeps encoded peaks under -1 dB
 MAX_GAIN_DB = 20.0      # never turn a near-silent clip up further than this: it would only amplify noise
 QUIET_LUFS = -50.0      # below this there is nothing to normalise (a muted or silent clip)
 
@@ -232,19 +235,52 @@ def segments_graph(segments: list[tuple[float, float]], lo: float, has_audio: bo
     return ";".join(parts)
 
 
+HOOK_ROOM = 200      # pixels a hook may take from its top on the 1080 canvas: two lines and the box around them
+TEXT_GAP = 16        # pixels kept between the hook and an impact caption
+
+
+def impact_rows(plan: LayoutPlan | None, oh: int, position: str, under: int, below_video: int | None = None,
+                k: float = 1.0) -> tuple[int, int]:
+    """(the row of the middle of an impact caption, the hook's top) in a frame `oh` tall. With a layout plan the
+    caption goes where the plan says for `position` and never on the person's head. Without one (the source's
+    own frame, or the classic layout, where `below_video` is where the old captions start under the picture)
+    there is no line between panels and no known person. `under` is where the hook would sit; it steps under
+    the caption (or over it) when the two would overlap. `k` scales the hook's size for a frame that is not the
+    1080 canvas."""
+    half = impact_size(oh).half
+    if plan is not None:
+        center = layouts.caption_center(plan, position, half, IMPACT_FILL)
+    else:
+        center = layouts.caption_y(oh, position, half, None if below_video is None else int(below_video + half))
+    top, bottom = center - half - TEXT_GAP * k, center + half + TEXT_GAP * k
+    if under - 14 * k < bottom and under + HOOK_ROOM * k > top:
+        if bottom + 24 * k + HOOK_ROOM * k <= 0.94 * oh:
+            under = int(bottom + 24 * k)
+        elif top - 24 * k - HOOK_ROOM * k >= 20 * k:
+            under = int(top - 24 * k - HOOK_ROOM * k)
+    return center, under
+
+
 def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, src_h: int,
                 vertical: bool, zoom: float, chat: str, words, font: str,
                 layout: str = "fill", facecam=None, style: str = "pop", aspect: str = "9:16",
                 max_side: int | None = None, deadline: Deadline | None = None,
                 segments: list[tuple[float, float]] | None = None, punch: str = "1", has_audio: bool = True,
                 hook: str | None = None, flash: bool = False, loudness: bool = True,
-                plan: LayoutPlan | None = None, resolution: str | None = None, preview: bool = False) -> None:
+                plan: LayoutPlan | None = None, resolution: str | None = None, preview: bool = False,
+                position: str = "auto", accent: str | None = None, camera: str | None = None,
+                split_ratio: float | None = None) -> None:
     """Cut [start, end] from src and render it. `words` are clip-relative (start, end, text) or empty.
+
+    `style` is a caption style from captions.CAPTION_STYLES. For "impact", `position` ("auto", "seam", "lower",
+    "center") is where the caption sits and `accent` (#RRGGBB) the keyword's colour; the other styles ignore
+    both. `camera` ("top" | "bottom") and `split_ratio` (the top panel's share, 0.25 to 0.75) adjust a two-panel
+    layout made here from `layout`; a `plan` already has them.
 
     With `segments` (source seconds, in playing order) those pieces are played back to back instead, and `words`
     are on that rendered timeline. `punch` is a zoom expression over rendered time for the gameplay picture.
     `hook` is a line of on-screen text for the first 2.5 s. `flash` marks the first segment as a flash-forward.
-    `loudness` normalises the audio to -14 LUFS with peaks under -1.5 dB (on by default).
+    `loudness` normalises the audio to -14 LUFS with peaks under -2 dB before encoding, -1 dB after (on by default).
 
     When reframing (`vertical`), what is drawn is a layout plan: `plan` if one is given (layouts.plan_layout),
     otherwise the one for `layout` (any name in layouts.LAYOUTS, or an old one) and `facecam` (a preset name, a
@@ -261,7 +297,7 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
         elif plan is not None:
             aspect = plan.aspect
         elif layouts.canonical(layout, aspect) != "classic":
-            plan = plan_for(src_w, src_h, layout, facecam, aspect, zoom)
+            plan = plan_for(src_w, src_h, layout, facecam, aspect, zoom, camera, split_ratio)
         ref = ow, oh = ASPECTS.get(aspect, ASPECTS["9:16"]) if vertical else (src_w, src_h)
         if words or hook:
             if not vertical:
@@ -270,10 +306,24 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
                 top, under, span = plan.caption_top, plan.hook_top, plan.text_span
             else:
                 top, under, span = caption_top(src_w, src_h, "classic", zoom, chat, oh), hook_top("classic", oh), (0.0, 1.0)
+            center = None
+            if style == "impact":
+                # Measured in the frame's own pixels (the old styles write a source frame as if it were 1920x1080).
+                k = 1.0 if vertical else oh / 1080
+                center, under = impact_rows(plan, oh, position, under if vertical else int(oh * 0.1),
+                                            top if vertical and plan is None else None, k)
             # Always written for the 1080 canvas: the subtitle renderer scales it to whatever size the clip is.
             build_ass(words, tmp / "cap.ass", vertical, top, font, style, play=(ow, oh), hook=hook, hook_top=under,
-                      span=span)
+                      span=span, center=center, accent=accent)
             cap_filter = f"ass=filename={tmp / 'cap.ass'}"
+            if style == "impact":
+                # The renderer is handed our own font file, so the text never depends on what the machine has
+                # installed. A copy in the temp dir keeps the filter's path free of spaces.
+                if not (FONT_DIR / IMPACT_FILE).is_file():
+                    raise PipelineError("captions_unavailable", "The caption font is missing on this server.")
+                (tmp / "fonts").mkdir()
+                shutil.copy(FONT_DIR / IMPACT_FILE, tmp / "fonts" / IMPACT_FILE)
+                cap_filter += f":fontsdir={tmp / 'fonts'}"
         size = output_size(src_w, src_h, vertical, aspect, resolution, preview, max_side)
         # A chosen resolution or a preview is drawn at its own size (sharper above 1080, far less work below it).
         # Everything else is drawn on the 1080 canvas and scaled after, exactly as before.

@@ -218,8 +218,9 @@ class CamBox(list):
 
 
 def resolve_plan(src, info: MediaInfo, options, deadline: Deadline | None = None) -> LayoutPlan | None:
-    """The layout plan for a job's options (layout, aspect, facecam_region, facecam_box, zoom), detecting the
-    scene when the camera is not given. None when the clip is not reframed or uses the old classic layout.
+    """The layout plan for a job's options (layout, aspect, facecam_region, facecam_box, zoom, and the two-panel
+    controls camera and split_ratio when the options have them), detecting the scene when the camera is not
+    given. None when the clip is not reframed or uses the old classic layout.
     Raises PipelineError for a layout the aspect does not offer, or one that is not built (trio, grid4, ots)."""
     region = options.facecam_region
     if region and region != "auto" and region not in FACECAM_REGIONS:
@@ -240,7 +241,8 @@ def resolve_plan(src, info: MediaInfo, options, deadline: Deadline | None = None
     if options.layout in layouts.NEEDS_CAMERA and scene.kind == "gameplay" and region != "auto":
         raise PipelineError("bad_options", f"The {options.layout} layout needs facecam_region or facecam_box.")
     return layouts.compose(info.width, info.height, name, aspect, scene=scene.kind, cam=scene.cam, face=scene.face,
-                           zoom=getattr(options, "zoom", 1.0), requested=options.layout)
+                           zoom=getattr(options, "zoom", 1.0), requested=options.layout,
+                           camera=getattr(options, "camera", None), split_ratio=getattr(options, "split_ratio", None))
 
 
 def resolve_facecam(src, info: MediaInfo, options, deadline: Deadline | None = None) -> tuple[str, object]:

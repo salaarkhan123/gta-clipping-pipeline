@@ -82,6 +82,35 @@ Default: one job at a time. Two ways to add capacity:
 After either change, run the 10-clip benchmark twice at the same time and compare with SPEC.md §10 B before
 relying on it.
 
+## Link import and takedowns
+
+Users can import a public video link (Twitch, Kick, direct https video links, Google Drive and Dropbox share
+links, YouTube best effort) with `POST /v1/imports`. Every import is logged in `import_log` (account, link,
+platform, consent, time) before anything is fetched. Imports are free; the job run on the imported video is what
+costs credits.
+
+- **Switch imports off:** set `IMPORTS_ENABLED=false` and restart `api` and `worker`. New imports are refused
+  with "upload the file instead"; imports already queued fail the same way. Uploads keep working.
+- **Caps** (defaults in brackets): `IMPORT_MAX_BYTES` (8 GB), `IMPORT_MAX_DURATION_SEC` (6 hours),
+  `IMPORT_TIMEOUT_SEC` (1800, the whole download). The upload limits (`MAX_UPLOAD_BYTES`, `MAX_DURATION_SEC`,
+  `MIN_DURATION_SEC`) apply too; the lower value wins.
+- **yt-dlp** is pinned in `requirements.txt`. Upgrade it in its own PR: the test in
+  `tests/test_ingest_platforms.py` lists every option it is given and must still pass.
+
+**Takedown request** (a rights holder asks for a video to be removed):
+
+1. See what would be removed, without changing anything:
+   `docker compose exec -T api python scripts/admin.py takedown --url "<the link>" --dry-run`
+   (or `--account <account id or email>` for everything one account imported by link).
+2. Remove it: run the same command without `--dry-run`. It prints each upload, its clips and files, and the jobs
+   it cancelled with the credits returned.
+3. If it says a job "is still stopping", run the same command again a minute later. It is safe to run any number
+   of times; a second run prints "Nothing to remove."
+4. Keep the printed output with the request. The `import_log` rows are kept: they record who imported the link.
+
+The link may be given in any form the site uses (with or without `www.`, tracking parameters, `youtu.be`): it is
+matched by its canonical form. Ordinary uploads are never touched by a takedown.
+
 ## Moving files to DigitalOcean Spaces
 
 Uploads and clips are stored on the droplet's disk by default (`STORAGE_BACKEND=local`). Spaces moves them to a

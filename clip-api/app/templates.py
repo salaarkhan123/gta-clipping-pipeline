@@ -40,7 +40,7 @@ GENRES = ("moba", "open_world", "roleplay", "racing", "mmo", "hero_shooter", "ta
 # The layouts a template may name: the ones the renderer draws. trio, grid4 and ots are not built.
 LAYOUTS = ("auto", "full", "fit", "split2", "pip", "screen_first", "gameplay_a", "gameplay_b")
 ASPECTS = ("9:16", "4:5", "1:1", "16:9")
-CAPTION_STYLES = ("pop", "bold", "neon", "boxed", "clean")          # the keys of pipeline/captions.py CAPTION_STYLES
+CAPTION_STYLES = ("impact", "pop", "bold", "neon", "boxed", "clean")          # the keys of pipeline/captions.py CAPTION_STYLES
 DURATIONS = {"0-30": (0, 30), "0-90": (0, 90), "30-60": (30, 60), "60-90": (60, 90), "90-180": (90, 180),
              "180-300": (180, 300)}
 HOOK_STYLES = ("serious", "casual", "informative", "conversational", "humorous", "parody", "inspirational",
@@ -63,9 +63,8 @@ PROVISIONAL_LAYOUTS = {
 # preset is provisional. The sizes follow the pictures and will be adjustable by the user.
 PRESET_PROVISIONAL = ("This preset is provisional: which reference layout it matches is not confirmed, so its "
                       "panel order and sizes are a first reading and may change. You will be able to adjust the sizes.")
-# The caption style every preset uses. It becomes "impact" when the renderer ships that style (CONTRACTS.md
-# "Caption style: impact"); until then `POST /v1/clips` rejects it, so presets carry the nearest style we have.
-PRESET_CAPTION_STYLE = "pop"
+# The caption style every preset uses: the large-caption style (CONTRACTS.md "Caption style: impact").
+PRESET_CAPTION_STYLE = "impact"
 # The only options a preset sets. None of them is something a job is priced on.
 PRESET_OPTIONS = ("layout", "aspect", "captions", "caption_style")
 MAX_CLIP_LENGTH = 60        # the longest `clip_length` POST /v1/clips takes today

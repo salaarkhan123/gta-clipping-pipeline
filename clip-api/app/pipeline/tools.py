@@ -35,11 +35,15 @@ class RenderOptions:
     chat_region: str = "none"
     zoom: float = 1.0
     captions: bool = False
-    caption_style: str = "pop"
+    caption_style: str = "pop"        # impact | pop | bold | neon | boxed | clean
     caption_font: str = "DejaVu Sans"
+    caption_position: str = "auto"    # impact only: auto | seam | lower | center
+    caption_accent: str | None = None # impact only: the keyword's colour, #RRGGBB; None = the brand lime
     censor: bool = False
     resolution: str | None = None     # "480" | "720" | "1080" | "2k" | "4k"; None renders at the size it always did
     preview: bool = False             # a fast, small render to look at (540 on the short side)
+    camera: str | None = None         # two-panel layouts: "top" | "bottom"; None = the layout's own
+    split_ratio: float | None = None  # two-panel layouts: the top panel's share of the height, 0.25 to 0.75
     source_lang: str | None = None    # (languages, agent F) recorded; the worker hands the matching transcriber in
 
 
@@ -78,7 +82,9 @@ def _render_one(src, info, start, end, idx, words, options, layout, facecam, out
     render_clip(src, start, end, video, src_w=info.width, src_h=info.height, vertical=options.vertical,
                 zoom=options.zoom, chat=options.chat_region, words=words, font=options.caption_font,
                 layout=layout, facecam=facecam, style=options.caption_style, aspect=options.aspect,
-                max_side=options.max_side, deadline=deadline, resolution=options.resolution, preview=options.preview)
+                max_side=options.max_side, deadline=deadline, resolution=options.resolution, preview=options.preview,
+                position=options.caption_position, accent=options.caption_accent, camera=options.camera,
+                split_ratio=options.split_ratio)
     thumb = out_dir / f"clip-{idx}.jpg"
     try:
         render_thumb(video, thumb, deadline)

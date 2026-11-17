@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from .routes_media import ClipOptions
 
 router = APIRouter()
-BOUNDS = ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "minLength", "maxLength", "minItems", "maxItems")
+BOUNDS = ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "minLength", "maxLength", "minItems", "maxItems", "pattern")
 
 
 def describe(prop: dict, defs: dict) -> dict:

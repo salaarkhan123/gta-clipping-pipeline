@@ -52,7 +52,7 @@ def test_every_preset_is_provisional_and_says_why():
 
 
 def test_a_presets_options_are_a_look_the_api_accepts_and_never_a_price():
-    assert PRESET_CAPTION_STYLE in catalogue.CAPTION_STYLES                    # an existing style until "impact" ships
+    assert PRESET_CAPTION_STYLE in catalogue.CAPTION_STYLES                    # the large-caption style
     for tid, t in PRESETS.items():
         assert t["options"] == {"layout": t["layout"], "aspect": "9:16", "captions": True, "caption_style": PRESET_CAPTION_STYLE}, tid
         sent = ClipOptions(template=tid, **t["options"])                       # today's API takes every one of them
@@ -72,7 +72,7 @@ def test_the_format_check_catches_a_bad_preset():
                          ({"panels": {"camera": "top", "split_ratio": 0.6}}, "panels.camera"),
                          ({"panels": {"camera": "bottom", "split_ratio": 0.8}}, "split_ratio"),
                          ({"panels": {"camera": "bottom", "split_ratio": None}}, "split_ratio"),
-                         ({"caption_style": "impact", "options": {**good["options"], "caption_style": "impact"}}, "caption_style"),
+                         ({"caption_style": "comic-sans", "options": {**good["options"], "caption_style": "comic-sans"}}, "caption_style"),
                          ({"options": {**good["options"], "captions": False}}, "captions on"),
                          ({"options": {**good["options"], "max_clips": 5}}, "options are exactly")]:
         found = problems("racing-gameplay", {**good, **change})

@@ -51,6 +51,13 @@ class Settings(BaseSettings):
     visual_search: bool = True        # Video Finder also searches what is on screen (CLIP)
     stale_job_minutes: int = 5        # RUNNING job with no heartbeat for this long is failed + refunded
 
+    # Link import (app/ingest, agent E). An import is free; the imported file then follows the upload limits
+    # above, so the lower of the two applies. The downloaders' own options are fixed in code, not settings.
+    imports_enabled: bool = True              # kill switch: false refuses new imports and stops queued ones
+    import_max_bytes: int = 8 * 1024 ** 3     # largest file an import may download
+    import_max_duration_sec: int = 6 * 3600   # longest video an import may bring in
+    import_timeout_sec: int = 1800            # the whole download; a slower one is stopped
+
     # Credits
     free_signup_credits: int = 30
     credit_packs: str = DEFAULT_PACKS

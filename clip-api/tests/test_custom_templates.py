@@ -104,23 +104,30 @@ def test_the_allowed_options_are_read_from_the_models():
         assert routes_templates.check_look({name: ClipOptions.model_fields[name].default}) == {name: ClipOptions.model_fields[name].default}
 
 
+def test_the_split_options_can_be_saved_in_a_look(client, user):
+    headers, _ = user
+    assert {"camera", "split_ratio", "caption_position", "caption_accent"} <= look_fields()      # the renderer has them now
+    assert save(client, headers, "Sized", {"camera": "top", "split_ratio": 0.4})["options"] == {"camera": "top", "split_ratio": 0.4}
+    wide = client.post(URL, json={"name": "Too big", "options": {"split_ratio": 0.9}}, headers=headers)
+    assert wide.status_code == 422 and "split_ratio" in wide.json()["error"]["message"]
+
+
 def test_an_option_the_renderer_adds_later_is_accepted_without_a_change_here(client, user, monkeypatch):
     headers, _ = user
-    refused = client.post(URL, json={"name": "Sized", "options": {"camera": "top", "split_ratio": 0.4}}, headers=headers)
-    assert refused.status_code == 422 and refused.json()["error"]["code"] == "unknown_option"    # not clip options today
+    refused = client.post(URL, json={"name": "Glowing", "options": {"glow": 0.4}}, headers=headers)
+    assert refused.status_code == 422 and refused.json()["error"]["code"] == "unknown_option"    # not a clip option today
 
-    class FutureLayout(LayoutOptions):                                         # what the render agent is adding
-        camera: Literal["top", "bottom"] | None = None
-        split_ratio: float | None = Field(default=None, ge=0.25, le=0.75)
+    class FutureLayout(LayoutOptions):                                         # what a render agent might add next
+        glow: float | None = Field(default=None, ge=0.0, le=1.0)
 
     class FutureClip(ClipOptions, FutureLayout):
         pass
     monkeypatch.setattr(routes_templates, "LayoutOptions", FutureLayout)
     monkeypatch.setattr(routes_templates, "ClipOptions", FutureClip)
-    assert {"camera", "split_ratio"} <= look_fields()
-    assert save(client, headers, "Sized", {"camera": "top", "split_ratio": 0.4})["options"] == {"camera": "top", "split_ratio": 0.4}
-    wide = client.post(URL, json={"name": "Too big", "options": {"split_ratio": 0.9}}, headers=headers)
-    assert wide.status_code == 422 and "split_ratio" in wide.json()["error"]["message"]
+    assert "glow" in look_fields()
+    assert save(client, headers, "Glowing", {"glow": 0.4})["options"] == {"glow": 0.4}
+    bright = client.post(URL, json={"name": "Too bright", "options": {"glow": 9}}, headers=headers)
+    assert bright.status_code == 422 and "glow" in bright.json()["error"]["message"]
 
 
 @pytest.mark.parametrize("key, value", [("max_clips", 3), ("clip_length", 30), ("duration", "0-30"), ("limit", 5),
