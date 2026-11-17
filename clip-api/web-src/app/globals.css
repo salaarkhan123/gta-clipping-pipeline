@@ -576,7 +576,7 @@ progress::-moz-progress-bar { background: var(--accent); }
   .dash { padding: 20px 16px 56px; }
   /* Touch targets: every button and field in the app is at least 40 px tall. */
   .dash .btn, .dash-nav .btn, .picker .btn, .dash .tabs button, .dash select, .dash input:not([type=checkbox]) { min-height: 40px; }
-  .dash button.link, .dash .score-badge .rank { display: inline-flex; align-items: center; min-height: 40px; }
+  .dash button.link, .dash .score-badge .rank { display: inline-flex; align-items: center; gap: .3em; min-height: 40px; }
   .dash .score-badge .rank { padding: 4px 14px; }
   .dash .score-badge .rank.score { padding: 0 2px; }
   .clip .icon-btn, .look-tools .icon-btn { width: 40px; height: 40px; }
@@ -590,7 +590,9 @@ progress::-moz-progress-bar { background: var(--accent); }
   .range2-time:last-child { justify-content: flex-end; }
   .range2-time input { width: 5.6rem; }
   .start-row .btn { flex: 1 1 100%; }
-  .bulk .btn { flex: 1 1 auto; }
+  .bulk { display: grid; grid-template-columns: 1fr 1fr; }      /* two even rows of two, never a ragged wrap */
+  .bulk .btn { flex-wrap: wrap; gap: 2px 8px; padding: 6px 10px; }
+  p.bulk { display: block; }
   .start-drop { padding: 26px 14px; }
   .start-actions .btn { flex: 1 1 100%; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
