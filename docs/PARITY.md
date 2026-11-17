@@ -75,9 +75,9 @@
 | Feature | Wayin (documented) | ClutchClips today | Status | Agent · ticket | Verified O/F/O |
 |---|---|---|---|---|---|
 | File upload | Ask for an upload URL, send the file to storage, use the returned id; MP4, MOV, WEBM, AVI | Send the file to the API; more formats accepted | partial | E · 4.4b | – |
-| Link import | 17 sources in the web importer: YouTube, Instagram, TikTok, Facebook, X, Twitch, Kick, Google Drive, Dropbox, Box, Zoom, Loom, StreamYard, Vimeo, Dailymotion, Rumble, Medal. Links must be public | None | missing | E · 4.4a | – |
-| Google Drive | Connected file picker or a share link | None | missing | E · 4.4c | – |
-| Bulk import | Several videos per batch (10, 30 or 50 by plan) | None | missing | E · 4.3 (batch limits: money) | – |
+| Link import | 17 sources in the web importer: YouTube, Instagram, TikTok, Facebook, X, Twitch, Kick, Google Drive, Dropbox, Box, Zoom, Loom, StreamYard, Vimeo, Dailymotion, Rumble, Medal. Links must be public | API: `POST /v1/imports` for Twitch (VODs, clips), Kick (VODs, clips), direct https video links, YouTube best effort; consent and a log row per import; takedown (`admin.py takedown`). Website form not built | partial | E · 4.4a | – |
+| Google Drive | Connected file picker or a share link | Public share links (Drive and Dropbox) through `POST /v1/imports`; no connected picker | partial | E · 4.4c | – |
+| Bulk import | Several videos per batch (10, 30 or 50 by plan) | `POST /v1/imports/bulk`, up to 10 links for everyone (per-plan limits are the owner's call) | partial | E · 4.3 (batch limits: money) | – |
 
 Our ingestion rule stays (CLAUDE.md): public, non-DRM content only; no logins, cookies, proxies or block evasion; fail cleanly and say "upload instead"; consent and a log per import. Wayin's own docs state the same access rule (links must open in a signed-out browser). Sources that need a login will fail on both; the site lists only sources we have verified.
 
