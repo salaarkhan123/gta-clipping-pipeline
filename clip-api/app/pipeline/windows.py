@@ -5,13 +5,20 @@ SPREAD_PARTS = 4              # pick_spread guarantees candidates from each quar
 SPREAD_MIN_DURATION = 1200    # ... on videos of 20 minutes or more; shorter ones use the plain ranking
 
 
-def _window_sums(per_sec, length: int, count: int) -> np.ndarray:
+def fits(n: int, length: int) -> int:
+    """The most windows of `length` seconds pick_windows can return from `n` seconds: each pick blocks every
+    start within two window lengths of its own."""
+    return 1 if n <= length else (n - length) // (2 * length) + 1
+
+
+def _window_sums(per_sec, length: int, count: int, skip_edges: bool = True) -> np.ndarray:
     """sums[i] = total score of the window starting at second i, with intro and outro zeroed."""
     scores = np.asarray(per_sec, dtype=float).copy()
     n = len(scores)
     # Skip intros and outros: first 3% and last 5% (at least 10 s each) when the video is long enough.
+    # `skip_edges=False` is for a part of a video the user chose: its first and last seconds are not an intro.
     head, tail = max(10, int(n * 0.03)), max(10, int(n * 0.05))
-    if n - head - tail > length * count:
+    if skip_edges and n - head - tail > length * count:
         scores[:head] = 0.0
         scores[n - tail:] = 0.0
     csum = np.concatenate([[0.0], np.cumsum(scores)])
@@ -40,16 +47,18 @@ def _windows(starts: list[int], sums: np.ndarray, length: int, duration: float) 
     return sorted(out, key=lambda w: w[2], reverse=True)
 
 
-def pick_windows(per_sec, length: int, count: int, duration: float) -> list[tuple[float, float, float]]:
+def pick_windows(per_sec, length: int, count: int, duration: float,
+                 skip_edges: bool = True) -> list[tuple[float, float, float]]:
     """Highest-scoring non-overlapping windows. Returns (start, end, mean_score), sorted by score."""
     n = len(per_sec)
     if n <= length:
         return [(0.0, float(min(duration, length)), float(np.mean(per_sec)) if n else 0.0)]
-    sums = _window_sums(per_sec, length, count)
+    sums = _window_sums(per_sec, length, count, skip_edges)
     return _windows(_greedy(sums, np.zeros(len(sums), dtype=bool), length, count), sums, length, duration)
 
 
-def pick_spread(per_sec, length: int, count: int, duration: float, floor: int | None = None) -> list[tuple[float, float, float]]:
+def pick_spread(per_sec, length: int, count: int, duration: float, floor: int | None = None,
+                skip_edges: bool = True) -> list[tuple[float, float, float]]:
     """pick_windows, but each quarter of a long video first gets `floor` windows (default count // 6) before
     the rest go to the strongest moments anywhere. Same count, same spacing, same return shape.
 
@@ -60,8 +69,8 @@ def pick_spread(per_sec, length: int, count: int, duration: float, floor: int | 
     n = len(per_sec)
     floor = count // 6 if floor is None else floor
     if n <= length or floor < 1 or duration < SPREAD_MIN_DURATION:
-        return pick_windows(per_sec, length, count, duration)
-    sums = _window_sums(per_sec, length, count)
+        return pick_windows(per_sec, length, count, duration, skip_edges)
+    sums = _window_sums(per_sec, length, count, skip_edges)
     taken = np.zeros(len(sums), dtype=bool)
     starts: list[int] = []
     for k in range(SPREAD_PARTS):

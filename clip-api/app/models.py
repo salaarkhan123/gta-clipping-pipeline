@@ -26,6 +26,10 @@ class Account(Base):
     plan: Mapped[str | None] = mapped_column(String(20), default="free")
     stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # What Stripe last said about the subscription: active | trialing | past_due | unpaid | paused | canceled.
+    subscription_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    subscription_cancel_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)   # set to end on this date
+    subscription_event_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)    # newest Stripe event applied
     webhook_secret: Mapped[str] = mapped_column(String(80))
     signup_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -168,6 +172,22 @@ class CustomTemplate(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class Payment(Base):
+    """One paid Stripe purchase that granted credits: a credit pack (Checkout Session) or a plan invoice.
+    Kept so a refund or dispute can take back exactly what that payment granted, once."""
+    __tablename__ = "payments"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(12))                       # pack | plan
+    stripe_ref: Mapped[str] = mapped_column(String(80), unique=True)    # Checkout Session id or invoice id
+    payment_intent: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    amount_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    credits: Mapped[int] = mapped_column(Integer)                       # granted by this payment
+    credits_removed: Mapped[int] = mapped_column(Integer, default=0)    # taken back (or written off) after refunds
+    status: Mapped[str] = mapped_column(String(12), default="paid")     # paid | partial | refunded | disputed
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class CreditLedger(Base):

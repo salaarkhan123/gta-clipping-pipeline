@@ -13,9 +13,16 @@ from .ff import SAFE_IN, Deadline, run
 CHAT_LAG = 4  # seconds: chat reacts a few seconds after the moment happens
 
 
-def audio_rms_db(path: Path, deadline: Deadline | None = None) -> list[float]:
-    """RMS level in dB, one value per second."""
-    res = run(["ffmpeg", "-hide_banner", "-nostats", *SAFE_IN, "-i", path, "-vn", "-ac", "1",
+def _seek(start: float, length: float | None) -> list[str]:
+    """ffmpeg input options that read only [start, start + length] of the file. Nothing for the whole file."""
+    return [] if length is None else ["-ss", f"{max(start, 0.0):.3f}", "-t", f"{length:.3f}"]
+
+
+def audio_rms_db(path: Path, deadline: Deadline | None = None, start: float = 0.0,
+                 length: float | None = None) -> list[float]:
+    """RMS level in dB, one value per second. With `length`, only that part of the file is read and the
+    first value is the second starting at `start`."""
+    res = run(["ffmpeg", "-hide_banner", "-nostats", *_seek(start, length), *SAFE_IN, "-i", path, "-vn", "-ac", "1",
                "-af", "aresample=8000,asetnsamples=n=8000,astats=metadata=1:reset=1,"
                       "ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-",
                "-f", "null", "-"], deadline)
@@ -23,10 +30,12 @@ def audio_rms_db(path: Path, deadline: Deadline | None = None) -> list[float]:
     return [max(-90.0, -90.0 if v in ("-inf", "inf", "nan") else float(v)) for v in vals]
 
 
-def onscreen_chat_motion(path: Path, chat_region: str, deadline: Deadline | None = None) -> list[float] | None:
-    """How fast the on-screen chat band is changing each second (scrolling text = many edge changes)."""
+def onscreen_chat_motion(path: Path, chat_region: str, deadline: Deadline | None = None, start: float = 0.0,
+                         length: float | None = None) -> list[float] | None:
+    """How fast the on-screen chat band is changing each second (scrolling text = many edge changes).
+    With `length`, only that part of the file is read (see audio_rms_db)."""
     band_y, band_h = (0.0, 0.32) if chat_region.startswith("top") else (0.58, 0.42)
-    res = run(["ffmpeg", "-hide_banner", "-nostats", *SAFE_IN, "-i", path, "-an",
+    res = run(["ffmpeg", "-hide_banner", "-nostats", *_seek(start, length), *SAFE_IN, "-i", path, "-an",
                "-vf", f"fps=2,crop=iw:ih*{band_h}:0:ih*{band_y},scale=480:-2,format=gray,"
                       "edgedetect=low=0.15:high=0.4,tblend=all_mode=difference,signalstats,"
                       "metadata=print:key=lavfi.signalstats.YAVG:file=-",

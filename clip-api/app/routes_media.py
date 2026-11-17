@@ -11,7 +11,7 @@ from typing import Callable, Literal
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, PlainTextResponse
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -21,7 +21,8 @@ from .config import get_settings
 from .db import get_db
 from .deps import ApiError, Principal, current_principal
 from .models import Clip, ClipFeedback, CreditLedger, Job, Upload, new_id, utcnow
-from .pipeline import PipelineError, probe
+from .pipeline import MIN_CLIP, PipelineError, probe
+from .pipeline.moments import BUCKETS, MAX_CLIPS, kind_of
 from .security import is_public_https_url, read_token
 from .render_options import LayoutOptions  # noqa: F401  (re-exported: routes_tools imports it from here)
 from .scoring import ai_score, display_scores
@@ -33,9 +34,32 @@ ALLOWED_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi", ".flv", ".ts"}
 ACTIVE = ("QUEUED", "RUNNING")
 
 
+RANGE_SLACK = 1.0      # a range may end this many seconds past the video (players round the length up); it is clipped
+
+
+class ClipRange(BaseModel):
+    """A part of the video, in seconds from its start."""
+    model_config = ConfigDict(extra="forbid")
+    start: float = Field(ge=0)
+    end: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def check_order(self):
+        if self.start >= self.end:
+            raise ValueError("range.start must be before range.end")
+        return self
+
+
 class ClipOptions(LayoutOptions):
     max_clips: int = Field(3, ge=1, le=10)
     clip_length: int = Field(30, ge=10, le=60)
+    # Clip length bucket, "shortest-longest" in seconds: every clip's length falls inside it and `clip_length` is
+    # not used for cutting. Absent: clips are `clip_length` long (the AI may pick 15-45 s), as before.
+    duration: Literal["0-30", "0-90", "30-60", "60-90", "90-180", "180-300"] | None = None
+    # How many clips to return, best first. Absent: `max_clips`; or, with `duration`, every good moment (at most 50).
+    limit: int | None = Field(default=None, ge=1, le=MAX_CLIPS)
+    range: ClipRange | None = None          # analyse and clip only this part of the video; clip times stay video times
+    project_name: str | None = Field(default=None, max_length=120)      # your label for this run
     tighten: bool = True          # cut silences over 0.6 s and filler words out of each clip
     punch_zoom: bool = True       # subtle punch-in zooms (max 1.15x) on the gameplay at loudness spikes
     flash_forward: bool = True    # open on 1.5 s of the clip's peak, then cut back (AI clips only)
@@ -45,11 +69,31 @@ class ClipOptions(LayoutOptions):
     template: str | None = None   # a game template id from GET /v1/templates: tunes detection and the AI judge.
                                   # Send the template's `options` too; they are not applied for you.
 
+    @field_validator("project_name")
+    @classmethod
+    def tidy_name(cls, value):
+        return " ".join(value.split()) or None if value is not None else None
+
     @model_validator(mode="after")
     def check_template(self):
         if self.template is not None and self.template not in TEMPLATES:
             raise ValueError(f"unknown template; use one of: {', '.join(TEMPLATES)}")
         return self
+
+
+def check_span(options: ClipOptions, video_sec: float) -> None:
+    """The range lies inside the video and is long enough to hold a clip of the chosen length. 422 otherwise."""
+    start, end = 0.0, video_sec
+    if options.range is not None:
+        start, end = options.range.start, min(options.range.end, video_sec)
+        if options.range.end > video_sec + RANGE_SLACK or start >= video_sec:
+            raise ApiError(422, "bad_range", f"range must lie inside the video (0 to {video_sec:.1f} seconds).")
+        if end - start < MIN_CLIP:
+            raise ApiError(422, "range_too_short", f"range must be at least {MIN_CLIP:.0f} seconds long.")
+    if options.duration is not None and end - start < BUCKETS[options.duration][0]:
+        raise ApiError(422, "too_short_for_duration",
+                       f"This video (or the chosen range) is {end - start:.0f} seconds long: shorter than the "
+                       f"shortest clip of duration {options.duration}.")
 
 
 class ClipRequest(BaseModel):
@@ -83,6 +127,22 @@ def credits_for(duration_sec: float) -> int:
     return max(1, math.ceil(duration_sec / 60))
 
 
+def rerun_seconds(options: "ClipOptions", video_sec: float) -> float:
+    """The most a run on an already-analysed upload can render, in seconds: what is reserved for it. The job is
+    then charged for the seconds it did render and the rest is returned (worker, ledger.settle).
+    Without duration, limit or range it is max_clips * clip_length, as it always was. With any of them: the number
+    of clips asked for (every moment, capped at MAX_CLIPS, when a duration is set without a limit) times the
+    longest clip the request allows, never more than the video or the chosen range holds."""
+    if options.duration is None and options.limit is None and options.range is None:
+        return options.max_clips * options.clip_length
+    count = options.limit if options.limit is not None else (MAX_CLIPS if options.duration else options.max_clips)
+    longest = BUCKETS[options.duration][1] if options.duration else options.clip_length
+    span = video_sec
+    if options.range is not None:
+        span = max(0.0, min(options.range.end, video_sec) - options.range.start)
+    return min(count * longest, span)
+
+
 def upload_json(u: Upload) -> dict:
     return {"upload_id": u.id, "filename": u.filename, "size_bytes": u.size_bytes,
             "duration_sec": round(u.duration_sec, 2), "width": u.width, "height": u.height,
@@ -103,18 +163,39 @@ def tier_of(meta: dict | None) -> str | None:
 
 
 def with_ranks(db: Session, clips: list[dict]) -> list[dict]:
-    """Adds rank and rank_of: each clip's position by score among the stored clips of its own run."""
+    """Adds each clip's two positions among the stored clips of its own run, so both stay gap-free when a clip
+    is deleted:
+    - by score, best first: `rank_index` (from 0), with `rank` (from 1) and `rank_of` as before;
+    - by where it happens in the video, earliest first: `timeline_index` (from 1). `index` is the number the
+      clip was given when the run finished and never changes."""
     job_ids = {c["job_id"] for c in clips}
-    order: dict[str, list[str]] = {}
+    by_score: dict[str, list[str]] = {}
+    by_time: dict[str, list[tuple]] = {}
     if job_ids:
-        for clip_id, job_id in db.execute(select(Clip.id, Clip.job_id).where(
+        for clip_id, job_id, start, idx in db.execute(select(Clip.id, Clip.job_id, Clip.start_sec, Clip.idx).where(
                 Clip.job_id.in_(job_ids), Clip.deleted_at.is_(None)).order_by(Clip.score.desc(), Clip.idx)):
-            order.setdefault(job_id, []).append(clip_id)
-    return [{**c, "rank": order[c["job_id"]].index(c["id"]) + 1, "rank_of": len(order[c["job_id"]])} for c in clips]
+            by_score.setdefault(job_id, []).append(clip_id)
+            by_time.setdefault(job_id, []).append((start, idx, clip_id))
+    rank = {clip_id: i for ids in by_score.values() for i, clip_id in enumerate(ids)}
+    timeline = {clip_id: i for rows in by_time.values() for i, (_s, _i, clip_id) in enumerate(sorted(rows), 1)}
+    return [{**c, "rank": rank[c["id"]] + 1, "rank_of": len(by_score[c["job_id"]]), "rank_index": rank[c["id"]],
+             "timeline_index": timeline[c["id"]]} for c in clips]
+
+
+def _ai_score(meta: dict | None) -> int | float | None:
+    """The AI's 0-100 score, or None when the AI did not rate the clip (the same test as tier_of)."""
+    v = (meta or {}).get("virality") or {}
+    if (meta or {}).get("source") == "signals" or not isinstance(v.get("score"), (int, float)):
+        return None
+    return v["score"]
 
 
 def clip_json(c: Clip, storage) -> dict:
     return {"id": c.id, "job_id": c.job_id, "index": c.idx, "start_sec": c.start_sec, "end_sec": c.end_sec,
+            "start_ms": int(round(c.start_sec * 1000)), "end_ms": int(round(c.end_sec * 1000)),
+            "virality_score": _ai_score(c.meta),
+            "kind": kind_of(c.kind or (c.meta or {}).get("kind")),
+            "why": (c.meta or {}).get("reason") or None,
             "tier": tier_of(c.meta),
             "score": c.score, "signals": c.signals, "kept": c.kept, "reaction": c.reaction,
             "bookmarked": bool(c.bookmarked),
@@ -297,13 +378,22 @@ def create_job(body: ClipRequest, p: Principal = Depends(current_principal), db:
         if not upload.has_audio and body.options.chat_region == "none":
             raise ApiError(422, "no_signal",
                            "This video has no audio track. Set chat_region so on-screen chat can be used.")
+        check_span(body.options, upload.duration_sec)
         s = get_settings()
+        basis = {}
         if upload.analyzed and s.charge_once_per_upload:   # already paid for once: charge only what is rendered
-            cost = credits_for(body.options.max_clips * body.options.clip_length)
+            cost = credits_for(rerun_seconds(body.options, upload.duration_sec))     # the worst case is reserved
+            basis = {"charge_basis": "rendered"}           # and the job settles on the seconds it rendered
         else:
             cost = credits_for(upload.duration_sec)
-        return {"tool": "clips", **with_tuning(body.options.model_dump())}, upload.duration_sec, cost
-    return submit_job(db, p, body.upload_id, body.webhook_url, idempotency_key, plan)
+        return {"tool": "clips", **basis, **with_tuning(body.options.model_dump())}, upload.duration_sec, cost
+    out = submit_job(db, p, body.upload_id, body.webhook_url, idempotency_key, plan)
+    if body.options.project_name:
+        job = db.get(Job, out["job_id"])
+        if job is not None and job.name is None:       # a replayed request (Idempotency-Key) keeps its first name
+            job.name = body.options.project_name
+            db.commit()
+    return out
 
 
 @router.get("/v1/jobs/{job_id}")
