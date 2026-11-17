@@ -11,9 +11,8 @@ def test_options_are_public_and_match_the_request_model():
     assert r.status_code == 200
     opts = r.json()["clips"]
     assert set(opts) == set(ClipOptions.model_fields)                        # every option, nothing else
-    defaults = ClipOptions().model_dump()
     for name, o in opts.items():
-        assert o["default"] == defaults[name], name
+        assert o["default"] == ClipOptions.model_fields[name].default, name
 
 
 def test_allowed_values_and_limits_are_listed():
@@ -26,11 +25,27 @@ def test_allowed_values_and_limits_are_listed():
 
 
 def test_every_listed_value_is_accepted_and_others_are_not():
-    for name, o in clip_options().items():
-        if name == "layout":                                                 # some layouts need a camera position
+    opts = clip_options()
+    for name, o in opts.items():
+        if name == "layout":
             continue
         for v in o.get("values", []):
             ClipOptions(**{name: v})
+    for aspect, layouts in opts["layout"]["by_aspect"].items():              # layouts depend on the aspect
+        assert "auto" in layouts
+        for layout in layouts:
+            ClipOptions(aspect=aspect, layout=layout)
+    listed = set(opts["layout"]["values"])
+    assert listed == {x for layouts in opts["layout"]["by_aspect"].values() for x in layouts}
+    named = set(ClipOptions.model_json_schema()["properties"]["layout"]["enum"])
+    assert listed < named                                                    # some layouts are named but not built yet
+    for refused in named - listed:
+        for aspect in opts["aspect"]["values"]:
+            try:
+                ClipOptions(aspect=aspect, layout=refused)
+            except ValueError:
+                continue
+            raise AssertionError(f"{refused} is accepted in {aspect} but not listed")
     r = TestClient(app).post("/v1/clips", json={"upload_id": "x", "options": {"not_an_option": 1}},
                              headers={"authorization": "Bearer nope"})
     assert r.status_code in (401, 422)
