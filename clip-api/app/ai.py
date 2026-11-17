@@ -16,6 +16,7 @@ import httpx
 from pydantic import BeforeValidator, Field
 
 from .config import get_settings
+from .languages import name_of
 from .pipeline.moments import KINDS, kind_of
 
 log = logging.getLogger("clipapi.ai")
@@ -217,6 +218,16 @@ def _interest(value) -> str:
     return (text or "")[:PROMPT_MAX].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+# (languages, agent F) The language the copy is written in, when it is not simply English: `language` in the
+# context is a code of app/languages.py. Added to the system prompt only then, so a request without it is byte for
+# byte what it was before.
+LANGUAGE_RULE = (
+    "\n\nLANGUAGE. Write the titles, the hook, the description, the reason and the tip in {name}, whatever language "
+    "the transcript is in. Hashtags stay in Latin letters and digits. The clip_meta tool, its field names and the "
+    "kind labels do not change."
+)
+
+
 class ClaudeAI:
     def __init__(self, api_key: str, model: str, client: httpx.Client | None = None):
         self.api_key, self.model = api_key, model
@@ -255,6 +266,9 @@ class ClaudeAI:
                 "messages": [{"role": "user", "content": content}]}
         if interest:
             body["system"] += PROMPT_RULE
+        language = name_of(context.get("language")) if isinstance(context.get("language"), str) else None
+        if language:
+            body["system"] += LANGUAGE_RULE.format(name=language)
         headers = {"x-api-key": self.api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
         for attempt in (1, 2):
             try:
