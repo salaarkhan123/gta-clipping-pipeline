@@ -5,7 +5,8 @@ Rules:
 - A refund or dispute takes back what the payment granted with one `adjust` row (key `stripe-refund:...` or
   `stripe-dispute:...`), stopping at a zero balance.
 - A job is reserved once (key `reserve:<job>`) and settled once (key `settle:<job>`),
-  either as a commit (keep the charge) or a release (refund). The unique key makes a
+  either as a commit (keep the charge, or the part of it the job used: the rest goes back in that same row)
+  or a release (refund). The unique key makes a
   second settle a no-op, so a job can never be refunded twice or refunded after commit.
 """
 from sqlalchemy import func, select
@@ -75,13 +76,16 @@ def reserve(db: Session, account_id: str, job_id: str, cost: int) -> None:
                  idempotency_key=f"reserve:{job_id}")
 
 
-def settle(db: Session, job: Job, success: bool) -> bool:
-    """Commit (success) or release (refund) a job's reservation exactly once. Caller must commit."""
+def settle(db: Session, job: Job, success: bool, charged: int | None = None) -> bool:
+    """Commit (success) or release (refund) a job's reservation exactly once. Caller must commit.
+    `charged` (success only) is what the job cost when that is less than was reserved: the difference goes back
+    in the same settle row. It can never be more than the reservation."""
     if success:
-        done = _insert_once(db, account_id=job.account_id, delta=0, kind="commit", job_id=job.id,
+        keep = job.credits_reserved if charged is None else max(0, min(int(charged), job.credits_reserved))
+        done = _insert_once(db, account_id=job.account_id, delta=job.credits_reserved - keep, kind="commit", job_id=job.id,
                             idempotency_key=f"settle:{job.id}")
         if done:
-            job.credits_charged = job.credits_reserved
+            job.credits_charged = keep
     else:
         done = _insert_once(db, account_id=job.account_id, delta=job.credits_reserved, kind="release",
                             job_id=job.id, idempotency_key=f"settle:{job.id}")
