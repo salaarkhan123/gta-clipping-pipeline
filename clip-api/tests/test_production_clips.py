@@ -22,9 +22,9 @@ def test_a_camera_just_inside_the_crop_is_stepped_around_not_blurred():
     assert abs(x - centred[0]) <= MAX_DODGE * w                                 # a small step: the middle of the game stays in view
 
 
-def test_a_camera_in_the_middle_of_the_frame_is_still_covered_because_no_small_step_clears_it():
+def test_a_camera_in_the_middle_of_the_frame_is_never_covered_when_no_small_step_clears_it():
     how, filt = gameplay_crop(SRC_W, SRC_H, TW, TH, 1.0, [0.42, 0.35, 0.16, 0.25])
-    assert how == "blurred"
+    assert how == "blocked" and "boxblur" not in filt      # the caller shows the camera in place (test_layouts.py)
 
 
 def loudness(path) -> tuple[float, float]:

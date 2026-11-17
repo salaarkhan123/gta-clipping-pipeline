@@ -60,7 +60,8 @@ class PipelineOptions:
     caption_font: str = "DejaVu Sans"
     caption_style: str = "pop"            # pop | bold | neon | boxed | clean
     censor: bool = False                  # mask swears in captions (burned and captions.json)
-    layout: str = "auto"                  # auto | split | fill | classic
+    layout: str = "auto"                  # a name from layouts.LAYOUTS, or split | fill | classic from before them
+    resolution: str | None = None         # 480 | 720 | 1080 | 2k | 4k: the short side, never above the source or max_side
     facecam_region: str | None = None     # "auto" (detect), or a preset key of FACECAM_REGIONS
     facecam_box: list | None = None       # [x, y, w, h] fractions; overrides the preset
     tighten: bool = True                  # cut silences over 0.6 s and filler words out of each clip
@@ -296,7 +297,7 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
             segments = with_flash_forward(body, c.peak, c.end)
         flash = len(segments) > len(body)
         zooms = []
-        if options.punch_zoom and options.vertical and layout in ("split", "fill") and info.has_audio:
+        if options.punch_zoom and options.vertical and layout != "classic" and info.has_audio:
             zooms = zoom_peaks(db, segments, flash)
         words = []
         if options.captions:
@@ -316,7 +317,7 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                         words=words, font=options.caption_font, layout=layout, facecam=facecam,
                         style=options.caption_style, aspect=options.aspect, max_side=options.max_side,
                         deadline=deadline, segments=segments, punch=zoom_expr(zooms), has_audio=info.has_audio,
-                        hook=hook, flash=flash)
+                        hook=hook, flash=flash, resolution=options.resolution)
         c.features["edit"]["render_sec"] = round(time.monotonic() - t0, 2)
         timer.count("clips")
         timer.count("rendered_sec", round(kept_duration(segments), 1))
