@@ -31,6 +31,12 @@ BUILT = tuple(name for name in LAYOUTS if name not in NOT_BUILT)
 # split = split2 (plain fill in 16:9), fill = full, classic = the blurred 9:16 layout with a chat panel (render.py).
 LEGACY = ("split", "fill", "classic")
 NEEDS_CAMERA = ("split", "split2", "pip", "screen_first", "gameplay_a", "gameplay_b")
+# The two-panel layouts: a camera panel and a gameplay panel. `camera` and `split_ratio` apply to these, whether
+# the layout was asked for by name or "auto" chose it; every other layout ignores both.
+TWO_PANEL = ("split2", "screen_first", "gameplay_a", "gameplay_b")
+CAMERA_SIDES = ("top", "bottom")          # which panel the camera is: the first one (top, or left in a wide frame)
+SPLIT_RATIO = (0.25, 0.75)                # the first panel's share of the frame: of the height, or of a wide frame's width
+CAPTION_POSITIONS = ("auto", "seam", "lower", "center")
 SCENES = ("gameplay_cam", "camera", "gameplay")
 
 ASPECTS = {"9:16": (1080, 1920), "4:5": (1080, 1350), "1:1": (1080, 1080), "16:9": (1920, 1080)}
@@ -50,6 +56,10 @@ MAX_AVOID_ZOOM = 1.35  # a gameplay panel may zoom in this much further when tha
 HEAD_PAD = (0.15, 0.35, 0.10)    # hair, a headset and the chin around a detected face box: sides, top, bottom (of the face size)
 PIP_SHAPE = (0.8, 1.9)           # the inset keeps the camera's own shape, within these width / height limits
 PIP_BORDER = 4                   # pixels of white edge around the inset, on the 1080 canvas
+LOWER_THIRD = 0.70               # where a caption sits when there is no line between panels to sit on
+SAFE_ROWS = (0.05, 0.92)         # a caption stays between these shares of the height (clear of the apps' own buttons)
+FACE_GAP = 14                    # pixels kept between a caption and the head, on a 1920-high canvas
+BLIND_HEAD = 0.85                # no face known: the head is taken to be anywhere in the camera picture but its lowest 15%
 
 Rect = tuple[float, float, float, float]     # x, y, width, height
 
@@ -238,6 +248,8 @@ class LayoutPlan:
     hook_top: int = 0
     text_span: tuple[float, float] = (0.0, 1.0)    # the part of the width the text is centred in
     note: str | None = None             # why `layout` is not the one that was asked for
+    seam: int | None = None             # the line between two stacked panels, in canvas pixels from the top
+    head: tuple | None = None           # where a caption must not go: the person's head on the canvas (x0, y0, x1, y1)
 
 
 def canonical(layout: str, aspect: str) -> str:
@@ -289,6 +301,8 @@ class _Ctx:
     cam: tuple | None
     face: tuple | None
     zoom: float
+    camera: str | None = None           # "top" | "bottom": which panel the camera is; None = the layout's own
+    split_ratio: float | None = None    # the first panel's share of the frame; None = the layout's own
 
 
 # name: (camera first?, the camera's share of the frame when stacked, ... when side by side)
@@ -308,12 +322,18 @@ def _two(c: _Ctx, name: str) -> dict | None:
     if c.scene != "gameplay_cam":
         return None
     cam_first, share_v, share_h = _SPLITS[name]
+    if c.camera:
+        cam_first = c.camera == "top"
     ow, oh = c.size
-    if oh >= ow:
-        n = even(oh * share_v)
+    stacked = oh >= ow
+    length = oh if stacked else ow
+    n = even(length * (share_v if stacked else share_h))        # the camera panel
+    if c.split_ratio is not None:                               # the first panel's share, whichever panel that is
+        first = even(length * c.split_ratio)
+        n = first if cam_first else length - first
+    if stacked:
         cam_out, game_out = ((0, 0, ow, n), (0, n, ow, oh - n)) if cam_first else ((0, oh - n, ow, n), (0, 0, ow, oh - n))
     else:
-        n = even(ow * share_h)
         cam_out, game_out = ((0, 0, n, oh), (n, 0, ow - n, oh)) if cam_first else ((ow - n, 0, n, oh), (0, 0, ow - n, oh))
     cam_src = camera_crop(c.sw, c.sh, c.cam, cam_out[2], cam_out[3], c.face)
     _how, game_src = avoid_camera(c.sw, c.sh, game_out[2], game_out[3], c.zoom, c.cam, c.face, MAX_AVOID_ZOOM)
@@ -325,9 +345,9 @@ def _two(c: _Ctx, name: str) -> dict | None:
         return dict(panels=panels, caption_top=int(oh * 0.70), hook_top=int(oh * 0.18),
                     text_span=(game_out[0] / ow, (game_out[0] + game_out[2]) / ow))
     if cam_first:      # captions sit on the seam between camera and gameplay, the hook under them
-        return dict(panels=panels, caption_top=n - 60, hook_top=n + 120)
+        return dict(panels=panels, caption_top=n - 60, hook_top=min(n + 120, oh - 220), seam=n)
     seam = oh - n      # camera at the bottom: all text stays on the gameplay above it
-    return dict(panels=panels, caption_top=seam - 150, hook_top=int(oh * 0.10))
+    return dict(panels=panels, caption_top=seam - 150, hook_top=max(20, min(int(oh * 0.10), seam - 290)), seam=seam)
 
 
 def _pip(c: _Ctx) -> dict | None:
@@ -405,6 +425,60 @@ def _head_on_canvas(c: _Ctx, panels) -> tuple[float, float, float, float] | None
     return None
 
 
+def _person_on_canvas(c: _Ctx, panels) -> tuple[float, float, float, float] | None:
+    """Where a caption must not go (x0, y0, x1, y1 on the canvas): the head, when a face is known. When only the
+    camera box is known, the head is taken to be anywhere in the camera picture except its lowest part (the
+    shoulders and chest), so a caption never sits where a face might be."""
+    head = _head_on_canvas(c, panels)
+    if head is not None or not c.cam or c.scene != "gameplay_cam":
+        return head
+    box = cam_px(c.cam, c.sw, c.sh)
+    for p in reversed(panels):
+        if p.kind == "camera":
+            x, y, w, h = p.out
+            return float(x), float(y), float(x + w), y + BLIND_HEAD * h
+        if _inside(box, p.src, tol=4.0):                # the camera is part of this picture, where the streamer put it
+            kx, ky = p.out[2] / p.src[2], p.out[3] / p.src[3]
+            x0, y0 = p.out[0] + (box[0] - p.src[0]) * kx, p.out[1] + (box[1] - p.src[1]) * ky
+            return x0, y0, x0 + box[2] * kx, y0 + BLIND_HEAD * box[3] * ky
+    return None
+
+
+def caption_y(oh: int, position: str, half: float, seam: int | None = None, head=None,
+              reach: tuple[float, float] | None = None) -> int:
+    """The row (pixels from the top of a frame `oh` tall) of the middle of a one-line caption that is `half`
+    pixels tall above and below it.
+
+    "seam": on the line between two stacked panels (`seam`), or the lower third when there is no such line;
+    "lower": the lower third; "center": the middle of the frame; "auto": the seam when there is one, else the
+    lower third. Wherever that is, the caption never covers `head` (x0, y0, x1, y1): it moves the least distance
+    that clears it, up or down. `reach` is the part of the width (x0, x1, in pixels) the widest caption covers.
+    """
+    if position not in CAPTION_POSITIONS:
+        raise PipelineError("bad_options", f"Unknown caption_position. Use one of: {', '.join(CAPTION_POSITIONS)}.")
+    want = oh * (0.5 if position == "center" else LOWER_THIRD)
+    if position in ("auto", "seam") and seam is not None:
+        want = seam
+    lo, hi = SAFE_ROWS[0] * oh + half, SAFE_ROWS[1] * oh - half
+    y = _clamp(want, lo, hi)
+    if head is not None and (reach is None or (head[0] < reach[1] and head[2] > reach[0])):
+        gap = FACE_GAP * oh / 1920
+        top, bottom = head[1] - gap, head[3] + gap
+        if y + half > top and y - half < bottom:
+            ways = [v for v in (top - half, bottom + half) if lo <= v <= hi]
+            # No room above or below the head inside the safe rows: as far from the middle of it as the frame allows.
+            y = min(ways, key=lambda v: abs(v - y)) if ways else max((lo, hi), key=lambda v: abs(v - (top + bottom) / 2))
+    return int(round(y))
+
+
+def caption_center(plan: LayoutPlan, position: str, half: float, fill: float = 1.0) -> int:
+    """caption_y for a layout plan, in the plan's canvas pixels. `fill` is the share of the text span the widest
+    caption covers."""
+    ow, oh = plan.size
+    mid, width = (plan.text_span[0] + plan.text_span[1]) / 2 * ow, (plan.text_span[1] - plan.text_span[0]) * ow * fill
+    return caption_y(oh, position, half, plan.seam, plan.head, (mid - width / 2, mid + width / 2))
+
+
 def _text_off_the_face(c: _Ctx, parts: dict) -> dict:
     """Move captions and the hook off the person's head when the one picture has them where the text would go."""
     head = _head_on_canvas(c, parts["panels"])
@@ -430,13 +504,31 @@ _NOTES = {
 }
 
 
+def split_problem(camera, split_ratio) -> str | None:
+    """Why `camera` / `split_ratio` cannot be used, or None. Both may be None: the layout's own."""
+    if camera is not None and camera not in CAMERA_SIDES:
+        return f"Unknown camera. Use one of: {', '.join(CAMERA_SIDES)}."
+    if split_ratio is not None and not (isinstance(split_ratio, (int, float)) and not isinstance(split_ratio, bool)
+                                        and SPLIT_RATIO[0] <= split_ratio <= SPLIT_RATIO[1]):
+        return f"split_ratio must be between {SPLIT_RATIO[0]} and {SPLIT_RATIO[1]}: the top panel's share of the height."
+    return None
+
+
 def compose(src_w: int, src_h: int, layout: str, aspect: str, *, scene: str | None = None, cam=None, face=None,
-            zoom: float = 1.0, requested: str | None = None) -> LayoutPlan:
+            zoom: float = 1.0, requested: str | None = None, camera: str | None = None,
+            split_ratio: float | None = None) -> LayoutPlan:
     """The boxes for `layout` (a canonical name or "auto") on a source whose scene type is already known.
     `cam` is the webcam overlay [x, y, w, h] and `face` the person's face (centre x, centre y, w, h), both as
-    fractions of the source. Raises PipelineError("layout_unavailable") for the layouts that are not built."""
+    fractions of the source. Raises PipelineError("layout_unavailable") for the layouts that are not built.
+
+    `camera` ("top" | "bottom") and `split_ratio` (0.25 to 0.75, the top panel's share of the height) adjust the
+    two-panel layouts (TWO_PANEL); None keeps the layout's own. In a wide frame the panels sit side by side:
+    "top" is the left panel and the ratio is its share of the width. Every other layout ignores both."""
     if aspect not in ASPECTS:
         raise PipelineError("bad_options", f"Unknown aspect. Use one of: {', '.join(ASPECTS)}.")
+    problem = split_problem(camera, split_ratio)
+    if problem:
+        raise PipelineError("bad_options", problem)
     if layout in NOT_BUILT:
         raise PipelineError(*layout_problem(layout, "16:9"))
     layout = canonical(layout, aspect)
@@ -445,7 +537,8 @@ def compose(src_w: int, src_h: int, layout: str, aspect: str, *, scene: str | No
     scene = scene or ("gameplay_cam" if cam else "gameplay")
     if scene == "gameplay_cam" and not cam:
         scene = "gameplay"
-    c = _Ctx(src_w, src_h, aspect, ASPECTS[aspect], scene, tuple(cam) if cam else None, tuple(face) if face else None, zoom)
+    c = _Ctx(src_w, src_h, aspect, ASPECTS[aspect], scene, tuple(cam) if cam else None, tuple(face) if face else None, zoom,
+             camera, split_ratio)
     first = layout
     if layout == "auto":       # per scene: a stream with a camera gets both in view; anything else fills the frame
         first = "split2" if scene == "gameplay_cam" and aspect != "16:9" else "full"
@@ -463,27 +556,30 @@ def compose(src_w: int, src_h: int, layout: str, aspect: str, *, scene: str | No
         if name != first:
             note = _NOTES["no_camera" if scene == "gameplay" else "camera_only" if scene == "camera" else "in_the_way"]
         return LayoutPlan(requested=requested or layout, layout=name, scene=scene, aspect=aspect, size=c.size,
-                          cam=c.cam, face=c.face, note=note, **parts)
+                          cam=c.cam, face=c.face, note=note, head=_person_on_canvas(c, parts["panels"]), **parts)
     raise PipelineError("layout_unavailable", "This video could not be reframed.")     # unreachable: fit always draws
 
 
-def plan_layout(info, frames, requested: str, aspect: str, *, zoom: float = 1.0, cam=None) -> LayoutPlan:
+def plan_layout(info, frames, requested: str, aspect: str, *, zoom: float = 1.0, cam=None,
+                camera: str | None = None, split_ratio: float | None = None) -> LayoutPlan:
     """Decide the scene type of a source and the boxes for the layout that was asked for.
 
     `info` is the source's MediaInfo, `frames` gray frames sampled across it (facecam.sample_gray), `requested`
     a name from LAYOUTS (or an old one) and `aspect` the output shape. `cam` is a camera box the caller already
     knows ([x, y, w, h] fractions): detection is skipped. Raises PipelineError("bad_options") for a layout the
-    shape does not offer and PipelineError("layout_unavailable") for trio, grid4 and ots.
+    shape does not offer and PipelineError("layout_unavailable") for trio, grid4 and ots. `camera` and
+    `split_ratio` are the two-panel controls (see compose).
     """
     name = check_layout(requested, aspect)
     if name == "classic":
         raise PipelineError("bad_options", "The classic layout has no plan: render it with layout='classic'.")
     if cam:
-        return compose(info.width, info.height, name, aspect, scene="gameplay_cam", cam=cam, zoom=zoom, requested=requested)
+        return compose(info.width, info.height, name, aspect, scene="gameplay_cam", cam=cam, zoom=zoom, requested=requested,
+                       camera=camera, split_ratio=split_ratio)
     from .facecam import classify       # facecam imports render, which imports this module
     scene = classify(frames or [])
     return compose(info.width, info.height, name, aspect, scene=scene.kind, cam=scene.cam, face=scene.face, zoom=zoom,
-                   requested=requested)
+                   requested=requested, camera=camera, split_ratio=split_ratio)
 
 
 # ---------- drawing ----------
