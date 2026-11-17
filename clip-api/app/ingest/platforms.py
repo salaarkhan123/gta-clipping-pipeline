@@ -131,7 +131,7 @@ def _refusal(platform: str, raw: str) -> Refused:
                                  "authentication", "password")):
         code, why = "login_required", ("This video needs a login (private, subscribers-only or age-restricted). "
                                        "Only public videos can be imported.")
-    elif "geo" in text or "not available in your country" in text or "your location" in text:
+    elif any(w in text for w in ("geo", "in your country", "your location", "your region")):
         code, why = "geo_blocked", "This video is not available where our servers are."
     elif "requested format is not available" in text or "no video formats" in text:
         code, why = "no_format", ("No version of this video can be imported: it needs one file with picture and "
