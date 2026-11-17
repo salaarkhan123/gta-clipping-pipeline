@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { API, api, ApiError, clock, getToken } from "@/lib/api";
+import { Icon, IconName, Soon } from "./Icon";
 import { useDash } from "./Shell";
 
 export async function downloadSubtitles(clipId: string, format = "srt") {
@@ -15,50 +17,94 @@ export async function downloadSubtitles(clipId: string, format = "srt") {
 // `rank_index` (from 0) and `timeline_index` (from 1); a clip without them uses today's `rank` and `index`.
 export const rankOf = (c: any): number | null => (typeof c.rank_index === "number" ? c.rank_index + 1 : c.rank || null);
 export const numberOf = (c: any): number => (typeof c.timeline_index === "number" ? c.timeline_index : c.index);
-export const nameOf = (c: any): string => c.title || `Clip ${numberOf(c)}`;
+// A clip without a title is named by its number in its project (see `numbering`), so no two cards share a name.
+// Where there is no project around it (the Library lists clips from every video), by where it starts.
+export const nameOf = (c: any, number?: number): string => c.title || (number ? `Clip ${number}` : `Clip at ${clock(c.start_sec)}`);
+// Each clip's own number in a project: 1 for the first one made, counting on across every run. `index` starts
+// again at 1 in each run, so it cannot tell two runs' clips apart. A clip keeps its number when more arrive.
+export function numbering(clips: any[]): Map<string, number> {
+  const made = [...clips].sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")) || String(a.job_id).localeCompare(String(b.job_id)) || numberOf(a) - numberOf(b));
+  return new Map(made.map((c, i) => [c.id, i + 1]));
+}
 
-// One clip: preview, title, score, times, and its actions. `project` links back to where it came from (Library).
-// `lit` marks the card the timeline just jumped to.
-export function ClipCard({ clip, onChange, project, lit }: { clip: any; onChange: (c: any) => void; project?: { id: string; name: string }; lit?: boolean }) {
+const SOON: [IconName, string][] = [["calendar", "Schedule"], ["scissors", "Trim"], ["reframe", "Reframe"]];
+
+// One clip as a card: tick box, rank and title, the preview with its time range, the score, and its actions.
+// `project` links back to where it came from (Library). `lit` marks the card the timeline just jumped to.
+// `onSelect` adds the tick box (the project page's bulk actions).
+export function ClipCard({ clip, onChange, project, lit, number, selected, onSelect }: { clip: any; onChange: (c: any) => void;
+  project?: { id: string; name: string }; lit?: boolean; number?: number; selected?: boolean; onSelect?: (id: string, on: boolean) => void }) {
   const { fail } = useDash();
+  // A reply signs new links for the same files; the ones on the page stay, so a playing clip is not restarted.
+  const merge = (r: any) => onChange({ ...clip, ...r, video_url: clip.video_url, thumb_url: clip.thumb_url || r.thumb_url, captions_url: clip.captions_url || r.captions_url });
   // Pressing the active choice again clears it.
-  const send = (body: Record<string, unknown>) => api(`/v1/clips/${clip.id}/feedback`, { body }).then((r) => onChange({ ...clip, ...r })).catch(fail);
+  const send = (body: Record<string, unknown>) => api(`/v1/clips/${clip.id}/feedback`, { body }).then(merge).catch(fail);
   const keep = (kept: boolean) => send({ kept: clip.kept === kept ? null : kept });
   const react = (reaction: "like" | "dislike") => send({ reaction: clip.reaction === reaction ? null : reaction });
   // The AI offers a few titles; picking one changes the clip's title everywhere. Nothing is re-rendered.
   const titles: string[] = clip.titles?.length ? (clip.titles.includes(clip.title) ? clip.titles : [clip.title, ...clip.titles]) : [];
-  const retitle = (title: string) => api(`/v1/clips/${clip.id}`, { method: "PATCH", body: { title } }).then((r) => onChange({ ...clip, ...r })).catch(fail);
+  const retitle = (title: string) => api(`/v1/clips/${clip.id}`, { method: "PATCH", body: { title } }).then(merge).catch(fail);
+  const name = nameOf(clip, number), rank = rankOf(clip);
   return (
-    <figure id={`clip-${clip.id}`} tabIndex={-1} className={`clip ${clip.kept === false ? "dropped" : ""} ${lit ? "lit" : ""}`}>
-      <video controls preload="none" poster={clip.thumb_url || undefined} src={clip.video_url} />
-      <figcaption>
-        <strong>{nameOf(clip)}</strong>
-        {titles.length > 1 && <label className="title-pick">Title
-          <select value={clip.title} onChange={(e) => retitle(e.target.value)}>
-            {titles.map((x) => <option key={x} value={x}>{x}</option>)}
-          </select></label>}
+    <article id={`clip-${clip.id}`} tabIndex={-1} aria-label={name}
+      className={`clip ${clip.kept === false ? "dropped" : ""} ${lit ? "lit" : ""} ${selected ? "picked" : ""}`}>
+      <header className="clip-top">
+        {onSelect && <input type="checkbox" checked={!!selected} aria-label={`Select ${name}`} onChange={(e) => onSelect(clip.id, e.target.checked)} />}
+        <h3 title={name}>{rank && <b>#{rank}</b>} {name}</h3>
+      </header>
+      <div className="clip-media">
+        <video controls preload="none" poster={clip.thumb_url || undefined} src={clip.video_url} />
+        <span className="clip-time">{clock(clip.start_sec)} – {clock(clip.end_sec)}</span>
+        {clip.edited === true && <span className="clip-edited">Edited</span>}
+      </div>
+      <div className="clip-row">
         <ScoreBadge clip={clip} />
-        <span className="muted">{clock(clip.start_sec)} to {clock(clip.end_sec)}</span>
-        {project && <Link className="muted" href={`/dashboard/project/?id=${project.id}`}>From {project.name}</Link>}
-        {clip.hook && <p className="muted">{clip.hook_on_screen ? "On-screen hook" : "Hook idea (not on the video)"}: “{clip.hook}”</p>}
-        {clip.description && <p>{clip.description}</p>}
-        {clip.suggestion?.text && <p className="tip"><b>Tip</b> {clip.suggestion.text}</p>}
-        {clip.hashtags?.length > 0 && <p className="tags">{clip.hashtags.map((t: string) => `#${t}`).join(" ")}</p>}
-        <div className="clip-actions">
-          <a className="btn small primary" href={clip.video_url} download>Download</a>
-          {clip.captions_url && <button className="btn small ghost" onClick={() => downloadSubtitles(clip.id).catch(fail)}>Subtitles</button>}
-          <button className="btn small ghost" aria-pressed={clip.kept === true} onClick={() => keep(true)}>Keep</button>
-          <button className="btn small ghost" aria-pressed={clip.kept === false} onClick={() => keep(false)}>Discard</button>
+        <div className="clip-icons" role="group" aria-label="Rate this clip">
+          <IconToggle icon="like" label="Like" on={clip.reaction === "like"} onClick={() => react("like")} />
+          <IconToggle icon="dislike" label="Dislike" on={clip.reaction === "dislike"} onClick={() => react("dislike")} />
+          <IconToggle icon="bookmark" label="Bookmark" on={!!clip.bookmarked} onClick={() => send({ bookmarked: !clip.bookmarked })} />
         </div>
-        <div className="clip-actions" role="group" aria-label="Rate this clip">
-          <button className="btn small ghost" aria-pressed={clip.reaction === "like"} onClick={() => react("like")}>Like</button>
-          <button className="btn small ghost" aria-pressed={clip.reaction === "dislike"} onClick={() => react("dislike")}>Dislike</button>
-          <button className="btn small ghost" aria-pressed={!!clip.bookmarked} onClick={() => send({ bookmarked: !clip.bookmarked })}>
-            {clip.bookmarked ? "Bookmarked" : "Bookmark"}</button>
+      </div>
+      <p className="clip-desc" title={clip.description || undefined}>{clip.description || <span className="muted">No description for this clip.</span>}</p>
+      {project && <Link className="muted clip-from" href={`/dashboard/project/?id=${project.id}`}>From {project.name}</Link>}
+      <div className="clip-row">
+        <div className="clip-icons" role="group" aria-label="Clip actions">
+          <a className="icon-btn go" href={clip.video_url} download aria-label={`Download ${name}`} title="Download"><Icon name="download" size={18} /></a>
+          <button type="button" className="icon-btn" disabled={!clip.captions_url} aria-label={clip.captions_url ? `Download the captions file for ${name}` : "No captions file: this clip has no captions"}
+            title={clip.captions_url ? "Captions file (SRT)" : "This clip has no captions"} onClick={() => downloadSubtitles(clip.id).catch(fail)}><Icon name="captions" size={18} /></button>
         </div>
-      </figcaption>
-    </figure>
+        <div className="clip-icons soon-set" role="group" aria-label="Coming soon">
+          {SOON.map(([icon, label]) => <button key={label} type="button" className="icon-btn" disabled aria-label={`${label} (coming soon)`} title={`${label}: coming soon`}><Icon name={icon} size={18} /></button>)}
+          <Soon />
+        </div>
+      </div>
+      <details className="clip-more">
+        <summary>More</summary>
+        <div className="clip-more-body">
+          {titles.length > 1 && <label className="title-pick">Title
+            <select value={clip.title} onChange={(e) => retitle(e.target.value)}>
+              {titles.map((x) => <option key={x} value={x}>{x}</option>)}
+            </select></label>}
+          {clip.description && <p>{clip.description}</p>}
+          {clip.hook && <p className="muted">{clip.hook_on_screen ? "On-screen hook" : "Hook idea (not on the video)"}: “{clip.hook}”</p>}
+          {clip.suggestion?.text && <p className="tip"><b>Tip</b> {clip.suggestion.text}</p>}
+          {clip.hashtags?.length > 0 && <p className="tags">{clip.hashtags.map((t: string) => `#${t}`).join(" ")}</p>}
+          <div className="clip-actions">
+            <button className="btn small ghost" aria-pressed={clip.kept === true} onClick={() => keep(true)}>Keep</button>
+            <button className="btn small ghost" aria-pressed={clip.kept === false} onClick={() => keep(false)}>Discard</button>
+          </div>
+          {clip.captions_url && <div className="clip-actions" role="group" aria-label="Captions file">
+            <span className="muted">Captions file</span>
+            {["srt", "vtt", "txt"].map((f) => <button key={f} className="btn small ghost" onClick={() => downloadSubtitles(clip.id, f).catch(fail)}>{f.toUpperCase()}</button>)}
+          </div>}
+        </div>
+      </details>
+    </article>
   );
+}
+
+function IconToggle({ icon, label, on, onClick }: { icon: IconName; label: string; on: boolean; onClick: () => void }) {
+  return <button type="button" className="icon-btn" aria-pressed={on} aria-label={label} title={label} onClick={onClick}><Icon name={icon} size={18} /></button>;
 }
 
 export type ClipSort = "score" | "time" | "newest";
@@ -92,29 +138,64 @@ export function arrange(clips: any[], sort: ClipSort, filter: ClipFilter): any[]
   return out;
 }
 
+// The order the cards are shown in. While clips are still arriving (`settled` false) the cards already on the
+// page stay where they are and new ones join at the end, so nothing moves under the cursor; the list is put in
+// its sorted order when the run ends or when the sort or filter is changed.
+export function useSteadyOrder(clips: any[], sort: ClipSort, filter: ClipFilter, settled: boolean): any[] {
+  const sorted = arrange(clips, sort, filter);
+  const last = useRef<{ key: string; ids: string[] }>({ key: "", ids: [] });
+  const key = `${sort}|${filter}`;
+  let ids = sorted.map((c) => c.id);
+  if (!settled && last.current.key === key) {
+    const here = new Set(ids), had = new Set(last.current.ids);
+    ids = [...last.current.ids.filter((id) => here.has(id)), ...ids.filter((id) => !had.has(id))];
+  }
+  useEffect(() => { last.current = { key, ids }; });
+  const by = new Map(sorted.map((c) => [c.id, c]));
+  return ids.map((id) => by.get(id));
+}
+
 const TIER_NAMES: Record<string, string> = { top: "Top pick", strong: "Strong", solid: "Solid", long_shot: "Long shot" };
-const PART_NAMES: [string, string][] = [["hook", "Hook"], ["flow", "Flow"], ["value", "Value"], ["trend", "Trend"]];
+const PART_NAMES: Record<string, string> = { hook: "Hook", flow: "Flow", story: "Story", value: "Value", trend: "Trend", engagement: "Engagement", reach: "Reach" };
 const SIGNAL_NAMES: Record<string, string> = { audio: "Loud reaction", chat_motion: "Chat activity", transcript: "What was said" };
 
-// Rank and tier on the card; the numbers behind them only on hover, focus or tap.
+// The score on the card: "N /100" once the API sends a calibrated `display_score`, the rank and tier until then.
+// The numbers behind it open on hover, on keyboard focus and on a tap or click; Escape or a tap elsewhere closes them.
 export function ScoreBadge({ clip }: { clip: any }) {
-  const rank = rankOf(clip);
-  if (!rank) return null;
+  const [mode, setMode] = useState<"" | "open" | "shut">("");
+  const box = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (mode !== "open") return;
+    const away = (e: Event) => { if (!box.current?.contains(e.target as Node)) setMode(""); };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [mode]);
+  const rank = rankOf(clip), shown = typeof clip.display_score === "number" ? Math.round(clip.display_score) : null;
+  if (shown === null && !rank) return null;
   const v = clip.virality || {}, tip = `score-${clip.id}`;
+  const raw = typeof v.score === "number" ? v.score : null;
+  // Sub-scores: the five dimensions under `scores` once the API sends them, today's four under `virality` until then.
+  const parts = Object.entries({ ...v, ...(clip.scores && typeof clip.scores === "object" ? clip.scores : {}) })
+    .filter(([k, n]) => k !== "score" && typeof n === "number") as [string, number][];
   const signals = Object.entries(clip.signals || {}).filter(([, share]) => (share as number) >= 0.05).sort((a, b) => (b[1] as number) - (a[1] as number));
+  const rated = shown !== null || !!clip.tier;
   return (
-    <span className="score-badge">
-      <button type="button" className={`rank ${clip.tier || "unrated"}`} aria-describedby={tip}>
-        <b>#{rank}</b>{clip.rank_of ? <> of {clip.rank_of}</> : null}{clip.tier && <> · {TIER_NAMES[clip.tier]}</>}
+    <span ref={box} className={`score-badge ${mode}`} onKeyDown={(e) => { if (e.key === "Escape") setMode("shut"); }}>
+      <button type="button" className={shown !== null ? "rank score" : `rank ${clip.tier || "unrated"}`} aria-describedby={tip} aria-expanded={mode === "open"}
+        aria-label={shown !== null ? `Score ${shown} out of 100. Show the numbers behind it.` : undefined}
+        onClick={() => setMode(mode === "open" ? "shut" : "open")} onBlur={() => setMode("")}>
+        {shown !== null ? <><b>{shown}</b><small>/100</small></>
+          : <><b>#{rank}</b>{clip.rank_of ? <> of {clip.rank_of}</> : null}{clip.tier && <> · {TIER_NAMES[clip.tier]}</>}</>}
       </button>
       <span role="tooltip" id={tip} className="score-tip">
-        {clip.tier
-          ? <><strong>AI score {v.score} of 100</strong>
-              <span className="parts">{PART_NAMES.filter(([k]) => typeof v[k] === "number").map(([k, name]) => <span key={k}>{name} <b>{v[k]}</b></span>)}</span></>
+        {rated
+          ? <><strong>{raw !== null ? `AI score ${raw} of 100` : "Rated by the AI"}{rank ? ` · #${rank}${clip.rank_of ? ` of ${clip.rank_of}` : ""}` : ""}</strong>
+              {parts.length > 0 && <span className="parts">{parts.map(([k, n]) => <span key={k}>{PART_NAMES[k] || k} <b>{n}</b></span>)}</span>}</>
           : <strong>Ranked by how strongly this moment stood out in the video. It has no AI rating.</strong>}
+        {shown !== null && <span>The {shown} on the card is the AI score scaled across this video's clips, so the best one lands in the 90s. The order is the AI's own.</span>}
         {signals.length > 0 && <span>Picked for: {signals.map(([k, share]) => `${SIGNAL_NAMES[k] || k} ${Math.round((share as number) * 100)}%`).join(", ")}</span>}
-        {clip.reason && <span>{clip.reason}</span>}
-        {clip.tier && <span className="muted">The score is an AI opinion of the clip, not a forecast of views.</span>}
+        {(clip.reason || clip.why) && <span>{clip.reason || clip.why}</span>}
+        {rated && <span className="muted">The score is an AI opinion of the clip, not a forecast of views.</span>}
       </span>
     </span>
   );
