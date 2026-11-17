@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import { VIDEO_TYPES } from "@/lib/api";
+import { VIDEO_TYPES, videoFileProblem } from "@/lib/api";
 
 export function DropZone({ onFile, busy, compact }: { onFile: (f: File) => void; busy?: boolean; compact?: boolean }) {
   const input = useRef<HTMLInputElement>(null);
@@ -10,10 +10,9 @@ export function DropZone({ onFile, busy, compact }: { onFile: (f: File) => void;
   function take(files: FileList | null) {
     const f = files?.[0];
     if (!f) return;
-    const ext = "." + (f.name.split(".").pop() || "").toLowerCase();
-    if (!VIDEO_TYPES.split(",").includes(ext)) { setError(`${f.name} isn't a video file we can read. Use MP4, MOV, MKV or WebM.`); return; }
-    setError("");
-    onFile(f);
+    const problem = videoFileProblem(f);
+    setError(problem || "");
+    if (!problem) onFile(f);
   }
 
   return (

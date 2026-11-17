@@ -4,8 +4,12 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from . import layouts
 from .captions import build_ass
 from .ff import SAFE_IN, Deadline, PipelineError, PipelineTimeout, run
+# The geometry lives in layouts.py; these names are re-exported because callers and tests import them from here.
+from .layouts import (ASPECTS, EDGE, FACECAM_PAD, FACECAM_REGIONS, FULL_FRAME, MAX_DODGE, LayoutPlan,  # noqa: F401
+                      _crop_scale, _overlaps, avoid_camera, crop_rect, even, fill_crop, punch_in)
 
 # Where the chat sits in the source video, as fractions: (x, y, width, height).
 CHAT_REGIONS = {
@@ -16,52 +20,13 @@ CHAT_REGIONS = {
     "bottom-left": (0.0, 0.58, 0.38, 0.42),
 }
 W, H, GAP = 1080, 1920, 40
-
-# Where the streamer's facecam usually sits, as fractions: (x, y, width, height).
-FACECAM_REGIONS = {
-    "top-left": (0.0, 0.0, 0.30, 0.30),
-    "top-right": (0.70, 0.0, 0.30, 0.30),
-    "bottom-left": (0.0, 0.70, 0.30, 0.30),
-    "bottom-right": (0.70, 0.70, 0.30, 0.30),
-}
 SPLIT_TOP = 640          # facecam band height in the 9:16 split layout (top third)
-ASPECTS = {"9:16": (1080, 1920), "4:5": (1080, 1350), "1:1": (1080, 1080), "16:9": (1920, 1080)}
-FULL_FRAME = (0.0, 0.0, 1.0, 1.0)
-
-
-def even(n) -> int:
-    return int(n) // 2 * 2
-
-
-def crop_rect(src_w: int, src_h: int, region, tw: int, th: int, zoom: float = 1.0) -> tuple[float, float, float, float]:
-    """The centred crop of `region` (fractions) with the target aspect, in source pixels: (x, y, w, h)."""
-    fx, fy, fw, fh = region
-    x, y, w, h = src_w * fx, src_h * fy, src_w * fw, src_h * fh
-    if w / h > tw / th:
-        cw, ch = h * tw / th, h
-    else:
-        cw, ch = w, w * th / tw
-    cw, ch = cw / zoom, ch / zoom
-    return x + (w - cw) / 2, y + (h - ch) / 2, cw, ch
-
-
-def _crop_scale(rect, tw: int, th: int) -> str:
-    cx, cy, cw, ch = rect
-    return f"crop={even(cw)}:{even(ch)}:{even(cx)}:{even(cy)},scale={tw}:{th},setsar=1"
-
-
-def fill_crop(src_w: int, src_h: int, region, tw: int, th: int, zoom: float = 1.0) -> str:
-    """Crop `region` (fractions) to the target aspect, centred, then scale to fill tw x th exactly."""
-    return _crop_scale(crop_rect(src_w, src_h, region, tw, th, zoom), tw, th)
-
-
-FACECAM_PAD = 0.02     # keep this much (fraction of the frame) between the gameplay crop and the camera box
-MAX_DODGE = 0.3        # the gameplay crop may step this share of its own size to clear a camera inside the frame
-EDGE = 0.02            # a camera box this close to a frame edge counts as sitting on that edge
-
-
-def _overlaps(a, b) -> bool:
-    return a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]
+OUT_FPS = 30
+# Export sizes by name: the output's short side in pixels. An output is never larger than its source.
+RESOLUTIONS = {"480": 480, "720": 720, "1080": 1080, "2k": 1440, "4k": 2160}
+PREVIEW_SIDE = 540       # a preview render's short side: 540x960 for 9:16
+FULL_ENCODE = ["-preset", "veryfast", "-crf", "20"]
+PREVIEW_ENCODE = ["-preset", "ultrafast", "-crf", "30"]     # a preview is for looking at, not for posting
 
 
 def gameplay_crop(src_w: int, src_h: int, tw: int, th: int, zoom: float, cam) -> tuple[str, str]:
@@ -69,45 +34,12 @@ def gameplay_crop(src_w: int, src_h: int, tw: int, th: int, zoom: float, cam) ->
 
     Returns (how, filter) where how is "clear" (the centred crop misses the camera), "shifted" (the crop moves the
     least distance that clears the camera: always for a camera on a frame edge, and for one inside the frame
-    when a small step is enough) or "blurred" (the camera is in the way and cannot be stepped around, so the crop
-    stays and a blurred patch covers it). `filter` reads [b] and writes [bot].
+    when a small step is enough) or "blocked" (the camera is in the way and cannot be stepped around). A blocked
+    crop has no filter: the camera is never covered with a patch, so the caller draws a layout that shows it
+    where it is instead (layouts.compose does that). `filter` reads [b] and writes [bot].
     """
-    cx, cy, cw, ch = crop_rect(src_w, src_h, FULL_FRAME, tw, th, zoom)
-    pad_x, pad_y = FACECAM_PAD * src_w, FACECAM_PAD * src_h
-    bx, by, bw, bh = cam[0] * src_w - pad_x, cam[1] * src_h - pad_y, cam[2] * src_w + 2 * pad_x, cam[3] * src_h + 2 * pad_y
-    box = (bx, by, bw, bh)
-    if not _overlaps((cx, cy, cw, ch), box):
-        return "clear", f"[b]{_crop_scale((cx, cy, cw, ch), tw, th)}[bot]"
-    on_left, on_right = cam[0] <= EDGE, cam[0] + cam[2] >= 1 - EDGE
-    on_top, on_bottom = cam[1] <= EDGE, cam[1] + cam[3] >= 1 - EDGE
-    # Every way the crop could step clear of the camera and stay inside the frame: (distance, new origin, allowed).
-    # A camera on a frame edge is always stepped away from. A camera inside the frame is only dodged when a small
-    # step does it (MAX_DODGE of the crop): a bigger one would push the middle of the game out of the picture.
-    moves = []
-    if bx + bw + cw <= src_w:
-        d = bx + bw - cx
-        moves.append((d, (bx + bw, cy), on_left or d <= MAX_DODGE * cw))
-    if bx - cw >= 0:
-        d = cx - (bx - cw)
-        moves.append((d, (bx - cw, cy), on_right or d <= MAX_DODGE * cw))
-    if by + bh + ch <= src_h:
-        d = by + bh - cy
-        moves.append((d, (cx, by + bh), on_top or d <= MAX_DODGE * ch))
-    if by - ch >= 0:
-        d = cy - (by - ch)
-        moves.append((d, (cx, by - ch), on_bottom or d <= MAX_DODGE * ch))
-    moves = [m for m in moves if m[2]]
-    if moves:
-        _dist, (nx, ny), _ok = min(moves, key=lambda m: m[0])
-        return "shifted", f"[b]{_crop_scale((nx, ny, cw, ch), tw, th)}[bot]"
-    # Camera in the middle of the frame: cover it with a blurred copy of itself, then crop as usual.
-    x0, y0 = even(max(0.0, bx)), even(max(0.0, by))
-    w0, h0 = even(min(src_w - x0, bw)), even(min(src_h - y0, bh))
-    return "blurred", (f"[b]split=2[b0][b1];[b1]crop={w0}:{h0}:{x0}:{y0},boxblur=20:3[cam];"
-                       f"[b0][cam]overlay={x0}:{y0},{_crop_scale((cx, cy, cw, ch), tw, th)}[bot]")
-
-
-OUT_FPS = 30
+    how, rect = avoid_camera(src_w, src_h, tw, th, zoom, cam)
+    return how, (f"[b]{_crop_scale(rect, tw, th)}[bot]" if rect else "")
 
 
 def resolve_layout(layout: str, facecam) -> str:
@@ -125,32 +57,32 @@ def fit_layout(layout: str, aspect: str) -> str:
     return layout
 
 
-def punch_in(tw: int, th: int, expr: str) -> str:
-    """Zoom the tw x th picture by `expr` (an ffmpeg expression of t, 1 = no zoom) about its centre. Empty for "1"."""
-    if expr == "1":
-        return ""
-    return (f",scale=w='2*trunc({tw}*({expr})/2)':h='2*trunc({th}*({expr})/2)':eval=frame,crop={tw}:{th}")
+def _camera(facecam):
+    """(box, face, scene) from what a caller passed as `facecam`: a preset name, a box, or a facecam.CamBox."""
+    if not facecam:
+        return None, None, None
+    box = FACECAM_REGIONS[facecam] if isinstance(facecam, str) else tuple(facecam)
+    return box, getattr(facecam, "face", None), getattr(facecam, "scene", None)
+
+
+def plan_for(src_w: int, src_h: int, layout: str, facecam, aspect: str = "9:16", zoom: float = 1.0) -> LayoutPlan:
+    """The layout plan for callers that pass a layout name and a camera instead of a plan."""
+    box, face, scene = _camera(facecam)
+    return layouts.compose(src_w, src_h, layout, aspect, scene=scene, cam=box, face=face, zoom=zoom)
 
 
 def layout_filter(src_w: int, src_h: int, layout: str, zoom: float, chat: str, facecam,
                   ow: int = W, oh: int = H, punch: str = "1") -> str:
-    """split: facecam top third + gameplay below. fill: gameplay fills the frame. classic: old blurred layout.
-    `punch` is a zoom expression over time for the gameplay picture (split and fill only)."""
-    if layout == "split":
-        top = even(oh / 3)
-        region = FACECAM_REGIONS[facecam] if isinstance(facecam, str) else tuple(facecam)
-        _how, bottom = gameplay_crop(src_w, src_h, ow, oh - top, zoom, region)
-        bottom = bottom[: -len("[bot]")] + punch_in(ow, oh - top, punch) + "[bot]"
-        return (f"[0:v]split=2[a][b];"
-                f"[a]{fill_crop(src_w, src_h, region, ow, top)}[top];"
-                f"{bottom};"
-                f"[top][bot]vstack=inputs=2,format=yuv420p[v]")
-    if layout == "fill":
-        return f"[0:v]{fill_crop(src_w, src_h, FULL_FRAME, ow, oh, zoom)}{punch_in(ow, oh, punch)},format=yuv420p[v]"
-    return vertical_filter(src_w, src_h, zoom, chat)
+    """The filter graph for a layout name (old names included) on the ow x oh canvas. classic is the old blurred
+    9:16 layout. `punch` is a zoom expression over time for the gameplay picture (never a panel with a person)."""
+    aspect = next((a for a, size in ASPECTS.items() if size == (ow, oh)), "9:16")
+    if layouts.canonical(layout, aspect) == "classic":
+        return vertical_filter(src_w, src_h, zoom, chat)
+    return layouts.layout_graph(plan_for(src_w, src_h, layout, facecam, aspect, zoom), punch=punch)
 
 
 def caption_top(src_w: int, src_h: int, layout: str, zoom: float, chat: str, oh: int = H) -> int:
+    """Where captions sit for the old layout names. Layout plans carry their own (LayoutPlan.caption_top)."""
     if layout == "split":
         return even(oh / 3) - 60       # captions sit on the seam between camera and gameplay
     if layout == "fill":
@@ -171,6 +103,28 @@ def capped_size(w: int, h: int, max_side: int | None) -> tuple[int, int] | None:
         return None
     k = max_side / min(w, h)
     return even(w * k), even(h * k)
+
+
+def output_size(src_w: int, src_h: int, vertical: bool, aspect: str = "9:16", resolution: str | None = None,
+                preview: bool = False, max_side: int | None = None) -> tuple[int, int]:
+    """The size a clip is rendered at. Without `resolution` it is what it always was: the 1080 canvas of the
+    aspect when reframing, the source's own size otherwise. With one, the short side is that resolution, capped
+    at the source's short side (an export is never larger than its source). A preview is at most PREVIEW_SIDE.
+    The plan cap `max_side` always wins."""
+    ref = ASPECTS.get(aspect, ASPECTS["9:16"]) if vertical else (src_w, src_h)
+    side = min(ref)
+    if resolution is not None:
+        if resolution not in RESOLUTIONS:
+            raise PipelineError("bad_options", f"Unknown resolution. Use one of: {', '.join(RESOLUTIONS)}.")
+        side = min(RESOLUTIONS[resolution], min(src_w, src_h))
+    if preview:
+        side = min(side, PREVIEW_SIDE)
+    if max_side:
+        side = min(side, max_side)
+    if side == min(ref):
+        return ref
+    k = side / min(ref)
+    return even(ref[0] * k), even(ref[1] * k)
 
 
 def vertical_filter(src_w: int, src_h: int, zoom: float, chat: str) -> str:
@@ -283,33 +237,55 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
                 layout: str = "fill", facecam=None, style: str = "pop", aspect: str = "9:16",
                 max_side: int | None = None, deadline: Deadline | None = None,
                 segments: list[tuple[float, float]] | None = None, punch: str = "1", has_audio: bool = True,
-                hook: str | None = None, flash: bool = False, loudness: bool = True) -> None:
+                hook: str | None = None, flash: bool = False, loudness: bool = True,
+                plan: LayoutPlan | None = None, resolution: str | None = None, preview: bool = False) -> None:
     """Cut [start, end] from src and render it. `words` are clip-relative (start, end, text) or empty.
 
     With `segments` (source seconds, in playing order) those pieces are played back to back instead, and `words`
     are on that rendered timeline. `punch` is a zoom expression over rendered time for the gameplay picture.
     `hook` is a line of on-screen text for the first 2.5 s. `flash` marks the first segment as a flash-forward.
     `loudness` normalises the audio to -14 LUFS with peaks under -1.5 dB (on by default).
+
+    When reframing (`vertical`), what is drawn is a layout plan: `plan` if one is given (layouts.plan_layout),
+    otherwise the one for `layout` (any name in layouts.LAYOUTS, or an old one) and `facecam` (a preset name, a
+    box, or what facecam.resolve_facecam returned). `resolution` ("480", "720", "1080", "2k", "4k") sets the
+    output's short side, never above the source's; without it the size is what it always was. `preview` is a
+    fast, small render to look at before paying for the real one. The plan cap `max_side` always wins.
     """
     # Caption files live in the system temp dir so the path has no spaces (ffmpeg filter paths are fussy).
     tmp = Path(tempfile.mkdtemp(prefix="clipcap"))
     try:
         cap_filter = ""
-        ow, oh = ASPECTS.get(aspect, ASPECTS["9:16"]) if vertical else (src_w, src_h)
-        layout = fit_layout(layout, aspect)
+        if not vertical:
+            plan = None
+        elif plan is not None:
+            aspect = plan.aspect
+        elif layouts.canonical(layout, aspect) != "classic":
+            plan = plan_for(src_w, src_h, layout, facecam, aspect, zoom)
+        ref = ow, oh = ASPECTS.get(aspect, ASPECTS["9:16"]) if vertical else (src_w, src_h)
         if words or hook:
-            top = caption_top(src_w, src_h, layout, zoom, chat, oh) if vertical else 0
-            build_ass(words, tmp / "cap.ass", vertical, top, font, style, play=(ow, oh), hook=hook,
-                      hook_top=hook_top(layout, oh) if vertical else int(1080 * 0.1))
+            if not vertical:
+                top, under, span = 0, int(1080 * 0.1), (0.0, 1.0)
+            elif plan is not None:
+                top, under, span = plan.caption_top, plan.hook_top, plan.text_span
+            else:
+                top, under, span = caption_top(src_w, src_h, "classic", zoom, chat, oh), hook_top("classic", oh), (0.0, 1.0)
+            # Always written for the 1080 canvas: the subtitle renderer scales it to whatever size the clip is.
+            build_ass(words, tmp / "cap.ass", vertical, top, font, style, play=(ow, oh), hook=hook, hook_top=under,
+                      span=span)
             cap_filter = f"ass=filename={tmp / 'cap.ass'}"
-        size = capped_size(ow, oh, max_side)
-        scale = ["-s", f"{size[0]}x{size[1]}"] if size else []
+        size = output_size(src_w, src_h, vertical, aspect, resolution, preview, max_side)
+        # A chosen resolution or a preview is drawn at its own size (sharper above 1080, far less work below it).
+        # Everything else is drawn on the 1080 canvas and scaled after, exactly as before.
+        direct = plan is not None and (resolution is not None or preview)
+        scale = ["-s", f"{size[0]}x{size[1]}"] if (size != ref and not direct) else []
         pieces = segments if segments and segments != [(start, end)] else None
         lo, hi = (min(s for s, _ in pieces), max(e for _, e in pieces)) if pieces else (start, end)
         level = loudness_filter(measure_loudness(src, start, end, deadline)) if (loudness and has_audio) else ""
         if vertical:
             # 30 fps out: TikTok, Shorts and Reels play it natively and it cuts render time by ~40% on 60 fps VODs.
-            graph = layout_filter(src_w, src_h, layout, zoom, chat, facecam, ow, oh, punch)
+            graph = (layouts.layout_graph(plan, size if direct else None, punch) if plan is not None
+                     else vertical_filter(src_w, src_h, zoom, chat))
             if pieces:
                 graph = segments_graph(pieces, lo, has_audio, flash, level) + ";" + graph.replace("[0:v]", "[cv]", 1)
             else:
@@ -329,8 +305,8 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
             vf += ["-af", level]
         run(["ffmpeg", "-loglevel", "error", "-y", "-ss", f"{lo:.3f}", "-t", f"{hi - lo:.3f}",
              *SAFE_IN, "-i", src, *vf, *scale,
-             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
-             "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", out], deadline)
+             "-c:v", "libx264", *(PREVIEW_ENCODE if preview else FULL_ENCODE), "-pix_fmt", "yuv420p",
+             "-c:a", "aac", "-b:a", "96k" if preview else "160k", "-ar", "48000", "-movflags", "+faststart", out], deadline)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

@@ -28,7 +28,7 @@
 | Reframe | Off by default (keeps source ratio) | On by default (9:16) | partial | B | – |
 | Ratio | 9:16, 1:1, 4:5, 16:9 | Same four | done | B | – |
 | Reframe layout | Auto, Full, Fit, Grid 4, Split 2, Trio, PiP, OTS, Screen First, Gameplay A, Gameplay B; allowed set depends on the ratio; default Auto | auto, split, fill, classic | partial | B · 2.1a/b | – |
-| More results, express mode | Enterprise-only switches | None | **ASK** | – | – |
+| More results, express mode | Enterprise-only switches | None | skip (owner: wait) | – | – |
 | Task states | Created, queued, ongoing, succeeded, failed | Queued, running, succeeded, failed, cancelled | partial | A | – |
 | Results while running | Clips appear as they are found | Clips appear as they render (PR #111) | partial | A · S1 | – |
 | Per clip: rank | Index in rank order, from 0 | Number in video order, from 1, plus rank | partial | A | – |
@@ -48,9 +48,9 @@
 | Find Moments | Prompt search; same clip format and render options as clipping; limit; no length bucket | Video Finder: speech and on-screen search, returns matches and optional clips | partial | A · 3.3 | – |
 | Re-export clips | Render all or chosen clips of a finished task again with new options | None (a clip is rendered once) | missing | B · S2 | – |
 | One-Click Highlights | Prompt-driven montage from one or several videos; ratio, duration, language, subtitles, hook, B-roll, music; five prompt presets | None | missing | B · 3.4 (music licence: owner) | – |
-| Game Clipping | Per-game templates: a layout, a subtitle style and detection tuned to the game | 5 GTA templates (options and tuning) | partial | C · 2.4 | – |
-| Game list | LoL, GTA 5, WoW, OW2, Minecraft, Apex, Valorant, Fortnite, Dota 2 / Rust, More | GTA only | partial | C | – |
-| Which templates sit under each game | Not in the docs (needs their app) | – | **ASK** | C | – |
+| Game Clipping | Per-game templates: a layout, a subtitle style and detection tuned to the game | 5 GTA templates (options and tuning) | partial: 31 templates for 12 games built on `feat/game-template-gallery`; their layouts, length buckets and hook styles reach a job only after B's and A's PRs and D's wiring; Gameplay A / B are provisional; not verified | C · 2.4 | – |
+| Game list | LoL, GTA 5, WoW, OW2, Minecraft, Apex, Valorant, Fortnite, Dota 2 / Rust, More | GTA only | partial: all 11 games plus "other" built on `feat/game-template-gallery` (`GET /v1/templates/games`, `?game=`); not verified | C | – |
+| Which templates sit under each game | Not in the docs (needs their app) | – | **ASK** (still open: the built catalogue is our own choice of template kinds per game) | C | – |
 | Video Editor | Canvas, layered timeline, trim, transcript-based cutting, reframe, subtitles, elements, hook, text, audio, transitions, details; autosave | None | missing | D · 1.4a–d (re-render charging: money) | – |
 | AI Subtitles | 100 languages; styles; line editing; original / translated / both; punctuation toggle; max characters per line; emoji; TXT, SRT, VTT export | English; 5 styles; SRT, VTT, TXT export | partial | F · 2.3, B · 2.2 | – |
 | Video Transcripts | Segments with text, language, start, end, speaker; optional translation | Internal transcript for search; no endpoint, no speakers | partial | F · U1 | – |
@@ -88,18 +88,22 @@ Our ingestion rule stays (CLAUDE.md): public, non-DRM content only; no logins, c
 | Sidebar | Home, Library, Scheduler, Brand kit, Pricing, API | Projects, Library, Brand kit and Publishing (coming soon), API keys, Billing | partial | D |
 | Settings before a run | Clip length, ratio or template, subtitle style, hook | Template, clips, length, shape, caption style, editing switches | partial | D |
 | Results | Ranked by score, sortable by time, preview, edit, export or publish | Ranked, sortable, preview, download | partial | D |
-| Template gallery | Game filter tabs, preview clip per template, "use template" | Template select | partial | C, D |
+| Template gallery | Game filter tabs, preview clip per template, "use template" | Template select | partial: API side built on `feat/game-template-gallery` (game list, filter, schematic posters); gallery page is D's; no preview clips (no rights-cleared footage) | C, D |
 
 ## 5. Money (owner decides; nothing here is built without an OK in the PR)
 
-Their plans, credits and per-plan limits (export resolution, storage, upload size, bulk batch size, connected accounts, scheduled posts, custom templates, fonts, seats) are listed in the research notes. Parity of **prices and plan limits** is a pricing decision, not a build task: **ASK**.
+Their plans, credits and per-plan limits (export resolution, storage, upload size, bulk batch size, connected accounts, scheduled posts, custom templates, fonts, seats) are listed in the research notes. Owner's decision: we keep our own pricing. Tiers, credits and limits will be recommended from measured processing costs and need the owner's approval before anything changes.
 
-## Questions for the owner
+## Decisions (owner, 2026-11-16)
 
-1. **API names.** Same options and values are planned. Should our API also use their exact parameter names and enum spellings, or our own names with a published mapping? I recommend our own names.
-2. **API defaults.** Their defaults are render off, captions off, reframe off, hook off, 480p. Ours are all on. Matching them changes what an API call without options returns. The dashboard would still send its own choices. Confirm the switch.
-3. **Clip index.** Theirs counts from 0 in rank order; ours counts from 1 in video order. Switch, or return both?
-4. **Templates per game** and what each **caption style** and the **Gameplay A / B** layouts look like are not in their docs. I need screenshots or recordings in `~/Downloads/wayin-benchmark/`.
-5. **Enterprise switches** (more results, express mode): their two pages disagree on what express mode costs. Build, skip, or wait?
-6. **Paid services** needed for parity: text-to-speech (hook voice), image generation (thumbnails), video or stock footage (B-roll), an upscaler (enhancer), hosted transcription in 100 languages. Each needs a verified price and your OK.
-7. **Plan limits and prices**: copy theirs, or keep ours?
+1. **API names:** our own parameter names, with a published mapping to Wayin's documented options. ClutchClips stays an independent platform with equivalent function.
+2. **API defaults:** match Wayin's documented defaults: rendering off, captions off, reframing off, AI hook off, 480p. The dashboard lets users choose their own settings and sends them explicitly. Existing API clients stay compatible wherever possible (every existing field keeps working).
+3. **Clip indexing:** return both. `rank_index` starts at 0 and orders clips by virality score; `timeline_index` starts at 1 and orders them by position in the video. Users can sort by either.
+4. **Templates, caption styles, layouts:** keep building the documented layouts and per-game templates with our own branding and artwork. Gameplay A and Gameplay B stay **provisional** until compared with Wayin's real output. The owner will supply screenshots and recordings. **Nothing is marked verified until that comparison is done.**
+5. **Enterprise switches** (more results, express mode): wait. Not built. Consumer-facing platform first.
+6. **Paid services:** research and price, in this order: hosted transcription and translation; AI thumbnail generation; text-to-speech for hooks; AI-generated or stock B-roll; video enhancement and upscaling. Compare providers on price, speed, quality and estimated cost per video; prefer affordable and open-source options. **No paid service is integrated without the owner's approval.**
+7. **Plans and pricing:** keep our own structure. Before subscriptions are finalised, calculate real processing costs (transcription, AI analysis, rendering, storage, bandwidth) and recommend tiers, credit allocations and usage limits from them. **No pricing change is implemented without the owner's approval.**
+
+## Still open
+
+- What each caption style and the Gameplay A / B layouts look like, and which templates sit under each game: waiting for the owner's screenshots and recordings in `~/Downloads/wayin-benchmark/`.
