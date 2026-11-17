@@ -40,6 +40,7 @@ class RenderOptions:
     censor: bool = False
     resolution: str | None = None     # "480" | "720" | "1080" | "2k" | "4k"; None renders at the size it always did
     preview: bool = False             # a fast, small render to look at (540 on the short side)
+    source_lang: str | None = None    # (languages, agent F) recorded; the worker hands the matching transcriber in
 
 
 def _layout(src, info, options, deadline=None) -> tuple[str, object]:
