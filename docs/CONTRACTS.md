@@ -159,6 +159,27 @@ Panel sizes are a public template field, `panels: {"camera": "top" | "bottom" | 
 | `exports` (new) | `id`, `clip_id`, `account_id`, `resolution`, `options` JSON, `status`, `storage_key`, `created_at` |
 | `import_log` (new) | `id`, `account_id`, `source_url`, `platform`, `consent` bool, `created_at` |
 
+## Waves 2 and 3 (owner, 2026-11-16: "add these")
+
+Everything Wayin's gaming product has that we do not. Same rules as above, plus:
+- **Paid services stay off.** Each feature that could use one is built on a provider interface with a local or open-source implementation as the default, and the paid adapter (if written at all) is behind a setting that is off. Nothing is signed up for, and no key is required for the feature to work.
+- **Money paths stay open for the owner:** anything that charges credits (re-export, Bulk Edit, montage renders, translation or summaries if they cost per use) follows the approved rule (reserve the worst case, charge the seconds rendered) and waits for the owner's merge. No feature is gated by plan.
+- **Platform apps are the owner's:** publishing needs developer apps at each platform. The code reads client ids and secrets from settings and shows a platform only when it is configured.
+- Ingestion keeps CLAUDE.md's rule: public, non-DRM content only; no logins, cookies, proxies, impersonation or block evasion; consent and a log per import; fail cleanly with "upload the file instead"; a takedown flow.
+
+| Wave | Agent | Scope | Owns | Notes |
+|---|---|---|---|---|
+| 2 | E | Link import (Twitch and Kick first, YouTube best effort, direct links), Google Drive and Dropbox share links, bulk import, consent, import log, takedown | `app/ingest/**`, `app/routes_ingest.py` | `POST /v1/imports {url, consent: true}`; `POST /v1/imports/bulk`; `POST /v1/takedowns` |
+| 2 | B3 | `render: none / preview / full`; `POST /v1/clips/export` (re-export with new options); layouts trio, grid 4, over-the-shoulder; layout chosen per moment; 13 hook styles and hook position; more caption styles; limiter headroom | render files, `app/routes_export.py` | export charging is a money PR |
+| 2 | F | Multilingual transcription (local multilingual Whisper), translation and bilingual captions, `POST /v1/transcripts` (with speakers when a local method allows), `POST /v1/summaries` | `app/languages.py`, `app/routes_text.py`, `app/pipeline/translate.py` | translation and summaries through the AI provider already in use cost per use: price shown first, money PR |
+| 2 | D3 | Editor: trim, transcript-based cutting, timeline, caption line editing; saves to `clips.edit`; re-render through the export route | `web-src/**`, `web/**` | re-render charging is B3's money PR |
+| 3 | B4 + D4 | Brand kit: logo, intro, outro, fonts (upload, store, apply at render) | render files; web | needs revision 0007 (`brand_assets`) from the orchestrator |
+| 3 | A3 + D4 | Bulk Edit; Create Montage (prompt-driven highlight reel from one or several videos); fifth score dimension; edge and spacing fixes from the Zias benchmark | engine files; web | montage and bulk renders are money PRs |
+| 3 | E2 | Scheduler and publishing (connect accounts, post now or later, calendar, bulk schedule); live clipping | `app/publish/**`, `app/routes_publish.py` | needs revision 0007 (`social_accounts`, `scheduled_posts`); platforms appear only when the owner has configured their app |
+| 3 | B5 | AI extras with local defaults: thumbnails (frame plus title text), upscaling (ffmpeg scaling and sharpening), B-roll and music from the user's own uploads, hook voice with an open-source voice if its licence allows | render files | generated thumbnails, stock or generated B-roll, AI upscalers, a music library and hosted voices are paid: priced in the research document, off until approved |
+| 3 | G | MCP server and the agent skill | `clip-api/mcp/**`, `clip-api/skill/**` | |
+| last | orchestrator | The single defaults PR (render, captions, reframe and hook off, 480p), with the dashboard sending every choice | `app/main.py`, `app/worker.py`, `app/config.py` | after B3 and D3 |
+
 ## Merge order
 
 1. Done: #111, #112, #113 (this file, revision 0004), #115 (templates, C), #116 (app shell, D).
