@@ -12,10 +12,16 @@ In a pool of at least COMMON_POOL candidates, topic tokens shared by more than h
 same speech only when both have at least MIN_SPEECH_TOKENS content words: a few words are too thin to judge.
 When too few distinct candidates exist, fewer clips come back: a repeat of the same moment is worse than
 one clip less.
+
+For a long list (dozens of clips from a multi-hour video) the caller passes `horizon`: the topic and speech
+tests then only compare clips less than that many seconds apart. Every clip is otherwise compared with every
+clip already picked, and with 50 picks two unrelated moments hours apart that happen to share words (two car
+chases, two arguments with the same person) would cost a clip each time. The time test always applies.
 """
 import re
 
 MIN_GAP = 60.0
+HORIZON = 900.0           # with a long list, "same topic" and "same speech" only count within 15 minutes
 TOPIC_OVERLAP = 0.5
 SPEECH_JACCARD = 0.5
 MIN_SPEECH_TOKENS = 6
@@ -66,10 +72,11 @@ def jaccard(a: set, b: set) -> float:
     return len(a & b) / len(a | b) if a and b else 0.0
 
 
-def pick_distinct(ranked: list, n: int, window, meta, speech,
-                  min_gap: float = MIN_GAP) -> tuple[list, list[tuple[int, str]]]:
+def pick_distinct(ranked: list, n: int, window, meta, speech, min_gap: float = MIN_GAP,
+                  horizon: float | None = None) -> tuple[list, list[tuple[int, str]]]:
     """Greedy over `ranked` (best first). `window(c)` -> (start, end), `meta(c)` -> judge dict or None,
-    `speech(c)` -> transcript text. Returns (picked, skipped) where skipped is [(index in ranked, reason)]."""
+    `speech(c)` -> transcript text. Returns (picked, skipped) where skipped is [(index in ranked, reason)].
+    `horizon`: compare topic and speech only between clips less than this many seconds apart (None = always)."""
     topics = _strip_common([tokens(topic_text(meta(c))) for c in ranked])
     words = [w if len(w) >= MIN_SPEECH_TOKENS else set() for w in (tokens(speech(c)) for c in ranked)]
     picked: list[int] = []
@@ -79,8 +86,11 @@ def pick_distinct(ranked: list, n: int, window, meta, speech,
             break
         reason = None
         for j in picked:
-            if gap(window(c), window(ranked[j])) < min_gap:
+            apart = gap(window(c), window(ranked[j]))
+            if apart < min_gap:
                 reason = f"within {min_gap:.0f} s of a picked clip"
+            elif horizon is not None and apart >= horizon:
+                continue
             elif overlap(topics[i], topics[j]) >= TOPIC_OVERLAP:
                 reason = "same topic as a picked clip"
             elif jaccard(words[i], words[j]) >= SPEECH_JACCARD:

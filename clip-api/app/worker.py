@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import shutil
 import tempfile
 import threading
@@ -42,6 +43,10 @@ class Canceled(Exception):
 class Lost(Exception):
     """The job was finalised by someone else (e.g. the stale-job sweeper) while we were working."""
 
+
+def credits_of(seconds: float) -> int:
+    """Credits for a number of seconds: one per started minute (the same rule as routes_media.credits_for)."""
+    return max(1, math.ceil(seconds / 60))
 
 def claim_job() -> str | None:
     """Claim the oldest QUEUED job for this caller only. The conditional UPDATE decides the winner, so two
@@ -159,6 +164,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             storage.fetch(src_key, src)
         deadline = Deadline(max(900.0, duration * s.job_timeout_factor))
         tool, result = options.pop("tool", "clips"), None
+        charge_basis = options.pop("charge_basis", None)   # "rendered": settle on the seconds rendered (re-runs)
         handed_over: set[int] = set()      # clips already stored (by object), so none is stored twice
 
         def save_clip(r, idx: int) -> None:
@@ -254,7 +260,11 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             if tool in ("clips", "find"):
                 db.get(Upload, job.upload_id).analyzed = True
             job.status, job.progress, job.stage, job.finished_at = "SUCCEEDED", 100, "done", utcnow()
-            ledger.settle(db, job, success=True)
+            charged = None                                  # None: the whole reservation, as for a first run
+            if charge_basis == "rendered":
+                rendered = float(timer.as_dict()["counts"].get("rendered_sec") or 0)
+                charged = credits_of(rendered) if rendered > 0 else 0
+            ledger.settle(db, job, success=True, charged=charged)
             db.commit()
         status, error = "SUCCEEDED", None
     except Canceled:

@@ -14,11 +14,15 @@ from pathlib import Path
 import httpx
 
 from .config import get_settings
+from .pipeline.moments import KINDS, kind_of
 
 log = logging.getLogger("clipapi.ai")
 API_URL = "https://api.anthropic.com/v1/messages"
 PARTS = ("hook", "flow", "value", "trend")
 MAX_TOKENS = 1024
+CUT_RULE = "the best {lo} to {hi} second clip"      # the clip lengths the judge may cut; 15 to 45 unless a bucket is set
+TRANSCRIPT_CHARS = 2500                             # timed transcript sent to the judge, at least
+CHARS_PER_SEC = 25                                  # ... and this much per second of the longest clip it may cut
 
 SYSTEM = (
     "You package short gaming clips (TikTok, Shorts, Reels) for GTA clippers, and rate how well a clip is likely "
@@ -43,8 +47,12 @@ SYSTEM = (
     "this clip only (for example: strong reaction, weak ending: trim the last 4 s). If cutting the start or the "
     "end would fix it, set tip.action to trim_start or trim_end and tip.seconds to how much; otherwise action is "
     "none. If the clip needs nothing, say what makes it work.\n\n"
+    "KIND. kind is the one label that fits the moment best: funny (a joke, a funny line or a silly situation), "
+    "argument (people arguing, trash talk or a confrontation), reaction (the streamer's strong reaction is the "
+    "clip), clutch (a skilled play, a narrow win or a last-second escape), fail (a mistake, a death, a crash or "
+    "a glitch going wrong), story (a scene or a conversation worth watching for what happens or what is told).\n\n"
     "CUT. When the transcript lines carry time marks like [12.4], also choose the cut, in seconds on those marks: "
-    "cut.start and cut.end are the best 15 to 45 second clip of this moment. Start right where the action or the "
+    "cut.start and cut.end are " + CUT_RULE.format(lo=15, hi=45) + " of this moment. Start right where the action or the "
     "reaction begins, not on the build-up before it, and end just after the payoff, not on a trailing silence. "
     "cut.peak is the second where the most striking 1 to 2 seconds begin (the loudest reaction or the punchline). "
     "Stay within the marks you were given."
@@ -65,6 +73,7 @@ TOOL = {
                                                           for k in PARTS}, "required": list(PARTS)},
             "reason": {"type": "string",
                        "description": "One sentence, max 200 chars, on why it would or would not perform."},
+            "kind": {"type": "string", "enum": list(KINDS), "description": "The one label that fits the moment best."},
             "tip": {"type": "object", "description": "One editing tip for this clip.",
                     "properties": {"text": {"type": "string", "description": "Max 120 chars."},
                                    "action": {"type": "string", "enum": ["none", "trim_start", "trim_end"]},
@@ -74,9 +83,21 @@ TOOL = {
                     "properties": {"start": {"type": "number"}, "end": {"type": "number"}, "peak": {"type": "number"}},
                     "required": ["start", "end", "peak"]},
         },
-        "required": ["titles", "hook", "hashtags", "virality", "reason"],
+        "required": ["titles", "hook", "hashtags", "virality", "reason", "kind"],
     },
 }
+
+
+def system_for(cut_range=None) -> str:
+    """The system prompt. `cut_range` (shortest, longest seconds) replaces the 15 to 45 second cut rule when the
+    request asked for a clip-length bucket."""
+    try:
+        lo, hi = (int(x) for x in cut_range)
+    except (TypeError, ValueError):
+        return SYSTEM
+    if not 0 < lo <= hi:
+        return SYSTEM
+    return SYSTEM.replace(CUT_RULE.format(lo=15, hi=45), CUT_RULE.format(lo=lo, hi=hi))
 
 
 def _clamp(v, lo=0, hi=100) -> int:
@@ -131,7 +152,7 @@ def parse_meta(text) -> dict | None:
     out = {"title": title, "titles": titles, "hook": _hook(raw.get("hook")), "description": str(raw.get("description") or "").strip()[:200],
            "hashtags": [t for t in tags if t][:5],
            "virality": {"score": round(sum(parts.values()) / len(parts)), **parts},
-           "reason": str(raw.get("reason") or "").strip()[:240], "source": "ai"}
+           "reason": str(raw.get("reason") or "").strip()[:240], "kind": kind_of(raw.get("kind")), "source": "ai"}
     tip = raw.get("tip")
     if isinstance(tip, dict) and str(tip.get("text") or "").strip():
         action = tip.get("action") if tip.get("action") in ("trim_start", "trim_end") else "none"
@@ -169,10 +190,14 @@ class ClaudeAI:
             content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                                         "data": base64.b64encode(Path(thumb).read_bytes()).decode()}})
         lines = context.get("lines")
+        system = system_for(context.get("cut_range"))
+        bucket = system != SYSTEM      # a clip-length bucket: the cut rule names its range, and more transcript is sent
         if lines:      # timed lines: the judge also chooses where the clip starts, ends and peaks
             a, b = context.get("window", (0, context.get("length", 0)))
-            said = "\n".join(f"[{s:.1f}] {text}" for s, text in lines)[:2500]
+            lo, hi = context["cut_range"] if bucket else (0, 0)
+            said = "\n".join(f"[{s:.1f}] {text}" for s, text in lines)[:max(TRANSCRIPT_CHARS, CHARS_PER_SEC * int(hi))]
             body_text = (f"The moment was detected between {a:.1f} and {b:.1f} on these time marks.\n"
+                         + (f"The cut must be {int(lo)} to {int(hi)} seconds long.\n" if bucket else "") +
                          f"Transcript with time marks (seconds):\n{said}")
         else:
             body_text = f"Transcript of the clip:\n{(transcript or '(no speech detected)')[:1500]}"
@@ -183,7 +208,7 @@ class ClaudeAI:
             f"Why it was picked (signal shares): {json.dumps(context.get('signals', {}))}\n" + body_text)})
         # The forced tool call means Haiku 5.5 skips thinking, so max_tokens only has to hold the tool input
         # (~150-300 tokens). 1024 leaves room for a long reason; only the tokens produced are billed.
-        body = {"model": self.model, "max_tokens": MAX_TOKENS, "system": SYSTEM, "tools": [TOOL],
+        body = {"model": self.model, "max_tokens": MAX_TOKENS, "system": system, "tools": [TOOL],
                 "tool_choice": {"type": "tool", "name": TOOL["name"]},
                 "messages": [{"role": "user", "content": content}]}
         headers = {"x-api-key": self.api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}

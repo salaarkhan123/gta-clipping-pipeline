@@ -12,12 +12,12 @@
 | Option / behaviour | Wayin (documented) | ClutchClips today | Status | Agent · ticket | Verified O/F/O |
 |---|---|---|---|---|---|
 | Input | Platform link or uploaded file id | Uploaded file only | partial | E · 4.4a | – |
-| Project name | Optional label, default empty | None | missing | A | – |
+| Project name | Optional label, default empty | None | partial | A | – |
 | Source language | ISO code from a list of 100, default auto-detect | English only | missing | F · 2.3 | – |
 | Target language (titles, descriptions, subtitles) | ISO code, default same as source | English only | missing | F · 2.3 | – |
 | Clip length | Buckets 0–30, 0–90, 30–60, 60–90, 90–180, 180–300 s; default 0–90 | Fixed length 10–60 s (default 30); the AI may pick 15–45 s | partial | A | – |
 | Clip limit | Top N by score; default all | 1–10, default 3 | partial | A | – |
-| Time range | Whole video or a chosen range (web product; not in the API) | Whole video only | missing | A | – |
+| Time range | Whole video or a chosen range (web product; not in the API) | Whole video only | partial | A | – |
 | Render on request | Off by default: results are metadata; on renders every clip | Always renders every clip | partial | B · S2 | – |
 | Resolution | 480, 720, 1080, 2K, 4K; default 480; never above the source | 1080 (capped by plan) | partial | B · S2 (plan caps: money) | – |
 | Captions | Off by default | On by default | partial | B | – |
