@@ -101,6 +101,30 @@ def source_languages() -> list[str]:
     return [c for c in CODES if c == "en" or all(transcribes(m, c) for m in models)]
 
 
+PROVIDERS = ("none", "ai", "standin")
+
+
+def _provider(setting: str, ai, ai_cls, standin_cls):
+    name = (setting or "none").strip().lower()
+    if name == "standin":
+        return standin_cls()
+    if name == "ai" and ai is not None and hasattr(ai, "tool_call"):
+        return ai_cls(ai.tool_call, LANGUAGES)
+    return None          # "none", an unknown name, or "ai" without an AI key: not configured
+
+
+def translator(ai=None):
+    """The configured translation provider, or None: not configured. `ai` is the AI client (app.ai.default_ai())."""
+    from .pipeline.translate import AITranslator, StandInTranslator
+    return _provider(get_settings().translation_provider, ai, AITranslator, StandInTranslator)
+
+
+def summarizer(ai=None):
+    """The configured summary provider, or None: not configured."""
+    from .pipeline.translate import AISummarizer, StandInSummarizer
+    return _provider(get_settings().summary_provider, ai, AISummarizer, StandInSummarizer)
+
+
 def _known(value: str) -> str:
     if value not in LANGUAGES:
         raise ValueError(f"unknown language code '{value[:16]}'; GET /v1/languages lists the codes")

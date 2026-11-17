@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from . import routes_auth, routes_billing, routes_media, routes_meta, routes_projects, routes_templates, routes_tools
+from . import routes_auth, routes_billing, routes_media, routes_meta, routes_projects, routes_templates, routes_text, routes_tools
 from .config import get_settings
 from .db import get_engine, init_db
 from .deps import ApiError
@@ -33,6 +33,7 @@ app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in get_setting
 app.include_router(routes_auth.router, tags=["auth"])
 app.include_router(routes_media.router, tags=["clips"])
 app.include_router(routes_tools.router, tags=["tools"])
+app.include_router(routes_text.router, tags=["languages"])      # (languages, agent F)
 app.include_router(routes_projects.router, tags=["projects"])
 app.include_router(routes_templates.router, tags=["templates"])
 app.include_router(routes_meta.router, tags=["clips"])

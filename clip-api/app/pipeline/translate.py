@@ -312,6 +312,71 @@ class StandInSummarizer:
         }, duration)
 
 
+# ---------- the two jobs: transcript and summary ----------
+
+def transcript_language(transcript: dict) -> str:
+    """The language a stored transcript was made in. Transcripts from before languages existed were made by the
+    English-only models: "en"."""
+    return transcript.get("language") or "en"
+
+
+def run_text_job(tool: str, src: Path, duration: float, language: str | None, target: str | None,
+                 cached: dict | None, stt, translator: Translator | None, summarizer: Summarizer | None,
+                 work_dir: Path, progress: Callable[[str, int], None], deadline: Deadline | None = None,
+                 detected: bool = False) -> tuple[dict | None, dict]:
+    """A transcript job ("transcript") or a summary job ("summary") on one recording.
+
+    `language`: the spoken language (None: unknown, the English models were used). `cached`: the transcript the
+    upload already has, used when it is in that language. `stt`: the transcription provider for that language.
+    Returns (transcript to store, or None when nothing in it changed; the job's result)."""
+    want = language or "en"
+    changed = False
+    if cached is not None and transcript_language(cached) == want:
+        transcript, reused = cached, True
+    else:
+        if stt is None:
+            raise PipelineError("transcription_unavailable", "Transcription is not available on this server right now.")
+        progress("transcribing", 5)
+        transcript = whole_transcript(src, duration, stt, work_dir, deadline,
+                                      lambda k, m: progress("transcribing", 5 + int(60 * k / m)))
+        transcript.update(language=want, language_detected=detected)
+        reused, changed = False, True
+    result = {"language": want, "transcript_cached": reused, "segments": len(transcript.get("segments", []))}
+    out_lang = target or want
+    if tool == "transcript":
+        result["target_lang"] = target
+        if target is None or target == want:
+            result["translation"] = "same_language" if target else None
+        elif stored_translation(transcript, target) is not None:
+            result["translation"] = "cached"
+        elif translator is None:
+            result["translation"] = "not_configured"
+        else:
+            progress("translating", 70)
+            texts = translator.translate([seg["text"] for seg in transcript.get("segments", [])], want, target,
+                                         lambda k, m: progress("translating", 70 + int(25 * k / m)))
+            transcript = {**transcript, "translations": {**(transcript.get("translations") or {}),
+                                                         target: {"texts": texts, "provider": translator.name}}}
+            result["translation"], changed = "done", True
+        return (transcript if changed else None), result
+    # summary
+    result["target_lang"] = out_lang
+    kept = (transcript.get("summaries") or {}).get(out_lang)
+    if isinstance(kept, dict) and kept.get("title"):
+        result.update(summary=kept, summary_cached=True)
+        return (transcript if changed else None), result
+    if summarizer is None:
+        raise PipelineError("not_configured", "Video summaries are not configured on this server.")
+    if not transcript.get("segments"):
+        raise PipelineError("no_speech", "No speech was found in this video, so there is nothing to summarise.")
+    progress("summarizing", 75)
+    summary = summarizer.summarize(transcript["segments"], duration, want, out_lang)
+    transcript = {**transcript, "summaries": {**(transcript.get("summaries") or {}),
+                                              out_lang: {**summary, "provider": summarizer.name}}}
+    result.update(summary=summary, summary_cached=False)
+    return transcript, result
+
+
 # ---------- TXT, SRT and VTT ----------
 
 def stamp(t: float, sep: str) -> str:
