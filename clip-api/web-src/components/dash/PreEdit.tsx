@@ -118,7 +118,7 @@ function Tile({ t, listed, aspect, on, onPick }: { t: any; listed: Listed; aspec
       <button type="button" className="look-pick" aria-pressed={on} onClick={onPick}>
         <span className="look-art">
           {poster && !broken ? <img src={poster} alt="" loading="lazy" onError={() => setBroken(true)} />
-            : <LookSketch aspect={aspect} layout={fill.layout} camera={fill.camera ?? t.panels?.camera} split={fill.split_ratio ?? t.panels?.split_ratio}
+            : <LookSketch box={0.8} aspect={aspect} layout={fill.layout} camera={fill.camera ?? t.panels?.camera} split={fill.split_ratio ?? t.panels?.split_ratio}
                 style={fill.caption_style} captions={fill.captions !== false} />}
           {on && <span className="look-check"><Icon name="check" size={16} /></span>}
         </span>
@@ -142,7 +142,7 @@ function SavedTile({ s, listed, aspect, on, onPick, onChange }: { s: Saved; list
     <li className={`look ${on ? "on" : ""}`}>
       <button type="button" className="look-pick" aria-pressed={on} onClick={onPick}>
         <span className="look-art">
-          <LookSketch aspect={fill.aspect || aspect} layout={fill.layout} camera={fill.camera} split={fill.split_ratio} style={fill.caption_style}
+          <LookSketch box={0.8} aspect={fill.aspect || aspect} layout={fill.layout} camera={fill.camera} split={fill.split_ratio} style={fill.caption_style}
             captions={fill.captions !== false} reframed={fill.vertical !== false} />
           {on && <span className="look-check"><Icon name="check" size={16} /></span>}
         </span>
@@ -182,7 +182,7 @@ function Panels({ listed, look, onLook }: { listed: Listed; look: Look; onLook: 
   return (
     <fieldset className="panels">
       <legend>Panels <span className="soon-tag" title={PROVISIONAL}>Provisional</span></legend>
-      <div className="panel-sketch" aria-hidden="true"><LookSketch aspect={look.aspect} layout={look.layout} camera={look.camera} split={look.split_ratio}
+      <div className="panel-sketch" aria-hidden="true"><LookSketch box={0.7} aspect={look.aspect} layout={look.layout} camera={look.camera} split={look.split_ratio}
         style={look.caption_style} captions={look.captions} /></div>
       <div className="stack-s grow">
         <label>Camera<select value={look.camera || ""} onChange={(e) => setCamera(e.target.value)}>
