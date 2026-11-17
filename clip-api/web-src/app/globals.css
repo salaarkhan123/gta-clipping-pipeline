@@ -409,6 +409,7 @@ progress::-moz-progress-bar { background: var(--accent); }
 .job.failed .status { color: var(--danger); }
 .job.succeeded .status { color: var(--accent); }
 .job > progress, .job > .link { margin-bottom: 16px; }
+.job-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; margin: -6px 0 14px; }
 .job-body { padding-bottom: 18px; display: grid; gap: 16px; }
 .matches { padding-left: 18px; color: var(--muted); }
 .matches b { color: var(--text); font-variant-numeric: tabular-nums; }
@@ -578,6 +579,13 @@ progress::-moz-progress-bar { background: var(--accent); }
   .clip .icon-btn, .look-tools .icon-btn { width: 40px; height: 40px; }
   .clip-top input { width: 24px; height: 24px; }
   .line-set { padding-left: 0; }
+  .panel { padding: 16px; }
+  .dash section.preedit { padding: 12px; }
+  .looks { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 480px; }
+  .range2-ends { display: grid; grid-template-columns: 1fr 1fr; }
+  .range2-ends > span { grid-column: 1 / -1; grid-row: 2; }
+  .range2-time:last-child { justify-content: flex-end; }
+  .range2-time input { width: 5.6rem; }
   .start-row .btn { flex: 1 1 100%; }
   .bulk .btn { flex: 1 1 auto; }
   .start-drop { padding: 26px 14px; }

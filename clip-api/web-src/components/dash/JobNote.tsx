@@ -15,7 +15,9 @@ export function JobNote({ job, name, onCancel, children }: { job: any; name: str
           : job.status === "FAILED" ? "Failed, credits refunded" : job.status === "CANCELLED" || job.status === "CANCELED" ? "Cancelled" : "Done"}</span>
       </div>
       {isActive(job) && <><progress max={100} value={job.progress} aria-label={`${name} progress`} />
-        <button className="link" onClick={() => onCancel(job.job_id)}>Cancel</button></>}
+        <p className="job-foot"><button className="link" onClick={() => onCancel(job.job_id)}>Cancel</button>
+          {/* The reservation exactly as the API reports it: nothing about credits is worked out in the browser. */}
+          {typeof job.credits_reserved === "number" && <span className="muted small">{job.credits_reserved} credit{job.credits_reserved === 1 ? "" : "s"} reserved for this run</span>}</p></>}
       {job.status === "FAILED" && job.error && <p className="error">{job.error.message}</p>}
       {children && <div className="job-body">{children}</div>}
     </article>
