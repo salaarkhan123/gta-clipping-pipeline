@@ -11,6 +11,9 @@
   selftest                                      load every model and tool once (run in the worker container)
   db-status                                     schema revision and differences from the models (read-only)
   migrate                                       upgrade the schema to the latest revision (deploy.sh runs it)
+  takedown --url URL | --account ID_OR_EMAIL [--dry-run]
+                                                remove every upload, clip and file imported from a source URL, or all
+                                                of one account's link imports; cancels and refunds their jobs
 """
 import argparse
 import secrets
@@ -160,6 +163,10 @@ def main() -> None:
     sub.add_parser("db-status")
     sub.add_parser("migrate")
     c = sub.add_parser("send-test-email"); c.add_argument("--to", required=True)
+    c = sub.add_parser("takedown")
+    target = c.add_mutually_exclusive_group(required=True)
+    target.add_argument("--url"); target.add_argument("--account")
+    c.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
 
     if args.cmd == "selftest":
@@ -175,6 +182,14 @@ def main() -> None:
         print(f"schema {before or 'empty'} -> {after}" if before != after else f"schema already at {after}")
         sys.exit(0)
     init_db()
+    if args.cmd == "takedown":
+        from app.ingest.takedown import takedown
+        try:
+            report = takedown(url=args.url, account=args.account, dry_run=args.dry_run)
+        except LookupError as e:
+            sys.exit(str(e))
+        print("\n".join(report.lines()))
+        sys.exit(0)
     with new_session() as db:
         if args.cmd == "create-account":
             if len(args.password) < 8:

@@ -107,6 +107,9 @@ def clip_text(r) -> str:
 def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=run_pipeline,
                 indexer: Transcriber | None = None, embedder=None, ai=None) -> str:
     """Run one claimed job to a final state. Always settles credits. Returns the final status."""
+    if job_id.startswith("imp_"):       # link import (agent E): no stored source yet; app/ingest runs it to the end
+        from .ingest.runner import run_import
+        return run_import(job_id)
     s = get_settings()
     storage = get_storage()
     with new_session() as db:
