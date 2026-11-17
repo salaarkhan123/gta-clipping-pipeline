@@ -11,8 +11,15 @@ export async function downloadSubtitles(clipId: string, format = "srt") {
   URL.revokeObjectURL(a.href);
 }
 
+// A clip's place by virality (1 = best) and by position in the video (1 = earliest). The API is adding
+// `rank_index` (from 0) and `timeline_index` (from 1); a clip without them uses today's `rank` and `index`.
+export const rankOf = (c: any): number | null => (typeof c.rank_index === "number" ? c.rank_index + 1 : c.rank || null);
+export const numberOf = (c: any): number => (typeof c.timeline_index === "number" ? c.timeline_index : c.index);
+export const nameOf = (c: any): string => c.title || `Clip ${numberOf(c)}`;
+
 // One clip: preview, title, score, times, and its actions. `project` links back to where it came from (Library).
-export function ClipCard({ clip, onChange, project }: { clip: any; onChange: (c: any) => void; project?: { id: string; name: string } }) {
+// `lit` marks the card the timeline just jumped to.
+export function ClipCard({ clip, onChange, project, lit }: { clip: any; onChange: (c: any) => void; project?: { id: string; name: string }; lit?: boolean }) {
   const { fail } = useDash();
   // Pressing the active choice again clears it.
   const send = (body: Record<string, unknown>) => api(`/v1/clips/${clip.id}/feedback`, { body }).then((r) => onChange({ ...clip, ...r })).catch(fail);
@@ -22,10 +29,10 @@ export function ClipCard({ clip, onChange, project }: { clip: any; onChange: (c:
   const titles: string[] = clip.titles?.length ? (clip.titles.includes(clip.title) ? clip.titles : [clip.title, ...clip.titles]) : [];
   const retitle = (title: string) => api(`/v1/clips/${clip.id}`, { method: "PATCH", body: { title } }).then((r) => onChange({ ...clip, ...r })).catch(fail);
   return (
-    <figure className={`clip ${clip.kept === false ? "dropped" : ""}`}>
+    <figure id={`clip-${clip.id}`} tabIndex={-1} className={`clip ${clip.kept === false ? "dropped" : ""} ${lit ? "lit" : ""}`}>
       <video controls preload="none" poster={clip.thumb_url || undefined} src={clip.video_url} />
       <figcaption>
-        <strong>{clip.title || `Clip ${clip.index}`}</strong>
+        <strong>{nameOf(clip)}</strong>
         {titles.length > 1 && <label className="title-pick">Title
           <select value={clip.title} onChange={(e) => retitle(e.target.value)}>
             {titles.map((x) => <option key={x} value={x}>{x}</option>)}
@@ -74,10 +81,14 @@ export function ClipToolbar({ sort, filter, sorts, onSort, onFilter }: { sort: C
 const MATCH: Record<ClipFilter, (c: any) => boolean> = { all: () => true, kept: (c) => c.kept === true, discarded: (c) => c.kept === false,
   bookmarked: (c) => !!c.bookmarked, liked: (c) => c.reaction === "like" };
 // For lists already in the browser (a project). The Library asks the server instead.
+// "Best first" is by virality, "Earliest first" by position in the original video. The new index fields count
+// within one run, so they order the list only when every clip shown has one and comes from the same run;
+// otherwise (today's API, or clips from several runs) the score and the start time do.
 export function arrange(clips: any[], sort: ClipSort, filter: ClipFilter): any[] {
   const out = clips.filter(MATCH[filter]);
-  if (sort === "time") out.sort((a, b) => a.start_sec - b.start_sec);
-  else if (sort === "score") out.sort((a, b) => b.score - a.score);
+  const oneRun = (key: string) => out.every((c) => typeof c[key] === "number" && c.job_id === out[0].job_id);
+  if (sort === "time") out.sort(oneRun("timeline_index") ? (a, b) => a.timeline_index - b.timeline_index : (a, b) => a.start_sec - b.start_sec);
+  else if (sort === "score") out.sort(oneRun("rank_index") ? (a, b) => a.rank_index - b.rank_index : (a, b) => b.score - a.score);
   return out;
 }
 
@@ -87,13 +98,14 @@ const SIGNAL_NAMES: Record<string, string> = { audio: "Loud reaction", chat_moti
 
 // Rank and tier on the card; the numbers behind them only on hover, focus or tap.
 export function ScoreBadge({ clip }: { clip: any }) {
-  if (!clip.rank) return null;
-  const v = clip.virality, tip = `score-${clip.id}`;
+  const rank = rankOf(clip);
+  if (!rank) return null;
+  const v = clip.virality || {}, tip = `score-${clip.id}`;
   const signals = Object.entries(clip.signals || {}).filter(([, share]) => (share as number) >= 0.05).sort((a, b) => (b[1] as number) - (a[1] as number));
   return (
     <span className="score-badge">
       <button type="button" className={`rank ${clip.tier || "unrated"}`} aria-describedby={tip}>
-        <b>#{clip.rank}</b> of {clip.rank_of}{clip.tier && <> · {TIER_NAMES[clip.tier]}</>}
+        <b>#{rank}</b>{clip.rank_of ? <> of {clip.rank_of}</> : null}{clip.tier && <> · {TIER_NAMES[clip.tier]}</>}
       </button>
       <span role="tooltip" id={tip} className="score-tip">
         {clip.tier

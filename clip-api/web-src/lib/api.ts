@@ -58,6 +58,11 @@ export const setPendingFile = (f: File | null) => { pending = f; };
 export const takePendingFile = () => { const f = pending; pending = null; return f; };
 
 export const VIDEO_TYPES = ".mp4,.mov,.mkv,.webm,.m4v,.avi,.flv,.ts";
+// Why a picked file can't be uploaded, or null when it can. Checked in the browser before any bytes are sent.
+export const videoFileProblem = (f: File) => {
+  const ext = "." + (f.name.split(".").pop() || "").toLowerCase();
+  return VIDEO_TYPES.split(",").includes(ext) ? null : `${f.name} isn't a video file we can read. Use MP4, MOV, MKV or WebM.`;
+};
 export const money = (cents: number, currency = "usd") =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase(), maximumFractionDigits: cents % 100 ? 2 : 0 }).format(cents / 100);
 export const clock = (s: number) => {
