@@ -12,12 +12,12 @@
 | Option / behaviour | Wayin (documented) | ClutchClips today | Status | Agent · ticket | Verified O/F/O |
 |---|---|---|---|---|---|
 | Input | Platform link or uploaded file id | Uploaded file only | partial | E · 4.4a | – |
-| Project name | Optional label, default empty | None | missing | A | – |
+| Project name | Optional label, default empty | None | partial | A | – |
 | Source language | ISO code from a list of 100, default auto-detect | English only | missing | F · 2.3 | – |
 | Target language (titles, descriptions, subtitles) | ISO code, default same as source | English only | missing | F · 2.3 | – |
 | Clip length | Buckets 0–30, 0–90, 30–60, 60–90, 90–180, 180–300 s; default 0–90 | Fixed length 10–60 s (default 30); the AI may pick 15–45 s | partial | A | – |
 | Clip limit | Top N by score; default all | 1–10, default 3 | partial | A | – |
-| Time range | Whole video or a chosen range (web product; not in the API) | Whole video only | missing | A | – |
+| Time range | Whole video or a chosen range (web product; not in the API) | Whole video only | partial | A | – |
 | Render on request | Off by default: results are metadata; on renders every clip | Always renders every clip | partial | B · S2 | – |
 | Resolution | 480, 720, 1080, 2K, 4K; default 480; never above the source | 1080 (capped by plan) | partial | B · S2 (plan caps: money) | – |
 | Captions | Off by default | On by default | partial | B | – |
@@ -157,7 +157,7 @@ The 15 moments above, with their times, are in `clip-api/eval/wayin-zias-iceman.
 python scripts/eval_clips.py eval/wayin-zias-iceman.csv job.json     # found, and the rows no clip landed on
 ```
 
-Not run yet: `~/Downloads/wayin-benchmark/source-videos/` holds only an unfinished download. One time differs between the owner's list and the screenshot (#4 ends 1:13:41 in the list, 1:13:31 in the picture); the sheet uses the picture.
+Run on 2026-11-16 without the AI judge (selection only): 7 of the 15 found, 8 missed. Details and causes in `docs/super-board/runs/2026-11-16-swarm.md`, "Moment benchmark". Clip #4 ends 1:13:31 (the screenshot; confirmed by the owner).
 
 ### Their pricing (w11), for the cost model only
 
@@ -183,5 +183,5 @@ Not run yet: `~/Downloads/wayin-benchmark/source-videos/` holds only an unfinish
 
 - Which screenshot (w01 to w07) belongs to which preset name, and the preset names below the fold in w09.
 - What Gameplay A and Gameplay B look like next to each other: still **provisional**.
-- Rendered clips from Wayin and the source videos they came from. Without them no row can be verified on output.
-- The Zias source video for the moment benchmark.
+- Rendered clips from Wayin: the owner will not pay for exports now, so **output parity stays unverified**. We benchmark against the 12 screenshots and the 15 documented moments.
+- The moment benchmark with the AI judge (no key on the build machine).
