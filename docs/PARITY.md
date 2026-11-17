@@ -5,7 +5,7 @@
 **Source of the "Wayin" column:** their public API docs, product pages and help centre, read on 2026-11-16 (24 API pages, 2 product pages, about 25 help articles). Nothing here was observed in their app. Where their docs disagree with each other or say nothing, the row is marked **ASK** and listed under "Questions for the owner": we do not guess.
 
 **Status:** done · partial · missing · skip (not gaming-relevant).
-**Verified** (agent H, per feature, against Wayin's output for the same input in `~/Downloads/wayin-benchmark/`): options / flow / outputs, each ✓ or ✗. A feature is done only with three ✓. **No row is verified yet: that folder does not exist.**
+**Verified** (agent H, per feature, against Wayin's output for the same input in `~/Downloads/wayin-benchmark/`): options / flow / outputs, each ✓ or ✗. A feature is done only with three ✓. **No row is verified yet.** The folder now holds twelve screenshots of their app (section 6) and no rendered clips or source video, so nothing can be compared on output yet.
 
 ## 1. AI Clipping
 
@@ -94,6 +94,81 @@ Our ingestion rule stays (CLAUDE.md): public, non-DRM content only; no logins, c
 
 Their plans, credits and per-plan limits (export resolution, storage, upload size, bulk batch size, connected accounts, scheduled posts, custom templates, fonts, seats) are listed in the research notes. Owner's decision: we keep our own pricing. Tiers, credits and limits will be recommended from measured processing costs and need the owner's approval before anything changes.
 
+## 6. Observed in the owner's screenshots (2026-11-16)
+
+Twelve screenshots of their web app, in `~/Downloads/wayin-benchmark/` (`w01` to `w12`). This is what the pictures show, measured by eye; it is the spec for the items below. **Observed, not verified:** no clip of ours has been compared with a clip of theirs.
+
+### Layouts (w01 to w07, all 9:16)
+
+| Shot | Game type | Top panel | Bottom panel | Caption |
+|---|---|---|---|---|
+| w01 | MOBA | Gameplay, about 63% of the height | Camera, about 37%, cropped tight on the person | none shown |
+| w02 | – | Camera, about one third | Gameplay | none shown |
+| w03 | – | Camera, about 30% | Gameplay | One word, on the line between the panels |
+| w04 | Shooter | Gameplay fills the frame | – | One word, in the lower third |
+| w05 | MOBA | Gameplay fills the frame | – | Two words, in the lower third |
+| w06 | – | Gameplay, about 66% | Camera | One word in the accent colour, on the line between the panels |
+| w07 | Fighting | Gameplay, about 57% | Camera, about 43% | none shown |
+
+- The owner describes the split as "about 50/50". The seven shots measure between 57% and 70% for the larger panel. Ours: gameplay 60%, camera 40% when gameplay is on top; camera 33%, gameplay 67% when the camera is on top; adjustable per template.
+- The camera panel is cropped tight on the person (head and shoulders fill it), never the whole webcam box with its border.
+- Shooter and "MOBA Full" presets show gameplay only.
+
+### Caption style (w03 to w07, and the preset tiles in w09)
+
+- One or two words on screen at a time (three at most in the tiles).
+- Very large, heavy, bold, with a thick dark outline; mostly upper case. One tile uses lower case with a filled box behind the keyword.
+- One keyword per caption in an accent colour (green in w06; yellow, red and blue appear in the tiles).
+- Position: on the line between the two panels in split layouts; in the lower third when gameplay fills the frame.
+- Ours: a new style, `impact`, in our own font, becomes the default caption style. Agent B.
+
+### Job form (w08)
+
+| Control | What it shows | Default |
+|---|---|---|
+| Source | The link as a chip, and a card with the video's thumbnail and title | – |
+| Language | One select | "Auto", no translation |
+| Clip length | One select | "Auto (<90s)", then the documented buckets |
+| What moments to find | Optional free text with five quick picks: funny reactions, clutch wins, epic fails, emotional moments, high-energy scenes | empty |
+| Where to find clips | A two-handle range slider with start and end times | whole video |
+
+### Pre-editing (w09, w10)
+
+- A switch turns pre-editing on. Two tabs: **Presets** and **Custom**.
+- Presets: a ratio select (9:16), a "show my templates only" checkbox, an "add template" tile, then preset tiles named by game type and layout: Racing Gameplay, Racing 2 Gameplay, Shooting Gameplay, Fighting Screen First, MOBA Screen First, MOBA Full, MOBA Gameplay, and more below the fold (names cut off in the picture).
+- Custom: checkboxes for Resize (with the ratio select; ticked), Subtitles, Emojis, Hook text, Logo, Intro, Outro. Emojis, Intro and Outro carry a paid badge; Hook text and Logo a Pro badge. Which of our plans unlock what is a pricing decision (section 5).
+
+### Results (w12)
+
+- Tabs: "Viral Moments" with the selected count ("2/38 selected") and "Find Moments".
+- A select-all checkbox with "2 of 38 selected"; a bar with Bulk Edit, Bulk Schedule, Bulk Export and Create Montage; a sort select ("Highest Viral Score").
+- A grid of cards, three across. Each card: a checkbox, "#N" and the title, a time range badge on the thumbnail ("38:58 - 40:30"), an "Edited" badge when changed, the score as "99 /100", a two-line description, six quick actions (schedule, trim, reframe, captions, download, more), and like, dislike and bookmark on hover.
+- 38 clips from a video at least 78 minutes long. Clip lengths among the top 15: 36 to 92 seconds.
+
+### Scores (w12)
+
+Their top 15 of 38: 99, 97, 96, 96, 93, 91, 91, 91, 89, 87, 87, 85, 82, 80, 80. Ours: a `display_score` calibrated per video so the best clips land in the same range while the order stays the order of the raw scores; raw score and sub-scores stay available and are shown in the tooltip. Agent A. Formula in `docs/CONTRACTS.md`.
+
+### Moment benchmark (w12)
+
+The 15 moments above, with their times, are in `clip-api/eval/wayin-zias-iceman.csv`. Once the source video is supplied:
+
+```bash
+python scripts/eval_clips.py eval/wayin-zias-iceman.csv job.json     # found, and the rows no clip landed on
+```
+
+Not run yet: `~/Downloads/wayin-benchmark/source-videos/` holds only an unfinished download. One time differs between the owner's list and the screenshot (#4 ends 1:13:41 in the list, 1:13:31 in the picture); the sheet uses the picture.
+
+### Their pricing (w11), for the cost model only
+
+| Plan | Monthly | Billed yearly, per month | Credits per month | Export | Bulk edit and export | Bulk import | Storage | Social accounts | Custom templates |
+|---|---|---|---|---|---|---|---|---|---|
+| Starter | $15.99 | $5.58 | 500 | 1080p | 20 clips | 10 videos | 50 GB | 3 | 1 |
+| Pro | $26.99 | $9.58 | 1,000 | 2K and 4K | 50 clips | 30 videos | 100 GB | 10 | 3 |
+| Scale | $139.99 | $69.99 | 6,000 | 2K and 4K | unlimited | 50 videos | 150 GB | 50 | 10 |
+
+1 credit processes 1 minute of source video. Pro adds 2 seats, brand kit, custom fonts, AI music, speech enhancement, B-roll and hook generation; Scale adds 4 seats and priority processing. Per credit: $0.032 (Starter), $0.027 (Pro), $0.023 (Scale) at monthly prices; $0.011, $0.0096, $0.0117 billed yearly.
+
 ## Decisions (owner, 2026-11-16)
 
 1. **API names:** our own parameter names, with a published mapping to Wayin's documented options. ClutchClips stays an independent platform with equivalent function.
@@ -106,4 +181,7 @@ Their plans, credits and per-plan limits (export resolution, storage, upload siz
 
 ## Still open
 
-- What each caption style and the Gameplay A / B layouts look like, and which templates sit under each game: waiting for the owner's screenshots and recordings in `~/Downloads/wayin-benchmark/`.
+- Which screenshot (w01 to w07) belongs to which preset name, and the preset names below the fold in w09.
+- What Gameplay A and Gameplay B look like next to each other: still **provisional**.
+- Rendered clips from Wayin and the source videos they came from. Without them no row can be verified on output.
+- The Zias source video for the moment benchmark.

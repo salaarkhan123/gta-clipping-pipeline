@@ -7,7 +7,8 @@ Usage: python scripts/eval_clips.py <labels.csv> <job.json> [--json]
 to the labelled row it overlaps most (at least 10 s, or a third of the clip if shorter). Labels: 3 = would post
 as-is, 2 = good, 1 = weak, 0 = junk; empty labels are ignored.
 
-Reports: good_rate (clips on a 2 or 3), mean label, great_recall (share of 3-rated moments some clip found),
+Reports: good_rate (clips on a 2 or 3), mean label, great_recall (share of 3-rated moments some clip found, and
+the ones no clip found),
 unlabelled clips (on no labelled row: the sheet missed them, or they are new), duplicates (two clips on the same
 labelled moment, or less than 60 s apart) and clips per quarter of the video.
 """
@@ -82,6 +83,7 @@ def score(rows: list[dict], clips: list[dict], duration: float | None = None) ->
         "mean_label": round(sum(labels) / len(labels), 2) if labels else None,
         "great_recall": round(len(found_great) / len(great), 3) if great else None,
         "great_found": f"{len(found_great)} of {len(great)}",
+        "great_missed": [{"id": r["id"], "start": r["start"], "end": r["end"]} for r in great if r["id"] not in found_great],
         "unlabelled": sum(1 for m in matched if m is None),
         "duplicate_pairs": dup,
         "per_quarter": quarters,
@@ -99,6 +101,10 @@ def report(s: dict) -> str:
         t = int(c["start"])
         lines.append(f"  {t // 3600}:{t % 3600 // 60:02d}:{t % 60:02d}  label {c['label'] if c['label'] is not None else '-'}"
                      f"  row {c['row'] or '-'}  {c['title'] or ''}")
+    for r in s.get("great_missed", []):
+        a, b = int(r["start"]), int(r["end"])
+        lines.append(f"  missed row {r['id']}  {a // 3600}:{a % 3600 // 60:02d}:{a % 60:02d} to "
+                     f"{b // 3600}:{b % 3600 // 60:02d}:{b % 60:02d}")
     return "\n".join(lines)
 
 
