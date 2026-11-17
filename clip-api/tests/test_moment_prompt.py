@@ -220,3 +220,18 @@ def test_a_job_costs_the_same_with_and_without_a_prompt_first_run_and_analysed_u
         assert asked[1]["options"]["prompt"] == ASK and plain[1]["options"]["prompt"] is None
         assert len(asked[1]["clips"]) == len(plain[1]["clips"]) == 1
     assert asked_balance == plain_balance == 30 - 10 - 1 and asked_history == plain_history            # the same ledger rows
+
+
+def test_the_prompt_works_together_with_a_bucket_a_limit_and_a_range(client, user, video, transcriber):
+    from tests.test_clip_options_api import KindAI, submit
+    headers, _ = user
+    up = upload(client, headers, video)
+    r = submit(client, headers, up["upload_id"], {"prompt": "  clutch wins \n", "duration": "0-30", "limit": 2,
+                                                   "range": {"start": 8, "end": 36}, "vertical": False, "punch_zoom": False})
+    assert r.status_code == 202 and r.json()["options"]["prompt"] == "clutch wins"
+    ai = KindAI()
+    assert worker.run_once(transcriber, ai=ai) == "SUCCEEDED"
+    job = client.get(f"/v1/jobs/{r.json()['job_id']}", headers=headers).json()
+    assert 1 <= len(job["clips"]) <= 2 and all(8000 <= c["start_ms"] < c["end_ms"] <= 36000 for c in job["clips"])
+    assert ai.contexts and all(ctx["prompt"] == "clutch wins" and ctx["cut_range"] == (10, 28) for ctx in ai.contexts)
+    assert all(c["display_score"] is not None for c in job["clips"])
