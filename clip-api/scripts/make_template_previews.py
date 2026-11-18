@@ -7,6 +7,13 @@ Usage:
       are drawn here from the catalogue (app/templates.py), so they contain no footage and no third-party
       artwork. A preset's poster shows its panels with their sizes and one caption word where captions sit.
 
+  python scripts/make_template_previews.py <video> --i-have-rights --poster-frames [--start 3300]
+                                           [--only id,id] [--game lol] [--out DIR]
+      Write clip-api/templates/<id>/poster.webp for each template: one frame of a short render of <video> made
+      with the template's own options (layout, panel sizes, caption style and position, hook) and today's
+      renderer, at 360x640 (or the template's own shape). The site serves poster.webp before poster.svg. Use only
+      footage the owner HAS THE RIGHTS to publish; templates for other games show that footage in their layout.
+
   python scripts/make_template_previews.py <video> --i-have-rights [--start 30] [--seconds 6]
                                            [--only id,id] [--game lol] [--out DIR]
       Render <out>/<id>/preview.mp4 for each template from a video the owner HAS THE RIGHTS to publish,
@@ -232,12 +239,57 @@ def render_previews(video: Path, out: Path = OUT, start: float = 0.0, seconds: f
     return made
 
 
+POSTER_WORDS = ((0.15, 0.85, "no"), (0.85, 1.6, "way"), (1.6, 2.4, "bro"))   # the caption on the poster frame
+POSTER_AT = 1.2          # seconds into the render: the second caption is up, the hook is still on screen
+POSTER_LONG_SIDE = 640
+POSTER_QUALITY = 80
+
+
+def render_poster_frames(video: Path, out: Path = OUT, start: float = 3300.0, only: list[str] | None = None,
+                         game: str | None = None, timeout: float = 600.0) -> list[Path]:
+    """poster.webp per template from a 2.4 s render of `video` at `start`, with every look option the template sets.
+    The caller is responsible for having the rights to publish `video`."""
+    import subprocess
+    import tempfile
+    from app.pipeline import Deadline, PipelineOptions, probe
+    from app.pipeline.facecam import resolve_facecam
+    from app.pipeline.render import render_clip
+
+    info = probe(video)
+    if start + 3 > info.duration:
+        raise ValueError("start is too close to the end of the video")
+    made = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for tid, t in TEMPLATES.items():
+            if (only and tid not in only) or (game and t["game"] != game):
+                continue
+            options = PipelineOptions(**t["options"], facecam_region="auto")
+            deadline = Deadline(timeout)
+            layout, facecam = resolve_facecam(video, info, options, deadline)
+            clip = Path(tmp) / f"{tid}.mp4"
+            render_clip(video, start, start + 2.4, clip, src_w=info.width, src_h=info.height, vertical=True, zoom=1.0,
+                        chat="none", words=list(POSTER_WORDS), font=options.caption_font, layout=layout, facecam=facecam,
+                        style=options.caption_style, aspect=options.aspect, max_side=720, deadline=deadline,
+                        has_audio=info.has_audio, hook=t["name"] if options.hook_overlay else None, loudness=False,
+                        position=options.caption_position, accent=options.caption_accent, camera=options.camera,
+                        split_ratio=options.split_ratio)
+            path = out / tid / "poster.webp"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            scale = f"scale='if(gt(iw,ih),{POSTER_LONG_SIDE},-2)':'if(gt(iw,ih),-2,{POSTER_LONG_SIDE})'"
+            subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-protocol_whitelist", "file,pipe",
+                            "-ss", str(POSTER_AT), "-i", str(clip), "-frames:v", "1", "-vf", scale,
+                            "-c:v", "libwebp", "-quality", str(POSTER_QUALITY), str(path)], check=True, timeout=120)
+            made.append(path)
+    return made
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("video", nargs="?", type=Path, help="a video you have the rights to publish")
     ap.add_argument("--posters", action="store_true", help="rewrite the schematic posters and stop")
     ap.add_argument("--i-have-rights", action="store_true", help="confirm you may publish clips of this video")
-    ap.add_argument("--start", type=float, default=0.0, help="where the preview starts, in seconds")
+    ap.add_argument("--poster-frames", action="store_true", help="write poster.webp frames from the video, not preview clips")
+    ap.add_argument("--start", type=float, default=None, help="where the render starts, in seconds")
     ap.add_argument("--seconds", type=float, default=6.0, help="preview length")
     ap.add_argument("--only", default="", help="comma-separated template ids")
     ap.add_argument("--game", choices=GAMES, help="only this game's templates")
@@ -258,8 +310,16 @@ def main(argv: list[str] | None = None) -> int:
     if unknown:
         print(f"Unknown template ids: {', '.join(unknown)}", file=sys.stderr)
         return 2
+    if args.poster_frames:
+        try:
+            made = render_poster_frames(args.video, args.out, 3300.0 if args.start is None else args.start, only, args.game)
+        except Exception as e:    # one clear line for the person at the terminal, whatever the renderer raised
+            print(f"Render failed: {e}", file=sys.stderr)
+            return 1
+        print(f"wrote {len(made)} poster frames under {args.out}")
+        return 0
     try:
-        made = render_previews(args.video, args.out, args.start, args.seconds, only, args.game)
+        made = render_previews(args.video, args.out, args.start or 0.0, args.seconds, only, args.game)
     except Exception as e:    # one clear line for the person at the terminal, whatever the renderer raised
         print(f"Render failed: {e}", file=sys.stderr)
         return 1
