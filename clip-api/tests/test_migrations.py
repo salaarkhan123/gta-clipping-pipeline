@@ -1,18 +1,24 @@
 """Alembic: the baseline equals the create_all schema; old databases are stamped, not rebuilt; reruns are no-ops."""
+import importlib.util
 import os
+import re
 import threading
 import uuid
+from datetime import datetime
+from pathlib import Path
 
 import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
+from alembic.operations import Operations
 from alembic.runtime.migration import MigrationContext
+import sqlalchemy as sa
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 
 from app import models  # noqa: F401
 from app.db import Base, get_engine
-from app.migrate import BASELINE, config, current, head, migrate
+from app.migrate import BASELINE, config, current, head, incompatible, migrate
 
 
 def diffs(engine):
@@ -134,3 +140,100 @@ def test_an_old_database_missing_a_table_is_refused_not_patched(db):
     with pytest.raises(RuntimeError, match="webhook_deliveries"):
         migrate(e)
     assert current(e) is None
+
+
+def test_a_database_ahead_of_this_code_starts_without_migrating(db, caplog):
+    """A code rollback after a newer release migrated the database: the older code must still start. It leaves the
+    newer revision alone (migrations are additive, so the old code runs on the newer schema) and says so in the log."""
+    engine = db("ahead")
+    migrate(engine)
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE alembic_version SET version_num = '9999'"))
+    caplog.set_level("WARNING", logger="clipapi.migrate")
+    assert migrate(engine) == ("9999", "9999")
+    assert current(engine) == "9999"
+    assert any("newer" in r.getMessage() and "9999" in r.getMessage() for r in caplog.records)
+
+
+# Exact copies of Step 2's migrations: 0007 from staging, 0008 from #158, 0009 from #152. Step 2 runs them in
+# production, so this code (Step 1.1) must keep working on the schema they leave if Step 2's code is rolled back.
+STEP2_MIGRATIONS = Path(__file__).parent / "step2_migrations"
+
+
+def _apply_step2_migrations(engine):
+    with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
+        for path in sorted(STEP2_MIGRATIONS.glob("m00*.py")):
+            spec = importlib.util.spec_from_file_location(path.stem, path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            module.upgrade()
+            conn.execute(text("UPDATE alembic_version SET version_num = :r"), {"r": module.revision})
+
+
+def test_rolling_back_from_step_2_migrations_0007_to_0009_keeps_this_code_working(db, caplog):
+    """Step 2 migrated the database to 0009 and its code was rolled back to this release: the api and worker start,
+    and this code's models still write and read the tables Step 2 changed (payments, clips) and their parents."""
+    assert head() == "0006"
+    assert [p.name[1:5] for p in sorted(STEP2_MIGRATIONS.glob("m00*.py"))] == ["0007", "0008", "0009"]
+    engine = db("rollback_step2")
+    migrate(engine)
+    _apply_step2_migrations(engine)
+    assert current(engine) == "0009"
+    assert {"policy_acceptances", "clip_thumbnails", "likeness_consents"} <= set(inspect(engine).get_table_names())
+
+    caplog.set_level("WARNING", logger="clipapi.migrate")
+    assert migrate(engine) == ("0009", "0009")
+    assert current(engine) == "0009"
+    with engine.connect() as conn:
+        assert incompatible(conn) == []
+
+    from sqlalchemy.orm import Session
+
+    from app.models import Account, Clip, Job, Payment, Upload
+    now = datetime(2026, 11, 18)
+    with Session(engine) as s:
+        s.add(Account(id="a1", email="rollback@example.com", password_hash="x", webhook_secret="w"))
+        s.flush()
+        s.add(Upload(id="u1", account_id="a1", filename="v.mp4", storage_key="k", size_bytes=1, duration_sec=1.0,
+                     width=1920, height=1080, has_audio=True, expires_at=now))
+        s.flush()
+        s.add(Job(id="j1", account_id="a1", upload_id="u1", options={}, duration_sec=1.0, credits_reserved=1,
+                  expires_at=now))
+        s.flush()
+        s.add(Clip(id="c1", job_id="j1", idx=0, start_sec=0.0, end_sec=1.0, score=1.0, signals={}, features={},
+                   video_key="v"))
+        s.add(Payment(account_id="a1", kind="pack", stripe_ref="cs_rollback", credits=10))
+        s.commit()
+    with Session(engine) as s:
+        assert s.get(Clip, "c1").video_key == "v"
+        assert s.query(Payment).one().credits == 10
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT thumb_id, thumb_chosen_key FROM clips")).one() == (None, None)
+        assert conn.execute(text("SELECT subscription_id, plan_id, period_start, period_end FROM payments")
+                            ).one() == (None, None, None, None)
+
+
+@pytest.mark.parametrize("change, problem", [
+    ("dropped column", "column clips.reaction is missing"),
+    ("required column", "clips.made_required is NOT NULL with no default, and this code never sets it"),
+    ("dropped table", "table clip_feedback is missing"),
+])
+def test_a_newer_schema_this_code_cannot_use_refuses_to_start(db, change, problem):
+    """A database newer than the code is only started on when the code can still use it. A newer release that
+    dropped something this code reads, or added a column this code cannot fill, stops startup with the reason."""
+    engine = db("incompatible_" + change.replace(" ", "_"))
+    migrate(engine)
+    with engine.begin() as conn:
+        ops = Operations(MigrationContext.configure(conn))
+        if change == "dropped column":
+            ops.drop_column("clips", "reaction")
+        elif change == "required column":
+            recreate = "always" if conn.dialect.name == "sqlite" else "auto"   # SQLite cannot ALTER in NOT NULL
+            with ops.batch_alter_table("clips", recreate=recreate) as batch:
+                batch.add_column(sa.Column("made_required", sa.String(10), nullable=False))
+        else:
+            ops.drop_table("clip_feedback")
+        conn.execute(text("UPDATE alembic_version SET version_num = '9999'"))
+    with pytest.raises(RuntimeError, match="cannot use its schema: .*" + re.escape(problem)):
+        migrate(engine)
+    assert current(engine) == "9999"
