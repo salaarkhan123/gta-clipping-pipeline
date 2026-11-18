@@ -104,7 +104,7 @@ export function ClipPlayer(p: PlayerProps) {
           </div>
         </header>
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_420px] gap-5 mid:grid-cols-[minmax(0,1fr)_360px] narrow:flex narrow:flex-col narrow:gap-0 narrow:overflow-y-auto">
-          <div className="grid min-h-0 place-items-center rounded-24 bg-[#050505] p-4 narrow:rounded-none narrow:p-0">
+          <div className="grid min-h-0 place-items-center rounded-24 bg-[#050505] p-4 narrow:flex-none narrow:rounded-none narrow:p-0">
             <div className={`relative ${ASPECT_CLASS[shape]} ${tall ? "h-full max-h-[calc(100dvh-120px)] narrow:h-[62dvh] narrow:max-h-none narrow:w-auto" : "w-full max-w-full"} max-w-full overflow-hidden rounded-16 bg-black narrow:rounded-none`}>
               {clip.video_url ? (
                 <video key={clip.id} ref={video} controls autoPlay playsInline preload="auto" src={clip.video_url} poster={clip.thumb_url || undefined}
@@ -115,7 +115,7 @@ export function ClipPlayer(p: PlayerProps) {
             </div>
           </div>
 
-          <aside className="flex min-h-0 flex-col gap-4 overflow-y-auto rounded-24 border border-solid border-line bg-card p-5 narrow:overflow-visible narrow:rounded-none narrow:border-x-0 narrow:border-b-0 narrow:p-4">
+          <aside className="flex min-h-0 flex-col gap-4 narrow:flex-none overflow-y-auto rounded-24 border border-solid border-line bg-card p-5 narrow:overflow-visible narrow:rounded-none narrow:border-x-0 narrow:border-b-0 narrow:p-4">
             <div className="grid gap-[10px]">
               <div className="flex items-start gap-3">
                 {r.shown !== null && <div className="grid flex-none place-items-center rounded-16 bg-lime-wash px-3 py-2 text-center" title="AI rating">
