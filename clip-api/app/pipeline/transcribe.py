@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from .ff import SAFE_IN, Deadline, run
+from .ff import SAFE_IN, Deadline, PipelineError, run
 
 EXCLAMATIONS = ("oh my god", "oh my gosh", "no way", "what the", "let's go", "lets go", "holy",
                 "are you kidding", "clip that", "clip it", "wtf", "omg", "get out", "i can't believe")
@@ -20,27 +20,79 @@ class Transcriber(Protocol):
     def transcribe(self, wav: Path) -> Transcript: ...
 
 
+MIN_SPEECH_SEC = 3.0      # less speech than this in a sample says nothing about the language
+
+
+def in_language(transcriber, language: str | None):
+    """(languages, agent F) The transcriber to use for speech in `language`: the same one, unless it knows a better
+    one (the local Whisper model hands over its multilingual counterpart). No language: no change."""
+    pick = getattr(transcriber, "for_language", None)
+    return pick(language) if pick is not None and language else transcriber
+
+
 class FasterWhisperTranscriber:
-    """Lazy-loaded faster-whisper model, CPU int8. One model per process."""
+    """Lazy-loaded faster-whisper model, CPU int8. One model per process.
+
+    `language` is the language it transcribes: English unless told otherwise, as it always was. `multilingual` is
+    the name of the model to use for any other language (None: there is none, and every request stays here)."""
     _lock = threading.Lock()
     _models: dict = {}
     workers = 1      # transcriptions one model runs at once (set before first use; see TRANSCRIBE_PARALLEL)
 
-    def __init__(self, model_name: str, beam_size: int = 5, words: bool = True):
+    def __init__(self, model_name: str, beam_size: int = 5, words: bool = True, language: str = "en",
+                 multilingual: str | None = None):
         self.model_name, self.beam_size, self.words = model_name, beam_size, words
+        self.language, self.multilingual = language, multilingual
+        self._others: dict[str, "FasterWhisperTranscriber"] = {}
 
-    def _load(self):
+    def _load(self, name: str | None = None):
+        name = name or self.model_name
         with self._lock:
-            if self.model_name not in self._models:
+            if name not in self._models:
                 from faster_whisper import WhisperModel
-                self._models[self.model_name] = WhisperModel(self.model_name, device="cpu", compute_type="int8",
-                                                             num_workers=max(1, FasterWhisperTranscriber.workers))
-        return self._models[self.model_name]
+                try:
+                    self._models[name] = WhisperModel(name, device="cpu", compute_type="int8",
+                                                      num_workers=max(1, FasterWhisperTranscriber.workers))
+                except Exception as e:
+                    if name.endswith(".en"):
+                        raise                    # the English models: as before
+                    raise PipelineError("language_unavailable", "The speech model for this language could not be "
+                                        "loaded on this server. Try again later, or use English.") from e
+        return self._models[name]
+
+    def for_language(self, language: str | None) -> "FasterWhisperTranscriber":
+        """The transcriber for speech in `language`: this one for its own language (English stays on the model and
+        the options it always had), otherwise the multilingual model with the same settings."""
+        if not language or language == self.language or not self.multilingual:
+            return self
+        if language not in self._others:
+            self._others[language] = FasterWhisperTranscriber(self.multilingual, self.beam_size, self.words,
+                                                              language=language, multilingual=self.multilingual)
+        return self._others[language]
+
+    def options(self) -> dict:
+        """What the model is asked to do. For English this is exactly what it was before languages existed."""
+        return {"language": self.language, "word_timestamps": self.words, "vad_filter": True,
+                "beam_size": self.beam_size, "condition_on_previous_text": False}
+
+    def language_probs(self, wav: Path) -> dict[str, float] | None:
+        """How likely each language is for the speech in this WAV (the first 30 s of it), by the multilingual
+        model. None when there is no such model or too little speech to tell."""
+        if not self.multilingual:
+            return None
+        import numpy as np
+        from faster_whisper.vad import get_speech_timestamps
+        audio = read_wav(wav)
+        spoken = get_speech_timestamps(audio)
+        if sum(c["end"] - c["start"] for c in spoken) < MIN_SPEECH_SEC * 16000:
+            return None
+        speech = np.concatenate([audio[c["start"]:c["end"]] for c in spoken])
+        _lang, _prob, probs = self._load(self.multilingual).detect_language(speech)
+        return {code: float(p) for code, p in probs}
 
     def transcribe(self, wav: Path) -> Transcript:
         # Feed raw samples instead of a path: faster-whisper's own decoder (PyAV) breaks across versions.
-        segments, _ = self._load().transcribe(read_wav(wav), language="en", word_timestamps=self.words, vad_filter=True,
-                                               beam_size=self.beam_size, condition_on_previous_text=False)
+        segments, _ = self._load().transcribe(read_wav(wav), **self.options())
         out = Transcript()
         for seg in segments:
             text = (seg.text or "").strip()

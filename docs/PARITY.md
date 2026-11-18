@@ -13,15 +13,15 @@
 |---|---|---|---|---|---|
 | Input | Platform link or uploaded file id | Uploaded file only | partial | E · 4.4a | – |
 | Project name | Optional label, default empty | None | partial | A | – |
-| Source language | ISO code from a list of 100, default auto-detect | English only | missing | F · 2.3 | – |
-| Target language (titles, descriptions, subtitles) | ISO code, default same as source | English only | missing | F · 2.3 | – |
+| Source language | ISO code from a list of 100, default auto-detect | `source_lang` on clips, reframe, captions, find, transcripts, summaries: the 100 codes of the installed Whisper tokenizer (`GET /v1/languages`); null = detected from up to three 30 s samples and stored on the upload. English keeps the English-only models; other languages use the multilingual model of the same size. Cantonese (`yue`) needs a large-v3 model and is refused on the default models | partial: built, not verified | F · 2.3 | – |
+| Target language (titles, descriptions, subtitles) | ISO code, default same as source | `target_lang`: the AI judge writes titles, hook, description in it (default: the spoken language; English requests unchanged). Translated subtitles need a translation provider, off by default (`TRANSLATION_PROVIDER`, money question open) | partial: built, translation off | F · 2.3 | – |
 | Clip length | Buckets 0–30, 0–90, 30–60, 60–90, 90–180, 180–300 s; default 0–90 | Fixed length 10–60 s (default 30); the AI may pick 15–45 s | partial | A | – |
 | Clip limit | Top N by score; default all | 1–10, default 3 | partial | A | – |
 | Time range | Whole video or a chosen range (web product; not in the API) | Whole video only | partial | A | – |
 | Render on request | Off by default: results are metadata; on renders every clip | Always renders every clip | partial | B · S2 | – |
 | Resolution | 480, 720, 1080, 2K, 4K; default 480; never above the source | 1080 (capped by plan) | partial | B · S2 (plan caps: money) | – |
 | Captions | Off by default | On by default | partial | B | – |
-| Caption display | Original, translation or both; default original | Original only | missing | F · 2.3 | – |
+| Caption display | Original, translation or both; default original | `caption_display` original / translation / both on clip jobs and on subtitle and transcript downloads (TXT, SRT, VTT). Burned-in captions stay original until the renderer takes the translated lines (B) | partial: downloads only | F · 2.3 | – |
 | Caption style | 53 styles: 4 word-emphasis, 18 animated, 6 static, 25 gaming; default the 8th animated one | 6 styles: `impact` (the default: one or two big words, the keyword in the accent colour; `caption_position`, `caption_accent`) and the five word-highlight styles. No animated or per-game sets | partial | B · 2.2 | – |
 | AI hook | Off by default; 13 script styles (default serious); position beginning or end | On by default; one style; beginning only | partial | B · 3.2 | – |
 | Hook keywords, hook duration | On re-export only | Fixed 2.5 s, no keywords | missing | B | – |
@@ -53,9 +53,9 @@
 | Game list | LoL, GTA 5, WoW, OW2, Minecraft, Apex, Valorant, Fortnite, Dota 2 / Rust, More | GTA only | partial: all 11 games plus "other" built on `feat/game-template-gallery` (`GET /v1/templates/games`, `?game=`); not verified | C | – |
 | Which templates sit under each game | Not in the docs (needs their app) | – | **ASK** (still open: the built catalogue is our own choice of template kinds per game) | C | – |
 | Video Editor | Canvas, layered timeline, trim, transcript-based cutting, reframe, subtitles, elements, hook, text, audio, transitions, details; autosave | None | missing | D · 1.4a–d (re-render charging: money) | – |
-| AI Subtitles | 100 languages; styles; line editing; original / translated / both; punctuation toggle; max characters per line; emoji; TXT, SRT, VTT export | English; 5 styles; SRT, VTT, TXT export | partial | F · 2.3, B · 2.2 | – |
-| Video Transcripts | Segments with text, language, start, end, speaker; optional translation | Internal transcript for search; no endpoint, no speakers | partial | F · U1 | – |
-| Video Summary | Title, summary, tags, timed highlights | None | missing | F | – |
+| AI Subtitles | 100 languages; styles; line editing; original / translated / both; punctuation toggle; max characters per line; emoji; TXT, SRT, VTT export | 99 languages on the default models; 5 styles; SRT, VTT, TXT export in original, translation or both (translation when configured). Burning translated captions: B | partial | F · 2.3, B · 2.2 | – |
+| Video Transcripts | Segments with text, language, start, end, speaker; optional translation | `POST /v1/transcripts` then `GET /v1/transcripts/{upload_id}` (segments: start, end, text, language, speaker, translation) and `/download` as TXT, SRT, VTT. Shared with Video Finder's index, reused when it is in the same language. `speaker` is always null: no speaker model without an account or token | partial: no speakers | F · U1 | – |
+| Video Summary | Title, summary, tags, timed highlights | `POST /v1/summaries` (title, summary, tags, timed highlights) through a summary provider; off by default (`SUMMARY_PROVIDER`: `ai` uses the existing AI client; money question open) | partial: built, off | F | – |
 | AI Note Taker, mind map, chat with video | Notes with prompt, length, timestamps, images | None | skip | – | – |
 | AI Reframe | Bulk, per clip, or a whole long video; automatic per scene or fixed | Reframe tool for a range, fixed layout | partial | B | – |
 | Video Enhancer | Upscale to 1080p, 2K or 4K; sharper on-screen text; range up to 10 minutes | None | missing | B (needs an upscaling model: cost to verify) | – |
@@ -75,9 +75,9 @@
 | Feature | Wayin (documented) | ClutchClips today | Status | Agent · ticket | Verified O/F/O |
 |---|---|---|---|---|---|
 | File upload | Ask for an upload URL, send the file to storage, use the returned id; MP4, MOV, WEBM, AVI | Send the file to the API; more formats accepted | partial | E · 4.4b | – |
-| Link import | 17 sources in the web importer: YouTube, Instagram, TikTok, Facebook, X, Twitch, Kick, Google Drive, Dropbox, Box, Zoom, Loom, StreamYard, Vimeo, Dailymotion, Rumble, Medal. Links must be public | None | missing | E · 4.4a | – |
-| Google Drive | Connected file picker or a share link | None | missing | E · 4.4c | – |
-| Bulk import | Several videos per batch (10, 30 or 50 by plan) | None | missing | E · 4.3 (batch limits: money) | – |
+| Link import | 17 sources in the web importer: YouTube, Instagram, TikTok, Facebook, X, Twitch, Kick, Google Drive, Dropbox, Box, Zoom, Loom, StreamYard, Vimeo, Dailymotion, Rumble, Medal. Links must be public | API: `POST /v1/imports` for Twitch (VODs, clips), Kick (VODs, clips), direct https video links, YouTube best effort; consent and a log row per import; takedown (`admin.py takedown`). Website form not built | partial | E · 4.4a | – |
+| Google Drive | Connected file picker or a share link | Public share links (Drive and Dropbox) through `POST /v1/imports`; no connected picker | partial | E · 4.4c | – |
+| Bulk import | Several videos per batch (10, 30 or 50 by plan) | `POST /v1/imports/bulk`, up to 10 links for everyone (per-plan limits are the owner's call) | partial | E · 4.3 (batch limits: money) | – |
 
 Our ingestion rule stays (CLAUDE.md): public, non-DRM content only; no logins, cookies, proxies or block evasion; fail cleanly and say "upload instead"; consent and a log per import. Wayin's own docs state the same access rule (links must open in a signed-out browser). Sources that need a login will fail on both; the site lists only sources we have verified.
 

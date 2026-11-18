@@ -44,6 +44,7 @@ class RenderOptions:
     preview: bool = False             # a fast, small render to look at (540 on the short side)
     camera: str | None = None         # two-panel layouts: "top" | "bottom"; None = the layout's own
     split_ratio: float | None = None  # two-panel layouts: the top panel's share of the height, 0.25 to 0.75
+    source_lang: str | None = None    # (languages, agent F) recorded; the worker hands the matching transcriber in
 
 
 def _layout(src, info, options, deadline=None) -> tuple[str, object]:
