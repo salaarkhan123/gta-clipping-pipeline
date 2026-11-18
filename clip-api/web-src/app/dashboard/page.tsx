@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { Icon } from "@/components/dash/Icon";
 import { ProjectGrid } from "@/components/dash/ProjectCard";
 import { useDash } from "@/components/dash/Shell";
@@ -13,8 +13,11 @@ import { isBuilt, ToolEntry, TOOLS } from "@/lib/tools";
 const RECENT = 10;
 
 // Home: one input for a link or a file, the tools, and the latest projects.
-export default function Home() {
-  const router = useRouter();
+// useSearchParams needs a Suspense boundary in a static export.
+export default function HomePage() { return <Suspense><Home /></Suspense>; }
+
+function Home() {
+  const router = useRouter(), query = useSearchParams();
   const { fail } = useDash();
   const [projects, setProjects] = useState<any[] | null>(null);
   const [pending, setPending] = useState<File | null>(null);
@@ -30,11 +33,11 @@ export default function Home() {
   const choose = (t: ToolEntry) => chooser.choose({ title: t.name, query: `tool=${t.tool}` });
   useEffect(() => {
     if (projects === null) return;
-    const want = TOOLS.find((t) => t.tool && t.tool === new URLSearchParams(window.location.search).get("tool"));
+    const want = TOOLS.find((t) => t.tool && t.tool === query.get("tool"));
     if (!want) return;
     window.history.replaceState(null, "", window.location.pathname);
     choose(want);
-  }, [projects === null]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [projects === null, query]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="home">

@@ -296,3 +296,6 @@ a.tool-tile:hover .tool-ico, button.tool-tile:hover .tool-ico { border-color: va
 @media (max-width: 420px) {
   .dash .clips { grid-template-columns: minmax(0, 1fr); }
 }
+/* The dashboard zeroes section padding (globals.css); these cards keep theirs. */
+.dash section.balance-card { padding: 22px; }
+.dash .balance-card h2 { font-size: 18px; margin-bottom: 4px; }

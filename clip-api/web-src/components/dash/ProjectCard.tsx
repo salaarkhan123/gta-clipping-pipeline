@@ -24,7 +24,7 @@ export function ProjectCard({ p }: { p: any }) {
         {p.active && <span className="project-status working">Working on it</span>}
         <span className="project-len">{clock(p.duration_sec)}</span>
         <span className="project-meta">
-          <b>{p.clips ? `${p.clips} clip${p.clips === 1 ? "" : "s"}` : p.jobs ? "No clips" : "Not started"}</b>
+          <b>{p.clips ? `${p.clips} clip${p.clips === 1 ? "" : "s"}` : p.active ? "Making clips" : p.jobs ? "No clips" : "Not started"}</b>
           {ends && <span className={ends.soon ? "soon" : ""}>{ends.text}</span>}
         </span>
       </span>
