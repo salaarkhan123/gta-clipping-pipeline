@@ -18,6 +18,9 @@ export function VodToClips({ play }: { play: boolean }) {
   const vod = useItem("hero-long-video", "vod");
   const real = useItems("hero-vertical-clips").filter((i) => /^clip-\d+$/.test(i.id))
     .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99)).slice(0, 6);
+  // A clip's rank is its place in its own stream; clips from several streams can share one, so the chips show
+  // only when the ranks shown are all different.
+  const ranks = real.map((c) => c.rank), ranked = ranks.every((r) => typeof r === "number") && new Set(ranks).size === ranks.length;
   const clipCls = (i: number) => `${s.rise} relative aspect-[9/16] w-[108px] overflow-hidden rounded-[12px] ring-1 ring-white/10 narrow:w-[30vw] narrow:max-w-[104px] ${i > 2 ? "narrow:hidden" : ""}`;
   const delay = (i: number) => ({ ["--d" as string]: `${i * 0.22}s` });
   const rank = (n: number) => <span className="absolute left-1.5 top-1.5 z-10 rounded-[6px] bg-black/60 px-1.5 text-[11px] font-semibold text-white/85">#{n}</span>;
@@ -44,7 +47,7 @@ export function VodToClips({ play }: { play: boolean }) {
         {real.length ? real.map((c, i) => (
           <li key={c.id} className={clipCls(i)} style={delay(i)}>
             <Footage section="hero-vertical-clips" item={c} play={play} />
-            {rank(c.rank ?? i + 1)}
+            {ranked && rank(c.rank!)}
             {aiRated(c) && <AiRating value={Math.round(c.rating!)} className="absolute bottom-1.5 left-1.5 z-10" />}
           </li>
         )) : SAMPLE.map((r, i) => (

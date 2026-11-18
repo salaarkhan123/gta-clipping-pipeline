@@ -16,10 +16,12 @@ const LAYOUTS = [
 
 export function Reframe({ play }: { play: boolean }) {
   const reduced = useReducedMotion(), tick = useTicker(play && !reduced, 2600);
-  const layout = LAYOUTS[tick % LAYOUTS.length];
-  // Real footage: the 16:9 original and the engine's render in each layout, when the media pipeline has them.
+  // Real footage: the 16:9 original and the engine's render in each layout. Once the section has media, only the
+  // layouts the engine really rendered are shown; a missing one is left out, never drawn.
   const items = useItems("reframe"), find = (id: string) => items.find((i) => i.id === id) ?? null;
-  const original = find("original"), after = find(layout.id);
+  const shown = items.length ? LAYOUTS.filter((l) => find(l.id)) : LAYOUTS;
+  const layout = shown.length ? shown[tick % shown.length] : null;
+  const original = find("original"), after = layout && find(layout.id);
   return (
     <div className={`${s.demo} flex h-full items-center justify-center gap-8 narrow:flex-col narrow:gap-3`} data-play={play}>
       <figure className="flex w-[min(440px,100%)] flex-col items-center gap-4 narrow:gap-2.5">
@@ -35,16 +37,18 @@ export function Reframe({ play }: { play: boolean }) {
         <figcaption><Pill>Before · 16:9</Pill></figcaption>
       </figure>
 
-      <div className="flex gap-2 narrow:rotate-90" aria-hidden="true">
-        {[0, 1, 2].map((i) => <span key={i} className={`${s.dot} h-2 w-2 rounded-full bg-white`} style={{ ["--d" as string]: `${i * 0.2}s` }} />)}
-      </div>
-
-      <figure className="flex flex-col items-center gap-4 narrow:gap-2.5">
-        <div className="relative aspect-[9/16] h-[400px] overflow-hidden rounded-[14px] ring-1 ring-white/10 narrow:h-[260px]">
-          <span key={layout.name} className={`${s.swap} absolute inset-0`}>{after ? <Footage section="reframe" item={after} play={play} /> : layout.draw}</span>
+      {layout && <>
+        <div className="flex gap-2 narrow:rotate-90" aria-hidden="true">
+          {[0, 1, 2].map((i) => <span key={i} className={`${s.dot} h-2 w-2 rounded-full bg-white`} style={{ ["--d" as string]: `${i * 0.2}s` }} />)}
         </div>
-        <figcaption><Pill>{layout.name} · 9:16</Pill></figcaption>
-      </figure>
+
+        <figure className="flex flex-col items-center gap-4 narrow:gap-2.5">
+          <div className="relative aspect-[9/16] h-[400px] overflow-hidden rounded-[14px] ring-1 ring-white/10 narrow:h-[260px]">
+            <span key={layout.name} className={`${s.swap} absolute inset-0`}>{after ? <Footage section="reframe" item={after} play={play} /> : layout.draw}</span>
+          </div>
+          <figcaption><Pill>{layout.name} · 9:16</Pill></figcaption>
+        </figure>
+      </>}
     </div>
   );
 }
