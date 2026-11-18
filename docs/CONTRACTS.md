@@ -133,6 +133,30 @@ Panel sizes are a public template field, `panels: {"camera": "top" | "bottom" | 
 - Position `auto`: centred on the line between the panels in split layouts, in the lower third (about 70% down) otherwise.
 - It is the default `caption_style`. The five existing styles stay.
 
+## Captions and on-screen text v1 (captions agent, 2026-11-18)
+
+Owner: the captions agent owns `app/pipeline/captions.py`, `render.text_track` (the ASS file a clip burns in), the new `app/pipeline/placement.py` and `app/pipeline/copy_check.py`, and `scripts/caption_checks.py`. The reframing agent owns the layout geometry and writes "Reframe boxes v1" (`layouts.reframe_boxes`), which placement only reads.
+
+Inputs (agreed with U1/U2 and the reframing agent):
+- Words: `(start, end, text)`, clip-relative seconds after cuts (`edit.remap_words`), the caption model's own text only (#139), sorted by start, `end > start`; back-to-back words may touch. There is no per-word confidence.
+- Standby: `features.standby_spans` (`[[start, end], ...]` source seconds) when U2 provides it. Without it the word gaps decide (below).
+- Boxes: `reframe_boxes(...)["keep_out"]`, canvas `[x0, y0, x1, y1]` px, static for the clip. In a two-panel layout the camera panel is not a keep-out box (captions sit on the seam); the head inside it is.
+
+Checks (`scripts/caption_checks.py`, run on the owner's six eval videos with the hand-labelled boxes in `scripts/caption_eval_boxes.json`; every number is measured on the ASS file `render.text_track` writes, for 9:16 auto and the 16:9 original frame):
+
+| Number | Definition | Limit |
+|---|---|---|
+| `active_p95_ms` | 95th percentile of \|when a word lights up as the word being said − its start\|. An event that marks word *i* as the one being said is named `w<i>` | ≤ 120 ms, for every word (`active_share` 1.0) |
+| `appear_early_p95_ms` | how long before it is said a word is already on screen (95th percentile) | ≤ 600 ms |
+| `dead_air_share` | share of caption time with nobody speaking: outside every word + 0.3 s, and inside any word gap of 0.6 s or more | ≤ 2% |
+| `cps_p95`, `over_cps_share` | characters per second of each caption (letters, no spaces) | over 20 cps in ≤ 5% of captions |
+| `flash_share` | captions on screen under 0.3 s | reported |
+| `over_max_words_share` | captions with more than 3 words (impact) | 0 |
+| `caption_overlap_share`, `hook_overlap_share` | share of frames with text on screen in which a caption or the hook covers a keep-out box | 0 |
+| `out_of_frame` | text events drawn past an edge of the frame | 0 |
+
+`measure` exits 1 while a limit is broken. `sheet` renders each eval window as a preview and cuts a contact sheet per game and aspect for the owner (renders are deleted; footage is never committed).
+
 ## Score calibration (A)
 
 `display_score` is computed per job when clips are read, never stored. With raw AI scores `s` (0 to 100) for the job's rated clips, `hi = max(s)`, `lo = min(s)`:
