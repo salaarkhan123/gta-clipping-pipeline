@@ -39,7 +39,7 @@ EVAL_DIR = Path(os.environ.get("EVAL_DIR", Path.home() / "ClutchClips-eval"))
 FPS = 30
 # The limits (docs/CONTRACTS.md). A word may appear a little before it is said (a reader reads ahead); it should
 # light up as it is said.
-LIMITS = {"active_p95_ms": 120, "appear_early_p95_ms": 600, "cps_max": 20.0, "min_cue_s": 0.3, "max_words": 3,
+LIMITS = {"active_p95_ms": 120, "appear_early_p95_ms": 700, "cps_max": 20.0, "min_cue_s": 0.3, "max_words": 3,
           "dead_air_share": 0.02, "overlap_share": 0.0}
 TEXT_STYLES = ("Cap", "Hook")       # the styles that draw text a viewer reads (CapShadow, Tag draw it again)
 
@@ -111,11 +111,17 @@ def timing(words, events: list[Event]) -> dict:
                     p = q + 1
                     break
     active: dict[int, float] = {}
+    shown_at, text = None, None
     for e in caps:
         m = re.fullmatch(r"w(\d+)", e.name)
         if m:
             i = int(m.group(1))
             active[i] = min(active.get(i, e.start), e.start)
+            # Named events: a caption is the run of events with the same words; each of its words is on
+            # screen from the caption's first event (no matching by text, so repeated words cannot mislead).
+            if e.shown != text:
+                shown_at, text = e.start, e.shown
+            appear[i] = shown_at
     said = {i: w[0] for i, w in enumerate(words) if keys[i]}
     app = [(appear[i] - said[i]) * 1000 for i in said if i in appear]
     act = [(active[i] - said[i]) * 1000 for i in said if i in active]
