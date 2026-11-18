@@ -28,7 +28,7 @@ export function ResultsBar({ view, onView, kinds, total }: { view: View; onView:
           <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" className="pointer-events-none absolute right-3 fill-none stroke-current stroke-2 text-fg-2"><path d="m7 10 5 5 5-5" /></svg>
         </label>
         <div role="radiogroup" aria-label="Sort" className="inline-flex rounded-pill bg-chip p-[3px]">
-          {([["rating", "AI rating"], ["time", "Time"]] as [Sort, string][]).map(([s, label]) => (
+          {([["rating", "AI rating"], ["duration", "Duration"], ["time", "Time"]] as [Sort, string][]).map(([s, label]) => (
             <button key={s} type="button" role="radio" aria-checked={view.sort === s} onClick={() => onView({ ...view, sort: s })}
               className={`${SEG} ${view.sort === s ? "bg-raised text-text shadow-card" : "bg-transparent text-fg-2 hover:text-text"}`}>{label}</button>))}
         </div>

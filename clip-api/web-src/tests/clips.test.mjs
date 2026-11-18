@@ -35,6 +35,8 @@ test("sort by AI rating (unrated last, by score) or by time, filtered by kind an
   ];
   assert.deepEqual(arrange(clips, { sort: "rating", kind: null, mark: "all" }).map((c) => c.id), ["b", "a", "c"]);
   assert.deepEqual(arrange(clips, { sort: "time", kind: null, mark: "all" }).map((c) => c.id), ["c", "a", "b"]);
+  const long = [{ id: "x", start_sec: 5, end_sec: 20 }, { id: "y", start_sec: 1, end_sec: 50, segments: [[1, 11], [30, 50]] }, { id: "z", start_sec: 9, end_sec: 39 }];
+  assert.deepEqual(arrange(long, { sort: "duration", kind: null, mark: "all" }).map((c) => c.id), ["y", "z", "x"]);
   assert.deepEqual(arrange(clips, { sort: "rating", kind: "funny", mark: "all" }).map((c) => c.id), ["a", "c"]);
   assert.deepEqual(arrange(clips, { sort: "rating", kind: null, mark: "bookmarked" }).map((c) => c.id), ["b"]);
   assert.deepEqual(arrange(clips, { sort: "rating", kind: null, mark: "discarded" }).map((c) => c.id), ["c"]);

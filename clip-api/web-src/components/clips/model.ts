@@ -56,7 +56,7 @@ export function kindsIn(clips: any[]): { kind: string; count: number }[] {
 
 // ---- Sorting and filters --------------------------------------------------------------------------------------
 
-export type Sort = "rating" | "time";
+export type Sort = "rating" | "duration" | "time";
 export type Mark = "all" | "kept" | "liked" | "bookmarked" | "discarded";
 export type View = { sort: Sort; kind: string | null; mark: Mark };
 
@@ -67,11 +67,13 @@ const MARKS: Record<Mark, (c: any) => boolean> = {
 export const MARK_NAMES: Record<Mark, string> = { all: "All", kept: "Kept", liked: "Liked", bookmarked: "Bookmarked", discarded: "Discarded" };
 
 // The best clip first by AI rating. Clips the AI did not rate follow, by the API's own score (how strongly the moment
-// stood out). Ties keep the earlier moment first. "time": where the moment is in the source video.
+// stood out). Ties keep the earlier moment first. "duration": longest clip first (as rendered). "time": where the
+// moment is in the source video.
 const ratingKey = (c: any) => (num(c.display_score) ? c.display_score : -1);
 export function arrange(clips: any[], v: View): any[] {
   const out = clips.filter((c) => MARKS[v.mark](c) && (v.kind === null || c.kind === v.kind));
   if (v.sort === "time") return out.sort((a, b) => a.start_sec - b.start_sec);
+  if (v.sort === "duration") return out.sort((a, b) => lengthOf(b) - lengthOf(a) || a.start_sec - b.start_sec);
   return out.sort((a, b) => ratingKey(b) - ratingKey(a) || (b.score ?? 0) - (a.score ?? 0) || a.start_sec - b.start_sec);
 }
 
