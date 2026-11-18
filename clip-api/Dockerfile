@@ -1,9 +1,12 @@
-FROM python:3.12-slim
+# Debian 13 (trixie), named rather than the moving `slim` tag: its ffmpeg 7.1 is the one production renders with.
+# ci/local-ci.sh runs the tests on the same base, so CI renders with the same ffmpeg (tests/test_render_equivalence.py).
+FROM python:3.12-slim-trixie
 
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 HF_HOME=/opt/hf FASTEMBED_CACHE_PATH=/opt/fastembed
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core \
+    && ffmpeg -version | head -1 | grep -q '^ffmpeg version 7\.1\.' \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv
