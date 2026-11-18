@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { AuthDialog } from "@/components/Auth";
 import { Footer, Nav } from "@/components/Chrome";
-import { INCLUDED, PeriodToggle, Plan, PlanCards, yearlySaving } from "@/components/PricingPlans";
+import { exportName, INCLUDED, PeriodToggle, Plan, PlanCards, yearlySaving } from "@/components/PricingPlans";
 import { api, ApiError, FREE_CREDITS, getToken, money } from "@/lib/api";
 
 const FAQ: [string, string][] = [
@@ -77,7 +77,7 @@ export default function Pricing() {
                   <tbody>
                     <tr className="group"><td colSpan={plans.length + 1}>Usage</td></tr>
                     <tr><td>Credits</td>{plans.map((p) => <td key={p.id}>{p.price_month_cents ? `${p.monthly_credits.toLocaleString()}/mo` : `${FREE_CREDITS} one-time`}</td>)}</tr>
-                    <tr><td>Max export quality</td>{plans.map((p) => <td key={p.id}>{p.max_side >= 1080 ? "1080p" : "720p"}</td>)}</tr>
+                    <tr><td>Max export quality</td>{plans.map((p) => <td key={p.id}>{exportName(p.max_side)}</td>)}</tr>
                     <tr><td>Reframe / Captions length per job</td>{plans.map((p) => <td key={p.id}>{p.max_render_min ? `${p.max_render_min} min` : "Unlimited"}</td>)}</tr>
                     <tr className="group"><td colSpan={plans.length + 1}>Tools</td></tr>
                     {INCLUDED.map((f) => <tr key={f}><td>{f}</td>{plans.map((p) => <td key={p.id} className="yes">✓</td>)}</tr>)}

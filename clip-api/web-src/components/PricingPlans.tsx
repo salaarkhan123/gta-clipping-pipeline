@@ -12,6 +12,8 @@ export type Plan = { id: string; name: string; price_month_cents: number; price_
 // What every plan can use: the product's tools, the same on every plan.
 export const INCLUDED = ["AI clip finder and virality score", "Find any moment by speech or what's on screen", "Automatic facecam detection",
   "9:16, 4:5, 1:1 and 16:9", "Caption styles, SRT and VTT export", "AI titles and hashtags", "API access and the agent skill"];
+// An export cap from the plan config (`max_side`, pixels on the short side) in the words people use.
+export const exportName = (px: number) => (px >= 2160 ? "4K" : px >= 1440 ? "2K" : px >= 1080 ? "1080p" : px >= 720 ? "720p" : `${px}p`);
 const perJob = (min: number | null) => (min ? `up to ${min >= 60 ? `${min / 60} hr` : `${min} min`}` : "any length");
 
 // The real yearly saving, worked out from the plans the server returns. 0 when there is none.
@@ -65,7 +67,7 @@ export function PlanCards({ plans, currency, yearly, current, busy, onPick, free
               <span className="text-[13px] text-muted">1 credit processes 1 minute of source video</span></p>
             <ul className="grid list-none gap-[10px] text-[14px]">
               <li className="flex items-start gap-[10px] text-lime"><Check hi />{isPaid ? `${p.monthly_credits.toLocaleString()} credits every month` : `${FREE_CREDITS} credits when you sign up`}</li>
-              <li className="flex items-start gap-[10px] text-label"><Check />{p.max_side >= 1080 ? "1080p" : "720p"} exports</li>
+              <li className="flex items-start gap-[10px] text-label"><Check />{exportName(p.max_side)} exports</li>
               <li className="flex items-start gap-[10px] text-label"><Check />Reframe and caption {perJob(p.max_render_min)} per job</li>
               {(p.features || []).map((f) => <li key={f} className="flex items-start gap-[10px] text-label"><Check />{f}</li>)}
             </ul>
