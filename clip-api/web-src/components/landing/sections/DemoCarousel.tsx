@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import { ComingSoon } from "../demos/Bits";
+import { ComingSoonBadge } from "../../ComingSoonBadge";
 import { CaptionStyles } from "../demos/CaptionStyles";
 import { DeadAir } from "../demos/DeadAir";
 import { HookText } from "../demos/HookText";
@@ -48,7 +48,7 @@ export function DemoCarousel() {
 
   return (
     <section aria-roledescription="carousel" aria-label="What ClutchClips does" className="w-full overflow-x-clip py-0">
-      <div ref={box} className="relative mx-auto h-[580px] [--gap:24px] [--w:min(1040px,calc(100vw-240px))] narrow:h-[640px] narrow:[--gap:12px] narrow:[--w:calc(100vw-40px)]"
+      <div ref={box} className="relative mx-auto h-[580px] [--gap:24px] [--w:min(880px,calc(100vw-240px))] narrow:h-[640px] narrow:[--gap:12px] narrow:[--w:calc(100vw-40px)]"
         onKeyDown={(e) => { if (e.key === "ArrowLeft") go(at - 1); if (e.key === "ArrowRight") go(at + 1); }}
         onTouchStart={(e) => { touch.current = e.touches[0].clientX; }}
         onTouchEnd={(e) => { const x = touch.current; touch.current = null; if (x === null) return;
@@ -57,7 +57,7 @@ export function DemoCarousel() {
           const o = offsets[i], here = o === 0;
           return (
             <div key={c.id} role="group" aria-roledescription="slide" aria-label={`${i + 1} of ${n}: ${c.title}`} aria-hidden={!here} inert={!here}
-              className={`absolute left-1/2 top-0 h-full w-[var(--w)] overflow-hidden rounded-[28px] p-8 ring-1 ring-white/[.06] narrow:rounded-[22px] narrow:p-4 ${Math.abs(o) > 2 ? "" : "transition-[transform,opacity,visibility] duration-500 ease-[cubic-bezier(.2,.8,.2,1)]"} ${here ? "" : "opacity-45"}`}
+              className={`absolute left-1/2 top-0 h-full w-[var(--w)] overflow-hidden rounded-stage p-8 shadow-card narrow:p-4 ${Math.abs(o) > 2 ? "" : "transition-[transform,opacity,visibility] duration-500 ease-[cubic-bezier(.2,.8,.2,1)]"} ${here ? "" : "opacity-45"}`}
               style={{ transform: `translateX(calc(-50% + ${o} * (var(--w) + var(--gap))))`, visibility: Math.abs(o) > 2 ? "hidden" : undefined,
                 background: `radial-gradient(120% 90% at 50% 0%, ${c.tone}, #0e0f12 80%)` }}>
               {Math.abs(o) <= 2 && <c.Demo play={here && seen} />}
@@ -79,15 +79,15 @@ export function DemoCarousel() {
           {CARDS.map((c, i) => (
             <button key={c.id} type="button" aria-pressed={i === at} onClick={() => go(i)}
               className={`cursor-pointer rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors narrow:hidden ${i === at ? "border-white bg-white text-black" : "border-white/10 bg-white/5 text-white/75 hover:text-white"}`}>
-              {c.tab}{c.soon && <span className="ml-1.5 text-[11px] font-semibold uppercase text-warn">Soon</span>}
+              {c.tab}{c.soon && <ComingSoonBadge short className="ml-1.5" />}
             </button>
           ))}
           <span className="hidden text-[13px] tabular-nums text-white/60 narrow:inline">{at + 1} / {n}</span>
           <button type="button" aria-label="Next demo" onClick={() => go(at + 1)} className="hidden h-9 w-9 cursor-pointer place-items-center rounded-full border border-white/10 bg-white/5 text-white narrow:grid">›</button>
         </div>
         <div className="max-w-[640px] text-center" aria-live="polite">
-          <p className="flex items-center justify-center gap-2 text-[17px] font-semibold">{shown.title}{shown.soon && <ComingSoon />}</p>
-          <p className="mt-1 text-[15px] text-white/65">{shown.text}</p>
+          <p className="flex items-center justify-center gap-2 text-title text-fg">{shown.title}{shown.soon && <ComingSoonBadge />}</p>
+          <p className="mt-1 text-body-lg text-fg-2">{shown.text}</p>
         </div>
       </div>
     </section>

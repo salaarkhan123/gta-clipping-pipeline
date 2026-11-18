@@ -4,7 +4,8 @@ import { AiRating } from "../demos/Bits";
 import { Cam, Gameplay, SplitClip } from "../demos/Frames";
 import { useInView } from "../demos/motion";
 import s from "../demos/demos.module.css";
-import { SectionHead } from "./SectionHead";
+import { Section } from "../../site/Section";
+import { EyebrowIcon } from "./EyebrowIcon";
 
 // Where the strong moments sit along a 2-hour stream (fractions of its length) and how strong each is.
 const PEAKS = [[0.08, 0.5], [0.21, 0.8], [0.34, 0.45], [0.47, 1], [0.63, 0.65], [0.78, 0.9], [0.9, 0.55]];
@@ -66,19 +67,18 @@ const CARDS = [
 export function ModelsSection() {
   const box = useRef<HTMLDivElement>(null), seen = useInView(box, "0px");
   return (
-    <section aria-labelledby="models-title" className="px-5">
-      <SectionHead id="models-title" icon="spark" label="Built for gaming streams" title={<>AI that knows what a<br className="narrow:hidden" /> good play looks like</>}
-        sub="Made for streams with a facecam over gameplay, not for podcasts. It hears the hype, follows the game and frames your face." />
-      <div ref={box} className={`${s.demo} mx-auto grid max-w-[1180px] grid-cols-2 gap-8 narrow:grid-cols-1`} data-play={seen}>
+    <Section id="features" eyebrow="Built for gaming streams" icon={<EyebrowIcon name="spark" />} title={<>AI that knows what a<br className="narrow:hidden" /> good play looks like</>}
+      sub="Made for streams with a facecam over gameplay, not for podcasts. It hears the hype, follows the game and frames your face.">
+      <div ref={box} className={`${s.demo} grid grid-cols-2 gap-8 narrow:grid-cols-1`} data-play={seen}>
         {CARDS.map((c) => (
           <article key={c.title}>
-            <div className="h-[340px] overflow-hidden rounded-[24px] p-7 ring-1 ring-white/[.06] narrow:h-auto narrow:min-h-[260px] narrow:p-5"
+            <div className="h-[340px] overflow-hidden rounded-card p-7 shadow-card narrow:h-auto narrow:min-h-[260px] narrow:p-5"
               style={{ background: `radial-gradient(120% 100% at 30% 0%, ${c.tone}, #0e0f12 85%)` }} aria-hidden="true">{c.visual}</div>
-            <h3 className="mt-6 text-[26px] font-semibold">{c.title}</h3>
-            <p className="mt-2 text-[16px] leading-relaxed text-white/60">{c.text}</p>
+            <h3 className="mt-6 text-h3 text-fg">{c.title}</h3>
+            <p className="mt-2 text-body-lg text-fg-2">{c.text}</p>
           </article>
         ))}
       </div>
-    </section>
+    </Section>
   );
 }

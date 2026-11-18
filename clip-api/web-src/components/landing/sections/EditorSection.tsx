@@ -4,7 +4,8 @@ import { Caption } from "../demos/Caption";
 import { SplitClip } from "../demos/Frames";
 import { useInView, useReducedMotion, useTicker } from "../demos/motion";
 import s from "../demos/demos.module.css";
-import { SectionHead } from "./SectionHead";
+import { Section } from "../../site/Section";
+import { EyebrowIcon } from "./EyebrowIcon";
 
 // The clip editor as the app has it (components/dash/Editor.tsx): transcript, caption lines and look tabs, a
 // trim bar with cuts, Your edit / Current file, Undo all changes, Save and Render. Nothing here that it lacks.
@@ -29,11 +30,9 @@ export function EditorSection() {
   const now = SPOKEN[tick % SPOKEN.length];
 
   return (
-    <section aria-labelledby="editor-title" className="px-5">
-      <SectionHead id="editor-title" icon="edit" label="Editor" title={<>Let the AI cut it,<br className="narrow:hidden" /> then make it yours</>}
-        sub="Every clip opens in the editor. Cut words straight from the transcript, fix a caption line, change the look, then render it again." />
-
-      <div ref={box} className={`${s.demo} mx-auto max-w-[1180px] overflow-hidden rounded-[24px] ring-1 ring-white/[.08]`} data-play={seen}
+    <Section id="editor" eyebrow="Editor" icon={<EyebrowIcon name="edit" />} title={<>Let the AI cut it,<br className="narrow:hidden" /> then make it yours</>}
+      sub="Every clip opens in the editor. Cut words straight from the transcript, fix a caption line, change the look, then render it again.">
+      <div ref={box} className={`${s.demo} overflow-hidden rounded-stage shadow-card`} data-play={seen}
         style={{ background: "radial-gradient(120% 90% at 50% 0%, #2a2219, #0f1013 80%)" }} aria-hidden="true">
         {/* top bar */}
         <div className="flex items-center gap-5 border-b border-white/[.07] px-5 py-3 text-[13px] text-white/80 narrow:gap-3 narrow:px-3">
@@ -104,6 +103,6 @@ export function EditorSection() {
           </div>
         </div>
       </div>
-    </section>
+    </Section>
   );
 }

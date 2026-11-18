@@ -1,11 +1,5 @@
 // Small pieces the demos and sections share.
 
-// What is not built yet. Always visible on the card or section itself, never only in small print.
-export function ComingSoon({ className = "" }: { className?: string }) {
-  return <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-warn/40 bg-warn/15 px-2.5 py-0.5 text-[12px] font-semibold uppercase tracking-[.06em] text-warn ${className}`}>
-    <span className="h-1.5 w-1.5 rounded-full bg-warn" aria-hidden="true" />Coming soon</span>;
-}
-
 // The AI rating on a clip: the AI's opinion of it, scaled across one video's clips. Never a forecast of views.
 export function AiRating({ value, className = "" }: { value: number; className?: string }) {
   return (

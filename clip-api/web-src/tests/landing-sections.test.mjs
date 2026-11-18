@@ -25,12 +25,12 @@ test("the layouts the reframe demo names are ones the renderer draws", () => {
 
 test("what is not built says Coming soon on the card and offers nothing to click", () => {
   const soon = source("components/landing/demos/Soon.tsx");
-  assert.match(soon, /<ComingSoon \/>/);
+  assert.match(soon, /<ComingSoonBadge \/>/);
   assert.doesNotMatch(soon, /<button|<a |href=|onClick/);
   for (const [file, title] of [["sections/WorkflowSection.tsx", "Auto posting"], ["sections/TeamsSection.tsx", "Team workspace"]]) {
     const text = source(`components/landing/${file}`);
     assert.match(text, new RegExp(`title: "${title}", soon: true`), file);
-    assert.match(text, /\.soon && <ComingSoon \/>/, file);
+    assert.match(text, /\.soon && <ComingSoonBadge \/>/, file);
     assert.doesNotMatch(text, /<button|href=|onClick/, file);
   }
   const carousel = source("components/landing/sections/DemoCarousel.tsx");

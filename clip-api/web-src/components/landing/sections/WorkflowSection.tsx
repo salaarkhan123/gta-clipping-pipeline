@@ -1,6 +1,8 @@
-import { ComingSoon, LinkIcon } from "../demos/Bits";
+import { ComingSoonBadge } from "../../ComingSoonBadge";
+import { LinkIcon } from "../demos/Bits";
 import { SplitClip } from "../demos/Frames";
-import { SectionHead } from "./SectionHead";
+import { Section } from "../../site/Section";
+import { EyebrowIcon } from "./EyebrowIcon";
 
 // Import, auto edit, post. Importing and editing work today; posting on a schedule is not built and says so.
 function Arrow() {
@@ -34,25 +36,24 @@ const STEPS = [
 
 export function WorkflowSection() {
   return (
-    <section aria-labelledby="workflow-title" className="px-5">
-      <SectionHead id="workflow-title" icon="loop" label="Workflow" title={<>Your clipping routine,<br className="narrow:hidden" /> mostly on autopilot</>}
-        sub="Bring in last night's stream, let the AI do the edit, and download clips ready to post. Posting for you is next." />
-      <div className="mx-auto flex max-w-[1180px] items-start justify-center gap-4 rounded-[28px] px-10 py-14 ring-1 ring-white/[.06] narrow:flex-col narrow:items-center narrow:px-5 narrow:py-8"
+    <Section id="workflow" eyebrow="Workflow" icon={<EyebrowIcon name="loop" />} title={<>Your clipping routine,<br className="narrow:hidden" /> mostly on autopilot</>}
+      sub="Bring in last night's stream, let the AI do the edit, and download clips ready to post. Posting for you is next.">
+      <div className="flex items-start justify-center gap-4 rounded-stage px-10 py-14 shadow-card narrow:flex-col narrow:items-center narrow:px-5 narrow:py-8"
         style={{ background: "radial-gradient(90% 120% at 20% 10%, #33281e, #121214 75%)" }}>
         {STEPS.map((st, i) => (
           <div key={st.title} className="contents">
             {i > 0 && <span className="mt-[72px] narrow:mt-0"><Arrow /></span>}
             <article className="flex max-w-[300px] flex-1 flex-col items-start gap-5 narrow:max-w-[340px]">
               <div className="flex h-[150px] w-full items-center justify-center" aria-hidden="true">{st.visual}</div>
-              <h3 className="flex flex-wrap items-center gap-2.5 text-[24px] font-semibold">
+              <h3 className="flex flex-wrap items-center gap-2.5 text-h3 text-fg">
                 <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{st.icon}</svg>
-                {st.title}{st.soon && <ComingSoon />}
+                {st.title}{st.soon && <ComingSoonBadge />}
               </h3>
-              <p className="-mt-2 text-[16px] leading-relaxed text-white/60">{st.text}</p>
+              <p className="-mt-2 text-body-lg text-fg-2">{st.text}</p>
             </article>
           </div>
         ))}
       </div>
-    </section>
+    </Section>
   );
 }

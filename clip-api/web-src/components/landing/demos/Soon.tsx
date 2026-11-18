@@ -1,4 +1,4 @@
-import { ComingSoon } from "./Bits";
+import { ComingSoonBadge } from "../../ComingSoonBadge";
 
 // A carousel card for something not built yet: the badge, what it will do, and an outline drawing. No output is
 // drawn and nothing is clickable, so nothing on it looks like it works today.
@@ -6,9 +6,9 @@ function SoonCard({ title, text, sketch }: { title: string; text: string; sketch
   return (
     <div className="flex h-full items-center justify-center gap-12 narrow:flex-col narrow:gap-6">
       <div className="flex max-w-[380px] flex-col items-start gap-4 narrow:items-center narrow:text-center">
-        <ComingSoon />
-        <h3 className="text-[28px] font-semibold leading-tight narrow:text-[22px]">{title}</h3>
-        <p className="text-[16px] text-white/70">{text}</p>
+        <ComingSoonBadge />
+        <h3 className="text-h3 text-fg">{title}</h3>
+        <p className="text-body-lg text-fg-2">{text}</p>
       </div>
       <div className="opacity-70" aria-hidden="true">{sketch}</div>
     </div>

@@ -1,5 +1,6 @@
-import { ComingSoon } from "../demos/Bits";
-import { SectionHead } from "./SectionHead";
+import { ComingSoonBadge } from "../../ComingSoonBadge";
+import { Section } from "../../site/Section";
+import { EyebrowIcon } from "./EyebrowIcon";
 
 // Templates per game and your own saved looks, team workspaces (not built), and the public API.
 // Game and template names are the API's own (app/templates.py).
@@ -58,18 +59,17 @@ const CARDS = [
 
 export function TeamsSection() {
   return (
-    <section aria-labelledby="teams-title" className="px-5">
-      <SectionHead id="teams-title" icon="people" label="For clippers and developers" title={<>One setup for<br className="narrow:hidden" /> every game you clip</>}
-        sub="Templates tuned per game, your own saved looks, and an API when you want to plug clipping into your own tools." />
-      <div className="mx-auto grid max-w-[1180px] grid-cols-3 gap-6 mid:grid-cols-1 mid:max-w-[560px]">
+    <Section id="teams" eyebrow="For clippers and developers" icon={<EyebrowIcon name="people" />} title={<>One setup for<br className="narrow:hidden" /> every game you clip</>}
+      sub="Templates tuned per game, your own saved looks, and an API when you want to plug clipping into your own tools.">
+      <div className="mx-auto grid grid-cols-3 gap-6 mid:max-w-[560px] mid:grid-cols-1">
         {CARDS.map((c) => (
-          <article key={c.title} className="flex flex-col rounded-[24px] bg-white/[.04] p-7 ring-1 ring-white/[.06]">
+          <article key={c.title} className="flex flex-col rounded-card bg-surface p-7">
             <div className="flex h-[220px] items-center justify-center" aria-hidden="true">{c.visual}</div>
-            <h3 className="mt-6 flex flex-wrap items-center gap-2.5 text-[22px] font-semibold">{c.title}{c.soon && <ComingSoon />}</h3>
-            <p className="mt-3 text-[16px] leading-relaxed text-white/60">{c.text}</p>
+            <h3 className="mt-6 flex flex-wrap items-center gap-2.5 text-h3 text-fg">{c.title}{c.soon && <ComingSoonBadge />}</h3>
+            <p className="mt-3 text-body-lg text-fg-2">{c.text}</p>
           </article>
         ))}
       </div>
-    </section>
+    </Section>
   );
 }
