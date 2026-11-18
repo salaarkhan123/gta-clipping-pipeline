@@ -17,7 +17,8 @@ from . import ledger
 from .config import get_settings
 from .db import get_db
 from .deps import ApiError, Principal, session_principal
-from .models import Account, Payment
+from .models import Account, Payment, utcnow
+from .plan_grants import YEARLY, add_months, grant_due, is_monthly_drip
 from .plans import PLANS, all_plans, find_plan, plan_for_price, stripe_price_id
 from typing import Literal
 
@@ -176,6 +177,26 @@ def _subscribed_plan(obj: dict, meta: dict, fallback_plan_id: str | None = None)
     return plan, "year" if meta.get("interval") == "year" else "month"
 
 
+def _yearly_payment(db: Session, acct: Account, plan: dict, inv: dict, event: dict) -> Payment:
+    """The record of a paid yearly invoice whose credits are granted monthly: its subscription, plan and period
+    (from the invoice line; else a year from when it was created). Created once per invoice."""
+    pay = db.execute(select(Payment).where(Payment.stripe_ref == inv["id"])).scalars().first()
+    if pay:
+        return pay
+    period = next((ln.get("period") for ln in ((inv.get("lines") or {}).get("data") or [])
+                   if (ln.get("period") or {}).get("start") and (ln.get("period") or {}).get("end")), None)
+    start = _when((period or {}).get("start")) or _when(inv.get("created")) or _when(event.get("created")) or utcnow()
+    end = _when((period or {}).get("end")) or add_months(start, 12)
+    intent = inv.get("payment_intent")
+    pay = Payment(account_id=acct.id, kind=YEARLY, stripe_ref=inv["id"],
+                  payment_intent=intent.get("id") if isinstance(intent, dict) else intent,
+                  amount_cents=int(inv["amount_paid"]) if inv.get("amount_paid") is not None else None, credits=0,
+                  subscription_id=_invoice_subscription(inv) or acct.stripe_subscription_id or inv["id"],
+                  plan_id=plan["id"], period_start=start, period_end=end)
+    db.add(pay)
+    return pay
+
+
 def _when(ts) -> datetime | None:
     """A Stripe timestamp (unix seconds) as the naive UTC time the database stores."""
     return datetime.fromtimestamp(int(ts), timezone.utc).replace(tzinfo=None) if ts else None
@@ -307,14 +328,18 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         acct = _account(db, meta.get("account_id"), obj.get("customer"))
         plan, interval = _subscribed_plan(obj, meta, acct.plan if acct else None)
         if acct and plan and plan.get("monthly_credits"):
-            months = 12 if interval == "year" else 1   # yearly plans get the year's credits up front
             acct.plan = plan["id"]
             if obj.get("customer"):
                 acct.stripe_customer_id = obj["customer"]
-            granted = ledger.grant(db, acct.id, int(plan["monthly_credits"]) * months, "grant",
-                                   f"stripe-inv:{obj['id']}", f"{plan['name']} plan credits")
-            _record_payment(db, acct.id, "plan", obj["id"], int(plan["monthly_credits"]) * months, obj.get("amount_paid"),
-                            obj.get("payment_intent"))
+            if is_monthly_drip(plan, interval):
+                # Yearly plans on sale: this month's credits now, the next 11 from the worker (app/plan_grants.py).
+                granted = grant_due(db, _yearly_payment(db, acct, plan, obj, event), first=True)
+            else:
+                months = 12 if interval == "year" else 1   # legacy yearly plans keep the year's credits up front
+                granted = ledger.grant(db, acct.id, int(plan["monthly_credits"]) * months, "grant",
+                                       f"stripe-inv:{obj['id']}", f"{plan['name']} plan credits")
+                _record_payment(db, acct.id, "plan", obj["id"], int(plan["monthly_credits"]) * months,
+                                obj.get("amount_paid"), obj.get("payment_intent"))
             if _invoice_subscription(obj) in (None, acct.stripe_subscription_id) and _fresh(acct, event, mark=False):
                 acct.subscription_status = "active"      # a payment went through: clears "past_due"
             db.commit()
@@ -374,6 +399,8 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             target = pay.credits if full else (pay.credits * refunded // amount if amount > 0 else 0)
             _take_back(db, pay, target, f"stripe-refund:{obj.get('id')}:{refunded}",
                        f"Refund of {pay.stripe_ref}", "refunded" if full else "partial")
+            if refunded > 0 and pay.status == "paid":    # also when nothing was left to take: no more monthly grants
+                pay.status = "refunded" if full else "partial"
         db.commit()
     elif kind == "charge.dispute.created":
         # The bank has pulled the money back: treat it as a full refund of that payment.

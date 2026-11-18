@@ -72,15 +72,15 @@ def test_subscription_lifecycle(client, user):
     assert me(client, headers)["plan"] == "free" and balance(client, headers) == 3030   # credits are kept
 
 
-def test_yearly_plan_grants_twelve_months_and_bad_events_do_nothing(client, user):
+def test_yearly_plan_grants_its_first_month_and_bad_events_do_nothing(client, user):
     headers, account = user
     meta = {"account_id": account["id"], "plan_id": "starter_v2", "interval": "year"}
     send(client, "invoice.paid", {"id": f"in_y_{account['id']}", "customer": "cus_y", "lines": {"data": [{"metadata": meta}]}})
-    assert balance(client, headers) == 30 + 500 * 12
+    assert balance(client, headers) == 30 + 500          # month 1; the worker grants months 2 to 12
     send(client, "invoice.paid", {"id": "in_unknown", "customer": "cus_nobody"})
     send(client, "invoice.paid", {"id": "in_badplan", "customer": "cus_y2",
                                   "subscription_details": {"metadata": {"account_id": account["id"], "plan_id": "nope"}}})
-    assert balance(client, headers) == 6030 and me(client, headers)["plan"] == "starter_v2"
+    assert balance(client, headers) == 530 and me(client, headers)["plan"] == "starter_v2"
     payload, headers2 = event("invoice.paid", {"id": "in_forged", "subscription_details": {"metadata": meta}})
     headers2["stripe-signature"] = headers2["stripe-signature"][:-4] + "0000"
     assert client.post("/webhooks/stripe", content=payload, headers=headers2).status_code == 400

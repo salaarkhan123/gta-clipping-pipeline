@@ -13,6 +13,8 @@ Limits, per plan:
 - `custom_templates_max`: saved looks per account (`POST /v1/templates/custom`). Looks saved before a downgrade are
   kept and stay editable; only new saves past the cap are refused.
 
+Credits: monthly plans grant `monthly_credits` per paid invoice. Yearly plans on sale grant the same amount each month of the paid year (app/plan_grants.py), not the year up front.
+
 Grandfathering: plans sold before 2026-11-17 are in LEGACY_PLANS under the ids their subscribers already have.
 They are never offered again, and a legacy subscriber keeps exactly that plan's credits and limits for as long as
 the subscription runs. Stripe keeps charging the price the subscription was created with. New plans use new ids,

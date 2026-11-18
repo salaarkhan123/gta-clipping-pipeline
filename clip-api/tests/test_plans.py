@@ -160,9 +160,9 @@ def test_invoice_credits_come_from_the_config_of_its_price_never_from_the_event(
 
 
 @pytest.mark.parametrize("price_id,meta_interval,credits", [
-    ("price_st_m", "year", 500), ("price_st_y", "month", 6000), ("price_pro_m", "month", 1000),
-    ("price_pro_y", "year", 12000), ("price_sc_y", "month", 72000)])
-def test_a_yearly_price_grants_twelve_months_up_front_and_a_monthly_one_a_month(client, user, prices, price_id,
+    ("price_st_m", "year", 500), ("price_st_y", "month", 500), ("price_pro_m", "month", 1000),
+    ("price_pro_y", "year", 1000), ("price_sc_y", "month", 6000)])
+def test_a_yearly_price_grants_its_first_month_now_and_a_monthly_one_a_month(client, user, prices, price_id,
                                                                                  meta_interval, credits):
     headers, account = user
     meta = {"account_id": account["id"], "plan_id": "starter_v2", "interval": meta_interval}
@@ -174,9 +174,9 @@ def test_without_one_of_our_prices_the_metadata_decides_the_month_or_year(client
     headers, account = user
     yearly = {"account_id": account["id"], "plan_id": "pro_v2", "interval": "year"}
     send(client, "invoice.paid", invoice(account, yearly, inv=i("in_y")))
-    assert balance(client, headers) == 30 + 12000
+    assert balance(client, headers) == 30 + 1000                               # first month of the year
     send(client, "invoice.paid", invoice(account, {**yearly, "interval": "month"}, inv=i("in_m")))
-    assert balance(client, headers) == 30 + 12000 + 1000
+    assert balance(client, headers) == 30 + 1000 + 1000
 
 
 # ---- subscribers from before the change (grandfathered) ----

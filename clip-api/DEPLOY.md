@@ -115,6 +115,8 @@ and refuses it (`plan_unavailable`, and an error in the api log naming what diff
 in `CURRENCY`, every 1 month or 1 year as configured, and exactly the amount in `app/plans.py`. A typo in Stripe
 therefore stops sales instead of charging the wrong amount.
 
+**Yearly plans grant credits monthly.** The first month comes with the paid yearly invoice; the worker grants each later month on the same day of the month (its sweep runs every minute and catches up after downtime). Grants stop at a refund, a dispute, a cancellation or the end of the paid year; credits already granted stay. Migration `0007` (additive: four nullable columns on `payments`) runs with the deploy.
+
 **Customer portal:** keep plan switching turned off for now (Settings, Billing, Customer portal: allow cancelling
 and updating the card only). Every paid invoice grants a full period of credits, so a mid-period upgrade with
 proration would grant a whole month of credits for a part payment. To change plan, a subscriber cancels and
