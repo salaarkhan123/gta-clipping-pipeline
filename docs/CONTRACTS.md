@@ -133,6 +133,16 @@ Panel sizes are a public template field, `panels: {"camera": "top" | "bottom" | 
 - Position `auto`: centred on the line between the panels in split layouts, in the lower third (about 70% down) otherwise.
 - It is the default `caption_style`. The five existing styles stay.
 
+## Thumbnails (U7)
+
+`thumb_url` on every clip (job, project, library and clip responses; a signed link like `video_url`) is the clip's thumbnail: a JPEG with the clip's own shape and layout, 720 px on its short side (never above the source), about 70–150 KB. `null` only when no frame could be drawn. Made by `app/pipeline/thumbs.py`, free, no AI:
+
+- The frame: the keyframes inside the clip (about one every 2 s) are scored on the streamer's face (whole in the camera, how far from their resting face), action, loudness, sharpness and nearness to the judge's peak. Frames that are dark, flat, blurred, a menu or results card (or next to one), a transition, on a cut or in removed dead air lose to any frame that is none of these.
+- The text: the clip's `hook`, else its `title` (swears masked when `censor` is on), upper case in Anton, the keyword in `caption_accent` (default lime), white with a dark outline and shadow. As large as fits (capitals 10% of the short side, down to 5.5%), wrapped to at most three balanced lines, cut short with "…" rather than overflowing. Inside 6% side margins and the safe rows (13%–87% of the height in 9:16, the 3:4 crop profile grids show; 7%–93% otherwise). On the line between stacked panels when there is one, else the upper third, then the lower third; never on the person's head or an inset camera. Text in a script our fonts lack (Anton, then DejaVu Sans Bold) gives the frame alone.
+- When the title arrives after the clip (the find tool, or a clip the judge could not rate), the worker sets it on the same frame then. The AI is always shown the frame without text.
+- `features.thumbnail` records the choice: `at` (source second), `frames` looked at, `score`, `face`, `failed` (checks the frame failed, when every frame failed some), `text` (whether text was drawn) and `canvas` (where text may go, so the text can be set again later).
+- AI-generated thumbnails are a separate paid option, priced in their own ticket. Not built.
+
 ## Score calibration (A)
 
 `display_score` is computed per job when clips are read, never stored. With raw AI scores `s` (0 to 100) for the job's rated clips, `hi = max(s)`, `lo = min(s)`:
