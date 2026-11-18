@@ -78,7 +78,7 @@
     </div>
     <div id="current">
       <div class="bar" style="margin-top:0">
-        <b id="curTitle">No row selected</b><span id="curSource"></span>
+        <b id="curTitle">No row selected</b>
       </div>
       <div class="bar rates">
         rating:
@@ -252,7 +252,7 @@ function problems(r) {
   if (r.rating) for (const o of mine()) {
     if (o === r || !o.rating) continue;
     const ov = Math.max(0, Math.min(r.end, o.end) - Math.max(r.start, o.start));
-    if (ov > Math.min(len, o.end - o.start) / 2) out.push(`overlaps ${o.id} by more than half: trim one, or clear one`);
+    if (ov > Math.min(len, o.end - o.start) / 2) out.push(`overlaps the moment at ${hms(o.start)} by more than half: trim one, or clear one`);
   }
   return out;
 }
@@ -273,8 +273,8 @@ function draw() {
     + (markIn !== null ? `<div class="mark" style="left:${100 * markIn / dur}%;width:${100 * Math.max(0, (markOut ?? player.currentTime) - markIn) / dur}%"></div>` : "")
     + `<div class="head" style="left:${100 * (player.currentTime || 0) / dur}%"></div>`;
   const r = current();
-  $("curTitle").textContent = r ? `${r.id}: ${hms(r.start)} – ${hms(r.end)} (${Math.round(r.end - r.start)} s)` : "No row selected";
-  $("curSource").textContent = r ? "from " + (r.source || "?") : "";
+  // Blind rating: rows show their place in time only, never their id or source (which system offered them).
+  $("curTitle").textContent = r ? `Moment ${cur + 1} of ${mine().length}: ${hms(r.start)} – ${hms(r.end)} (${Math.round(r.end - r.start)} s)` : "No row selected";
   document.querySelectorAll(".rates button").forEach((b) => b.classList.toggle("on", !!r && b.dataset.r === r.rating && !!r.rating));
   if (document.activeElement !== $("reason")) $("reason").value = r ? r.reason || "" : "";
   $("warn").textContent = r ? problems(r).join(" · ") : "";
@@ -327,10 +327,10 @@ function addMoment() {
   const r = { id: `${vod}-${n}`, vod, game: info.game, start: markIn, end: markOut, rating: "", reason: "",
               held_out: info.held_out, source: "owner" };
   rows.push(r); markIn = markOut = null; changed();
-  go(mine().indexOf(r), false); status(`Added ${r.id}: rate it`);
+  go(mine().indexOf(r), false); status("Added a moment: rate it");
 }
 function removeAdded() {
-  const r = current(); if (!r || r.source !== "owner" || !confirm(`Delete ${r.id}?`)) return;
+  const r = current(); if (!r || r.source !== "owner" || !confirm(`Delete the moment you added at ${hms(r.start)}?`)) return;
   rows.splice(rows.indexOf(r), 1); changed(); go(cur, false);
 }
 setSpeed(0);
