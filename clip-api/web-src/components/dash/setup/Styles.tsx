@@ -5,7 +5,7 @@ import { tidy } from "@/lib/templates";
 import { Tile } from "./parts";
 
 // How each caption style reads, close to how the renderer draws it (render/captions): weight, case, the accent word.
-const CAPTION: Record<string, { box: string; hot: string; text?: [string, string] }> = {
+export const CAPTION: Record<string, { box: string; hot: string; text?: [string, string] }> = {
   impact: { box: "font-black uppercase tracking-[-0.01em] text-white [text-shadow:0_2px_0_#000,0_0_3px_#000]", hot: "text-lime" },
   pop: { box: "font-extrabold text-white [text-shadow:0_2px_0_#000]", hot: "text-[#ffe14d] text-[1.18em]" },
   bold: { box: "font-black uppercase text-white [text-shadow:0_3px_0_#000]", hot: "" },
@@ -42,7 +42,7 @@ export function CaptionStyles({ styles, value, onChange }: { styles: string[]; v
 }
 
 // A sample opening line for each hook tone, in our words.
-const HOOK_LINES: Record<string, string> = {
+export const HOOK_LINES: Record<string, string> = {
   serious: "This is how the heist really ended", casual: "ok so this happened on stream", informative: "How to lose a five-star chase",
   conversational: "You won't guess what chat said next", humorous: "My driving instructor would cry", parody: "A totally normal day in the city",
   inspirational: "Down 1v4. Didn't give up.", dramatic: "Nobody saw this ending coming", empathetic: "We've all lost a run like this",

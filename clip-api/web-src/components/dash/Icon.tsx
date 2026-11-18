@@ -66,6 +66,20 @@ const PATHS = {
   info: <><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5M12 8h.01" /></>,
   phone: <rect x="7.5" y="3.5" width="9" height="17" rx="2" />,
   undo: <><path d="M9 7.5 5 11.5l4 4" /><path d="M5 11.5h9.5a4.5 4.5 0 0 1 0 9H12" /></>,
+  // Dashboard shell (agent E).
+  redo: <><path d="M15 7.5l4 4-4 4" /><path d="M19 11.5H9.5a4.5 4.5 0 0 0 0 9H12" /></>,
+  bell: <><path d="M6.5 16.5V11a5.5 5.5 0 0 1 11 0v5.5l1.5 2H5l1.5-2Z" /><path d="M10 20.5a2.2 2.2 0 0 0 4 0" /></>,
+  chart: <><path d="M4.5 19.5h15" /><path d="M7.5 16v-4M12 16V7.5M16.5 16v-6" /></>,
+  share: <><circle cx="17" cy="6" r="2.5" /><circle cx="7" cy="12" r="2.5" /><circle cx="17" cy="18" r="2.5" /><path d="m9.2 10.8 5.6-3.5M9.2 13.2l5.6 3.5" /></>,
+  flask: <><path d="M9.5 3.5h5M10.5 3.5v5.5L5 18.3a1.5 1.5 0 0 0 1.3 2.2h11.4a1.5 1.5 0 0 0 1.3-2.2L13.5 9V3.5" /><path d="M7.5 14.5h9" /></>,
+  book: <><path d="M4.5 5.5A1.5 1.5 0 0 1 6 4h5.5v15.5H6a1.5 1.5 0 0 0-1.5 1.5V5.5Z" /><path d="M19.5 5.5A1.5 1.5 0 0 0 18 4h-5.5v15.5H18a1.5 1.5 0 0 1 1.5 1.5V5.5Z" /></>,
+  folder: <><path d="M3.5 7A1.5 1.5 0 0 1 5 5.5h4.5l2 2.5H19A1.5 1.5 0 0 1 20.5 9.5V18a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18V7Z" /></>,
+  template: <><rect x="4" y="4" width="16" height="16" rx="2.5" /><path d="M4 9.5h16M9.5 9.5V20" /></>,
+  sidebar: <><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" /><path d="M9.5 4.5v15" /></>,
+  key: <><circle cx="8" cy="15" r="3.5" /><path d="m10.5 12.5 8-8M15.5 7.5l2.5 2.5M17.5 5.5l2 2" /></>,
+  font: <path d="M4.5 19 9.5 5h1l5 14M6.5 14h7M15.5 19l2.5-6.5L20.5 19M16.3 17h3.4" />,
+  shield: <path d="M12 3.5 19 6v5.5c0 4.3-3 7.6-7 9-4-1.4-7-4.7-7-9V6l7-2.5Z" />,
+  swap: <path d="M7 4.5 4 7.5l3 3M4 7.5h12M17 13.5l3 3-3 3M20 16.5H8" />,
 } as const;
 
 export type IconName = keyof typeof PATHS;
