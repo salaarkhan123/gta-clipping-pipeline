@@ -1,4 +1,6 @@
+import atexit
 import os
+import shutil
 import subprocess
 import tempfile
 import uuid
@@ -8,6 +10,7 @@ import pytest
 
 # Configure the app before anything imports it.
 _TMP = Path(tempfile.mkdtemp(prefix="clipapi_test_"))
+atexit.register(shutil.rmtree, _TMP, ignore_errors=True)  # each run wrote up to 1 GB here and left it behind
 os.environ.update(
     ENV="dev", DATA_DIR=str(_TMP / "data"),
     DATABASE_URL=os.environ.get("TEST_DATABASE_URL", f"sqlite:///{_TMP / 'test.db'}"),
