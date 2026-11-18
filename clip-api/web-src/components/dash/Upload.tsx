@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, clock, uploadFile, VIDEO_TYPES, videoFileProblem } from "@/lib/api";
 import { Icon } from "./Icon";
+import { ImportBox, useImportSources } from "./ImportBox";
 import { useDash } from "./Shell";
 
 export const ACCEPT = VIDEO_TYPES + ",video/*";
@@ -42,7 +43,8 @@ export function UploadProgress({ up, onCancel }: { up: Progress; onCancel: () =>
 }
 
 // What the chosen video is for: the dialog's heading, and the query that opens the right tool on the project page.
-export type VideoTarget = { title: string; query: string };
+// `path`: the page that opens with the chosen video (default: its project page).
+export type VideoTarget = { title: string; query: string; path?: string };
 
 // "Which video?" for a tool tile or a template. With no projects it goes straight to the file chooser; otherwise
 // one dialog lists the stored videos next to an upload button. Either way the project opens with `target.query`.
@@ -62,7 +64,7 @@ export function useVideoChooser(projects: any[] | null) {
         if (file && waiting.current) setPicking({ target: waiting.current, file });
       }} />
       {picking && <VideoPicker title={picking.target.title} projects={projects} file={picking.file} onClose={() => setPicking(null)}
-        onPick={(id) => router.push(`/dashboard/project/?id=${id}&${picking.target.query}`)} />}
+        onPick={(id) => router.push(`${picking.target.path || "/dashboard/project/"}?id=${id}${picking.target.query ? `&${picking.target.query}` : ""}`)} />}
     </>
   );
   return { choose, element };
@@ -73,6 +75,7 @@ function VideoPicker({ title, projects, file, onPick, onClose }: { title: string
   const dialog = useRef<HTMLDialogElement>(null), input = useRef<HTMLInputElement>(null);
   const [problem, setProblem] = useState("");
   const { up, start, cancel } = useUpload((u) => onPick(u.upload_id));
+  const sources = useImportSources();
 
   function take(f: File | null | undefined) {
     if (!f) return;
@@ -99,6 +102,7 @@ function VideoPicker({ title, projects, file, onPick, onClose }: { title: string
           <input ref={input} type="file" accept={ACCEPT} hidden onChange={(e) => { take(e.target.files?.[0]); e.target.value = ""; }} />
           <div><button className="btn primary" onClick={() => input.current?.click()}><Icon name="upload" />Upload a video</button></div>
           {problem && <p className="error" role="alert">{problem}</p>}
+          {sources && <ImportBox sources={sources} compact onReady={(u) => onPick(u.upload_id)} />}
           {projects === null ? <p className="muted">Loading your videos…</p> : projects.length > 0 && (
             <ul className="picker-list" aria-label="Your videos">
               {projects.map((p) => (

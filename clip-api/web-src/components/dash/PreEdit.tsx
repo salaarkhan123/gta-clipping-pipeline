@@ -212,13 +212,14 @@ function Line({ label, hint, checked, onChange, disabled, children }: { label: s
   );
 }
 
-function Custom({ listed, look, onLook, setAspect }: { listed: Listed; look: Look; onLook: (change: Partial<Look>) => void; setAspect: (a: string) => void }) {
+export function Custom({ listed, look, onLook, setAspect, hint = "Tick what to apply to every clip." }: { listed: Listed; look: Look; onLook: (change: Partial<Look>) => void;
+  setAspect: (a: string) => void; hint?: string }) {
   const has = (k: string) => k in listed;
   const styles: string[] = listed.caption_style?.values || [look.caption_style];
   const setLayout = (layout: string) => onLook({ layout, ...(hasPanels(layout) ? {} : { camera: null, split_ratio: null }) });
   return (
     <>
-      <p className="muted small">Tick what to apply to every clip.</p>
+      <p className="muted small">{hint}</p>
       <ul className="lines">
         {has("vertical") && <Line label="Resize" hint="Reshape the clip for the feed. Unticked keeps your video's own shape." checked={look.vertical} onChange={(v) => onLook({ vertical: v })}>
           <div className="options">

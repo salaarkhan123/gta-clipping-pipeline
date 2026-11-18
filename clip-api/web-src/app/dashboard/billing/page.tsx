@@ -18,18 +18,20 @@ export default function Billing() {
   const ends = typeof me.subscription_cancel_at === "string" && !Number.isNaN(Date.parse(me.subscription_cancel_at)) ? new Date(me.subscription_cancel_at) : null;
 
   return (
-    <>
-      <h1 className="dash-title">Billing</h1>
+    <div className="stack">
+      <div className="page-head-row"><h1>Billing and credits</h1></div>
       {UNPAID.includes(me.subscription_status) && <div className="error bill-note" role="alert">
         <p><strong>Your last payment failed.</strong> Update your payment method to keep your {plan} plan.</p>
         <button className="btn small ghost" onClick={portal}>Manage billing</button>
       </div>}
       {ends && <p className="notice bill-note">Your {plan} plan ends on {ends.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}. You keep it until then.</p>}
-      <section className="panel">
-        <p><span className="credits"><b>{me.credits.toLocaleString()}</b> credits</span> · {plan} plan</p>
-        <p className="muted">One credit is one minute of video. A failed or cancelled job is refunded in full.</p>
+      <section className="balance-card" aria-label="Balance">
+        <div>
+          <p className="big">{me.credits.toLocaleString()}<small>credits · {plan} plan</small></p>
+          <p className="muted small">One credit is one minute of video. A failed or cancelled job is refunded in full.</p>
+        </div>
         <div className="row">
-          <Link href="/pricing/" className="btn small primary">{me.plan === "free" ? "See plans" : "Add credits"}</Link>
+          <Link href="/dashboard/pricing/" className="btn small primary">{me.plan === "free" ? "See plans" : "Add credits"}</Link>
           {me.plan !== "free" && <button className="btn small ghost" onClick={portal}>Manage billing</button>}
         </div>
       </section>
@@ -43,6 +45,6 @@ export default function Billing() {
                   <td className={h.delta < 0 ? "minus" : "plus"}>{h.delta > 0 ? `+${h.delta}` : h.delta}</td></tr>))}</tbody>
             </table></div>}
       </section>
-    </>
+    </div>
   );
 }

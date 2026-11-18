@@ -105,3 +105,22 @@ def test_wayin_benchmark_sheet_loads_fifteen_moments():
     assert (rows[0]["start"], rows[0]["end"]) == (2338.0, 2430.0)            # their #1: 38:58 to 40:30
     found = ev.score(rows, [{"start": 2340, "end": 2400, "title": "a"}], duration=4680)
     assert found["great_found"] == "1 of 15" and len(found["great_missed"]) == 14
+
+
+def test_v1_scores_of_a_real_run_stay_the_same():
+    # The selection-only run on staging 347ca2f, scored by the v1 harness before eval set v2: 7 of 15, the same
+    # moments as the 2026-11-16 benchmark in docs/super-board/runs/2026-11-16-swarm.md.
+    root = Path(__file__).resolve().parent.parent / "eval"
+    rows = ev.load_labels(root / "wayin-zias-iceman.csv")
+    s = ev.score(rows, ev.load_clips(root / "runs" / "zias-iceman.staging-347ca2f.json"))
+    assert (s["clips"], s["good_rate"], s["mean_label"], s["great_found"], s["great_recall"]) == (23, 0.304, 3.0, "7 of 15", 0.467)
+    assert (s["unlabelled"], s["duplicate_pairs"], s["per_quarter"]) == (16, 0, [6, 6, 6, 5])
+    assert sorted(int(c["row"]) for c in s["per_clip"] if c["row"]) == [1, 3, 5, 9, 11, 12, 15]
+    # New in v2: the best 20 hold 6 hits and 14 clips on no labelled row (unrated, not misses); 23 clips < 40.
+    a20, a40 = s["@20"], s["@40"]
+    assert (a20["n"], a20["hits"], a20["misses"], a20["unrated"], a20["short"]) == (20, 6, 0, 14, False)
+    assert (a20["precision_rated"], a20["precision_low"], a20["precision_high"]) == (1.0, 0.3, 1.0)
+    assert (a40["n"], a40["hits"], a40["unrated"], a40["short"], a40["strict_low"], a40["strict_high"]) == (
+        23, 7, 16, True, 0.175, 0.575)
+    assert "@40: 23 clips · hits 7 · misses 0 · repeats 0 · unrated 16 · precision 100% of rated, 30% to 100%" in ev.report(s)
+    assert "run returned only 23 clips: 18% to 57% of 40 (strict)" in ev.report(s)
