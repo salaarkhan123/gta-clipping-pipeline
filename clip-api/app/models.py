@@ -180,14 +180,19 @@ class Payment(Base):
     __tablename__ = "payments"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
-    kind: Mapped[str] = mapped_column(String(12))                       # pack | plan
+    kind: Mapped[str] = mapped_column(String(12))                       # pack | plan | plan_year
     stripe_ref: Mapped[str] = mapped_column(String(80), unique=True)    # Checkout Session id or invoice id
     payment_intent: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     amount_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    credits: Mapped[int] = mapped_column(Integer)                       # granted by this payment
+    credits: Mapped[int] = mapped_column(Integer)                       # granted by this payment so far
     credits_removed: Mapped[int] = mapped_column(Integer, default=0)    # taken back (or written off) after refunds
     status: Mapped[str] = mapped_column(String(12), default="paid")     # paid | partial | refunded | disputed
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # plan_year only: a yearly invoice whose credits are granted one month at a time (app/plan_grants.py).
+    subscription_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    plan_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    period_start: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    period_end: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class CreditLedger(Base):

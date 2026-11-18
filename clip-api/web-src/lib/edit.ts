@@ -1,4 +1,5 @@
 import { api, API, ApiError, getToken } from "./api";
+import { deadAir } from "./deadair";
 
 // An edit of one clip, as the editor keeps it. Every time is in seconds of the SOURCE video, so an edit means the
 // same thing however the clip was rendered before.
@@ -21,10 +22,13 @@ export const round = (t: number) => Math.round(t * 100) / 100;
 // The shortest clip the editor lets the trim make: the API's shortest clip.
 export const MIN_LENGTH = 10;
 
+// A clip with no saved edit opens with the dead air its run cut shown as cuts, so rendering it keeps them; each
+// one can be given back like any other cut.
 export function startEdit(clip: any, options: Record<string, unknown>): Edit {
   const saved = clip.edit && typeof clip.edit === "object" ? clip.edit : null;     // once the API sends a stored edit
   if (saved?.trim && Array.isArray(saved.cuts)) return { caption_lines: [], hook_text: null, options, ...saved };
-  return { trim: { start: round(clip.start_sec), end: round(clip.end_sec) }, cuts: [], caption_lines: [], hook_text: null, options };
+  const trim = { start: round(clip.start_sec), end: round(clip.end_sec) };
+  return { trim, cuts: deadAir(clip.segments, trim.start, trim.end), caption_lines: [], hook_text: null, options };
 }
 
 // ---------- the draft in this browser, one per clip ----------
