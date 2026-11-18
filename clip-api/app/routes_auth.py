@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from . import ledger, legal
+from . import account_data, ledger, legal
 from .config import get_settings
 from .db import get_db
 from .deps import ApiError, Principal, client_ip, current_principal, rate_limit, session_principal
@@ -73,10 +73,11 @@ def session_token(a: Account) -> str:
 
 
 def mark_verified(db: Session, a: Account) -> None:
-    """Verify the email and give the one-time free grant (idempotent)."""
+    """Verify the email and give the one-time free grant (idempotent). No grant for an email whose earlier
+    account was deleted: deleting and signing up again does not earn the free credits twice."""
     a.email_verified = True
     free = get_settings().free_signup_credits
-    if free > 0:
+    if free > 0 and not account_data.was_deleted_before(db, a.email):
         ledger.grant(db, a.id, free, "grant", f"signup:{a.id}", "Free signup credits")
 
 
@@ -122,7 +123,7 @@ def signup(body: SignupRequest, request: Request, db: Session = Depends(get_db))
 def login(body: Credentials, request: Request, db: Session = Depends(get_db)):
     rate_limit(f"login:{client_ip(request)}", get_settings().login_limit_per_ip_per_minute, 60)
     account = db.execute(select(Account).where(Account.email == body.email.strip().lower())).scalar_one_or_none()
-    if not account or not verify_password(account.password_hash, body.password):
+    if not account or account.status == "deleted" or not verify_password(account.password_hash, body.password):
         raise ApiError(401, "invalid_credentials", "Wrong email or password.")
     if account.status != "active":
         raise ApiError(403, "account_suspended", "This account is suspended.")
@@ -133,7 +134,7 @@ def login(body: Credentials, request: Request, db: Session = Depends(get_db)):
 def verify(token: str, request: Request, db: Session = Depends(get_db)):
     data = read_token(token, "verify")
     account = db.get(Account, data["sub"]) if data else None
-    if not account:
+    if not account or account.status == "deleted":
         raise ApiError(400, "invalid_token", "This verification link is invalid or has expired.")
     mark_verified(db, account)
     db.commit()
@@ -155,7 +156,7 @@ def resend(p: Principal = Depends(session_principal)):
 def forgot(body: ForgotRequest, request: Request, db: Session = Depends(get_db)):
     rate_limit(f"forgot:{client_ip(request)}", 5, 3600)
     account = db.execute(select(Account).where(Account.email == body.email.strip().lower())).scalar_one_or_none()
-    if account:
+    if account and account.status != "deleted":
         token = make_token(account.id, "reset", timedelta(hours=1), v=_pw_version(account))
         send_email(account.email, "Reset your password",
                    f"Reset your password here (link valid for 1 hour):\n\n"
@@ -168,7 +169,7 @@ def forgot(body: ForgotRequest, request: Request, db: Session = Depends(get_db))
 def reset(body: ResetRequest, db: Session = Depends(get_db)):
     data = read_token(body.token, "reset")
     account = db.get(Account, data["sub"]) if data else None
-    if not account or data.get("v") != _pw_version(account):
+    if not account or account.status == "deleted" or data.get("v") != _pw_version(account):
         raise ApiError(400, "invalid_token", "This reset link is invalid, expired or already used.")
     account.password_hash = hash_password(body.password)
     db.commit()

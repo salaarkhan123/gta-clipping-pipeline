@@ -15,6 +15,9 @@
   takedown --url URL | --account ID_OR_EMAIL [--dry-run]
                                                 remove every upload, clip and file imported from a source URL, or all
                                                 of one account's link imports; cancels and refunds their jobs
+  export-account ID_OR_EMAIL                    print everything held about an account, as JSON (access request)
+  delete-account ID_OR_EMAIL [--dry-run]        delete an account's files and personal data (deletion request);
+                                                keeps the ledger and payments without identity (app/account_data.py)
 """
 import argparse
 import secrets
@@ -150,6 +153,39 @@ def db_status() -> int:
     return 0 if now == latest else 1
 
 
+def account_command(cmd: str, who: str, dry_run: bool) -> int:
+    """export-account / delete-account, for access and deletion requests that arrive by email."""
+    import json
+
+    from app import account_data
+    from app.ingest.takedown import find_account
+    from app.trust_decisions import Refused
+    with new_session() as db:
+        try:
+            account = find_account(db, who)
+        except LookupError as e:
+            print(e, file=sys.stderr)
+            return 1
+        if cmd == "export-account":
+            print(json.dumps(account_data.export(db, account), indent=2))
+            return 0
+        try:
+            report = account_data.delete(db, account, "admin:cli", dry_run=dry_run)
+        except Refused as e:
+            db.rollback()
+            print(f"Refused ({e.code}): {e.message}", file=sys.stderr)
+            return 1
+        if dry_run:
+            db.rollback()
+        else:
+            db.commit()
+        print("\n".join(report.lines()))
+        if not dry_run and not report.already_deleted:
+            print(f"Tell {report.old_email} it is done. The Stripe customer, if any, is not deleted: remove it in "
+                  "the Stripe dashboard if they asked.")
+    return 0
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -170,6 +206,8 @@ def main() -> None:
     target = c.add_mutually_exclusive_group(required=True)
     target.add_argument("--url"); target.add_argument("--account")
     c.add_argument("--dry-run", action="store_true")
+    c = sub.add_parser("export-account"); c.add_argument("who")
+    c = sub.add_parser("delete-account"); c.add_argument("who"); c.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
 
     if args.cmd == "selftest":
@@ -193,6 +231,8 @@ def main() -> None:
             sys.exit(str(e))
         print("\n".join(report.lines()))
         sys.exit(0)
+    if args.cmd in ("export-account", "delete-account"):
+        sys.exit(account_command(args.cmd, args.who, getattr(args, "dry_run", False)))
     with new_session() as db:
         if args.cmd == "create-account":
             if len(args.password) < 8:

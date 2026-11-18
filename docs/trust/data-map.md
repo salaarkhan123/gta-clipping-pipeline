@@ -14,15 +14,24 @@ Paths are relative to `clip-api/`. "Admin" means a person with shell access to t
 
 | Data | Where | Kept | Who can read | Sent to |
 |---|---|---|---|---|
-| Email address | `accounts.email` (`app/models.py:22`) | Until the account is deleted. No self-serve deletion yet (#149) | The user (`GET /v1/me`), admin | SMTP provider (every email), Stripe (`customer_email` at first checkout, `app/routes_billing.py:71`, `:118`) |
-| Password | `accounts.password_hash`, argon2 (`app/models.py:23`, `app/security.py:17`) | Until deleted | Nobody can read the password; admin sees the hash | Nobody |
-| Sign-up IP address | `accounts.signup_ip` (`app/models.py:34`, set at `app/routes_auth.py` signup) | Until deleted | Admin | Nobody |
+| Email address | `accounts.email` (`app/models.py:22`) | Until the account is deleted (`POST /v1/me/delete`, or `admin.py delete-account` for an emailed request); then replaced with `deleted+<id>@deleted.invalid`. Kept only inside a copyright or likeness case younger than a year (`account_deleted` case event, Copyright Act s. 41.26(1)(b)) | The user (`GET /v1/me`), admin | SMTP provider (every email), Stripe (`customer_email` at first checkout, `app/routes_billing.py:71`, `:118`) |
+| Password | `accounts.password_hash`, argon2 (`app/models.py:23`, `app/security.py:17`) | Until deleted (emptied) | Nobody can read the password; admin sees the hash | Nobody |
+| Sign-up IP address | `accounts.signup_ip` (`app/models.py:34`, set at `app/routes_auth.py` signup) | Until deleted (emptied) | Admin | Nobody |
 | Verified flag, plan, status, created time | `accounts` | Until deleted | The user, admin | Nobody |
-| Webhook signing secret | `accounts.webhook_secret` (`app/models.py:33`) | Until deleted | The user (session only, `GET /v1/me`), admin | Nobody |
+| Webhook signing secret | `accounts.webhook_secret` (`app/models.py:33`) | Until deleted (emptied) | The user (session only, `GET /v1/me`), admin | Nobody |
 | Session token (JWT, 168 h) | Not stored on the server. The browser keeps it in `localStorage["cc_token"]` (`web-src/lib/api.ts:8`) | Until it expires or the user logs out | The user's browser | Nobody |
-| API keys | `api_keys.key_hash` (sha256 only), `prefix`, `name`, `last_used_at` (`app/models.py:39-47`) | Until deleted; revoked keys stay as rows | The user (name, prefix, dates), admin (hash) | Nobody |
-| Policy acceptances (new) | `policy_acceptances`: policy, version, source, time (`app/models.py:211`) | Append-only, kept for the life of the account (proposal in #150) | The user (`GET /v1/me/consents`), admin | Nobody |
+| API keys | `api_keys.key_hash` (sha256 only), `prefix`, `name`, `last_used_at` (`app/models.py:39-47`) | Until the account is deleted (rows deleted); revoked keys stay as rows until then | The user (name, prefix, dates), admin (hash) | Nobody |
+| Policy acceptances (new) | `policy_acceptances`: policy, version, source, time (`app/models.py:211`) | Append-only. Kept after the account is deleted, as proof of consent (duration: #150) | The user (`GET /v1/me/consents`), admin | Nobody |
 | Rate-limit counters | Process memory, keyed by IP or account id (`app/deps.py:20`) | Up to 1 hour, lost on restart | Nobody | Nobody |
+| Deleted-email hash (new, #149) | `accounts.deleted_email_hash`: HMAC-SHA256 of a deleted account's old email, keyed with `SECRET_KEY` (`app/account_data.py`) | As long as the account row (it stays for the ledger) | Admin; cannot be reversed without `SECRET_KEY` | Nobody. Used only to withhold a second free sign-up grant for the same email |
+
+**Account deletion (#149).** `POST /v1/me/delete` (password and the word DELETE), or the admin route and CLI for
+emailed requests, deletes every stored object under the account's prefixes (`uploads/<account>/`,
+`transcripts/<upload>`, `index/<upload>`, `clips/<job>/`, `exports/<job>/`, `thumbs/<clip>/`), its API keys, saved
+looks, webhook deliveries and premium thumbnails, and empties the account, upload, job, clip and export rows of
+personal data. The rows themselves stay because the ledger and payments point at them. It is refused while a paid
+plan is live, while a case about the account's content is open, or while a job runs. `GET /v1/me/export` returns
+everything in this file that is about the caller, as JSON. The Stripe customer is not deleted (`DEPLOY.md`).
 
 ## 2. Videos and what is made from them
 
@@ -34,11 +43,11 @@ through `app/storage.py`. Downloads are signed links that expire after `SIGNED_U
 |---|---|---|---|---|
 | Uploaded video (may show the streamer's face, voice, other people, chat usernames) | `uploads/<account>/<upload>.<ext>`; row in `uploads` with filename, size, length, hash (`app/models.py:50-70`) | `RETENTION_DAYS` (7) after upload, then the file is deleted and the row marked (`app/worker.py:501`) | The user (signed link), admin | Storage provider only |
 | Imported link: source URL, platform | `uploads.source_url`, `uploads.source_platform` | Same as the upload | The user, admin | The platform (Twitch, Kick, YouTube) is contacted to download it (`app/ingest/platforms.py`) |
-| Import log: account, URL, platform, consent, time | `import_log` (`app/models.py:154`) | No limit today (gap, #150) | Admin | Nobody |
+| Import log: account, URL, platform, consent, time | `import_log` (`app/models.py:154`) | No limit today (gap, #150). Kept after account deletion | Admin | Nobody |
 | Transcript (words spoken, with times) and search index | `transcripts/<upload>.json`, `index/<upload>.npz` (`app/storage.py`) | Deleted with the upload (`app/worker.py:509-510`) | The user (`GET /v1/transcripts/<upload>`), admin | Anthropic, when translation or summaries are switched on (`TRANSLATION_PROVIDER=ai`, `SUMMARY_PROVIDER=ai`) |
 | Clips: video, thumbnail, captions JSON, preview, export | `clips/<job>/<clip>.*`, `exports/<export job>/<export id>.mp4` (`app/worker.py:257`, `:315`); rows in `clips`, `exports` | `RETENTION_DAYS` after the job: video, thumbnail, captions, preview and the latest export (`clips.export_key`) are deleted (`app/worker.py:516`). Gap: earlier exports of the same clip (other `exports` rows) stay, and a worker-lost job leaves its export file (`app/worker.py:488`, #150) | The user (signed links), admin | Storage provider |
 | AI copy per clip: titles, hook, description, hashtags, rating, reason | `clips.meta` (`app/models.py:116`) | Row kept after files are deleted (no limit, #150) | The user, admin | Made by Anthropic from the data below |
-| Ranking features and feedback (kept, like, bookmark) | `clips.features`, `clip_feedback` (`app/models.py:112`, `:130`) | No limit (training data for a future ranker) | Admin | Nobody |
+| Ranking features and feedback (kept, like, bookmark) | `clips.features`, `clip_feedback` (`app/models.py:112`, `:130`) | No limit (training data for a future ranker). Account deletion empties `clips.features`; `clip_feedback` rows are kept (#150) | Admin | Nobody |
 | Job options, including the user's free-text `prompt` and project name | `jobs.options`, `jobs.name` (`app/models.py:83`, `:94`) | No limit | The user, admin | The prompt goes to Anthropic with the clip (`app/ai.py:275`) |
 | Saved looks (custom templates) | `custom_templates` | Until the user deletes one (soft delete) | The user, admin | Nobody |
 | Clip edits from the editor | `clips.edit`; unsent drafts in the browser's `localStorage` (`web-src/lib/edit.ts:35`) | Row: no limit. Browser: until sent or cleared | The user | Nobody |
@@ -58,8 +67,8 @@ through `app/storage.py`. Downloads are signed links that expire after `SIGNED_U
 | Data | Where | Kept | Who can read | Sent to |
 |---|---|---|---|---|
 | Card details | Never reach us: Stripe Checkout collects them | n/a | n/a | Stripe |
-| Stripe customer and subscription ids, subscription status | `accounts.stripe_customer_id`, `stripe_subscription_id`, `subscription_*` (`app/models.py:27-32`) | Until the account is deleted | Admin; status shown to the user | Stripe |
-| Payments: Stripe reference, amount, credits granted, refunds | `payments` (`app/models.py:177`) | No limit (accounting) | Admin | Stripe |
+| Stripe customer and subscription ids, subscription status | `accounts.stripe_customer_id`, `stripe_subscription_id`, `subscription_*` (`app/models.py:27-32`) | Until the account is deleted (emptied). The customer record in Stripe stays until the owner deletes it in the Stripe dashboard | Admin; status shown to the user | Stripe |
+| Payments: Stripe reference, amount, credits granted, refunds | `payments` (`app/models.py:177`) | No limit (accounting); kept after account deletion, without identity | Admin | Stripe |
 | Credit ledger: every grant, purchase, reserve, charge, refund, with a note | `credit_ledger` (`app/models.py:198`), append-only | Never deleted (`CLAUDE.md`: append-only) | The user (last 50, `GET /v1/credits`), admin | Nobody |
 | Account id sent to Stripe | `client_reference_id` and `metadata.account_id` (`app/routes_billing.py:77`, `:122`) | Stripe's own retention | Stripe | Stripe |
 
@@ -70,6 +79,7 @@ through `app/storage.py`. Downloads are signed links that expire after `SIGNED_U
 | Confirm your email | Sign-up (`app/routes_auth.py`, `send_verification`) | A 48-hour verification link |
 | Reset your password | `POST /v1/auth/forgot` | A 1-hour reset link |
 | Admin test email | `admin.py send-test-email` | Fixed text |
+| Your account was deleted | `POST /v1/me/delete` or the admin delete route (`app/routes_account.py`), to the old address | What was deleted and kept; no link |
 
 All go through the SMTP server in `SMTP_HOST` (`app/emailer.py:19`). The provider is not chosen yet; its retention
 must be added here when it is (Postmark keeps messages 45 days by default, Resend 30 days).
@@ -110,7 +120,7 @@ must be added here when it is (Postmark keeps messages 45 days by default, Resen
 
 | Gap | Where it is fixed |
 |---|---|
-| No self-serve account deletion or data export | #149 |
+| ~~No self-serve account deletion or data export~~ | Closed by #149: `GET /v1/me/export`, `POST /v1/me/delete`, `/dashboard/account/` |
 | Earlier exports and worker-lost exports outlive `RETENTION_DAYS` | #150 |
 | No retention limit on `import_log`, `clips.meta`, `clip_feedback`, `jobs.options`, `webhook_deliveries`, Docker logs | #150 (durations are the owner's decision) |
 | Email bodies with reset links are logged when SMTP is not configured | #150 (stop logging the body) |

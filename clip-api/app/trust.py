@@ -135,6 +135,15 @@ def iso(dt):
     return dt.isoformat() + "Z" if dt else None
 
 
+def my_case_json(case: TrustCase, mine: list[CaseTarget]) -> dict:
+    """What the reported account holder sees (their case list, their data export): never the claimant's email,
+    address or phone."""
+    return {"reference": case.reference, "kind": case.kind, "status": case.status,
+            "reported_by": case.claimant_organization or case.claimant_name, "work": case.work,
+            "your_content": [{"kind": t.kind, "id": t.target_id, "state": t.state} for t in mine],
+            "can_counter_notice": case.status in ("disabled", "removed"), "created_at": iso(case.created_at)}
+
+
 def target_json(db: Session, t: CaseTarget) -> dict:
     owner = db.get(Account, t.account_id)
     return {"kind": t.kind, "id": t.target_id, "state": t.state, "account_id": t.account_id,

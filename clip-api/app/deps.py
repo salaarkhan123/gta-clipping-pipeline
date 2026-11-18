@@ -62,7 +62,7 @@ def current_principal(request: Request, db: Session = Depends(get_db)) -> Princi
         data = read_token(token, "session")
         account = db.get(Account, data["sub"]) if data else None
         via = "session"
-    if not account:
+    if not account or account.status == "deleted":
         raise ApiError(401, "unauthorized", "Invalid or expired session.")
     if account.status != "active":
         raise ApiError(403, "account_suspended", "This account is suspended.")
