@@ -10,6 +10,7 @@ Add a revision: change app/models.py, then
   python -c "from app.migrate import new_revision; new_revision('add uploads.content_hash')"
 and review the generated file in app/migrations/versions/ before committing it.
 """
+import logging
 from pathlib import Path
 
 from alembic import command
@@ -21,6 +22,7 @@ from sqlalchemy import Boolean, Engine, inspect, text
 
 BASELINE = "0001"
 LOCK_KEY = 72026111  # pg_advisory_lock key for migrations
+log = logging.getLogger("clipapi.migrate")
 
 # Columns added before migrations existed, by the old forward-only patch. Legacy databases only.
 LEGACY_COLUMNS = {"jobs": {"result": "JSON"}, "uploads": {"analyzed": "BOOLEAN DEFAULT FALSE"},
@@ -46,6 +48,14 @@ def head() -> str:
 def current(engine: Engine) -> str | None:
     with engine.connect() as conn:
         return MigrationContext.configure(conn).get_current_revision()
+
+
+def _known(conn, revision: str) -> bool:
+    """Whether this code's migration scripts contain `revision`."""
+    try:
+        return ScriptDirectory.from_config(config(conn)).get_revision(revision) is not None
+    except Exception:       # alembic raises ResolutionError / CommandError for an unknown revision
+        return False
 
 
 def _bring_legacy_to_baseline(conn) -> None:
@@ -80,6 +90,12 @@ def migrate(engine: Engine) -> tuple[str | None, str]:
             conn.commit()
         try:
             before = MigrationContext.configure(conn).get_current_revision()
+            if before is not None and not _known(conn, before):
+                # A newer release migrated this database and the code was rolled back. Migrations are additive, so
+                # this code runs on the newer schema; never try to "upgrade" to an older head.
+                log.warning("database is at revision %s, newer than this code knows (head %s): starting without "
+                            "migrating", before, head())
+                return before, before
             tables = set(inspect(conn).get_table_names())
             if before is None and "accounts" in tables:
                 _bring_legacy_to_baseline(conn)
