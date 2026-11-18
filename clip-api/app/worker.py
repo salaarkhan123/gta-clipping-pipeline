@@ -167,6 +167,21 @@ def save_parts(storage, upload_id: str, heard: Heard, work: Path) -> None:
         log.exception("could not keep the transcript pieces of %s", upload_id)
 
 
+def game_weights(template_id: str | None, configured: str) -> tuple[dict | None, str]:
+    """The sub-score weights for a job: those of its template's game, else its genre, else the default, from
+    SCORE_WEIGHTS. (None, "equal") when nothing is configured, the job has no template, or the setting is unreadable
+    (ranking then uses the plain mean; a bad setting never fails a job)."""
+    from .pipeline.ranking import weights_for
+    from .templates import TEMPLATES
+    try:
+        table = json.loads(configured) if configured.strip() else {}
+    except ValueError:
+        log.warning("SCORE_WEIGHTS is not valid JSON; ranking by the plain mean")
+        table = {}
+    template = TEMPLATES.get(template_id or "") or {}
+    return weights_for(template.get("game"), template.get("genre"), table if isinstance(table, dict) else {})
+
+
 def default_embedder():
     return FastembedClip() if get_settings().visual_search else None
 
@@ -405,9 +420,11 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 np.savez(work / "vindex.npz", emb=new_v["emb"], step=new_v["step"])
                 storage.put(vkey, work / "vindex.npz")
         else:
+            weights, weights_version = game_weights(options.get("template"), s.score_weights)
             opts = PipelineOptions(caption_font=s.caption_font, source_lang=language, target_lang=target,
                                    moment_layout=s.provisional_layouts, quality_floor=s.clip_quality_floor,
-                                   **options)   # (render, agent B; U4 quality floor)
+                                   score_weights=weights, score_weights_version=weights_version,
+                                   **options)   # (render, agent B; U4 quality floor; per-game rank weights)
             # The pipeline's judge takes (text, frame, context); the AI client takes (text, context, frame).
             extra = ({"judge": lambda text, frame, ctx: ai.clip_meta(text, {**ctx, **lang_ctx}, frame),
                       "fast_transcriber": indexer} if ai is not None else {})
