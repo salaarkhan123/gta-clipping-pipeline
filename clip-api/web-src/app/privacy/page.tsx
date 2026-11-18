@@ -89,8 +89,8 @@ const sections = [
         to Anthropic, under the same terms.</li>
       <li>We do not offer AI-generated thumbnails, and no image-generation company receives your videos or frames.</li>
     </ul>
-    <p>The AI ranks and titles clips. It makes no decision about you as a person. Its ratings and virality scores are opinions about clips,
-      not forecasts.</p>
+    <p>The AI ranks and titles clips. It makes no decision about you as a person. AI ratings of clips are opinions, not forecasts of how a
+      clip will perform.</p>
   </> },
   { id: "share", title: "Who receives it", body: <>
     <p>We do not sell your personal information and we do not share it for advertising. These companies process it for us:</p>

@@ -108,8 +108,8 @@ const sections = [
   </> },
   { id: "disclaimers", title: "Disclaimers", body: <>
     <ul>
-      <li>Clip selection, titles, ratings and virality scores are made by software, including AI. They are opinions about clips, not forecasts.
-        We do not promise views, followers, earnings or that a clip will go viral.</li>
+      <li>Clip selection, titles and ratings are made by software, including AI. AI ratings of clips are opinions, not forecasts of how a
+        clip will perform. We do not promise views, followers or earnings.</li>
       <li>AI output can be wrong. Check titles, captions and hashtags before you publish.</li>
       <li>The service is provided &ldquo;as is&rdquo; and &ldquo;as available&rdquo;. As far as the law allows, we give no warranties beyond
         those in these terms.</li>
