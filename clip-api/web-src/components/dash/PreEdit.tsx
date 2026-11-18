@@ -212,7 +212,7 @@ function Line({ label, hint, checked, onChange, disabled, children }: { label: s
   );
 }
 
-function Custom({ listed, look, onLook, setAspect }: { listed: Listed; look: Look; onLook: (change: Partial<Look>) => void; setAspect: (a: string) => void }) {
+export function Custom({ listed, look, onLook, setAspect }: { listed: Listed; look: Look; onLook: (change: Partial<Look>) => void; setAspect: (a: string) => void }) {
   const has = (k: string) => k in listed;
   const styles: string[] = listed.caption_style?.values || [look.caption_style];
   const setLayout = (layout: string) => onLook({ layout, ...(hasPanels(layout) ? {} : { camera: null, split_ratio: null }) });

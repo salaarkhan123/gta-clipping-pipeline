@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon, IconName, Soon } from "@/components/dash/Icon";
 import { ProjectGrid } from "@/components/dash/ProjectCard";
 import { useDash } from "@/components/dash/Shell";
+import { ImportBox, useImportSources } from "@/components/dash/ImportBox";
 import { ACCEPT, UploadProgress, useUpload, useVideoChooser } from "@/components/dash/Upload";
 import { api, takePendingFile, videoFileProblem } from "@/lib/api";
 
@@ -17,7 +18,7 @@ const TILES: Tile[] = [
   { icon: "gamepad", name: "Game Templates", text: "Presets tuned to a game. One pick sets the length, captions and editing.", href: "/dashboard/templates/" },
   { icon: "captions", name: "AI Captions", text: "Burn word-by-word captions into any part of a video.", tool: "captions" },
   { icon: "reframe", name: "AI Reframe", text: "Reshape wide footage to vertical, portrait or square.", tool: "reframe" },
-  { icon: "sliders", name: "Video Editor", text: "Trim and restyle a clip after it's made." },
+  { icon: "sliders", name: "Video Editor", text: "Trim, cut by transcript and restyle a clip: open Edit on any clip.", href: "/dashboard/library/?view=clips" },
   { icon: "bolt", name: "One-Click Highlights", text: "One montage from the best parts of a stream." },
   { icon: "transcript", name: "Video Transcripts", text: "Everything that was said, with timestamps." },
   { icon: "summary", name: "Video Summary", text: "The short version of a long stream." },
@@ -36,6 +37,7 @@ export default function Home() {
   const input = useRef<HTMLInputElement>(null);
   const { up, start, cancel } = useUpload((u) => router.push(`/dashboard/project/?id=${u.upload_id}`));
   const chooser = useVideoChooser(projects);
+  const sources = useImportSources();
 
   const load = useCallback(() => api("/v1/projects").then((r) => setProjects(r.projects)).catch(fail), [fail]);
   function take(file: File | null | undefined) {
@@ -65,9 +67,11 @@ export default function Home() {
           {problem && <p className="error" role="alert">{problem}</p>}
           <div className="start-actions">
             <button type="button" className="btn primary" onClick={() => input.current?.click()}><Icon name="upload" />Upload</button>
-            <button type="button" className="btn ghost" disabled><Icon name="stack" />Bulk import <Soon /></button>
-            <button type="button" className="btn ghost" disabled><Icon name="link" />Paste a link <Soon /></button>
+            {sources === null && <>
+              <button type="button" className="btn ghost" disabled><Icon name="stack" />Bulk import <Soon /></button>
+              <button type="button" className="btn ghost" disabled><Icon name="link" />Paste a link <Soon /></button></>}
           </div>
+          {sources && <ImportBox sources={sources} recent onReady={(u) => router.push(`/dashboard/project/?id=${u.upload_id}`)} />}
         </>}
       </section>
 

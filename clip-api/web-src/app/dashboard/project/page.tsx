@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BulkEdit } from "@/components/dash/BulkEdit";
 import { ClipCard, ClipFilter, ClipSort, ClipToolbar, numbering, useSteadyOrder } from "@/components/dash/ClipCard";
 import { FindPanel } from "@/components/dash/FindPanel";
 import { Icon, IconName, Soon } from "@/components/dash/Icon";
@@ -10,9 +11,11 @@ import { Tabs } from "@/components/dash/Tabs";
 import { Timeline } from "@/components/dash/Timeline";
 import { isTool, Tool, ToolPanel } from "@/components/dash/ToolPanel";
 import { api, ApiError, clock } from "@/lib/api";
+import { useClipOptions } from "@/lib/options";
+import { useRoutes } from "@/lib/routes";
 
 const TOOL_OF_JOB: Record<string, string> = { clips: "Clip Maker", render: "Reframe / Captions", find: "Video Finder" };
-const BULK_SOON: [IconName, string][] = [["pencil", "Bulk edit"], ["send", "Bulk schedule"], ["sparkle", "Create montage"]];
+const BULK_SOON: [IconName, string][] = [["send", "Bulk schedule"], ["sparkle", "Create montage"]];
 type View = "clips" | "find";
 
 // Every read signs new links for the same files. A refresh keeps the links already on the page, so polling a
@@ -53,6 +56,7 @@ export default function Project() {
   const [picked, setPicked] = useState<Set<string>>(new Set()), [exporting, setExporting] = useState(0);
   const [lit, setLit] = useState<{ id: string } | null>(null);                // the clip a timeline marker jumped to
   const all = useRef<HTMLInputElement>(null);
+  const known = useRoutes(), listed = useClipOptions(), [bulkEdit, setBulkEdit] = useState(false);
 
   const load = useCallback(async (pid: string) => {
     try { const next = await api(`/v1/projects/${pid}`); setProject((old: any) => keepLinks(old, next)); }
@@ -160,6 +164,9 @@ export default function Project() {
               {chosen.length > 0 ? <div className="bulk" role="group" aria-label="Actions for the selected clips">
                   <button type="button" className="btn small primary" disabled={exporting > 0} title="Downloads the files as they are. Nothing is rendered again and no credits are used."
                     onClick={exportChosen}><Icon name="download" size={16} />{exporting ? `Downloading ${Math.min(exporting, chosen.length)} of ${chosen.length}…` : "Bulk export"}</button>
+                  {known?.exportRoute && listed
+                    ? <button type="button" className="btn small ghost" onClick={() => setBulkEdit(true)}><Icon name="pencil" size={16} />Bulk edit</button>
+                    : <button type="button" className="btn small ghost" disabled><Icon name="pencil" size={16} />Bulk edit <Soon /></button>}
                   {BULK_SOON.map(([icon, label]) => <button key={label} type="button" className="btn small ghost" disabled><Icon name={icon} size={16} />{label} <Soon /></button>)}
                 </div>
                 : <p className="bulk muted small">Tick clips to export them together. Bulk export downloads the files as they are: nothing is rendered again and no credits are used.</p>}
@@ -169,12 +176,14 @@ export default function Project() {
             {anyActive && clips.length > 0 && <p className="muted small" role="status">More clips are on the way. New ones join at the end; the list is sorted again when the run finishes.</p>}
             <div className="clips">
               {shown.map((c: any) => (
-                <ClipCard key={c.id} clip={c} lit={lit?.id === c.id} number={numbers.get(c.id)} selected={picked.has(c.id)} onSelect={select}
+                <ClipCard key={c.id} clip={c} uploadId={project.upload_id} lit={lit?.id === c.id} number={numbers.get(c.id)} selected={picked.has(c.id)} onSelect={select}
                   onChange={(n) => setProject((p: any) => ({ ...p, clips: p.clips.map((x: any) => (x.id === n.id ? n : x)) }))} />))}
             </div>
           </>}
         </div>
       </section>
+      {bulkEdit && known?.exportRoute && listed && <BulkEdit clips={chosen} jobs={project.jobs} listed={listed} known={known}
+        onClose={() => setBulkEdit(false)} onDone={() => load(project.upload_id)} />}
     </>
   );
 }
