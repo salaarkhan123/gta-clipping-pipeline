@@ -13,6 +13,7 @@ import { route } from "@/lib/routes";
 import { AS_IT_IS, extrasFrom, loadCustom, loadTemplates, Look, lookFrom, Saved, startLook, tidy } from "@/lib/templates";
 import { isBuilt, ToolEntry, TOOLS } from "@/lib/tools";
 import { Icon } from "./Icon";
+import { offeredBucket } from "./JobForm";
 import { AspectSelect, Picked, PreEdit, Templates } from "./PreEdit";
 import { useDash } from "./Shell";
 import { BackTitle } from "./ui";
@@ -63,7 +64,7 @@ export function LinkChooser() {
   // One call that imports and clips on the server (URL clipping), when this API has it: its path, else null.
   const [oneCall, setOneCall] = useState<string | null>(null), [off, setOff] = useState(false);
   // Options per tool.
-  const [o, setO] = useState({ source_lang: "", duration: AUTO, query: "", clip_length: 30, aspect: "9:16", caption_style: "", target_lang: "" });
+  const [o, setO] = useState({ source_lang: "", duration: AUTO, cap: null as number | null, query: "", clip_length: 30, aspect: "9:16", caption_style: "", target_lang: "" });
   const set = (c: Partial<typeof o>) => setO((x) => ({ ...x, ...c }));
   const [pre, setPre] = useState(true), [look, setLook] = useState<Look | null>(null), [picked, setPicked] = useState<Picked>(null);
   const [templates, setTemplates] = useState<Templates>({ presets: [], games: [] }), [saved, setSaved] = useState<Saved[] | null>(null);
@@ -116,7 +117,7 @@ export function LinkChooser() {
     if (!item) { setPicked(null); return; }
     setPicked({ kind: k, id: String(item.id) });
     setLook((x) => ({ ...x!, ...lookFrom(item, listed, x!.aspect) }));
-    if (k === "template" && typeof item.duration === "string" && allows(listed, "duration", item.duration) && (!duration || shortest(item.duration) <= duration))
+    if (k === "template" && typeof item.duration === "string" && allows(listed, "duration", item.duration) && offeredBucket(item.duration) && (!duration || shortest(item.duration) <= duration))
       set({ duration: item.duration });
   }
 
@@ -128,7 +129,8 @@ export function LinkChooser() {
       const options: Record<string, unknown> = { facecam_region: "auto", zoom: 1, resolution: "1080", chat_region: "none", ...look,
         ...(pre ? {} : AS_IT_IS), template: pre && chosen ? chosen.id : null, ...(pre && chosen ? extrasFrom(chosen, L) : {}), prompt: null, range: null, ...lang };
       if ("duration" in L) options.duration = o.duration; else options.clip_length = 30;
-      if ("limit" in L) options.limit = null; else options.max_clips = 3;
+      // No cap unless the user sets one: the server returns every clip that clears its quality bar.
+      if ("limit" in L) options.limit = o.cap; else if (o.cap !== null) options.max_clips = o.cap;
       return ["/v1/clips", { upload_id: uploadId, options: onlyListed(L, options) }];
     }
     if (kind === "find") return ["/v1/find", { upload_id: uploadId, query: o.query.trim(), mode: "auto", max_results: 5, make_clips: true, clip_length: o.clip_length,
@@ -262,8 +264,11 @@ export function LinkChooser() {
               {(listed.source_lang?.values || langs.languages.filter((l) => l.transcribe).map((l) => l.code)).map((c: string) =>
                 <option key={c} value={c}>{langs.languages.find((l) => l.code === c)?.name || c}</option>)}</select></label>
             {kind === "clips" && "duration" in listed && <label>Clip length<select value={o.duration} disabled={busy} onChange={(e) => set({ duration: e.target.value })}>
-              {[AUTO, ...(listed.duration.values || []).filter((b: string) => b !== AUTO)].filter((b) => allows(listed, "duration", b)).map((b) => (
+              {[AUTO, ...(listed.duration.values || []).filter((b: string) => b !== AUTO)].filter((b) => allows(listed, "duration", b) && offeredBucket(b)).map((b) => (
                 <option key={b} value={b} disabled={!!duration && shortest(b) > duration}>{BUCKETS[b] || b}</option>))}</select></label>}
+            {kind === "clips" && ("limit" in listed || "max_clips" in listed) && <label>How many clips<select value={o.cap ?? ""} disabled={busy} onChange={(e) => set({ cap: e.target.value ? +e.target.value : null })}>
+              <option value="">Automatic: every clip that makes the cut</option>
+              {inside(listed.limit || listed.max_clips, [1, 3, 5, 10, 20, 30, 50]).map((n) => <option key={n} value={n}>{n === 1 ? "The best one" : `At most ${n}`}</option>)}</select></label>}
             {kind === "summary" && langs.translation && <label>Write the summary in<select value={o.target_lang} disabled={busy} onChange={(e) => set({ target_lang: e.target.value })}>
               <option value="">The language spoken</option>{langs.languages.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}</select></label>}
           </>}

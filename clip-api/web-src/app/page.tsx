@@ -14,7 +14,7 @@ const SOURCES = ["Twitch VODs", "YouTube Gaming", "Kick", "OBS recordings", "Str
 
 const TOOLS: { ico: string; name: string; text: string; soon?: boolean }[] = [
   { ico: "🎯", name: "AI Clip Finder", text: "Scores every second on reaction volume, chat speed and what gets said, then cuts the top moments on sentence boundaries." },
-  { ico: "🔥", name: "Virality Score", text: "Every clip gets a 0–100 score for hook, pacing and payoff, so you post the strongest one first." },
+  { ico: "🔥", name: "AI Rating", text: "Every clip gets an AI rating for hook, pacing and payoff, so you post the strongest one first." },
   { ico: "💬", name: "Animated Captions", text: "Word-by-word captions in five styles. Download them as SRT or VTT too." },
   { ico: "📐", name: "Auto Reframe", text: "Finds your facecam on its own and stacks it over the gameplay. 9:16, 4:5, 1:1 and 16:9." },
   { ico: "🔎", name: "Find Any Moment", text: "Type what was said or shown (“police chase”, “no way”) and get a clip of every match." },
@@ -25,7 +25,7 @@ const TOOLS: { ico: string; name: string; text: string; soon?: boolean }[] = [
 ];
 
 const faq = (signup: number | null): [string, string][] => [
-  ["How does ClutchClips work?", "Upload a stream recording. The AI listens for hype, reads the transcript, finds the strongest moments, cuts them into vertical clips with your facecam on top and captions on the seam, and scores each one."],
+  ["How does ClutchClips work?", "Upload a stream recording. The AI listens for hype, reads the transcript, finds the strongest moments, cuts them into vertical clips with your facecam on top and captions on the seam, and rates each one."],
   ["Can I paste a Twitch or YouTube link?", "Not yet. You upload the recording itself, from OBS or the VOD you downloaded from your own channel."],
   ["How long does it take?", "On our servers a 2-hour VOD takes about 11 minutes to clip once it's uploaded. Upload time depends on your connection."],
   ["What does a credit buy?", "One credit is one minute of video. A 2-hour stream uses 120 credits, however many clips you make from it. If a job fails, the credits come back automatically."],
@@ -93,7 +93,7 @@ export default function Home() {
             <div className="chip-row"><span className="chip">Hype spikes</span><span className="chip">Chat speed</span></div>
           </div>
           <div className="float-card right" aria-hidden="true">
-            <h5>🔥 Virality Score <small>example</small></h5>
+            <h5>🔥 AI rating <small>example</small></h5>
             {[["“He actually did it”", 98], ["Chat goes crazy", 91], ["Getaway fail", 84]].map(([t, s]) => (
               <div key={t as string}><div className="moment"><span>{t}</span><b>{s}</b></div>
                 <div className="score-bar"><span style={{ width: `${s}%` }} /></div></div>))}

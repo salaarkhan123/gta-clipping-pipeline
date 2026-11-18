@@ -15,6 +15,8 @@ import { StartRow } from "./StartRow";
 const AUTO = "0-90";
 const BUCKETS: Record<string, string> = { "0-90": "Auto (under 90 s)", "0-30": "Under 30 seconds", "30-60": "30 to 60 seconds", "60-90": "60 to 90 seconds",
   "90-180": "1½ to 3 minutes", "180-300": "3 to 5 minutes" };
+// Clip lengths offered: the automatic one and the buckets that end at 60 s or sooner (owner, 2026-11-18).
+export const offeredBucket = (b: string) => b === AUTO || +b.split("-")[1] <= 60;
 const bucketName = (b: string) => BUCKETS[b] || `${b.replace("-", " to ")} seconds`;
 const shortest = (b: string) => +b.split("-")[0] || 0;
 const QUICK = ["Funny reactions", "Clutch wins", "Epic fails", "Emotional moments", "High-energy scenes"];
@@ -33,7 +35,8 @@ const languageName = (code: string) => { try { return new Intl.DisplayNames(["en
 export function JobForm({ upload, listed, onStarted, template }: { upload: any; listed: Listed; onStarted: (job: any) => void; template?: string }) {
   const { reloadMe, fail } = useDash();
   const has = (k: string) => k in listed;
-  const [f, setF] = useState({ max_clips: 3, clip_length: 30, duration: allows(listed, "duration", AUTO) ? AUTO : (listed.duration?.values?.[0] as string) || AUTO,
+  // No clip cap by default: the server returns every clip that clears its quality bar. A cap is the user's choice.
+  const [f, setF] = useState({ max_clips: null as number | null, clip_length: 30, duration: allows(listed, "duration", AUTO) ? AUTO : (listed.duration?.values?.[0] as string) || AUTO,
     limit: null as number | null, chat_region: "none", prompt: "", range: null as Span | null, source_lang: "" });
   const set = (change: Partial<typeof f>) => setF((x) => ({ ...x, ...change }));
   const [pre, setPre] = useState(true), [look, setLook] = useState<Look>(() => startLook(listed)), [picked, setPicked] = useState<Picked>(null);
@@ -49,7 +52,7 @@ export function JobForm({ upload, listed, onStarted, template }: { upload: any; 
     setLook((x) => ({ ...x, ...lookFrom(item, listed, x.aspect) }));
     if (kind !== "template") return;
     const length = item.options?.clip_length;
-    if (typeof item.duration === "string" && allows(listed, "duration", item.duration) && shortest(item.duration) <= upload.duration_sec) set({ duration: item.duration });
+    if (typeof item.duration === "string" && allows(listed, "duration", item.duration) && offeredBucket(item.duration) && shortest(item.duration) <= upload.duration_sec) set({ duration: item.duration });
     else if (!has("duration") && typeof length === "number" && inside(listed.clip_length, [length]).length) set({ clip_length: length });
   }
   const reloadSaved = useCallback(() => loadCustom().then(setSaved).catch(fail), [fail]);
@@ -70,7 +73,7 @@ export function JobForm({ upload, listed, onStarted, template }: { upload: any; 
       ...look, ...(pre ? {} : AS_IT_IS), template: pre && chosen ? chosen.id : null, ...(pre && chosen ? extrasFrom(chosen, listed) : {}),
       prompt: f.prompt.trim() || null, range: f.range, source_lang: f.source_lang || null };
     if (has("duration")) options.duration = f.duration; else options.clip_length = f.clip_length;
-    if (has("limit")) options.limit = f.limit; else options.max_clips = f.max_clips;
+    if (has("limit")) options.limit = f.limit; else if (f.max_clips !== null) options.max_clips = f.max_clips;
     return { upload_id: upload.upload_id, options: onlyListed(listed, options) };
   }
   // The exact price, asked again as the options change, once the API has POST /v1/clips/quote.
@@ -100,16 +103,17 @@ export function JobForm({ upload, listed, onStarted, template }: { upload: any; 
           {langs.map((l) => <option key={l} value={l}>{languageName(l)}</option>)}</select></label>}
         {has("duration")
           ? <label>Clip length<select value={f.duration} onChange={(e) => set({ duration: e.target.value })}>
-              {[AUTO, ...(listed.duration.values || []).filter((b: string) => b !== AUTO)].filter((b) => allows(listed, "duration", b)).map((b) => (
+              {[AUTO, ...(listed.duration.values || []).filter((b: string) => b !== AUTO)].filter((b) => allows(listed, "duration", b) && offeredBucket(b)).map((b) => (
                 <option key={b} value={b} disabled={shortest(b) > span}>{bucketName(b)}{shortest(b) > span ? " (longer than this video)" : ""}</option>))}</select></label>
           : has("clip_length") && <label>Clip length<select value={f.clip_length} onChange={(e) => set({ clip_length: +e.target.value })}>
               {inside(listed.clip_length, [15, 20, 30, 40, 45, 60]).map((n) => <option key={n} value={n}>{n} seconds</option>)}</select></label>}
         {has("limit")
           ? <label>How many clips<select value={f.limit ?? ""} onChange={(e) => set({ limit: e.target.value ? +e.target.value : null })}>
-              {listed.limit.nullable !== false && <option value="">Every good moment</option>}
+              {listed.limit.nullable !== false && <option value="">Automatic: every clip that makes the cut</option>}
               {limits.map((n) => <option key={n} value={n}>{n === 1 ? "The best one" : `The best ${n}`}</option>)}</select></label>
-          : has("max_clips") && <label>How many clips<select value={f.max_clips} onChange={(e) => set({ max_clips: +e.target.value })}>
-              {inside(listed.max_clips, [1, 2, 3, 5, 8, 10]).map((n) => <option key={n} value={n}>{n}</option>)}</select></label>}
+          : has("max_clips") && <label>How many clips<select value={f.max_clips ?? ""} onChange={(e) => set({ max_clips: e.target.value ? +e.target.value : null })}>
+              <option value="">Automatic: every clip that makes the cut</option>
+              {inside(listed.max_clips, [1, 3, 5, 10, 20, 30, 50]).map((n) => <option key={n} value={n}>{n === 1 ? "The best one" : `At most ${n}`}</option>)}</select></label>}
         {has("chat_region") && <label>Chat on screen<select value={f.chat_region} onChange={(e) => set({ chat_region: e.target.value })}>
           {CHAT.filter(([v]) => allows(listed, "chat_region", v)).map(([v, name]) => <option key={v} value={v}>{name}</option>)}</select></label>}
       </div>

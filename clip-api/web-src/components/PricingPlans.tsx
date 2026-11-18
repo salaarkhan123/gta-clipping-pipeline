@@ -11,7 +11,7 @@ export type Plan = { id: string; name: string; price_month_cents: number; price_
   max_side: number; max_render_min: number | null; description?: string; features?: string[]; signup_credits?: number };
 
 // What every plan can use: the product's tools, the same on every plan.
-export const INCLUDED = ["AI clip finder and virality score", "Find any moment by speech or what's on screen", "Automatic facecam detection",
+export const INCLUDED = ["AI clip finder with an AI rating on every clip", "Find any moment by speech or what's on screen", "Automatic facecam detection",
   "9:16, 4:5, 1:1 and 16:9", "Caption styles, SRT and VTT export", "AI titles and hashtags", "API access and the agent skill"];
 // An export cap from the plan config (`max_side`, pixels on the short side) in the words people use.
 export const exportName = (px: number) => (px >= 2160 ? "4K" : px >= 1440 ? "2K" : px >= 1080 ? "1080p" : px >= 720 ? "720p" : `${px}p`);

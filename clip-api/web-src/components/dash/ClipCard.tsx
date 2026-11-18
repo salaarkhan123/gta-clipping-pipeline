@@ -208,13 +208,13 @@ export function ScoreBadge({ clip }: { clip: any }) {
       </button>
       <span role="tooltip" id={tip} className="score-tip">
         {rated
-          ? <><strong>{raw !== null ? `AI score ${raw} of 100` : "Rated by the AI"}{rank ? ` · #${rank}${clip.rank_of ? ` of ${clip.rank_of}` : ""}` : ""}</strong>
+          ? <><strong>{raw !== null ? `AI rating ${raw} of 100` : "Rated by the AI"}{rank ? ` · #${rank}${clip.rank_of ? ` of ${clip.rank_of}` : ""}` : ""}</strong>
               {parts.length > 0 && <span className="parts">{parts.map(([k, n]) => <span key={k}>{PART_NAMES[k] || k} <b>{n}</b></span>)}</span>}</>
           : <strong>Ranked by how strongly this moment stood out in the video. It has no AI rating.</strong>}
-        {shown !== null && <span>The {shown} on the card is the AI score scaled across this video's clips, so the best one lands in the 90s. The order is the AI's own.</span>}
+        {shown !== null && <span>The {shown} on the card is the AI rating scaled across this video's clips, so the best one lands in the 90s. The order is the AI's own.</span>}
         {signals.length > 0 && <span>Picked for: {signals.map(([k, share]) => `${SIGNAL_NAMES[k] || k} ${Math.round((share as number) * 100)}%`).join(", ")}</span>}
         {(clip.reason || clip.why) && <span>{clip.reason || clip.why}</span>}
-        {rated && <span className="muted">The score is an AI opinion of the clip, not a forecast of views.</span>}
+        {rated && <span className="muted">The rating is the AI's opinion of the clip. It does not say how many views a clip will get.</span>}
       </span>
     </span>
   );
