@@ -58,7 +58,7 @@ def no_render(monkeypatch):
     def no_thumb(*args, **kwargs):
         raise PipelineError("no_thumb", "not rendered")
     monkeypatch.setattr(pipeline, "render_clip", fake_clip)
-    monkeypatch.setattr(pipeline, "render_thumb", no_thumb)
+    monkeypatch.setattr(pipeline, "make_thumbnail", no_thumb)
 
 
 class Marked:

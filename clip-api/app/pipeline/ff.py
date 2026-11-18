@@ -49,6 +49,11 @@ def run(cmd, deadline: Deadline | None = None, cap: float | None = None, check: 
 
 def run_bytes(cmd, deadline: Deadline | None = None, cap: float | None = None) -> bytes:
     """Like run(), for commands that write binary data to stdout."""
+    return run_binary(cmd, deadline, cap)[0]
+
+
+def run_binary(cmd, deadline: Deadline | None = None, cap: float | None = None) -> tuple[bytes, str]:
+    """Like run_bytes(), and the command's log (stderr) as text too."""
     timeout = deadline.remaining(cap) if deadline else cap
     try:
         res = subprocess.run([str(c) for c in cmd], check=True, capture_output=True, timeout=timeout,
@@ -57,7 +62,7 @@ def run_bytes(cmd, deadline: Deadline | None = None, cap: float | None = None) -
         raise PipelineTimeout() from None
     except subprocess.CalledProcessError:
         raise PipelineError("media_error", "Could not read this video.") from None
-    return res.stdout
+    return res.stdout, res.stderr.decode("utf-8", "replace")
 
 
 @dataclass

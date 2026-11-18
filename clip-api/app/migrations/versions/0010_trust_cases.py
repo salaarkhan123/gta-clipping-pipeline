@@ -1,18 +1,16 @@
 """Trust and safety: an admin flag on accounts, and copyright/likeness cases with their targets and history.
 
 Revision ID: 0010
-Revises: 0008
+Revises: 0009
 Create Date: 2026-11-18
 
 Additive: one column with a false default and three new tables.
-Numbering: 0009 is taken by #152 (premium thumbnails). Whichever of the two merges second points its
-down_revision at the other (tests/test_consents.py::test_migrations_have_one_head fails until it does).
 """
 import sqlalchemy as sa
 from alembic import op
 
 revision = "0010"
-down_revision = "0008"
+down_revision = "0009"      # 0009_premium_thumbnails (#152)
 branch_labels = None
 depends_on = None
 
