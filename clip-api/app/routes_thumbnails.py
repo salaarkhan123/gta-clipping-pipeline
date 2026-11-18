@@ -34,7 +34,7 @@ from .imagegen import style_look
 from .imagegen.prompts import MAX_INSTRUCTION, InstructionRefused, clean_instruction
 from .models import Clip, ClipThumbnail, Job, LikenessConsent, new_id
 from .pipeline.thumbs import Canvas, write_thumbnail
-from .routes_media import ACTIVE, iso, job_json
+from .routes_media import ACTIVE, iso, job_json, own_clip
 from .storage import get_storage
 
 router = APIRouter()
@@ -64,14 +64,6 @@ class ThumbText(BaseModel):
     @classmethod
     def tidy(cls, value):
         return (" ".join(value.split()) or None) if isinstance(value, str) else value
-
-
-def own_clip(db: Session, p: Principal, clip_id: str) -> tuple[Clip, Job]:
-    clip = db.get(Clip, clip_id)
-    job = db.get(Job, clip.job_id) if clip is not None else None
-    if clip is None or clip.deleted_at is not None or job is None or job.account_id != p.account.id:
-        raise ApiError(404, "not_found", "No such clip.")
-    return clip, job
 
 
 def _checked(clip: Clip, body: PremiumQuote) -> tuple[str, str | None]:

@@ -273,6 +273,15 @@ def own_job(db: Session, p: Principal, job_id: str) -> Job:
     return job
 
 
+def own_clip(db: Session, p: Principal, clip_id: str, deleted_ok: bool = False) -> tuple[Clip, Job]:
+    """The caller's clip and its job. Someone else's clip and a missing one are the same 404."""
+    clip = db.get(Clip, clip_id)
+    job = db.get(Job, clip.job_id) if clip else None
+    if not clip or (clip.deleted_at and not deleted_ok) or not job or job.account_id != p.account.id:
+        raise ApiError(404, "not_found", "No such clip.")
+    return clip, job
+
+
 def own_upload(db: Session, p: Principal, upload_id: str) -> Upload:
     upload = db.get(Upload, upload_id)
     if not upload or upload.account_id != p.account.id or upload.deleted_at or upload.expires_at <= utcnow():
@@ -472,10 +481,7 @@ def cancel_job(job_id: str, p: Principal = Depends(current_principal), db: Sessi
 @router.post("/v1/clips/{clip_id}/feedback")
 def clip_feedback(clip_id: str, body: Feedback, p: Principal = Depends(current_principal),
                   db: Session = Depends(get_db)):
-    clip = db.get(Clip, clip_id)
-    if not clip:
-        raise ApiError(404, "not_found", "No such clip.")
-    own_job(db, p, clip.job_id)
+    clip, _job = own_clip(db, p, clip_id, deleted_ok=True)
     for field in sorted(body.model_fields_set):
         value = getattr(body, field)
         if getattr(clip, field) == value:
@@ -510,10 +516,7 @@ def edit_clip(clip_id: str, body: ClipEdit, p: Principal = Depends(current_princ
     Free: nothing is re-rendered; POST /v1/clips/export renders the edit. When the words the thumbnail carries
     change, it is drawn again on its stored frame now (a fraction of a second). A hook already burned into the
     video stays as it is there."""
-    clip = db.get(Clip, clip_id)
-    if not clip or clip.deleted_at:
-        raise ApiError(404, "not_found", "No such clip.")
-    job = own_job(db, p, clip.job_id)
+    clip, job = own_clip(db, p, clip_id)
     if "edit" in body.model_fields_set:
         stored = None
         if body.edit is not None:
@@ -568,10 +571,7 @@ def clip_subtitles(clip_id: str, format: Literal["srt", "vtt", "txt"] = "srt",
     """Subtitle file for a clip that was rendered with captions. Times are relative to the clip.
     `caption_display`: the spoken words (`original`), their translation into the job's `target_lang`
     (`translation`), or both, original first. Left out: the job's own `caption_display` option."""
-    clip = db.get(Clip, clip_id)
-    if not clip or clip.deleted_at:
-        raise ApiError(404, "not_found", "No such clip.")
-    job = own_job(db, p, clip.job_id)
+    clip, job = own_clip(db, p, clip_id)
     if not clip.captions_key:
         raise ApiError(404, "no_captions", "This clip has no captions (it was rendered with captions off, or has no speech).")
     display = caption_display or (job.options or {}).get("caption_display") or "original"
@@ -617,7 +617,10 @@ def get_file(token: str):
     storage = get_storage()
     if not data or not isinstance(storage, LocalStorage):
         raise ApiError(404, "not_found", "This link is invalid or has expired.")
-    path = storage.path(data["k"])
+    try:
+        path = storage.path(data["k"])
+    except (KeyError, TypeError, ValueError):      # no key, or one that leaves the storage folder
+        raise ApiError(404, "not_found", "This link is invalid or has expired.") from None
     if not path.is_file():
         raise ApiError(404, "not_found", "This file has been deleted.")
     return FileResponse(path, filename=path.name)
