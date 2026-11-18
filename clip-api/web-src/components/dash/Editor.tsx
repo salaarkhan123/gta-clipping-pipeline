@@ -44,7 +44,7 @@ const TOOLS: { id: Tool; icon: IconName; label: string; needs: string[]; section
   { id: "layout", icon: "reframe", label: "Layout", needs: ["vertical", "aspect", "layout"], sections: ["resize"], title: "Shape and layout" },
   { id: "captions", icon: "captions", label: "Captions", needs: ["captions"], sections: ["subtitles", "emoji"], title: "Captions" },
   { id: "hook", icon: "hook", label: "Hook", needs: ["hook_overlay"], sections: ["hook"], title: "Hook" },
-  { id: "edits", icon: "bolt", label: "Edits", needs: ["tighten", "punch_zoom", "flash_forward"], sections: ["tighten", "punch", "flash"], title: "Auto edits" },
+  { id: "edits", icon: "bolt", label: "Edits", needs: ["tighten"], sections: ["tighten"], title: "Auto edits" },
 ];
 const PLANNED: [IconName, string][] = [["image", "AI B-roll"], ["music", "Music"], ["transitions", "Transitions"], ["mic", "AI voice hook"], ["send", "Publish"]];
 
@@ -319,6 +319,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
             </div>
             <div className="grid min-h-0 content-start gap-3 overflow-y-auto pr-1 [&_.line]:p-3 [&_.lines]:gap-2 [&_.options]:grid [&_.options]:gap-3 [&_.panels]:p-3 [&_.panel-sketch]:hidden [&_select]:w-full">
               <Custom listed={listed} look={look} onLook={onLook} setAspect={setAspect} sections={open.sections} hint={open.id === "edits" ? "Applied when you export." : ""} />
+              {open.id === "edits" && <ul className="lines m-0" aria-label="Not on an existing clip yet">{["Punch-in zoom", "Open on the best moment"].map((n) => <li key={n} className="line off"><span className="font-medium text-fg-2">{n}</span><Soon short /></li>)}</ul>}
               {open.id === "hook" && "hook_overlay" in listed && look.hook_overlay && <fieldset className="panels hook-set">
                 <legend>Hook text</legend>
                 <label className="grow">Text<input value={edit.hook_text ?? clip.hook ?? ""} maxLength={HOOK_MAX} placeholder="A short opening line"

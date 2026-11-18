@@ -4,19 +4,19 @@
 // Data: POST /v1/imports/preview when this API has it (found in /openapi.json, never probed), GET /v1/options,
 // GET /v1/languages, the template routes, POST /v1/imports, then the tool's own route. Tailwind utilities.
 import Link from "next/link";
+import { ComingSoonBadge } from "@/components/ComingSoonBadge";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, clock, videoFileProblem } from "@/lib/api";
 import { useLanguages } from "@/lib/languages";
 import { polishLook } from "@/lib/polish";
-import { allows, inside, Listed, onlyListed, useClipOptions } from "@/lib/options";
+import { allows, inside, Listed, offeredBucket, onlyListed, useClipOptions } from "@/lib/options";
 import { route } from "@/lib/routes";
 import { AS_IT_IS, extrasFrom, loadCustom, loadTemplates, Look, lookFrom, Saved, startLook, tidy } from "@/lib/templates";
 import { isBuilt, ToolEntry, TOOLS } from "@/lib/tools";
-import { ComingSoonBadge } from "@/components/ComingSoonBadge";
 import { Icon } from "./Icon";
+import { useImportSources } from "./ImportBox";
 import { JobSetup } from "./setup/JobSetup";
-import { offeredBucket } from "@/lib/options";
 import { AspectSelect, Picked, PreEdit, Templates } from "./PreEdit";
 import { useDash } from "./Shell";
 import { BackTitle } from "./ui";
@@ -97,8 +97,11 @@ export function LinkChooser() {
           else setPreview(null);
         })
       : setPreview(null));
-    // Imports can be switched off on the server (IMPORTS_ENABLED=false): say so up front and offer the upload.
-    api<{ enabled?: boolean }>("/v1/imports/sources").then((x) => { if (x?.enabled === false) setOff(true); }).catch(() => {});
+  }, [fail]);
+  // Imports can be switched off on the server (IMPORTS_ENABLED=false): say so up front and offer the upload.
+  const sources = useImportSources();
+  useEffect(() => { if (sources && sources.enabled === false) setOff(true); }, [sources]);
+  useEffect(() => {
     // URL clipping: POST /v1/clips taking `url`, or its own route. Found in /openapi.json, never probed.
     Promise.all([route("post", "/v1/clips"), route("post", "/v1/clips/from-url")])
       .then(([clips, fromUrl]) => setOneCall(clips?.fields.includes("url") ? "/v1/clips" : fromUrl ? "/v1/clips/from-url" : null));
