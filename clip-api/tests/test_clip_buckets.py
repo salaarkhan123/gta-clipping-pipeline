@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 import app.pipeline as pipeline
-from app.pipeline import PipelineError, PipelineOptions, Timer, probe, run_pipeline
+from app.pipeline import AUTO_LONGEST, PipelineError, PipelineOptions, Timer, probe, run_pipeline
 from app.pipeline.edit import cut, duration as kept, select_cuts
 from app.pipeline.moments import BUCKETS, KINDS, MAX_CLIPS, NOMINAL, Moment, kind_of
 from app.pipeline.stt import extract_audio, wav_duration
@@ -122,6 +122,7 @@ def test_every_bucket_yields_clips_inside_it_with_a_judge_that_cuts_to_the_longe
     clips = run_pipeline(long, PipelineOptions(duration=bucket, limit=1, **FAST), tmp_path / "o",
                          transcriber=Marked(), judge=judge)
     lo, hi = BUCKETS[bucket]
+    hi = min(hi, AUTO_LONGEST.get(bucket, hi))                               # Auto (0-90) never passes 60 s (U4)
     assert all(c["cut_range"] == (max(lo, 10), hi - 2) for c in seen)        # the range the judge is told (room for the flash)
     widest = max(c["lines"][-1][0] - c["lines"][0][0] for c in seen)
     assert widest >= hi - 2 - 4                                              # enough transcript to cut the longest clip
