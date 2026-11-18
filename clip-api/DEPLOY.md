@@ -51,9 +51,23 @@ uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-cl
 
 ## Transcription settings
 
-- `TRANSCRIPTION_PROVIDER=local` (the only provider so far): whole recordings are transcribed by the local Whisper
-  models, in chunks cut at quiet points. Hosted providers are added with their adapters; an unknown name stops the
-  worker at start with a clear message.
+- `TRANSCRIPTION_PROVIDER=local` (the default): whole recordings are transcribed by the local Whisper models, in
+  chunks cut at quiet points. An unknown name stops the worker at start with a clear message.
+- `TRANSCRIPTION_PROVIDER=groq`, `deepgram` or `assemblyai`: whole recordings go to that service instead
+  (`app/pipeline/hosted_stt.py`). **It costs money per audio hour and sends users' audio to a third party**: the
+  Terms and Privacy pages must say so first, and the prices are in `docs/transcription/provider-comparison.md`.
+  - Key: `GROQ_API_KEY`, `DEEPGRAM_API_KEY` or `ASSEMBLYAI_API_KEY` in the server's env file. Without it the
+    worker logs a warning at start and the local model transcribes.
+  - Model: `GROQ_MODEL` (default `whisper-large-v3-turbo`), `DEEPGRAM_MODEL` (`nova-3`), `ASSEMBLYAI_MODEL`
+    (`assemblyai-stt-3-7`); `ASSEMBLYAI_REGION=eu` for its EU servers.
+  - `TRANSCRIPTION_TIMEOUT_SEC` (default 900): one attempt at the whole file. Requests are retried on 429, 5xx
+    and network errors.
+  - `TRANSCRIPTION_DIARIZE` (default `true`): speaker turns where the service has them (Deepgram, AssemblyAI).
+  - Fallback: when the service fails, times out or answers with something unusable, the local model transcribes
+    the file and the job carries on. The job's `stages` then show `transcribe_hosted` and `transcribe_fallback`,
+    and `counts.stt_fallback` is 1; the worker log says which service failed (never the key). Deepgram is called
+    with `mip_opt_out=true` and AssemblyAI's copy of the transcript is deleted after it is read.
+  - Before switching: run the benchmark on the server (`docs/transcription/server-benchmark.md`).
 - `TRANSCRIBE_PARALLEL` (default 1, up to 8): chunks transcribed at once, for whole-recording transcription (Video
   Finder's index today). Leave it at 1 on the 4 vCPU droplet: one model already uses every core. On a machine
   with 8 or more cores try 2 to 4 and compare with `scripts/job_timings.py`. Each extra one adds memory.

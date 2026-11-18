@@ -1,0 +1,73 @@
+# Gaming terms for scripts/transcribe_bench.py: one term per line, spellings that count as the same term after
+# "|". Matching ignores case, punctuation and hyphens ("AK-47" = "ak 47"). Add the words your streamers say.
+
+# GTA places, modes and things
+GTA | grand theft auto
+Los Santos
+Blaine County
+Vinewood
+Vespucci
+Sandy Shores
+Paleto Bay
+Maze Bank
+Lester
+Franklin
+Trevor
+Lamar
+heist
+cayo perico
+Doomsday
+Diamond Casino | casino heist
+lobby
+bounty
+wanted level | stars
+cop | cops | police
+deathmatch
+respawn
+griefer | griefing
+modder | modders
+roleplay | RP
+NoPixel
+# Vehicles
+Oppressor | oppressor mk2 | oppressor mark two | oppressor mark 2
+Deluxo
+Hydra
+Lazer
+Buzzard
+Akula
+Kuruma
+Insurgent
+Zentorno
+supercar
+helicopter | heli
+jet
+tank | rhino
+# Weapons
+AK | AK47 | AK 47
+RPG
+minigun
+railgun
+sniper
+heavy sniper
+shotgun
+pistol
+sticky bomb | sticky bombs | sticky
+homing launcher | homing
+grenade
+# Slang
+let's go | lets go
+no way
+bro
+bruh
+GG
+clutch
+cracked
+sweaty | sweat | sweats
+noob | nub
+ratio
+W | dub
+L
+sus
+cap | no cap
+headshot
+one shot | one tap

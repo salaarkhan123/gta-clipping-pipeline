@@ -14,6 +14,8 @@ EXCLAMATIONS = ("oh my god", "oh my gosh", "no way", "what the", "let's go", "le
 class Transcript:
     words: list[tuple[float, float, str]] = field(default_factory=list)      # (start, end, word)
     segments: list[tuple[float, float, str]] = field(default_factory=list)   # sentence-ish chunks
+    # (start, end, speaker) when the transcriber identified who speaks; None when it does not (never guessed)
+    turns: list[tuple[float, float, str]] | None = None
 
 
 class Transcriber(Protocol):

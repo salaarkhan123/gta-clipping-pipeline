@@ -30,6 +30,7 @@ from .models import Account, Clip, Job, Upload, WebhookDelivery, new_id, utcnow
 from .pipeline import Deadline, PipelineError, PipelineOptions, Timer, run_pipeline
 from .pipeline.tools import RenderOptions, run_export, run_find, run_render
 from .exports import export_items, finish_export, new_export_id
+from .pipeline.hosted_stt import HostedConfig
 from .pipeline.stt import provider_for
 from .pipeline.transcribe import FasterWhisperTranscriber, Transcriber, Transcript, in_language
 from .pipeline.translate import detect_language, run_text_job, transcript_language, translate_captions
@@ -288,7 +289,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 storage.fetch(tkey, work / "transcript.json")
                 cached = json.loads((work / "transcript.json").read_text())
             tr = indexer or transcriber
-            stt = provider_for(s.transcription_provider, tr, s.transcribe_chunk_sec, s.transcribe_parallel)
+            stt = transcription_provider(s, tr, timer)
             new_t, result = run_text_job(tool, src, video_sec, language, target, cached, stt, languages.translator(ai),
                                          languages.summarizer(ai), work / "out", progress, deadline, detected)
             if new_t is not None:
@@ -343,8 +344,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 src, query, max_results, make_clips, clip_length,
                 RenderOptions(caption_font=s.caption_font, **options), work / "out", progress, transcriber,
                 deadline, cached_t, mode=mode, embedder=embedder, vindex=cached_v, indexer=indexer,
-                provider=provider_for(s.transcription_provider, indexer or transcriber, s.transcribe_chunk_sec,
-                                      s.transcribe_parallel))
+                provider=transcription_provider(s, indexer or transcriber, timer))
             # Keep both indexes so later searches on this upload skip the expensive part.
             if new_t is not None:
                 new_t.update(language=language or "en", language_detected=detected)
@@ -530,6 +530,25 @@ def run_once(transcriber: Transcriber | None = None, pipeline=run_pipeline,
     return process_job(job_id, transcriber, pipeline, indexer, embedder, ai)
 
 
+def hosted_config(s, transcriber) -> HostedConfig | None:
+    """The settings of the hosted transcription service TRANSCRIPTION_PROVIDER names, or None when it is "local"
+    or has no API key (then the local model transcribes). The key goes into the provider only, never a log."""
+    key, model = {"groq": (s.groq_api_key, s.groq_model), "deepgram": (s.deepgram_api_key, s.deepgram_model),
+                  "assemblyai": (s.assemblyai_api_key, s.assemblyai_model)}.get(s.transcription_provider, ("", ""))
+    if not key:
+        return None
+    return HostedConfig(api_key=key, model=model, language=getattr(transcriber, "language", None) or "en",
+                        timeout_sec=float(s.transcription_timeout_sec), diarize=s.transcription_diarize,
+                        region=s.assemblyai_region)
+
+
+def transcription_provider(s, transcriber, timer: Timer | None = None):
+    """Whole-recording transcription for one job: the configured service with the local model behind it, or the
+    local model alone (stt.provider_for)."""
+    return provider_for(s.transcription_provider, transcriber, s.transcribe_chunk_sec, s.transcribe_parallel,
+                        hosted=hosted_config(s, transcriber), timer=timer)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     s = get_settings()
@@ -539,6 +558,9 @@ def main() -> None:
         sentry_sdk.init(dsn=s.sentry_dsn, traces_sample_rate=0.0)
     init_db()
     provider_for(s.transcription_provider, None)                 # an unknown provider stops the worker here, not mid-job
+    if s.transcription_provider != "local" and hosted_config(s, None) is None:
+        log.warning("TRANSCRIPTION_PROVIDER=%s has no API key set: the local model transcribes instead",
+                    s.transcription_provider)
     FasterWhisperTranscriber.workers = s.transcribe_parallel     # before the models load
     transcriber, indexer, embedder = default_transcriber(), default_indexer(), default_embedder()
     log.info("worker started (captions: %s, search index: %s, visual search: %s)",
