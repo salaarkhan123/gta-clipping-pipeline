@@ -23,7 +23,9 @@ import { RangeStrip } from "./Range";
 import { CaptionStyles, HookTones } from "./Styles";
 
 export type SetupSource = { title: string; duration: number | null; height?: number | null; thumb?: string | null; video?: string | null;
-  badge?: string | null; detail?: string | null };
+  badge?: string | null; detail?: string | null;
+  // What the link preview says about the video (platform, type, status, creator, game…), only what the API sent.
+  facts?: [string, string][] };
 // The price, only ever from the server: a quote for this exact request, or the link preview's estimate.
 export type Price = { state: "asking" } | { state: "ok"; credits: number; note?: string } | { state: "failed"; message: string } | { state: "unknown"; text: string };
 
@@ -96,7 +98,8 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
   // ---------- price and the button ----------
   const credits = price.state === "ok" ? price.credits : null;
   const short = credits !== null && credits > me.credits ? credits - me.credits : 0;
-  const ready = !busy && !step && price.state !== "asking" && price.state !== "failed" && !short && me.email_verified && (!consent || consent.checked);
+  // Create waits for a price from the server: no quote, no start.
+  const ready = !busy && !step && price.state === "ok" && !short && me.email_verified && (!consent || consent.checked);
 
   const span = f.range ? f.range.end - f.range.start : source.duration;
   const games = [...new Set(allTemplates.map(gameOf))].filter((g) => g !== "other");
@@ -141,13 +144,14 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
                 <button type="button" onClick={onRemove} aria-label="Choose a different video" title="Choose a different video"
                   className="absolute right-2 top-2 grid h-9 w-9 cursor-pointer place-items-center rounded-full border-0 bg-[rgba(0,0,0,.6)] text-text hover:bg-[rgba(0,0,0,.85)]"><Icon name="close" size={17} /></button>
               </div>
-              {source.detail && <p className="m-0 overflow-hidden text-ellipsis whitespace-nowrap px-1 text-[12.5px] text-muted">{source.detail}</p>}
+              {source.facts?.length ? <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 px-1 text-[12.5px]">{source.facts.map(([k, v]) => <div key={k} className="contents"><dt className="text-muted">{k}</dt><dd className="m-0 overflow-hidden text-ellipsis whitespace-nowrap text-label" title={v}>{v}</dd></div>)}</dl>
+                : source.detail && <p className="m-0 overflow-hidden text-ellipsis whitespace-nowrap px-1 text-[12.5px] text-muted">{source.detail}</p>}
               <div className="flex flex-wrap gap-1">
                 {spoken.length > 0 && <InlineSelect label="Speech" value={f.source_lang} shown={f.source_lang ? languageName(f.source_lang) : "Auto"} onChange={(v) => set({ source_lang: v })}>
                   {listed.source_lang?.nullable !== false && <option value="">Detect it</option>}
                   {spoken.map((c) => <option key={c} value={c}>{langs?.languages.find((l) => l.code === c)?.name || languageName(c)}</option>)}</InlineSelect>}
-                <InlineSelect label="Game" value={f.game} shown={f.game ? gameName(f.game) : "Auto"} onChange={(v) => set({ game: v })}>
-                  <option value="">Auto</option>{games.map((g) => <option key={g} value={g}>{gameName(g)}</option>)}</InlineSelect>
+                <InlineSelect label="Templates for" value={f.game} shown={f.game ? gameName(f.game) : "Every game"} onChange={(v) => set({ game: v })}>
+                  <option value="">Every game</option>{games.map((g) => <option key={g} value={g}>{gameName(g)}</option>)}</InlineSelect>
               </div>
             </div>
             <div className="grid content-start gap-4">
@@ -169,23 +173,28 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
               <label className="relative m-0 flex min-h-[72px] cursor-pointer items-center gap-3 rounded-16 bg-surface px-4 font-normal hover:bg-raised">
                 <span className="grid h-10 w-10 flex-none place-items-center rounded-12 bg-text text-bg" aria-hidden="true"><Icon name="grid" size={20} /></span>
                 <span className="grid min-w-0 flex-1"><span className="text-[15px] font-medium text-text">Template</span>
-                  <span className="overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-muted">{chosen?.name || saved?.find((s) => `s:${s.id}` === picked)?.name || "None: our defaults"}</span></span>
+                  <span className="overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-muted">{chosen?.name || "None: our defaults"}</span></span>
                 <Icon name="chevron" size={18} className="text-muted" />
                 <select value={picked} onChange={(e) => pick(e.target.value)} aria-label="Template" className="absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0">
                   <option value="">None: our defaults</option>
-                  {!!saved?.length && <optgroup label="Your templates">{saved.map((s) => <option key={s.id} value={`s:${s.id}`}>{s.name}</option>)}</optgroup>}
                   {templates.presets.length > 0 && <optgroup label="Game types">{templates.presets.map((t) => <option key={t.id} value={`t:${t.id}`}>{t.name || tidy(t.id)}</option>)}</optgroup>}
                   {(f.game ? [f.game] : [...games, "other"]).map((g) => { const list = templates.games.filter((t) => gameOf(t) === g && forGame(t) && !isPreset(t));
                     return list.length ? <optgroup key={g} label={gameName(g)}>{list.map((t) => <option key={t.id} value={`t:${t.id}`}>{t.name || tidy(t.id)}</option>)}</optgroup> : null; })}
                 </select>
               </label>
-              <div className="flex min-h-[72px] items-center gap-3 rounded-16 bg-surface px-4" aria-disabled="true">
-                <span className="grid h-10 w-10 flex-none place-items-center rounded-12 bg-raised text-fg-3" aria-hidden="true"><Icon name="brand" size={20} /></span>
-                <span className="grid min-w-0 flex-1"><span className="text-[15px] font-medium text-fg-2">Brand kit</span><span className="text-[13px] text-fg-3">Logo, intro, outro</span></span>
-                <ComingSoonBadge />
-              </div>
+              {/* Brand kits are the account's saved looks (GET /v1/templates/custom). Picking one sets the look it holds. */}
+              <label className={`relative m-0 flex min-h-[72px] items-center gap-3 rounded-16 bg-surface px-4 font-normal ${saved?.length ? "cursor-pointer hover:bg-raised" : ""}`}>
+                <span className="grid h-10 w-10 flex-none place-items-center rounded-12 bg-text text-bg" aria-hidden="true"><Icon name="brand" size={20} /></span>
+                <span className="grid min-w-0 flex-1"><span className="text-[15px] font-medium text-text">Brand kit</span>
+                  <span className="overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-muted">{saved?.find((k) => `s:${k.id}` === picked)?.name
+                    || (saved?.length ? "No brand kit" : "No brand kits saved yet")}</span></span>
+                {!!saved?.length && <Icon name="chevron" size={18} className="text-muted" />}
+                {!!saved?.length && <select value={picked.startsWith("s:") ? picked : ""} onChange={(e) => pick(e.target.value)} aria-label="Brand kit"
+                  className="absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0">
+                  <option value="">No brand kit</option>{saved.map((k) => <option key={k.id} value={`s:${k.id}`}>{k.name}</option>)}</select>}
+              </label>
             </div>
-            <p className="m-0 px-1 pt-1 text-[13px] text-muted">A template tunes what we look for in a game and sets the layout, captions and edits below. You can still change each one.</p>
+            <p className="m-0 px-1 pt-1 text-[13px] text-muted">A template tunes what we look for in a game; a brand kit is a look you saved. Either one sets the layout, captions and edits below, and you can still change each.</p>
             <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="inline-flex w-max cursor-pointer items-center gap-1 border-0 bg-transparent px-1 py-2 font-sans text-[14px] text-muted hover:text-text">
               Settings <Icon name="chevron" size={16} className={open ? "rotate-180" : ""} /></button>
 

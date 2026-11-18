@@ -153,7 +153,8 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
 
   // ---------- saving and rendering ----------
   const canSave = !!known.patchClip?.fields.includes("edit");
-  const exportRoute = known.exportRoute;
+  // Export needs the exact price first: without the quote route there is no Export.
+  const exportRoute = known.exportQuote ? known.exportRoute : null;
   const options = onlyListed(listed, edit.options);
   const body = exportRoute ? exportBody(exportRoute, { jobId: clip.job_id, clipIds: [clip.id], options, edit: forApi(edit) }) : null;
   const quote = useQuote(confirm && known.exportQuote ? EXPORT_QUOTE : null, confirm ? body : null);
@@ -351,10 +352,10 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
 
       {confirm && body && <Confirm title="Export this clip" onClose={() => setConfirm(false)}>
         <p className="muted">{stamp(keptLength(edit))} long · {edit.cuts.length} cut{edit.cuts.length === 1 ? "" : "s"} · {aspect}{look.captions ? " · captions" : ""}</p>
-        <p aria-live="polite">{known.exportQuote ? <QuoteLine quote={quote} what="This export" exact /> : "You only use credits for the minutes rendered."}</p>
+        <p aria-live="polite"><QuoteLine quote={quote} what="This export" exact /></p>
         <div className="editor-actions">
           <button type="button" className="btn small ghost" onClick={() => setConfirm(false)}>Back</button>
-          <button type="button" className="btn small primary" disabled={!!known.exportQuote && quote.state !== "ok"} onClick={startRender}>
+          <button type="button" className="btn small primary" disabled={quote.state !== "ok"} onClick={startRender}>
             {quote.state === "ok" ? `Export for ${creditWords(quote.credits)}` : "Export"}</button>
         </div>
       </Confirm>}
