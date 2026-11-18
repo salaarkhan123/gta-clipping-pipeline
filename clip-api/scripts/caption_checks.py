@@ -454,6 +454,8 @@ def cmd_sheet(args) -> int:
         for setup in args.aspect.split(","):
             tiles = []
             for w in item["windows"]:
+                if not w["words"]:
+                    continue                       # nothing is said: no caption to look at
                 words = [tuple(x) for x in w["words"]]
                 plan = plan_for(item, setup)
                 with tempfile.TemporaryDirectory() as tmp:
