@@ -68,7 +68,11 @@ export default function Home() {
         <section className="px-gutter pb-[clamp(64px,8vw,120px)] pt-0">
           <div className="mx-auto grid max-w-site justify-items-center gap-6 rounded-stage bg-surface px-6 py-[clamp(48px,6vw,80px)] text-center">
             <h2 className="text-[clamp(24px,2vw+8px,36px)] leading-[1.1] tracking-[-0.03em] text-fg">Your last stream already has clips in it</h2>
-            <Link href="/login/?new=1" className="btn btn-primary h-[52px]">Start clipping free</Link>
+            {/* Back to the hero's input: one way in, the same for signed-in and new visitors. */}
+            <button type="button" className="btn btn-primary h-[52px]" onClick={() => {
+              const el = document.getElementById("start-hero-link");
+              el?.scrollIntoView({ behavior: "smooth", block: "center" }); el?.focus({ preventScroll: true });
+            }}>Start clipping free</button>
             <p className="text-[14px] text-fg-2">{freeCredits(signup)} · No card needed</p>
           </div>
         </section>
