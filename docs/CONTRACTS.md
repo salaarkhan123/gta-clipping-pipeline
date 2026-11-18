@@ -168,6 +168,39 @@ Checks (`scripts/caption_checks.py`, run on the owner's six eval videos with the
 - Order never changes: sorting by `display_score` gives the same order as sorting by the raw score (ties stay ties). Clips the AI did not rate have no `display_score`.
 - `score` and `scores` stay raw. The website shows `display_score` as "N /100" and the raw numbers in the tooltip.
 
+## Reframe boxes v1 (reframing agent → captions agent, agreed 2026-11-18)
+
+Where the camera, the head and the HUD land on one clip's output, so text never covers them. Reframing owns the function and the HUD table; captions owns placement (`app/pipeline/placement.py`) and only reads this.
+
+```python
+# app/pipeline/layouts.py
+reframe_boxes(plan: LayoutPlan | None, *, src: tuple[int, int] | None = None, cam=None, face=None,
+              game: str | None = None, confidence: float | None = None) -> dict
+hud_regions(game: str | None) -> tuple[tuple[str, Rect], ...]      # (kind, [x, y, w, h] fractions); HUD_REGIONS
+```
+
+Units, one rule: source boxes are `[x, y, w, h]` fractions of the source (the same as the `facecam_box` API); canvas boxes are `[x0, y0, x1, y1]` pixels of `canvas` (the same as `LayoutPlan.head`). Scale canvas pixels to the output size.
+
+| Key | Value |
+|---|---|
+| `v` | `1` |
+| `canvas` | `[w, h]`: the plan's canvas (`ASPECTS[aspect]`, e.g. `[1080, 1920]`); the source size when there is no plan |
+| `layout`, `scene` | what is drawn (`LayoutPlan.layout`, or `"original"` with no plan) and the scene type |
+| `seam` | the line between two stacked panels (canvas px) or null |
+| `panels` | `[{"role": "gameplay" \| "camera", "out": [x0, y0, x1, y1]}]` in drawing order |
+| `text_span` | `[f0, f1]`: the share of the width text is centred in (`LayoutPlan.text_span`) |
+| `facecam` | `{"src": [x, y, w, h], "out": [x0, y0, x1, y1] \| null, "confidence": 0-1 \| null}` or null (no camera). `out` is the camera panel, the inset, or where the camera lands inside a gameplay picture. `confidence` null: given by the user, or not measured |
+| `head` | the person's head on the canvas or null (`LayoutPlan.head`; when only the camera box is known, its upper 85%) |
+| `hud` | `[{"kind": "killfeed" \| "minimap" \| "speedometer" \| "hud", "src": [x, y, w, h], "out": [x0, y0, x1, y1] \| null}]`; `out` null when the crop never shows it. Empty for an unknown game, `"other"` or no game: never guessed |
+| `keep_out` | canvas boxes no text may overlap: the head, a camera inset (`border`) or a camera drawn inside a gameplay picture, and every HUD element shown. A stacked camera panel adds only the head, so the seam stays a caption line |
+| `crop_path` | `[{"t": seconds from the clip start, "box": [x, y, w, h]}]`: the gameplay panel's moving crop, or null (static) |
+
+Rules:
+- `keep_out` is static for the whole clip: the worst case over every point of `crop_path`. Place captions once per clip.
+- No plan (`vertical=False`, the 16:9 original, `classic`): `reframe_boxes(None, src=(w, h), cam=..., face=..., game=...)` gives `canvas = [w, h]`, one gameplay panel, and `keep_out` = head + camera + HUD in source pixels.
+- `game` is a `templates.GAMES` id (the template's `game`). `gta6` and `gta-online` fold to `gta5`'s HUD. The table and how each box was measured go in `docs/REFRAME_EVAL.md` with the first measured entries; until then the table is empty and `hud` is `[]`.
+- A change to this shape bumps `v` and is agreed with the captions agent first.
+
 ## Schema: revision 0005 (shipped by the orchestrator, additive)
 
 | Table | Columns |
