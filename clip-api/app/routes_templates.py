@@ -15,16 +15,17 @@ from sqlalchemy.orm import Session
 from .db import get_db
 from .deps import ApiError, Principal, current_principal
 from .ledger import lock_account
+from .plans import plan_of
 from .models import CustomTemplate, new_id, utcnow
-from .render_options import LayoutOptions
+from .render_options import LayoutOptions, refused_layout
 from .routes_media import ClipOptions, iso
 from .templates import GAMES, KINDS, TEMPLATES, games, listing, poster_file
 
 router = APIRouter()
 
-# A technical cap on saved looks per account, so one account cannot fill the table. It is the same for every
-# account: there are no per-plan limits and no plan gating on saved looks (owner's decision, 2026-11-16).
-MAX_CUSTOM_TEMPLATES = 20
+# Saved looks per account come from the plan (`custom_templates_max` in app/plans.py: Free and Starter 1, Pro 3,
+# Scale 10; owner's decision 2026-11-17, replacing one cap of 20 for everyone). Looks saved before a downgrade are
+# kept and stay editable; only new saves past the cap are refused.
 # The editing switches that are part of a look, next to every field of LayoutOptions.
 EDIT_FIELDS = ("tighten", "punch_zoom", "flash_forward", "hook_overlay")
 # Never saved in a look: these set what a job costs or a quality the plan caps, or name another template.
@@ -61,6 +62,9 @@ def check_look(options: dict[str, Any]) -> dict[str, Any]:
     try:
         read = ClipOptions(**options)
     except ValidationError as e:
+        refused = refused_layout(e.errors())
+        if refused:
+            raise ApiError(400, *refused) from None
         first = e.errors()[0]
         where = ".".join(str(x) for x in first.get("loc", ()))
         raise ApiError(422, "bad_options", f"{where}: {first['msg']}".strip(": ")) from None
@@ -131,20 +135,22 @@ def list_custom(p: Principal = Depends(current_principal), db: Session = Depends
     a saved look for you."""
     rows = db.execute(select(CustomTemplate).where(CustomTemplate.account_id == p.account.id, CustomTemplate.deleted_at.is_(None))
                       .order_by(CustomTemplate.created_at.desc(), CustomTemplate.id.desc())).scalars()
-    return {"templates": [custom_json(t) for t in rows], "limit": MAX_CUSTOM_TEMPLATES}
+    return {"templates": [custom_json(t) for t in rows], "limit": plan_of(p.account)["custom_templates_max"]}
 
 
 @router.post("/v1/templates/custom", status_code=201)
 def create_custom(body: CustomTemplateIn, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
     """Save a look: a name and the clip options that make it (layout, shape, captions, editing switches).
     Options that set a price or a quality (`max_clips`, `clip_length`, `resolution` and the like) are refused.
-    Free, and at most 20 per account."""
+    Free; how many an account may keep depends on its plan (`limit` in the list)."""
     options = check_look(body.options)
     lock_account(db, p.account.id)      # serialise this account's saves so two at once cannot pass the cap
     saved = db.execute(select(func.count()).select_from(CustomTemplate).where(
         CustomTemplate.account_id == p.account.id, CustomTemplate.deleted_at.is_(None))).scalar_one()
-    if saved >= MAX_CUSTOM_TEMPLATES:
-        raise ApiError(409, "too_many_templates", f"You can save up to {MAX_CUSTOM_TEMPLATES} templates. Delete one first.")
+    plan = plan_of(p.account)
+    if saved >= plan["custom_templates_max"]:
+        raise ApiError(409, "too_many_templates", f"The {plan['name']} plan saves up to {plan['custom_templates_max']} "
+                                                  "templates. Delete one first or upgrade.")
     now = utcnow()
     t = CustomTemplate(id=new_id("ctpl"), account_id=p.account.id, name=body.name, options=options,
                        created_at=now, updated_at=now)

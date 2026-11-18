@@ -63,10 +63,10 @@ export function PlanCards({ plans, currency, yearly, current, busy, onPick, free
               : <a className={button} href={freeHref}>Start free</a>}
             <p className="grid grid-cols-[auto_1fr] gap-x-[10px] gap-y-[2px] border-0 border-b border-solid border-line pb-[14px]">
               <Icon name="bolt" size={18} className="row-span-2 mt-[2px] text-lime" />
-              <b className="text-[15px]">{!isPaid ? `${FREE_CREDITS} credits` : yearly ? `${(p.monthly_credits * 12).toLocaleString()} credits/year` : `${p.monthly_credits.toLocaleString()} credits/month`}</b>
+              <b className="text-[15px]">{!isPaid ? `${FREE_CREDITS} credits` : `${p.monthly_credits.toLocaleString()} credits every month${yearly ? ", billed yearly" : ""}`}</b>
               <span className="text-[13px] text-muted">1 credit processes 1 minute of source video</span></p>
             <ul className="grid list-none gap-[10px] text-[14px]">
-              <li className="flex items-start gap-[10px] text-lime"><Check hi />{isPaid ? `${p.monthly_credits.toLocaleString()} credits every month` : `${FREE_CREDITS} credits when you sign up`}</li>
+              {!isPaid && <li className="flex items-start gap-[10px] text-lime"><Check hi />{FREE_CREDITS} credits when you sign up</li>}
               <li className="flex items-start gap-[10px] text-label"><Check />{exportName(p.max_side)} exports</li>
               <li className="flex items-start gap-[10px] text-label"><Check />Reframe and caption {perJob(p.max_render_min)} per job</li>
               {(p.features || []).map((f) => <li key={f} className="flex items-start gap-[10px] text-label"><Check />{f}</li>)}

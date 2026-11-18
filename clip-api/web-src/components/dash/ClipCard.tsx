@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { API, api, ApiError, clock, getToken } from "@/lib/api";
+import { ExportFull } from "./ExportFull";
 import { Icon, IconName } from "./Icon";
 import { BACKDROP, CARD_ROW, MEDIA, Shape, thumbVar, useShape } from "./ProjectCard";
 import { useDash } from "./Shell";
@@ -88,6 +89,7 @@ export function ClipCard({ clip, onChange, project, uploadId, lit, number, selec
             title={clip.captions_url ? "Captions file (SRT)" : "This clip has no captions"} onClick={() => downloadSubtitles(clip.id).catch(fail)}><Icon name="captions" size={18} /></button>
           {source && <Link className="btn small ghost ml-1 min-h-[30px] gap-[5px] rounded-8 px-[10px] py-1 text-[12.5px]" href={`/dashboard/edit/?project=${source}&clip=${clip.id}`} aria-label={`Edit ${name}`}
             title="Trim, cut by transcript, captions and look"><Icon name="sliders" size={16} /><span className={shape === "tall" ? "sr-only" : ""}>Edit</span></Link>}
+          {clip.rendered && clip.rendered !== "full" && <ExportFull clip={clip} onDone={(n) => onChange({ ...clip, ...n })} />}
         </div>
       </div>
       <p className="line-clamp-2 min-h-[3em] text-[13px] leading-[1.5] text-soft" title={clip.description || undefined}>{clip.description || <span className="muted">No description for this clip.</span>}</p>
