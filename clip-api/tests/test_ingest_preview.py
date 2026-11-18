@@ -15,7 +15,8 @@ from tests.test_api import balance
 
 TWITCH = "https://www.twitch.tv/videos/2301234567"
 THUMB = "https://static-cdn.jtvnw.net/cf_vods/d1m7jfoe9zdc1j/abc/thumb/thumb0-640x360.jpg"
-KEYS = {"url", "platform", "supported", "title", "channel", "duration_sec", "thumbnail_url", "kind", "refusal"}
+KEYS = {"url", "platform", "supported", "title", "channel", "duration_sec", "thumbnail_url", "kind", "refusal",
+        "estimate"}
 
 
 @pytest.fixture(autouse=True)
@@ -47,7 +48,10 @@ def test_a_supported_link_shows_its_metadata_and_imports_nothing(client, user, f
     body = ask(client, headers, "https://m.twitch.tv/videos/2301234567?t=1h")
     assert body == {"url": TWITCH, "platform": "twitch", "supported": True, "title": "Ranked grind: part 3 / finale!",
                     "channel": "SomeStreamer", "duration_sec": 7260.5, "thumbnail_url": THUMB, "kind": "video",
-                    "refusal": None}
+                    "refusal": None, "estimate": {
+                        "credits": 122, "basis": "source_minutes", "duration_sec": 7260.5, "balance": 30,
+                        "enough": False, "note": "One credit per started minute of the video (121.0 minutes). Never "
+                                                 "more than this; less if the video turns out shorter."}}
     # Metadata only, with the import's fixed options and a short socket timeout. Nothing is stored or charged.
     assert len(fake_ydl.instances) == 1 and fake_ydl.instances[0].urls == [TWITCH]
     options = fake_ydl.instances[0].params

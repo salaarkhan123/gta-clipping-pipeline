@@ -2,7 +2,8 @@
 that behaves exactly like an uploaded file (same size, length and file-type limits, same content-hash reuse).
 
 An import job reserves no credits, so there is normally nothing to settle. If a job does carry a reservation,
-every path here settles it: a failure or a cancel ends in a refund.
+every path here settles it: a failure or a cancel ends in a refund. Clip jobs started from the link
+(POST /v1/clips/from-url) wait for the import and are queued or refunded in its final transaction (url_clips.resolve).
 """
 import hashlib
 import logging
@@ -15,7 +16,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from .. import ledger
+from .. import ledger, url_clips
 from ..config import get_settings
 from ..db import new_session
 from ..models import Job, Upload, utcnow
@@ -88,6 +89,7 @@ def run_import(job_id: str) -> str:
     threading.Thread(target=_heartbeat, args=(job_id, stop), daemon=True).start()
     status, error = "FAILED", ("import_failed", f"Something went wrong while importing this link. {UPLOAD_INSTEAD}")
     stored_key: str | None = None
+    ended: list[str] = []          # link clip jobs that ended with this import (app/url_clips.py)
     last = [0.0]
 
     def progress(stage: str, pct: int, force: bool = True) -> None:
@@ -162,6 +164,7 @@ def run_import(job_id: str) -> str:
             job.status, job.progress, job.stage, job.finished_at = "SUCCEEDED", 100, "done", utcnow()
             if job.credits_reserved:
                 ledger.settle(db, job, success=True)
+            ended = url_clips.resolve(db, job)      # link clip jobs waiting for it: queued now, in this transaction
             db.commit()
         status, error = "SUCCEEDED", None
     except Canceled:
@@ -191,7 +194,9 @@ def run_import(job_id: str) -> str:
                     job.error_code, job.error_message = error
                 if job.credits_reserved:
                     ledger.settle(db, job, success=False)   # refund
+                ended = url_clips.resolve(db, job)          # link clip jobs waiting for it: refunded
             else:
                 status = job.status      # already finalised (and settled) elsewhere; leave it alone
             db.commit()
+    url_clips.notify(ended)
     return status

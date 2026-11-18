@@ -94,6 +94,8 @@ Owner's decisions (2026-11-16, PARITY.md "Decisions"):
 | `GET`, `POST /v1/templates/custom`; `PATCH`, `DELETE /v1/templates/custom/{id}` | an account's saved looks: `name` (max 80) and `options` (validated as clip options; never `template`, `max_clips`, `limit` or anything that sets a price) | | | C |
 | `POST /v1/transcripts`, `POST /v1/summaries` | `upload_id`, `source_lang`, `target_lang` | | | F |
 | `POST /v1/imports` | `url`, `consent: true` (required) | | | E |
+| `POST /v1/clips/from-url` | `url`, `consent: true`, `options` (as `POST /v1/clips`), `webhook_url`; see "URL clipping" | | | E |
+| `POST /v1/imports/preview` | `url`, `options` (optional); answer adds `estimate`; see "URL clipping" | | | E |
 
 ## Template format (C)
 
@@ -142,6 +144,126 @@ Panel sizes are a public template field, `panels: {"camera": "top" | "bottom" | 
 - `display = round(floor + (top - floor) * (s - lo) / (hi - lo))`; one rated clip, or all equal, shows `top`.
 - Order never changes: sorting by `display_score` gives the same order as sorting by the raw score (ties stay ties). Clips the AI did not rate have no `display_score`.
 - `score` and `scores` stay raw. The website shows `display_score` as "N /100" and the raw numbers in the tooltip.
+
+## URL clipping
+
+The customer pastes a link, sees what it is and what it costs, and clicks "Generate clips". The server imports the video and runs the clip job on it; the page makes no other call until the clips are ready. Code: `app/url_clips.py`, `app/routes_ingest.py`. This contract is stable: fields may be added, none are renamed or removed.
+
+### What the page calls
+
+| Step | Call | When |
+|---|---|---|
+| 1 | `GET /v1/imports/sources` | Once on load. `enabled` false: hide the link box and offer upload. `consent` is the exact checkbox text to show. |
+| 2 | `POST /v1/imports/preview {url, options?}` | On paste (debounce about 500 ms). Show `title`, `thumbnail_url`, `duration_sec`, `channel` and `estimate`. Again when the clip options change: the answer is cached server-side for 5 minutes, so a repeat makes no request to the site. |
+| 3 | `POST /v1/clips/from-url {url, consent: true, options}` | On "Generate clips". Send an `Idempotency-Key` header, one new value per click of a confirmed preview (for example a UUID). |
+| 4 | `GET /v1/jobs/{job_id}` | Every 2 seconds until `status` is `SUCCEEDED`, `FAILED` or `CANCELED`. |
+| 5 | `POST /v1/jobs/{job_id}/cancel` | The Cancel button, at any stage. |
+| 6 | `GET /v1/credits` | After the job ends, to refresh the balance. |
+
+All calls need `Authorization: Bearer <session token or API key>`. Every error is `{"error": {"code", "message"}}`; `message` is written for the customer, so show it as given.
+
+### 1. Preview with price: `POST /v1/imports/preview`
+
+Request. `options` is optional and takes exactly what `options` of `POST /v1/clips` takes. Send the same `options` here and to `POST /v1/clips/from-url`, so the price shown is the price reserved.
+
+**Default: automatic discovery** (owner, 2026-11-18). When `options` names none of `max_clips`, `limit` or `duration`, both calls use `duration: "0-90"` with `limit: null`: every moment that passes, 0 to 90 seconds each, at most 50, best first. There is no 3-clip limit. For a first run the price is the same either way (one credit per started minute). Send `max_clips`, `limit` or `duration` to choose a count or a length yourself.
+
+```json
+{"url": "https://www.twitch.tv/videos/2301234567", "options": {"max_clips": 5, "duration": "30-60"}}
+```
+
+Response 200, a supported link:
+
+```json
+{"url": "https://www.twitch.tv/videos/2301234567", "platform": "twitch", "supported": true,
+ "title": "Ranked grind: part 3", "channel": "SomeStreamer", "duration_sec": 7260.5,
+ "thumbnail_url": "https://static-cdn.jtvnw.net/...jpg", "kind": "video", "refusal": null,
+ "estimate": {"credits": 122, "basis": "source_minutes", "duration_sec": 7260.5, "balance": 300, "enough": true,
+              "note": "One credit per started minute of the video (121.0 minutes). Never more than this; less if the video turns out shorter."}}
+```
+
+Response 200, a refused link: `supported` false, `estimate` null, and `refusal` `{code, message}` saying why and what to do instead (for example `live_stream`, `video_too_long`, `private_address`, `unsupported_source`, `login_required`). Show the message and the upload button.
+
+`estimate`:
+
+| Field | Meaning |
+|---|---|
+| `credits` | What "Generate clips" reserves. The job is never charged more. |
+| `basis` | `source_minutes`: one credit per started minute of the video. `rendered`: the account already has this video and it was clipped before, so the job is charged for the seconds it renders, at most `credits`. |
+| `duration_sec` | The length it is priced on. |
+| `balance`, `enough` | The account's balance now, and whether it covers `credits`. When `enough` is false, disable "Generate clips" and link to buying credits. |
+| `note` | One line to show under the price. |
+
+`estimate` is null when the link is refused, or when its length cannot be known before a download (direct links, Google Drive and Dropbox). For those, use the two-step flow: `POST /v1/imports`, then `POST /v1/clips` on the upload.
+
+Errors: `401`; `403 email_not_verified`; `503 imports_disabled`; `429 rate_limited` (10 lookups a minute per account; cached answers are not counted); `422 validation_error` (a bad body or bad options); `422 bad_range`, `range_too_short`, `too_short_for_duration` (the options do not fit this video).
+
+### 2. Start: `POST /v1/clips/from-url`
+
+Request. `consent` must be the JSON value `true`, sent only after the customer ticks the consent box. `options` and `webhook_url` are those of `POST /v1/clips`. No other fields are accepted.
+
+```http
+POST /v1/clips/from-url
+Idempotency-Key: 6f1c2a0e-6c2b-4a55-9a51-1d2a4c1f9e01
+
+{"url": "https://www.twitch.tv/videos/2301234567", "consent": true,
+ "options": {"max_clips": 5, "duration": "30-60", "project_name": "Ranked grind"}}
+```
+
+Response `202`: the clip job, as `GET /v1/jobs/{job_id}` returns it, with the `import` part. The credits are reserved (taken from the balance) at this point, before anything is imported.
+
+```json
+{"job_id": "job_9a1b...", "tool": "clips", "status": "WAITING", "stage": "importing", "progress": 0,
+ "upload_id": "upl_42cd...", "credits_reserved": 122, "credits_charged": 0, "error": null,
+ "options": {"...": "..."}, "created_at": "2026-11-18T10:00:00Z", "finished_at": null, "expires_at": "...",
+ "import": {"import_id": "imp_77e0...", "status": "QUEUED", "stage": null, "progress": 0,
+            "url": "https://www.twitch.tv/videos/2301234567", "platform": "twitch", "reused": false,
+            "upload_id": null, "error": null}}
+```
+
+- `200` instead of `202`: the same link with the same options is already waiting or running for this account (a double click). That job is returned and nothing new is reserved.
+- A repeated `Idempotency-Key` returns the job the first request started, whatever the body.
+- When the account already has this video stored, nothing is imported: the job starts as `QUEUED`, and `import` is `{"import_id": null, "status": "SUCCEEDED", "stage": "done", "progress": 100, "reused": true, "upload_id": "upl_...", ...}`.
+
+Errors (nothing is reserved, imported or logged):
+
+| Status | Code | When |
+|---|---|---|
+| 401 | `unauthorized` | No or bad login. |
+| 402 | `insufficient_credits` | The balance does not cover the price. The message gives both numbers. |
+| 403 | `email_not_verified` | The email address is not confirmed. |
+| 422 | `consent_required` | `consent` is not `true`. |
+| 422 | `validation_error` | A bad body or bad options. |
+| 422 | the preview's refusal codes | The link is refused: `unsupported_source`, `unsupported_link`, `https_only`, `credentials_in_url`, `bad_url`, `private_address`, `unreachable`, `live_stream`, `video_too_long`, `video_too_short`, `login_required`, `drm_protected`, `geo_blocked`, `not_found`, `source_refused`, `source_failed`, `preview_timeout`, `no_format`, `file_too_large`. |
+| 422 | `duration_unknown` | The link's length cannot be read before a download. Use `POST /v1/imports`, then `POST /v1/clips`. |
+| 422 | `bad_range`, `range_too_short`, `too_short_for_duration`, `bad_webhook_url` | The options do not fit the video, or the webhook URL is not public https. |
+| 429 | `too_many_jobs` | Two jobs are already waiting or running. A link job counts once. |
+| 429 | `too_many_imports`, `rate_limited` | Too many imports at once, or too many lookups a minute. |
+| 503 | `imports_disabled`, `paused`, `capacity` | Link import is switched off, new jobs are paused, or the day's capacity is used up. |
+
+### 3. Follow: `GET /v1/jobs/{job_id}`
+
+| `status` | `stage` | Show |
+|---|---|---|
+| `WAITING` | `importing` | "Importing": `import.progress` (0 to 100) as the bar; `import.stage` is null (waiting for a worker), `starting`, `importing` (downloading), `checking` or `storing`. |
+| `QUEUED` | null | "Waiting for a worker". `import.status` is `SUCCEEDED`, and `upload_id` is the stored video. |
+| `RUNNING` | the clip job's stages (`downloading`, `transcribing`, ... `uploading`) | `progress` (0 to 100) as the bar. `clips` fill in as each clip is ready. |
+| `SUCCEEDED` | `done` | The clips. `credits_charged` is what was charged: at most `credits_reserved`, less when the video was shorter than its metadata said. |
+| `FAILED` | null | `error.message`. When the import failed (`import.status` `FAILED`, for example `source_refused`, `login_required`, `video_too_long`, `import_timeout`), the message says to upload the file instead. Every failure is refunded in full: `credits_charged` is 0. |
+| `CANCELED` | null | "Cancelled". Refunded in full. |
+
+`import` is present on every job started from a link, also after it finishes. `import.error` is the import's own error; the job's `error` carries the same code.
+
+### 4. Cancel: `POST /v1/jobs/{job_id}/cancel`
+
+Works at every stage and returns the job. `WAITING` or `QUEUED`: cancelled and refunded at once (`status` `CANCELED`), and the import is stopped. `RUNNING`: `status` stays `RUNNING` until the worker stops at its next step (seconds), then `CANCELED` and refunded. Poll as before.
+
+### Money, for the record (owner-approved rules, `CLAUDE.md`)
+
+- One reservation per job (`reserve:<job_id>`), made by `POST /v1/clips/from-url` before the import, and one settle (`settle:<job_id>`): a charge of at most the reservation, or a full refund. The import itself costs nothing and holds nothing.
+- The price is `price_clips` in `app/routes_media.py`, the function behind `POST /v1/clips` and `POST /v1/clips/quote`, on the metadata's length (or the stored upload's, when the account has the video).
+- When the import has stored the video, the job is priced again on the real length: charged that if it is less, never more than the reservation.
+- Failed, refused, timed-out or cancelled imports, a crash at any point (the worker's sweeps finish or refund the job), a cancel, a takedown, and a failed clip job all end in a full refund.
 
 ## Schema: revision 0005 (shipped by the orchestrator, additive)
 
