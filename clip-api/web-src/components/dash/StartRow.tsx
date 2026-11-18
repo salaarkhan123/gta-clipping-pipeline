@@ -26,5 +26,5 @@ export function QuoteLine({ quote, what = "This run" }: { quote: Quote; what?: s
   if (quote.state === "asking") return <>Working out the price…</>;
   if (quote.state === "failed") return <span className="warn">No price yet: {quote.message}</span>;
   if (quote.state !== "ok") return null;
-  return <><b className="price">{what} reserves {creditWords(quote.credits)}.</b> {quote.note || "You're charged only for what is rendered; the rest comes back."}</>;
+  return <><b className="price">{what} reserves {creditWords(quote.credits)}.</b> {quote.note || "The exact amount from the API; nothing is reserved until you start."}</>;
 }

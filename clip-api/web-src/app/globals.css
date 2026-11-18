@@ -591,7 +591,7 @@ textarea:focus { border-color: var(--accent); outline: none; }
 /* Editor */
 .editor { display: grid; gap: 18px; min-width: 0; }
 .editor-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px; align-items: start; }
-.editor-stage, .editor-side { display: grid; gap: 12px; min-width: 0; padding: 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+.dash section.editor-stage, .dash section.editor-side { display: grid; gap: 12px; min-width: 0; padding: 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
 .editor-video { position: relative; border-radius: 12px; overflow: hidden; background: #000; }
 .editor-video video { display: block; width: 100%; max-height: 460px; background: #000; }
 .editor-caption { position: absolute; left: 50%; bottom: 12%; transform: translateX(-50%); max-width: 90%; padding: 4px 10px; border-radius: 8px; text-align: center;
@@ -637,8 +637,8 @@ textarea:focus { border-color: var(--accent); outline: none; }
   padding: 12px 16px; border: 1px solid var(--line); border-radius: 14px; background: rgba(18,20,24,.94); backdrop-filter: blur(10px); }
 .editor-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .editor-actions .soon-tag { margin-left: 4px; }
-.confirm { display: grid; gap: 10px; padding: 18px; border: 1px solid var(--accent); border-radius: 16px; background: var(--card); }
-.dash .confirm h2 { margin: 0; font-size: 18px; }
+.picker.confirm { border-color: var(--accent); }
+.bulk-foot { position: sticky; bottom: -20px; display: grid; gap: 10px; margin: 0 -20px -20px; padding: 14px 20px 20px; border-top: 1px solid var(--line); background: var(--card); }
 .price { color: var(--accent); }
 .clip-edit { padding: 6px 12px; }
 
@@ -689,7 +689,10 @@ textarea:focus { border-color: var(--accent); outline: none; }
   .start-drop { padding: 26px 14px; }
   .start-actions .btn { flex: 1 1 100%; }
   .editor-grid { grid-template-columns: minmax(0, 1fr); }
-  .editor-stage, .editor-side { padding: 12px; }
+  .cap-lines li { grid-template-columns: auto minmax(0, 1fr); }
+  .cap-lines input { grid-column: 1 / -1; grid-row: 2; }
+  .cap-lines li > :last-child { justify-self: end; }
+  .dash section.editor-stage, .dash section.editor-side { padding: 12px; }
   .editor-controls .seg { margin-left: 0; }
   .editor-bar { padding: 10px 12px; }
   .editor-actions .btn { flex: 1 1 auto; }
@@ -701,6 +704,7 @@ textarea:focus { border-color: var(--accent); outline: none; }
   .tile strong { font-size: 15px; }
   .tile .muted { font-size: 13px; }
   .picker-body { padding: 16px; }
+  .bulk-foot { bottom: -16px; margin: 0 -16px -16px; padding: 12px 16px 16px; }
   .account-menu { right: -12px; }
 }
 @media (prefers-reduced-motion: reduce) {

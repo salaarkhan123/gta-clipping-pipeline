@@ -172,6 +172,11 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
         <button className="link" onClick={() => { setEdit(base); dropDraft(clip.id); setDraftAt(null); setRestored(null); }}>Discard it</button>{" "}
         <button className="link" onClick={() => setRestored(null)}>Keep it</button></p>}
 
+      {render && <div className={`job ${render.problem ? "failed" : render.done ? "succeeded" : "running"}`} role="status">
+        <div className="job-head"><strong>Render</strong><span className="status">{render.problem ? "Failed" : render.done ? "Done: the new file is in the player" : `${render.job?.progress ?? 0}%`}</span></div>
+        {working && <progress max={100} value={render.job?.progress ?? 0} aria-label="Render progress" />}
+        {render.problem && <p className="error">{render.problem}</p>}
+      </div>}
       <div className="editor-grid">
         <section className="editor-stage" aria-label="Preview and timeline">
           <div className="editor-video">
@@ -245,7 +250,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
             </>}
 
             {tab === "look" && <>
-              <Custom listed={listed} look={look} onLook={onLook} setAspect={setAspect} />
+              <Custom listed={listed} look={look} onLook={onLook} setAspect={setAspect} hint="Tick what this clip gets when it is rendered again." />
               {"hook_overlay" in listed && look.hook_overlay && <fieldset className="panels hook-set">
                 <legend>Hook</legend>
                 <label className="grow">Hook text<input value={edit.hook_text ?? clip.hook ?? ""} maxLength={HOOK_MAX} placeholder="A short opening line"
@@ -269,8 +274,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
         </div>
       </div>
 
-      {confirm && body && <div className="confirm" role="dialog" aria-label={`Render ${name}`}>
-        <h2>Render this clip again</h2>
+      {confirm && body && <Confirm title="Render this clip again" onClose={() => setConfirm(false)}>
         <p className="muted">{stamp(keptLength(edit))} long · {edit.cuts.length} cut{edit.cuts.length === 1 ? "" : "s"} · {String(look.aspect)}{look.captions ? " · subtitles" : ""}</p>
         <p aria-live="polite">{known.exportQuote ? <QuoteLine quote={quote} what="This render" /> : "You only use credits for the minutes rendered."}</p>
         <div className="editor-actions">
@@ -278,13 +282,24 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
           <button type="button" className="btn small primary" disabled={!!known.exportQuote && quote.state !== "ok"} onClick={startRender}>
             {quote.state === "ok" ? `Render for ${creditWords(quote.credits)}` : "Render"}</button>
         </div>
-      </div>}
-      {render && <div className={`job ${render.problem ? "failed" : render.done ? "succeeded" : "running"}`} role="status">
-        <div className="job-head"><strong>Render</strong><span className="status">{render.problem ? "Failed" : render.done ? "Done: the new file is in the player" : `${render.job?.progress ?? 0}%`}</span></div>
-        {working && <progress max={100} value={render.job?.progress ?? 0} aria-label="Render progress" />}
-        {render.problem && <p className="error">{render.problem}</p>}
-      </div>}
+      </Confirm>}
     </div>
+  );
+}
+
+// A small modal: the price and the button that spends it.
+function Confirm({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { if (dialog.current && !dialog.current.open) dialog.current.showModal(); }, []);
+  return (
+    <dialog ref={dialog} className="picker confirm" aria-labelledby="confirm-title" onClose={onClose}
+      onClick={(e) => { if (e.target === dialog.current) dialog.current?.close(); }}>
+      <div className="picker-body">
+        <div className="picker-head"><h2 id="confirm-title">{title}</h2>
+          <button className="icon-btn" aria-label="Close" onClick={() => dialog.current?.close()}><Icon name="close" /></button></div>
+        {children}
+      </div>
+    </dialog>
   );
 }
 

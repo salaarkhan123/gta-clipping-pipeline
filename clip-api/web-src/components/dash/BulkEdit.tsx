@@ -51,6 +51,7 @@ export function BulkEdit({ clips, jobs, listed, known, onClose, onDone }: { clip
         </div>
         <p className="muted small">Every selected clip is rendered again with this look. Trims and cuts are made one clip at a time in its editor.</p>
         <Custom listed={listed} look={l} onLook={onLook} setAspect={setAspect} />
+        <div className="bulk-foot">
         {oneRunOnly ? <p className="notice">These clips come from {runs.length} runs. Bulk edit takes clips from one run at a time: pick clips from one run.</p>
           : <p aria-live="polite">{known.exportQuote ? <QuoteLine quote={quote} what="This export" /> : "You only use credits for the minutes rendered."}</p>}
         {state?.problem && <p className="error" role="alert">{state.problem}</p>}
@@ -60,6 +61,7 @@ export function BulkEdit({ clips, jobs, listed, known, onClose, onDone }: { clip
           <button type="button" className="btn small ghost" onClick={() => dialog.current?.close()}>{state?.done ? "Close" : "Cancel"}</button>
           <button type="button" className="btn small primary" disabled={!body || working || !!state?.done || (!!known.exportQuote && quote.state !== "ok")} onClick={run}>
             {working ? "Rendering…" : quote.state === "ok" ? `Export for ${creditWords(quote.credits)}` : "Export"}</button>
+        </div>
         </div>
       </div>
     </dialog>
