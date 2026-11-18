@@ -151,7 +151,7 @@ def test_unknown_options_and_bad_values_are_refused_by_name(client, user):
         assert r.status_code == 422 and r.json()["error"]["code"] == "unknown_option", key
         assert f"'{key}'" in r.json()["error"]["message"] and "caption_style" in r.json()["error"]["message"]
     for options, word in [({"caption_style": "comic"}, "caption_style"), ({"zoom": 9}, "zoom"), ({"aspect": "3:2"}, "aspect"),
-                          ({"layout": "trio"}, "trio"), ({"layout": "split2", "aspect": "1:1"}, "split2"),
+                          ({"layout": "ots"}, "ots"), ({"layout": "split2", "aspect": "1:1"}, "split2"),
                           ({"facecam_box": [0.5, 0.5, 0.9, 0.9]}, "facecam_box"), ({"captions": "sometimes"}, "captions")]:
         r = client.post(URL, json={"name": "x", "options": options}, headers=headers)
         assert r.status_code == 422 and r.json()["error"]["code"] == "bad_options", options

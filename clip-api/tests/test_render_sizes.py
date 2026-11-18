@@ -170,7 +170,8 @@ def test_layout_and_resolution_are_validated_with_the_reason():
         assert LayoutOptions(resolution=res).resolution == res
     for bad, reason in (({"resolution": "8k"}, "resolution"), ({"resolution": 1080}, "resolution"),
                         ({"layout": "pip", "aspect": "1:1"}, "not available in 1:1"),
-                        ({"layout": "ots"}, "not available in 9:16"), ({"layout": "ots", "aspect": "16:9"}, "not available yet"),
+                        ({"layout": "ots"}, "not available in 9:16"), ({"layout": "trio", "aspect": "1:1",
+                                                                         "facecam_region": None}, "needs facecam_region"),
                         ({"layout": "sideways"}, "layout"), ({"layout": "pip", "facecam_region": None}, "needs facecam_region"),
                         ({"layout": "split", "facecam_region": None}, "needs facecam_region")):
         with pytest.raises(ValidationError) as e:
@@ -181,7 +182,7 @@ def test_layout_and_resolution_are_validated_with_the_reason():
 def test_reframe_with_a_layout_and_a_resolution_end_to_end(client, user, video, transcriber, tmp_path):
     headers, _ = user
     up = upload(client, headers, video)                                       # a 640x360 upload
-    bad = [({"layout": "pip", "aspect": "1:1"}, "not available in 1:1"), ({"layout": "trio"}, "not available yet"),
+    bad = [({"layout": "pip", "aspect": "1:1"}, "not available in 1:1"), ({"layout": "ots"}, "not available in 9:16"),
            ({"resolution": "8k"}, "resolution")]
     for options, reason in bad:
         r = client.post("/v1/reframe", json={"upload_id": up["upload_id"], "options": options}, headers=headers)
