@@ -225,16 +225,18 @@ Work phase by phase; a phase starts after the owner merges the one before. PRs i
 
 ## 14. North-star goal (approved 2026-11-16)
 
-A streamer finishes a 2–4 hour stream and, when they open ClutchClips, 30–50 candidate clips are already found, ranked by a 0–100 score, and playable as vertical previews with captions, framing and thumbnails, ready to review, edit and export. Speed and understanding come before everything else in section 13.
+A streamer finishes a 2–4 hour stream and, when they open ClutchClips, 20–40 high-quality candidate clips are already found, ranked by a 0–100 score, and playable as vertical previews with captions, framing and thumbnails, ready to review, edit and export. Speed and understanding come before everything else in section 13.
 
-**Targets**, end to end from "file or link available on the server" to "clips visible":
+**Targets** (owner, 2026-11-17; they replace the 2026-11-16 numbers), end to end from "file or link available on the server" to "clips visible":
 
 | What | Target |
 |---|---|
-| 2-hour VOD: 30–50 ranked clips with playable previews | 10 minutes or less (stretch: 5) |
-| 4-hour VOD | 15 minutes or less |
-| 1080p export of one clip | 30 seconds or less |
-| Batch export of 40 clips | 3 minutes or less |
+| 2-hour gaming VOD: 20–40 high-quality ranked candidates with playable previews | under 5 minutes |
+| 4-hour VOD | 15 minutes or less (unchanged; not restated by the owner on 2026-11-17) |
+| Export of one clip (1080p, full quality) | under 2 minutes |
+| Batch export of 40 clips | 3 minutes or less (unchanged; not restated on 2026-11-17) |
+
+Before 2026-11-17: 30–50 clips in 10 minutes (stretch 5) for a 2-hour VOD, and 30 seconds for one 1080p export.
 
 Starting point (server, 2026-11-15): a 2-hour VOD gave 10 clips in 932.7 s (transcribing 257 s, rendering 578 s). Every speed PR reports before and after with `scripts/job_timings.py`; every selection PR reports precision@20, precision@40 and recall on the eval set.
 

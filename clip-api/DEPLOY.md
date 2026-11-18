@@ -36,7 +36,8 @@ Anything that drops, renames or rewrites data needs its own PR and the owner's O
 
 Every job records where its time went: `result.stages` (seconds per pipeline stage), `result.counts` (candidates,
 clips, seconds transcribed and rendered), `result.queue_sec` and `result.total_sec` (queue + run: what a customer
-waits). Failed and cancelled jobs record it too. The goal is a 2-hour video in 10 minutes and a 4-hour video in 15.
+waits). Failed and cancelled jobs record it too. The goal (SPEC.md section 14, 2026-11-17) is a 2-hour video in under
+5 minutes and a 4-hour video in 15; `scripts/job_timings.py` still checks against the earlier 10-minute target.
 
 ```bash
 curl -s $API/v1/jobs/<job_id> -H "authorization: Bearer $KEY" > job.json
