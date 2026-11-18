@@ -5,8 +5,8 @@
 #
 # Usage: ci/local-ci.sh <pr-number | commit> [all|test|docker-build]
 #
-# test          Python 3.12 on Debian (python:3.12-slim) with apt ffmpeg, against Postgres 16, `pytest -q -rs`,
-#               like the GitHub job. Runs natively (linux/arm64 on Apple silicon); GitHub ran linux/amd64.
+# test          Ubuntu 24.04 (what ubuntu-latest was) with Python 3.12, apt ffmpeg, git and node, against Postgres 16,
+#               `pytest -q -rs`, like the GitHub job. Runs natively (linux/arm64 on Apple silicon); GitHub ran amd64.
 # docker-build  `docker build clip-api` for linux/amd64, the production droplet's platform. The image is removed after.
 # A change made only of Markdown files outside clip-api/ and web-src/ needs neither job; both get a success status
 # that says so. Nothing here reads the repository's settings files, and no secret goes into a container.
@@ -54,7 +54,8 @@ fi
 
 for j in "${jobs[@]}"; do status "$j" pending "queued on this Mac"; done
 
-src="$HOME_DIR/src-$short"
+MAIN="$(dirname "$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)")"
+src="$MAIN/.claude/worktrees/ci-$short"   # worktrees live only under .claude/worktrees/
 net="lci-$short"
 cleanup() {
   docker rm -f "lci-pg-$short" "lci-test-$short" >/dev/null 2>&1 || true
@@ -78,11 +79,14 @@ with_timeout() {  # container-name command... : kill the container after TIMEOUT
 }
 
 run_test() {
+  # The GitHub job ran on ubuntu-latest (Ubuntu 24.04: Python 3.12, apt ffmpeg 6.1, git and node on the runner).
+  # Same here, so the same tests run and none is skipped for a missing tool.
   local reqs; reqs="$(cat "$src/clip-api/requirements.txt" "$src/clip-api/requirements-dev.txt" | shasum | cut -c1-12)"
-  local image="clutchclips-ci:$reqs"
+  local image="clutchclips-ci:u2404-$reqs"
   if ! docker image inspect "$image" >/dev/null 2>&1; then
-    printf '%s\n' 'FROM python:3.12-slim' \
-      'RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core && rm -rf /var/lib/apt/lists/*' \
+    printf '%s\n' 'FROM ubuntu:24.04' 'ENV DEBIAN_FRONTEND=noninteractive' \
+      'RUN apt-get update && apt-get install -y --no-install-recommends python3.12 python3.12-venv ffmpeg git nodejs ca-certificates fonts-dejavu-core && rm -rf /var/lib/apt/lists/*' \
+      'RUN python3.12 -m venv /venv' 'ENV PATH=/venv/bin:$PATH' \
       'COPY requirements.txt requirements-dev.txt /tmp/' \
       'RUN pip install --no-cache-dir -r /tmp/requirements.txt -r /tmp/requirements-dev.txt' \
       | docker build -q -t "$image" -f - "$src/clip-api" >/dev/null
