@@ -9,7 +9,7 @@ const CHIP = "inline-flex min-h-[32px] cursor-pointer items-center gap-[6px] rou
 export function ResultsBar({ view, onView, kinds, total }: { view: View; onView: (v: View) => void; kinds: { kind: string; count: number }[]; total: number }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex min-w-0 flex-wrap items-center gap-[6px]" role="group" aria-label="Filter by kind">
+      <div className="flex min-w-0 flex-wrap items-center gap-[6px] narrow:-mx-4 narrow:w-[calc(100%+32px)] narrow:flex-nowrap narrow:overflow-x-auto narrow:px-4 narrow:pb-1 narrow:[scrollbar-width:none]" role="group" aria-label="Filter by kind">
         <button type="button" aria-pressed={view.kind === null} onClick={() => onView({ ...view, kind: null })}
           className={`${CHIP} ${view.kind === null ? "border-btn bg-btn text-btn-ink" : "border-line-strong bg-transparent text-soft hover:text-text"}`}>
           All <span className="font-mono text-[11.5px] tabular-nums opacity-60">{total}</span></button>

@@ -105,7 +105,7 @@ export function ClipPlayer(p: PlayerProps) {
         </header>
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_420px] gap-5 mid:grid-cols-[minmax(0,1fr)_360px] narrow:flex narrow:flex-col narrow:gap-0 narrow:overflow-y-auto">
           <div className="grid min-h-0 place-items-center rounded-24 bg-[#050505] p-4 narrow:rounded-none narrow:p-0">
-            <div className={`relative ${ASPECT_CLASS[shape]} ${tall ? "h-full max-h-[calc(100dvh-120px)] narrow:h-auto narrow:max-h-[62dvh] narrow:w-auto" : "w-full max-w-full"} max-w-full overflow-hidden rounded-16 bg-black narrow:rounded-none`}>
+            <div className={`relative ${ASPECT_CLASS[shape]} ${tall ? "h-full max-h-[calc(100dvh-120px)] narrow:h-[62dvh] narrow:max-h-none narrow:w-auto" : "w-full max-w-full"} max-w-full overflow-hidden rounded-16 bg-black narrow:rounded-none`}>
               {clip.video_url ? (
                 <video key={clip.id} ref={video} controls autoPlay playsInline preload="auto" src={clip.video_url} poster={clip.thumb_url || undefined}
                   onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} className="absolute inset-0 h-full w-full bg-black object-contain">
@@ -137,7 +137,7 @@ export function ClipPlayer(p: PlayerProps) {
                     </form>
                   )}
                   <p className="m-0 flex flex-wrap gap-x-[6px] text-[12.5px] text-fg-2">
-                    <span className="font-mono tabular-nums">{clock(lengthOf(clip))}</span>
+                    <span className="tabular-nums">{clock(lengthOf(clip))}</span>
                     {game && <><span aria-hidden="true">·</span><span>{game}</span></>}
                     {clip.kind && <><span aria-hidden="true">·</span><span>{kindName(clip.kind)}</span></>}
                     <span aria-hidden="true">·</span><span>From {clock(clip.start_sec)} in the video</span>

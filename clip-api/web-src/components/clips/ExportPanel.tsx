@@ -2,17 +2,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { creditWords, exportBody, followJob } from "@/lib/exporting";
+import { creditWords, exportBody, followJob, useQuote } from "@/lib/exporting";
 import { EXPORT, EXPORT_QUOTE, Routes } from "@/lib/routes";
 import { useDash } from "@/components/dash/Shell";
 import { resolutionChoices, resolutionName, SIDE } from "./model";
 
-type Reply = { credits: number; note: string | null; free: boolean; existing: string | null };
-type Ask = { state: "asking" } | { state: "ok"; r: Reply } | { state: "failed"; message: string };
-
 // Export one clip at a chosen resolution. The price is the server's quote for exactly this body
 // (POST /v1/clips/export/quote), shown before anything is charged; a clip already rendered with these settings comes
-// back free (`existing`). Resolutions are the ones GET /v1/options lists; those above the plan's cap are shown but
+// back free (the export's `existing`). Resolutions are the ones GET /v1/options lists; those above the plan's cap are shown but
 // cannot be picked.
 export function ExportPanel({ clip, job, sourceSide, cap, resolutions, known, onDone }: {
   clip: any; job: any | undefined; sourceSide: number | null; cap: number | null; resolutions: string[]; known: Routes; onDone: () => void;
@@ -26,25 +23,14 @@ export function ExportPanel({ clip, job, sourceSide, cap, resolutions, known, on
   };
   const [res, setRes] = useState<string | null>(first);
   useEffect(() => { if (res === null || !choices.some((c) => c.value === res && c.allowed)) setRes(first()); }, [choices]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const [ask, setAsk] = useState<Ask>({ state: "asking" });
   const [progress, setProgress] = useState<number | null>(null), [ready, setReady] = useState<string | null>(null);
 
   const body = (r: typeof known.exportRoute) => r && res ? exportBody(r, { jobId: clip.job_id, clipIds: [clip.id], options: { resolution: res } }) : null;
-  const quoteBody = JSON.stringify(body(known.exportQuote));
-  useEffect(() => {
-    const b = JSON.parse(quoteBody);
-    if (!b) return;
-    let on = true;
-    setAsk({ state: "asking" }); setReady(null);
-    const t = setTimeout(() => api(EXPORT_QUOTE, { body: b }).then((q: any) => {
-      if (!on) return;
-      if (typeof q?.credits_reserved !== "number") return setAsk({ state: "failed", message: "The price could not be worked out." });
-      const mine = (q.existing || []).find((e: any) => e.clip_id === clip.id);
-      setAsk({ state: "ok", r: { credits: q.credits_reserved, note: typeof q.note === "string" ? q.note : null,
-        free: q.credits_reserved === 0, existing: mine?.video_url || null } });
-    }).catch((e) => on && setAsk({ state: "failed", message: e instanceof Error ? e.message : "The price could not be worked out." })), 250);
-    return () => { on = false; clearTimeout(t); };
-  }, [quoteBody, clip.id]);
+  // The shared quote hook: exactly what POST /v1/clips/export with this body would reserve. 0: already rendered with
+  // these settings, so the export hands the file back free.
+  const q = useQuote(known.exportQuote ? EXPORT_QUOTE : null, body(known.exportQuote), 250);
+  const ask = q.state === "ok" ? { state: "ok" as const, r: { credits: q.credits, free: q.credits === 0 } } : q.state === "none" ? { state: "asking" as const } : q;
+  useEffect(() => { setReady(null); }, [res, clip.id]);
 
   async function run() {
     const b = body(known.exportRoute);
@@ -98,10 +84,8 @@ export function ExportPanel({ clip, job, sourceSide, cap, resolutions, known, on
               ? <span className="text-soft">Free: already rendered with these settings.</span>
               : <span><b className="font-semibold text-text">{creditWords(ask.r.credits)}</b> <span className="text-fg-2">· exact price, refunded if the render fails</span></span>)}
           </p>
-          {ask.state === "ok" && ask.r.free && ask.r.existing
-            ? <a className="btn small primary" href={ask.r.existing} download>Download</a>
-            : <button type="button" className="btn small primary" disabled={ask.state !== "ok" || short || !known.exportRoute} onClick={run}>
-                {ask.state === "ok" ? (ask.r.free ? "Get it" : `Export for ${creditWords(ask.r.credits)}`) : "Export"}</button>}
+          <button type="button" className="btn small primary" disabled={ask.state !== "ok" || short || !known.exportRoute} onClick={run}>
+                {ask.state === "ok" ? (ask.r.free ? "Get it free" : `Export for ${creditWords(ask.r.credits)}`) : "Export"}</button>
         </div>
       )}
       {short && progress === null && <p className="m-0 text-[12px] text-warn">You have {creditWords(me.credits)}. <Link href="/dashboard/pricing/" className="text-text underline">Get more credits</Link></p>}

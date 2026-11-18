@@ -77,7 +77,8 @@ export default function Project() {
   const loaded = !!project;
   useEffect(() => {
     if (!loaded) return;
-    setMaking(open.tool ? open.tool !== "find" : !project.clips.length && !project.jobs.some(isActive));
+    // Nothing made yet and no run (not even a failed one, whose refund the results show): open on the setup screen.
+    setMaking(open.tool ? open.tool !== "find" : !project.clips.length && !project.jobs.some((j: any) => j.tool !== "find"));
   }, [loaded]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const clips: any[] = project?.clips || [];
@@ -108,7 +109,7 @@ export default function Project() {
 
   const until = new Date(project.expires_at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   return (
-    <div className="mx-auto grid w-full max-w-wide gap-6">
+    <div className="mx-auto grid w-full max-w-wide grid-cols-1 gap-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
           <BackTitle title={project.filename} />

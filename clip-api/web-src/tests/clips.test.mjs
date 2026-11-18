@@ -75,8 +75,8 @@ test("export resolutions above the plan's cap cannot be picked; an unknown cap r
 
 test("the export price is the server's quote; nothing about credits is worked out in the browser", () => {
   const panel = source("components/clips/ExportPanel.tsx");
-  assert.match(panel, /api\(EXPORT_QUOTE, \{ body: b \}\)/);
-  assert.match(panel, /credits: q\.credits_reserved/);
+  assert.match(panel, /useQuote\(known\.exportQuote \? EXPORT_QUOTE : null, body\(known\.exportQuote\)/);
+  assert.match(panel, /creditWords\(ask\.r\.credits\)/);
 });
 
 test("the transcript is read from the clip's WebVTT subtitles", () => {

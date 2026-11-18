@@ -52,8 +52,9 @@ export function RatingBadge({ clip }: { clip: any }) {
           ? <><b className="text-[17px] font-semibold tabular-nums tracking-[-0.02em] text-lime">{r.shown}</b><small className="text-[10.5px] text-fg-2">/100</small></>
           : <span className="text-[12px] font-medium tabular-nums">#{r.rank}{r.of ? <span className="text-fg-2"> of {r.of}</span> : null}</span>}
       </button>
-      <div id={tip} role="tooltip" className={`absolute bottom-[calc(100%+8px)] left-0 z-20 w-[248px] rounded-16 border border-solid border-line bg-[rgba(20,20,20,.97)] p-[14px] text-left shadow-pop
-        transition-[opacity,transform] duration-150 ease-out [backdrop-filter:blur(10px)] ${open ? "visible translate-y-0 opacity-100" : "invisible translate-y-1 opacity-0"}`}>
+      {/* Not laid out while closed, so it never widens a phone's page. On a phone it opens as a sheet at the bottom. */}
+      <div id={tip} role="tooltip" className={`absolute bottom-[calc(100%+8px)] left-0 z-20 w-[248px] animate-[rise_.15s_ease-out] rounded-16 border border-solid border-line bg-[rgba(20,20,20,.97)] p-[14px] text-left shadow-pop
+        [backdrop-filter:blur(10px)] narrow:fixed narrow:inset-x-4 narrow:bottom-4 narrow:z-50 narrow:w-auto ${open ? "block" : "hidden"}`}>
         <p className="m-0 mb-[10px] flex items-baseline justify-between gap-2 text-[13px] font-semibold">
           {r.shown !== null ? <>AI rating <span className="font-mono text-lime">{r.shown}</span></> : "Not rated by the AI"}
           {r.rank !== null && <span className="text-[11.5px] font-normal text-fg-2">#{r.rank}{r.of ? ` of ${r.of}` : ""} in this run</span>}

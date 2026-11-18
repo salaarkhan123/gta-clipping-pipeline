@@ -110,7 +110,7 @@ export function Results({ project, onChange, reload, onMake, jump }: {
   const sourceSide = project.width && project.height ? Math.min(project.width, project.height) : null;
 
   return (
-    <section id="results" aria-label="Results" className="grid gap-5">
+    <section id="results" aria-label="Results" className="grid grid-cols-1 gap-5">
       {(running.length > 0 || problems.length > 0) && <div className="grid gap-3">
         {running.map((j) => <JobStatus key={j.job_id} job={j} made={madeBy(j)} onCancel={cancel} />)}
         {problems.map((j) => <JobStatus key={j.job_id} job={j} made={madeBy(j)} onCancel={cancel} onDismiss={() => setDismissed((d) => new Set(d).add(j.job_id))} />)}

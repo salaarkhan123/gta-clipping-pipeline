@@ -39,7 +39,7 @@ export function ClipTile({ clip, name, shape, game, selected, onSelect, onOpen, 
             <span className={`pointer-events-none absolute left-1/2 top-1/2 grid h-12 w-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[rgba(255,255,255,.92)] text-btn-ink
               transition-[opacity,transform] duration-150 ${hover ? "scale-100 opacity-100" : "scale-90 opacity-0"}`} aria-hidden="true"><Icon name="play" size={20} /></span>
           </button>
-          <span className={`${CHIP} absolute right-2 top-2 z-[2] font-mono tabular-nums`}>{clock(length)}</span>
+          <span className={`${CHIP} absolute right-2 top-2 z-[2] tabular-nums`}>{clock(length)}</span>
           {discarded && <span className={`${CHIP} absolute bottom-2 right-2 z-[2]`}>Discarded</span>}
           {!discarded && clip.edit && <span className={`${CHIP} absolute bottom-2 right-2 z-[2]`}>Edited</span>}
           <div className="absolute right-2 top-10 z-[2] grid gap-[6px] opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 group-focus-within/tile:opacity-100
@@ -58,7 +58,7 @@ export function ClipTile({ clip, name, shape, game, selected, onSelect, onOpen, 
         <h3 title={name} className="m-0 line-clamp-2 font-sans text-[14px] font-semibold leading-[1.32] tracking-[-0.01em] text-text">
           <button type="button" onClick={onOpen} tabIndex={-1} className="cursor-pointer border-0 bg-transparent p-0 text-left font-[inherit] text-inherit hover:underline">{name}</button></h3>
         <p className="m-0 flex min-w-0 flex-wrap items-center gap-x-[6px] text-[12.5px] text-fg-2">
-          <span className="font-mono tabular-nums">{clock(length)}</span>
+          <span className="tabular-nums">{clock(length)}</span>
           {game && <><Dot /><span className="truncate">{game}</span></>}
           {clip.kind && <><Dot /><span>{kindName(clip.kind)}</span></>}
         </p>
