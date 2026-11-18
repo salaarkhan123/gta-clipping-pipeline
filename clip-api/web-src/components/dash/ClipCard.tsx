@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { API, api, ApiError, clock, getToken } from "@/lib/api";
-import { Icon, IconName, Soon } from "./Icon";
+import { Icon, IconName } from "./Icon";
 import { useDash } from "./Shell";
 
 export async function downloadSubtitles(clipId: string, format = "srt") {
@@ -56,28 +56,22 @@ export function ClipCard({ clip, onChange, project, lit, number, selected, onSel
         <video controls preload="none" poster={clip.thumb_url || undefined} src={clip.video_url} />
         <span className="clip-time">{clock(clip.start_sec)} – {clock(clip.end_sec)}</span>
         {clip.edited === true && <span className="clip-edited">Edited</span>}
-      </div>
-      <div className="clip-row">
-        <ScoreBadge clip={clip} />
-        <div className="clip-icons" role="group" aria-label="Rate this clip">
+        <div className="clip-rate" role="group" aria-label="Rate this clip">
           <IconToggle icon="like" label="Like" on={clip.reaction === "like"} onClick={() => react("like")} />
           <IconToggle icon="dislike" label="Dislike" on={clip.reaction === "dislike"} onClick={() => react("dislike")} />
           <IconToggle icon="bookmark" label="Bookmark" on={!!clip.bookmarked} onClick={() => send({ bookmarked: !clip.bookmarked })} />
         </div>
       </div>
-      <p className="clip-desc" title={clip.description || undefined}>{clip.description || <span className="muted">No description for this clip.</span>}</p>
-      {project && <Link className="muted clip-from" href={`/dashboard/project/?id=${project.id}`}>From {project.name}</Link>}
-      <div className="clip-row">
+      <div className="clip-bar">
+        <ScoreBadge clip={clip} />
         <div className="clip-icons" role="group" aria-label="Clip actions">
           <a className="icon-btn go" href={clip.video_url} download aria-label={`Download ${name}`} title="Download"><Icon name="download" size={18} /></a>
           <button type="button" className="icon-btn" disabled={!clip.captions_url} aria-label={clip.captions_url ? `Download the captions file for ${name}` : "No captions file: this clip has no captions"}
             title={clip.captions_url ? "Captions file (SRT)" : "This clip has no captions"} onClick={() => downloadSubtitles(clip.id).catch(fail)}><Icon name="captions" size={18} /></button>
         </div>
-        <div className="clip-icons soon-set" role="group" aria-label="Coming soon">
-          {SOON.map(([icon, label]) => <button key={label} type="button" className="icon-btn" disabled aria-label={`${label} (coming soon)`} title={`${label}: coming soon`}><Icon name={icon} size={18} /></button>)}
-          <Soon />
-        </div>
       </div>
+      <p className="clip-desc" title={clip.description || undefined}>{clip.description || <span className="muted">No description for this clip.</span>}</p>
+      {project && <Link className="muted clip-from" href={`/dashboard/project/?id=${project.id}`}>From {project.name}</Link>}
       <details className="clip-more">
         <summary>More</summary>
         <div className="clip-more-body">
@@ -93,6 +87,7 @@ export function ClipCard({ clip, onChange, project, lit, number, selected, onSel
             <button className="btn small ghost" aria-pressed={clip.kept === true} onClick={() => keep(true)}>Keep</button>
             <button className="btn small ghost" aria-pressed={clip.kept === false} onClick={() => keep(false)}>Discard</button>
           </div>
+          <p className="muted small">Coming soon: {SOON.map(([, label]) => label.toLowerCase()).join(", ")}.</p>
           {clip.captions_url && <div className="clip-actions" role="group" aria-label="Captions file">
             <span className="muted">Captions file</span>
             {["srt", "vtt", "txt"].map((f) => <button key={f} className="btn small ghost" onClick={() => downloadSubtitles(clip.id, f).catch(fail)}>{f.toUpperCase()}</button>)}
