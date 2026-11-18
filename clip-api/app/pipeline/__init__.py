@@ -44,7 +44,8 @@ from .heard import Heard, model_of
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
 from .transcribe import (Transcriber, Transcript, exclamation_hits, extract_wav, in_language, snap_to_sentences,
                          snap_to_speech)
-from .edit import FLASH_LEN, KEEP_PAUSE, MAX_REMOVED, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, select_cuts, with_flash_forward, zoom_expr, zoom_peaks
+from .edit import FLASH_LEN, KEEP_PAUSE, MAX_REMOVED, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, select_cuts, to_output, with_flash_forward, zoom_expr, zoom_peaks
+from . import hooks as hook_lines
 from .moments import BUCKETS, MAX_CLIPS, NOMINAL, Moment
 from .llm_pass import PASS_BUDGET_SEC, PassResult, Proposal, Proposer, mix, run_pass
 from .variety import HORIZON, min_gap_for, pick_distinct
@@ -203,7 +204,8 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                  transcript: Heard | None = None, source_audio: SourceAudio | None = None,
                  on_clip: Callable[[ClipResult], None] | None = None,
                  on_moments: Callable[[list[Moment]], None] | None = None,
-                 proposer: Proposer | None = None) -> list[ClipResult]:
+                 proposer: Proposer | None = None,
+                 hook_writer: hook_lines.Writer | None = None) -> list[ClipResult]:
     """`timer`, when given, receives how long each stage took and how much work it did (see timing.py).
     `transcript` (heard.Heard) is what earlier jobs transcribed of this recording: candidates it covers are read
     from it instead of transcribed again (the rough pass from any model, captions only from the caption model's
@@ -214,7 +216,9 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     the order of the video. `on_moments` is called once, before anything is rendered, with the chosen moments
     (moments.Moment, best first).
     `proposer` (llm_pass.Proposer, used only with a `judge`) reads the whole transcript in chunks and proposes
-    moments for the judge (U3). It runs only when `transcript` covers the whole analysed part."""
+    moments for the judge (U3). It runs only when `transcript` covers the whole analysed part.
+    `hook_writer` (hooks.Writer, U4) rewrites a hook that repeats an earlier clip's; without it a repeat is replaced
+    by one of the clip's titles or its own best line."""
     progress = progress_cb or (lambda stage, pct: None)
     timer = timer or Timer()
     t_begin = time.monotonic()
@@ -403,6 +407,10 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     if limits:
         for c in chosen:
             _fit(c, limits, t0, t1)
+    if judge is not None:
+        _distinct_hooks(chosen, hook_writer, timer)
+        for c in chosen:          # (U4) the judge's peak, for the thumbnail and the flash-forward: source seconds
+            c.features["peak_sec"] = round(c.peak, 3) if c.peak is not None and c.start <= c.peak < c.end else None
     if on_moments is not None:
         on_moments([_moment(c) for c in sorted(chosen, key=lambda c: -c.final)])
 
@@ -442,6 +450,9 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
             hook = " ".join(mask(w) for w in hook.split())
         c.features["edit"] = {"segments": segments, "flash_forward": flash, "zoom_at": zooms, "hook": hook,
                               "removed_sec": round((c.end - c.start) - kept_duration(body), 2)}
+        if c.features.get("peak_sec") is not None:   # where the peak plays in the rendered clip (after any tease)
+            at = to_output(c.features["peak_sec"], segments, skip=1 if flash else 0)
+            c.features["edit"]["peak_at"] = round(at, 2) if at is not None else None
         video = out_dir / f"clip-{i}.mp4"
         t0 = time.monotonic()
         with timer.stage("render"):
@@ -594,6 +605,24 @@ def _snap(c: _Candidate, duration: float, limits: tuple[float, float] | None = N
         segs = [(s + c.offset, e + c.offset, t) for s, e, t in c.transcript.segments]
         snapped = snap_to_speech(c.start, c.end, segs, lo=floor, hi=duration, min_len=min_len, max_len=max_len)
     c.start, c.end = snapped
+
+
+def _distinct_hooks(chosen: list[_Candidate], writer, timer: Timer) -> None:
+    """(U4) No two clips of the job with the same hook (hooks.distinct), best clip first: its hook is kept."""
+    order = sorted(chosen, key=lambda c: -c.final)
+    rows = []
+    for c in order:
+        meta = c.meta if isinstance(c.meta, dict) else {}
+        lines = [t for s, _e, t in c.transcript.segments if c.start <= s + c.offset < c.end]
+        rows.append({"hook": meta.get("hook"), "titles": meta.get("titles") or [], "lines": lines,
+                     "context": {"title": meta.get("title"), "kind": meta.get("kind")}})
+    stats = hook_lines.distinct(rows, writer)
+    for c, row in zip(order, rows):
+        if isinstance(c.meta, dict) and "rewritten" in row:
+            c.meta["hook"] = row["hook"]
+            c.features["hook_rewritten"] = row["rewritten"]
+    for k, v in stats.items():
+        timer.count(f"hook_{k}", v)
 
 
 def _timeline(series: dict[str, np.ndarray], start: float, end: float, base: int) -> dict:
