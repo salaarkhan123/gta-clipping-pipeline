@@ -132,6 +132,10 @@ Stripe Price that you create; the API only needs its ID.
 
 3. Restart: `docker compose up -d api worker`.
 
+4. Check: `docker compose exec -T api python scripts/admin.py stripe-check` (read-only, prints no secret) shows
+   the key mode, one `OK` per Price and `ALL OK`. For a real payment test with minimal spend, follow
+   `docs/ops/stripe-e2e-test.md`; to change a Stripe key or secret, `docs/ops/credential-rotation.md`.
+
 A plan whose Price ID is blank answers `plan_unavailable`. Before each checkout the API reads the Price from Stripe
 and refuses it (`plan_unavailable`, and an error in the api log naming what differs) unless it is active, recurring,
 in `CURRENCY`, every 1 month or 1 year as configured, and exactly the amount in `app/plans.py`. A typo in Stripe
