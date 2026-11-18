@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eval labeller</title>
+<!-- Local tool for the eval set v2 (see eval/README.md). Open this file in Chrome. Nothing leaves the machine:
+     the sheet and the video are read from disk and the sheet is written back to disk. -->
+<style>
+  :root { --bg: #0d0f12; --panel: #161a1f; --line: #262c34; --text: #e8ecf1; --dim: #8a94a3;
+          --lime: #b8ff3c; --cyan: #3cf0ff; --r1: #6b7280; --r2: #3cf0ff; --r3: #b8ff3c; --bad: #ff6b6b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 Inter, system-ui, sans-serif; }
+  header { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 16px;
+           border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 15px; margin: 0 12px 0 0; }
+  button, select, input { background: var(--panel); color: var(--text); border: 1px solid var(--line);
+                          border-radius: 6px; padding: 6px 10px; font: inherit; }
+  button:hover { border-color: var(--lime); cursor: pointer; }
+  button.primary { background: var(--lime); color: #0d0f12; border-color: var(--lime); font-weight: 600; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 16px; padding: 16px; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  video { width: 100%; max-height: 62vh; background: #000; border-radius: 8px; }
+  #timeline { position: relative; height: 26px; background: var(--panel); border: 1px solid var(--line);
+              border-radius: 6px; margin-top: 8px; cursor: pointer; overflow: hidden; }
+  #timeline .m { position: absolute; top: 3px; bottom: 3px; min-width: 2px; border-radius: 2px; background: #3a414c; }
+  #timeline .m.r1 { background: var(--r1); } #timeline .m.r2 { background: var(--r2); }
+  #timeline .m.r3 { background: var(--r3); } #timeline .m.cur { outline: 2px solid #fff; }
+  #timeline .head { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; }
+  #timeline .mark { position: absolute; top: 0; bottom: 0; background: rgba(255,255,255,.18); }
+  .bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 8px; color: var(--dim); }
+  .bar b { color: var(--text); font-weight: 600; }
+  #current { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px;
+             margin-top: 10px; }
+  #current .rates button { min-width: 44px; }
+  #current .rates button.on { background: var(--lime); color: #0d0f12; }
+  #current input#reason { width: 100%; margin-top: 8px; }
+  .warn { color: var(--bad); margin-top: 6px; min-height: 1.4em; }
+  aside { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+          display: flex; flex-direction: column; max-height: calc(100vh - 90px); }
+  aside .top { padding: 10px 12px; border-bottom: 1px solid var(--line); color: var(--dim); }
+  #rows { overflow-y: auto; }
+  .row { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--line);
+         cursor: pointer; align-items: center; }
+  .row:hover { background: #1c2128; } .row.cur { background: #222a1a; }
+  .row .rt { width: 22px; height: 22px; border-radius: 4px; display: grid; place-items: center; font-weight: 700;
+             background: #2a3039; color: var(--dim); }
+  .row .rt.r1 { background: var(--r1); color: #fff; } .row .rt.r2 { background: var(--r2); color: #0d0f12; }
+  .row .rt.r3 { background: var(--r3); color: #0d0f12; }
+  .row .t { font-variant-numeric: tabular-nums; } .row .s { color: var(--dim); font-size: 12px; }
+  details { margin-top: 12px; color: var(--dim); } kbd { background: #2a3039; border-radius: 4px; padding: 0 5px;
+            color: var(--text); font: 12px ui-monospace, monospace; }
+  table.keys td { padding: 2px 10px 2px 0; }
+  #status { margin-left: auto; color: var(--dim); }
+  #status.dirty { color: var(--cyan); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Eval labeller</h1>
+  <button id="openSheet">Open sheet</button>
+  <input id="sheetFile" type="file" accept=".csv,text/csv" hidden>
+  <button id="openVideo">Open video</button>
+  <input id="videoFile" type="file" accept="video/*,.mkv" hidden>
+  <select id="vod" title="Video in the sheet"></select>
+  <button id="newVod" title="Start rows for a video that is not in the sheet yet">New video…</button>
+  <button id="save" class="primary" title="Ctrl+S / Cmd+S">Save sheet</button>
+  <span id="status">Open the sheet (eval/labels-v2.csv), then the video.</span>
+</header>
+<main>
+  <section>
+    <video id="player" controls preload="metadata"></video>
+    <div id="timeline" title="Click to jump. Grey: not rated · 1 · 2 · 3"></div>
+    <div class="bar">
+      <span>at <b id="pos">0:00:00</b></span><span>speed <b id="speed">1.5x</b></span>
+      <span id="marks">mark in/out: <b>–</b></span>
+      <span id="progress"></span>
+    </div>
+    <div id="current">
+      <div class="bar" style="margin-top:0">
+        <b id="curTitle">No row selected</b><span id="curSource"></span>
+      </div>
+      <div class="bar rates">
+        rating:
+        <button data-r="1" title="1: not a clip (weak or junk)">1 weak</button>
+        <button data-r="2" title="2: good, a trim away">2 good</button>
+        <button data-r="3" title="3: would post as-is">3 great</button>
+        <button data-r="" title="clear the rating">clear</button>
+      </div>
+      <input id="reason" maxlength="80" placeholder="reason: a few words (needed for a 3), Enter for the next row">
+      <div class="warn" id="warn"></div>
+    </div>
+    <details open>
+      <summary>Keys</summary>
+      <table class="keys">
+        <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>rate the row (1 and 2 go to the next row; 3 asks for a reason)</td></tr>
+        <tr><td><kbd>0</kbd></td><td>clear the rating</td></tr>
+        <tr><td><kbd>J</kbd> / <kbd>K</kbd> or <kbd>↓</kbd> / <kbd>↑</kbd></td><td>next / previous row (plays it from its start)</td></tr>
+        <tr><td><kbd>Space</kbd> · <kbd>R</kbd></td><td>play or pause · replay the row</td></tr>
+        <tr><td><kbd>←</kbd> <kbd>→</kbd> (<kbd>Shift</kbd>)</td><td>back / forward 5 s (30 s)</td></tr>
+        <tr><td><kbd>,</kbd> <kbd>.</kbd></td><td>slower / faster</td></tr>
+        <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>move the row's start / end to the playhead</td></tr>
+        <tr><td><kbd>I</kbd> <kbd>O</kbd> then <kbd>N</kbd></td><td>mark in, mark out, add it as a new moment (one the sheet missed)</td></tr>
+        <tr><td><kbd>Del</kbd></td><td>delete a moment you added (source owner) by mistake</td></tr>
+        <tr><td><kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>S</kbd></td><td>save the sheet</td></tr>
+      </table>
+    </details>
+  </section>
+  <aside>
+    <div class="top" id="listTop">No sheet open.</div>
+    <div id="rows"></div>
+  </aside>
+</main>
+<script>
+"use strict";
+// Same columns and order as V2_FIELDS in scripts/eval_clips.py.
+const FIELDS = ["id", "vod", "game", "start", "end", "rating", "reason", "held_out", "source"];
+const MIN_LEN = 5, MAX_LEN = 300, REASON_MAX = 80;
+const $ = (id) => document.getElementById(id);
+const player = $("player");
+const play = () => player.play().catch(() => { /* a seek or pause cut the start short: harmless */ });
+let rows = [];            // every row of the sheet, all videos: {id, vod, game, start, end (seconds), rating, ...}
+let vod = null, cur = -1, sheetName = "labels-v2.csv", handle = null, dirty = false, markIn = null, markOut = null;
+const SPEEDS = [0.5, 1, 1.25, 1.5, 2, 2.5, 3];
+let speed = 1.5;
+
+// ---- CSV ----
+function parseCsv(text) {
+  const out = []; let row = [], field = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (c === '"') q = false;
+      else field += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(field); field = ""; if (row.length > 1 || row[0] !== "") out.push(row); row = [];
+    } else field += c;
+  }
+  if (field !== "" || row.length) { row.push(field); out.push(row); }
+  return out;
+}
+const cell = (v) => /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+function secs(t) { return String(t).trim().split(":").reduce((a, p) => a * 60 + parseFloat(p), 0); }
+function hms(t) { t = Math.round(t); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`; }
+
+function loadSheet(text, name) {
+  const table = parseCsv(text);
+  const head = table.shift() || [];
+  const missing = FIELDS.filter((f) => f !== "id" && f !== "source" && !head.includes(f));
+  if (missing.length) { alert(`Not a v2 sheet: missing ${missing.join(", ")}`); return; }
+  rows = table.map((r) => { const o = {}; head.forEach((h, i) => o[h] = (r[i] || "").trim());
+    return { ...o, start: secs(o.start), end: secs(o.end) }; });
+  sheetName = name; dirty = false;
+  const saved = restore();
+  if (saved && confirm("This browser has unsaved ratings for this sheet. Restore them?")) { rows = saved; dirty = true; }
+  fillVods(); status();
+}
+function sheetText() {
+  const sorted = [...rows].sort((a, b) => a.vod.localeCompare(b.vod) || a.start - b.start || a.end - b.end);
+  return [FIELDS.join(","), ...sorted.map((r) => FIELDS.map((f) =>
+    cell(f === "start" || f === "end" ? hms(r[f]) : String(r[f] ?? ""))).join(","))].join("\n") + "\n";
+}
+
+// ---- autosave in this browser only (a convenience: the sheet on disk is the record) ----
+const key = () => "labeller:" + sheetName;
+function remember() { try { localStorage.setItem(key(), JSON.stringify(rows)); } catch (e) { /* storage off */ } }
+function restore() { try { const v = localStorage.getItem(key()); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
+function forget() { try { localStorage.removeItem(key()); } catch (e) { /* storage off */ } }
+
+// ---- files ----
+const canPick = "showOpenFilePicker" in window;
+$("openSheet").onclick = async () => {
+  if (!canPick) return $("sheetFile").click();
+  try {
+    [handle] = await showOpenFilePicker({ types: [{ description: "CSV", accept: { "text/csv": [".csv"] } }] });
+    const f = await handle.getFile(); loadSheet(await f.text(), f.name);
+  } catch (e) { if (e.name !== "AbortError") alert(e.message); }
+};
+$("sheetFile").onchange = async (e) => { const f = e.target.files[0]; if (f) { handle = null; loadSheet(await f.text(), f.name); } };
+$("openVideo").onclick = () => $("videoFile").click();
+$("videoFile").onchange = (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  player.src = URL.createObjectURL(f); player.playbackRate = speed;
+  const guess = f.name.replace(/\.[^.]+$/, "");
+  if ([...$("vod").options].some((o) => o.value === guess)) { $("vod").value = guess; pickVod(guess); }
+};
+player.onerror = () => { $("warn").textContent = "This browser cannot play the file. Remux it: ffmpeg -i in.mkv -c copy out.mp4"; };
+async function save() {
+  if (!rows.length) return;
+  const text = sheetText();
+  try {
+    if (handle && handle.createWritable) {
+      if ((await handle.requestPermission({ mode: "readwrite" })) !== "granted") throw new Error("no permission");
+      const w = await handle.createWritable(); await w.write(text); await w.close();
+    } else {
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+      a.download = sheetName; a.click();
+    }
+    dirty = false; forget(); status(handle ? "Saved to " + sheetName : "Downloaded " + sheetName + ": move it over eval/labels-v2.csv");
+  } catch (e) { alert("Not saved: " + e.message); }
+}
+$("save").onclick = save;
+window.onbeforeunload = (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } };
+
+// ---- videos and rows ----
+function fillVods() {
+  const vods = [...new Set(rows.map((r) => r.vod))].sort();
+  $("vod").innerHTML = vods.map((v) => `<option>${v}</option>`).join("");
+  if (vods.length) pickVod(vod && vods.includes(vod) ? vod : vods[0]);
+}
+$("vod").onchange = (e) => { e.target.blur(); pickVod(e.target.value); };
+// Keys drive the page: a clicked button keeps no focus, so Space and the digits never press it again.
+document.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) b.blur(); });
+$("newVod").onclick = () => {
+  const id = (prompt("Short id for the video (a-z, 0-9, dashes), e.g. gta-rp-1") || "").trim();
+  if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(id)) return;
+  const game = (prompt("Game: gta-rp, gta-online, or the game, e.g. valorant") || "").trim();
+  if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(game)) return;
+  const held = confirm("Is this the held-out video? OK = yes, Cancel = no") ? "yes" : "no";
+  pendingVod = { vod: id, game, held_out: held };
+  $("vod").insertAdjacentHTML("beforeend", `<option>${id}</option>`); $("vod").value = id; pickVod(id);
+  status("New video " + id + ": mark moments with I, O, N");
+};
+let pendingVod = null;
+const mine = () => rows.filter((r) => r.vod === vod).sort((a, b) => a.start - b.start);
+function vodInfo() { const r = rows.find((x) => x.vod === vod); return r ? { game: r.game, held_out: r.held_out } : pendingVod; }
+function pickVod(v) { vod = v; cur = mine().length ? 0 : -1; draw(); if (cur >= 0) go(0, false); }
+function go(i, autoplay = true) {
+  const list = mine(); if (!list.length) return;
+  cur = Math.max(0, Math.min(list.length - 1, i)); const r = list[cur];
+  if (player.src) { player.currentTime = r.start; if (autoplay) play(); }
+  draw(); const el = document.querySelector(".row.cur"); if (el) el.scrollIntoView({ block: "nearest" });
+}
+function current() { return mine()[cur]; }
+function rate(v) {
+  const r = current(); if (!r) return;
+  r.rating = v; changed();
+  if (v === "3") { $("reason").focus(); } else if (v) go(cur + 1);
+}
+function changed() { dirty = true; remember(); draw(); status(); }
+
+function problems(r) {
+  const out = [], len = r.end - r.start;
+  if (len < MIN_LEN || len > MAX_LEN) out.push(`${Math.round(len)} s long: must be ${MIN_LEN} to ${MAX_LEN} s`);
+  if (r.rating === "3" && !r.reason) out.push("a 3 needs a reason");
+  if ((r.reason || "").length > REASON_MAX) out.push("reason too long");
+  if (r.rating) for (const o of mine()) {
+    if (o === r || !o.rating) continue;
+    const ov = Math.max(0, Math.min(r.end, o.end) - Math.max(r.start, o.start));
+    if (ov > Math.min(len, o.end - o.start) / 2) out.push(`overlaps ${o.id} by more than half: trim one, or clear one`);
+  }
+  return out;
+}
+
+// ---- drawing ----
+function draw() {
+  const list = mine(), dur = player.duration || Math.max(1, ...list.map((r) => r.end));
+  $("rows").innerHTML = list.map((r, i) => `<div class="row ${i === cur ? "cur" : ""}" data-i="${i}">
+      <span class="rt ${r.rating ? "r" + r.rating : ""}">${r.rating || ""}</span>
+      <span><span class="t">${hms(r.start)} – ${hms(r.end)}</span> <span class="s">${(r.reason || "").replace(/</g, "&lt;")}</span></span>
+      <span class="s">${problems(r).length ? "⚠" : ""} ${r.source === "owner" ? "added" : ""}</span></div>`).join("");
+  const rated = list.filter((r) => r.rating).length, all = rows.filter((r) => r.rating).length;
+  const left = list.filter((r) => !r.rating).reduce((a, r) => a + (r.end - r.start), 0) / speed / 60;
+  $("listTop").textContent = vod ? `${vod} · ${(vodInfo() || {}).game || ""}${(vodInfo() || {}).held_out === "yes" ? " · held out" : ""} · rated ${rated} of ${list.length}` : "No sheet open.";
+  $("progress").textContent = rows.length ? `whole sheet: ${all} rated · about ${Math.ceil(left)} min left on this video` : "";
+  $("timeline").innerHTML = list.map((r, i) => `<div class="m ${r.rating ? "r" + r.rating : ""} ${i === cur ? "cur" : ""}"
+      style="left:${100 * r.start / dur}%;width:${100 * (r.end - r.start) / dur}%"></div>`).join("")
+    + (markIn !== null ? `<div class="mark" style="left:${100 * markIn / dur}%;width:${100 * Math.max(0, (markOut ?? player.currentTime) - markIn) / dur}%"></div>` : "")
+    + `<div class="head" style="left:${100 * (player.currentTime || 0) / dur}%"></div>`;
+  const r = current();
+  $("curTitle").textContent = r ? `${r.id}: ${hms(r.start)} – ${hms(r.end)} (${Math.round(r.end - r.start)} s)` : "No row selected";
+  $("curSource").textContent = r ? "from " + (r.source || "?") : "";
+  document.querySelectorAll(".rates button").forEach((b) => b.classList.toggle("on", !!r && b.dataset.r === r.rating && !!r.rating));
+  if (document.activeElement !== $("reason")) $("reason").value = r ? r.reason || "" : "";
+  $("warn").textContent = r ? problems(r).join(" · ") : "";
+  $("marks").innerHTML = `mark in/out: <b>${markIn === null ? "–" : hms(markIn)} / ${markOut === null ? "–" : hms(markOut)}</b>`;
+}
+function status(msg) { $("status").textContent = msg || (dirty ? "Unsaved changes" : rows.length ? sheetName + " saved" : $("status").textContent);
+  $("status").className = dirty ? "dirty" : ""; }
+$("rows").onclick = (e) => { const el = e.target.closest(".row"); if (el) go(+el.dataset.i); };
+$("timeline").onclick = (e) => { const b = e.currentTarget.getBoundingClientRect();
+  if (player.duration) player.currentTime = (e.clientX - b.left) / b.width * player.duration; };
+document.querySelectorAll(".rates button").forEach((b) => b.onclick = () => rate(b.dataset.r));
+$("reason").oninput = (e) => { const r = current(); if (r) { r.reason = e.target.value.slice(0, REASON_MAX); changed(); } };
+$("reason").onkeydown = (e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); $("reason").blur(); if (e.key === "Enter") go(cur + 1); } };
+player.ontimeupdate = () => {
+  $("pos").textContent = hms(player.currentTime || 0);
+  const r = current();
+  if (r && !player.paused && player.currentTime >= r.end && player.currentTime < r.end + 1) player.pause();   // stop at the row's end
+  draw();
+};
+player.onloadedmetadata = draw;
+function setSpeed(dir) { speed = SPEEDS[Math.max(0, Math.min(SPEEDS.length - 1, SPEEDS.indexOf(speed) + dir))];
+  player.playbackRate = speed; $("speed").textContent = speed + "x"; draw(); }
+
+document.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") { e.preventDefault(); save(); return; }
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.metaKey || e.ctrlKey || e.altKey) return;
+  const r = current(), k = e.key;
+  const step = e.shiftKey ? 30 : 5;
+  const act = {
+    "1": () => rate("1"), "2": () => rate("2"), "3": () => rate("3"), "0": () => rate(""),
+    j: () => go(cur + 1), ArrowDown: () => go(cur + 1), k: () => go(cur - 1), ArrowUp: () => go(cur - 1),
+    " ": () => player.paused ? play() : player.pause(),
+    r: () => r && (player.currentTime = r.start, play()),
+    ArrowLeft: () => player.currentTime = Math.max(0, player.currentTime - step),
+    ArrowRight: () => player.currentTime = player.currentTime + step,
+    ",": () => setSpeed(-1), ".": () => setSpeed(1),
+    "[": () => { if (r && player.currentTime < r.end) { r.start = Math.round(player.currentTime); changed(); } },
+    "]": () => { if (r && player.currentTime > r.start) { r.end = Math.round(player.currentTime); changed(); } },
+    i: () => { markIn = Math.round(player.currentTime); markOut = null; draw(); },
+    o: () => { if (markIn !== null && player.currentTime > markIn) { markOut = Math.round(player.currentTime); draw(); } },
+    n: () => addMoment(),
+    Delete: () => removeAdded(), Backspace: () => removeAdded(),
+  }[k.length === 1 ? k.toLowerCase() : k];
+  if (act) { e.preventDefault(); act(); }
+});
+function addMoment() {
+  const info = vodInfo();
+  if (!info || markIn === null || markOut === null) { status("Mark in (I) and out (O) first"); return; }
+  const used = new Set(rows.map((r) => r.id)); let n = 1; while (used.has(`${vod}-${n}`)) n++;
+  const r = { id: `${vod}-${n}`, vod, game: info.game, start: markIn, end: markOut, rating: "", reason: "",
+              held_out: info.held_out, source: "owner" };
+  rows.push(r); markIn = markOut = null; changed();
+  go(mine().indexOf(r), false); status(`Added ${r.id}: rate it`);
+}
+function removeAdded() {
+  const r = current(); if (!r || r.source !== "owner" || !confirm(`Delete ${r.id}?`)) return;
+  rows.splice(rows.indexOf(r), 1); changed(); go(cur, false);
+}
+setSpeed(0);
+</script>
+</body>
+</html>
