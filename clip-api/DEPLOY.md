@@ -196,6 +196,19 @@ every admin account when it is empty. A report changes no content.
   API keys never reach admin routes, even an admin's.
 - Limits: `TRUST_REPORTS_PER_IP_PER_HOUR` (5), `TRUST_REPORTS_PER_IP_PER_DAY` (20),
   `TRUST_REPORTS_PER_EMAIL_PER_DAY` (3); 32 KB per report.
+- Decide with `POST /v1/admin/trust/cases/{reference}/decisions {"action": ...}`. Each decision is one event in
+  the case history, with who and when.
+  - `forward_notice`: sends the notice to the account holder (Canada's notice-and-notice). It removes nothing.
+  - `disable`: hides the content and keeps its files. `restore` and `reject` bring it back.
+  - `remove`: the verified decision. It gives one strike per account; `REPEAT_INFRINGER_STRIKES` (3) suspends the
+    account. Strikes never expire while `REPEAT_INFRINGER_STRIKE_DAYS` is 0.
+  - `withdraw`, or `restore` after a counter-notice, cancels the case's strikes.
+  - `delete_content`: removes the files, only on a case already decided `remove`.
+  - `terminate {account_id, note}`: suspends an account at once for a serious violation.
+- Links handed out before a `disable` keep working until they expire (`SIGNED_URL_TTL_SEC`, 1 hour).
+- The reported user sees their cases at `GET /v1/trust/my-cases`, without the claimant's contact details. They can
+  send a counter-notice there; a copy goes to the claimant, and the admin decides on `restore` after 10 business
+  days.
 
 ## Moving files to DigitalOcean Spaces
 

@@ -224,12 +224,21 @@ def people(client):
     return {"admin": admin_h, "admin_key": {"Authorization": f"Bearer {key}"}, "user": user_h}
 
 
+# Each admin route, with the body an admin's call sends. A new admin route must be added here.
+ADMIN_BODIES = {
+    ("GET", "/v1/admin/trust/cases"): None,
+    ("GET", "/v1/admin/trust/cases/{reference}"): None,
+    ("POST", "/v1/admin/trust/cases/{reference}/decisions"): {"action": "note", "note": "access test"},
+}
+
+
 def test_every_admin_route_has_an_access_case():
-    assert admin_routes() == [("GET", "/v1/admin/trust/cases"), ("GET", "/v1/admin/trust/cases/{reference}")]
+    assert admin_routes() == sorted(ADMIN_BODIES)
 
 
 def _call(client, method, path, headers, ref):
-    return client.request(method, path.replace("{reference}", ref), headers=headers or {})
+    return client.request(method, path.replace("{reference}", ref), headers=headers or {},
+                          json=ADMIN_BODIES[(method, path)])
 
 
 @pytest.mark.parametrize("method, path", admin_routes())
