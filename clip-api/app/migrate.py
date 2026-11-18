@@ -18,6 +18,7 @@ from alembic.config import Config
 from alembic.operations import Operations
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
+from alembic.util import CommandError
 from sqlalchemy import Boolean, Engine, inspect, text
 
 BASELINE = "0001"
@@ -54,8 +55,36 @@ def _known(conn, revision: str) -> bool:
     """Whether this code's migration scripts contain `revision`."""
     try:
         return ScriptDirectory.from_config(config(conn)).get_revision(revision) is not None
-    except Exception:       # alembic raises ResolutionError / CommandError for an unknown revision
+    except CommandError:    # what alembic raises for a revision it has no script for
         return False
+
+
+def incompatible(conn) -> list[str]:
+    """Why this code's models cannot read and write this database (empty when they can).
+
+    Checked only when the database is newer than the code. The code needs every table and column it maps, must be
+    able to leave its optional columns empty, and must be able to insert rows without knowing the newer columns."""
+    from . import models  # noqa: F401  (registers every table on Base.metadata)
+    from .db import Base
+
+    insp = inspect(conn)
+    tables = set(insp.get_table_names())
+    problems = []
+    for table in Base.metadata.sorted_tables:
+        if table.name not in tables:
+            problems.append(f"table {table.name} is missing")
+            continue
+        db_cols = {c["name"]: c for c in insp.get_columns(table.name)}
+        for col in table.columns:
+            db_col = db_cols.get(col.name)
+            if db_col is None:
+                problems.append(f"column {table.name}.{col.name} is missing")
+            elif col.nullable and not db_col["nullable"] and db_col.get("default") is None:
+                problems.append(f"{table.name}.{col.name} is NOT NULL, but this code may leave it empty")
+        for name, db_col in db_cols.items():
+            if name not in table.columns and not db_col["nullable"] and db_col.get("default") is None:
+                problems.append(f"{table.name}.{name} is NOT NULL with no default, and this code never sets it")
+    return problems
 
 
 def _bring_legacy_to_baseline(conn) -> None:
@@ -91,8 +120,13 @@ def migrate(engine: Engine) -> tuple[str | None, str]:
         try:
             before = MigrationContext.configure(conn).get_current_revision()
             if before is not None and not _known(conn, before):
-                # A newer release migrated this database and the code was rolled back. Migrations are additive, so
-                # this code runs on the newer schema; never try to "upgrade" to an older head.
+                # A newer release migrated this database and the code was rolled back. Never "upgrade" to an older
+                # head. Start on the newer schema only if this code can still use it; otherwise refuse to start.
+                problems = incompatible(conn)
+                if problems:
+                    raise RuntimeError(f"database is at revision {before}, newer than this code knows (head {head()}), "
+                                       f"and this code cannot use its schema: {'; '.join(problems)}. Deploy the "
+                                       "newer code again, or restore the backup taken before it migrated.")
                 log.warning("database is at revision %s, newer than this code knows (head %s): starting without "
                             "migrating", before, head())
                 return before, before
