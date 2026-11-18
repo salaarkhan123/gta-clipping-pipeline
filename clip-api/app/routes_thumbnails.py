@@ -2,7 +2,7 @@
 
 Free, always on:
   GET   /v1/clips/{clip_id}/thumbnails                     the gallery: the original and every premium one
-  POST  /v1/clips/{clip_id}/thumbnails/{thumb_id}/select   use this one (`original` is the job's own); switching
+  POST  /v1/clips/{clip_id}/thumbnails/{thumb_id}/select   show this one (`original` is the job's own); switching
                                                            back and forth is free
   PATCH /v1/clips/{clip_id}/thumbnails/{thumb_id}          edit the text or turn it off; redrawn by our renderer
 
@@ -83,7 +83,7 @@ def _checked(clip: Clip, body: PremiumQuote) -> tuple[str, str | None]:
         instruction = clean_instruction(body.instruction)
     except InstructionRefused as e:
         raise ApiError(422, "instruction_not_allowed", str(e)) from None
-    if not clip.frame_key:
+    if not tj.frame_of(clip):
         raise ApiError(409, "no_clean_frame", "This clip was made before premium thumbnails. Make the clip again "
                                               "to use one.")
     return body.style, instruction
@@ -172,7 +172,7 @@ def _row_json(row: ClipThumbnail | None, clip: Clip, storage, selected: bool) ->
         key = row.image_key if row is not None else clip.thumb_key
         return {"id": ORIGINAL, "kind": "original", "style": None, "url": storage.url(key) if key else None,
                 "text": row.text if row is not None else None, "show_text": row.show_text if row is not None else True,
-                "editable": bool(clip.frame_key), "selected": selected, "created_at": iso(clip.created_at)}
+                "editable": bool(tj.frame_of(clip)), "selected": selected, "created_at": iso(clip.created_at)}
     return {"id": row.id, "kind": row.kind, "style": row.style, "instruction": row.instruction,
             "url": storage.url(row.image_key), "text": row.text, "show_text": row.show_text, "editable": True,
             "selected": selected, "provider": (row.info or {}).get("provider"), "created_at": iso(row.created_at)}
@@ -189,7 +189,8 @@ def gallery(db: Session, clip: Clip) -> dict:
     chosen = clip.thumb_id if clip.thumb_id and any(r.id == clip.thumb_id and r.kind != "original" for r in rows) else ORIGINAL
     pending = db.execute(select(Job).where(Job.id.startswith(tj.PREFIX + "_"), Job.status.in_(ACTIVE),
                                            Job.account_id == db.get(Job, clip.job_id).account_id)).scalars().all()
-    return {"clip_id": clip.id, "selected": chosen, "thumb_url": storage.url(clip.thumb_key) if clip.thumb_key else None,
+    shown = clip.thumb_chosen_key or clip.thumb_key
+    return {"clip_id": clip.id, "selected": chosen, "thumb_url": storage.url(shown) if shown else None,
             "thumbnails": [_row_json(original, clip, storage, chosen == ORIGINAL)]
             + [_row_json(r, clip, storage, chosen == r.id) for r in rows if r.kind != "original"],
             "pending": [j.id for j in pending if (j.options or {}).get("clip_id") == clip.id],
@@ -201,6 +202,13 @@ def list_thumbnails(clip_id: str, p: Principal = Depends(current_principal), db:
     """The clip's thumbnails: the original (free) first, then every premium one, and which one the clip uses."""
     clip, _job = own_clip(db, p, clip_id)
     return gallery(db, clip)
+
+
+def show(clip: Clip, row: ClipThumbnail) -> None:
+    """The clip shows `row`. `thumb_key` (the job's own thumbnail, redrawn in place when the title or hook changes)
+    is never written here; `thumb_chosen_key` is what clip responses sign instead, None for the job's own."""
+    clip.thumb_id = row.id
+    clip.thumb_chosen_key = None if row.image_key == clip.thumb_key else row.image_key
 
 
 def _target(db: Session, clip: Clip, thumb_id: str) -> ClipThumbnail:
@@ -219,7 +227,7 @@ def select_thumbnail(clip_id: str, thumb_id: str, p: Principal = Depends(current
     clip, _job = own_clip(db, p, clip_id)
     tj.ensure_original(db, clip)
     row = _target(db, clip, thumb_id)
-    clip.thumb_id, clip.thumb_key = row.id, row.image_key
+    show(clip, row)
     db.commit()
     return gallery(db, clip)
 
@@ -229,7 +237,7 @@ def edit_thumbnail(clip_id: str, thumb_id: str, body: ThumbText, p: Principal = 
                    db: Session = Depends(get_db)):
     """Change a thumbnail's text, or turn it off. Free: the picture is redrawn by ClutchClips, never by an AI."""
     clip, source = own_clip(db, p, clip_id)
-    if thumb_id == ORIGINAL and not clip.frame_key:
+    if thumb_id == ORIGINAL and not tj.frame_of(clip):
         raise ApiError(409, "no_clean_frame", "This clip's thumbnail was made before text could be edited.")
     row = _target(db, clip, thumb_id)
     if "text" in body.model_fields_set:
@@ -249,9 +257,8 @@ def edit_thumbnail(clip_id: str, thumb_id: str, body: ThumbText, p: Principal = 
         storage.put(new_key, out)
     old = row.image_key
     row.image_key = new_key
-    selected = clip.thumb_id == row.id or (clip.thumb_id is None and row.kind == "original")
-    if selected:
-        clip.thumb_id, clip.thumb_key = row.id, new_key
+    if clip.thumb_id == row.id or (clip.thumb_id is None and row.kind == "original"):
+        show(clip, row)
     db.commit()
     if old.startswith("thumbs/") and old != new_key:       # an earlier edit of ours; the job's own file stays
         try:

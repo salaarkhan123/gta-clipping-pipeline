@@ -107,6 +107,46 @@ def test_a_face_cut_by_the_camera_box_is_not_chosen(face_gray):
     assert best(scored, 102.0).t != 102.0
 
 
+CAM = (0.0, 160 / 360, 200 / 640, 200 / 360)
+
+
+def brb_screen() -> np.ndarray:
+    """A "be right back" card at 640x360: a logo band of big letters on a plain backdrop, an empty camera box."""
+    import cv2
+    frame = np.full((360, 640), 60, np.uint8)
+    cv2.putText(frame, "BE RIGHT BACK", (220, 120), cv2.FONT_HERSHEY_SIMPLEX, 1.4, 230, 4)
+    frame[160:360, 0:200] = cv2.resize(textured(9), (200, 200))               # the chair, nobody in it
+    return frame
+
+
+def test_a_be_right_back_screen_with_an_empty_chair_is_standby_and_loses(face_gray):
+    import cv2
+    brb = brb_screen()
+    live = [with_camera(face_gray, 0), cv2.flip(with_camera(face_gray, 0), 1)]
+    live[1][160:360, 0:200] = with_camera(face_gray, 3)[160:360, 0:200]       # game moved, streamer back
+    pics = [brb, brb, brb, brb, live[0], live[1]]
+    loud = lambda t: -6.0                                                      # BRB music is loud: no help here
+    scored = score_frames(frames_at(pics), cam=CAM, segments=[(99.0, 112.0)], loudness=loud)
+    assert all("standby" in s.failed for s in scored[1:3])                     # frozen, no face in the camera
+    assert best(scored, 104.0).t >= 108.0                                      # the streamer, not the card
+
+
+def test_a_frozen_picture_is_standby_only_when_nobody_is_talking():
+    still = [textured(4)] * 5
+    quiet = score_frames(frames_at(still), segments=[(99.0, 110.0)], speech=[])
+    talking = score_frames(frames_at(still), segments=[(99.0, 110.0)], speech=[(103.0, 105.5)])
+    assert all("standby" in s.failed for s in quiet[1:4])
+    assert "standby" not in talking[2].failed and "standby" not in talking[1].failed   # paused game, live commentary
+    no_words = score_frames(frames_at(still), segments=[(99.0, 110.0)], loudness=lambda t: -70.0)
+    assert "standby" in no_words[2].failed                                     # no transcript: silence by level
+
+
+def test_a_paused_game_with_the_streamer_on_camera_is_not_standby(face_gray):
+    pic = with_camera(face_gray, 0)
+    scored = score_frames(frames_at([pic] * 4), cam=CAM, segments=[(99.0, 108.0)], speech=[(100.0, 107.0)])
+    assert not any("standby" in s.failed for s in scored)
+
+
 def test_without_a_camera_a_face_cut_by_the_layouts_crop_loses(face_gray):
     import cv2
     pic = cv2.resize(face_gray, (360, 360))

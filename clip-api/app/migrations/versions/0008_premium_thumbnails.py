@@ -1,24 +1,24 @@
 """Premium AI thumbnails (#140): a clip's thumbnails besides its first one, the one it uses, and likeness consent.
 
 Revision ID: 0008
-Revises: 0006
+Revises: 0007
 Create Date: 2026-11-17
 
-Additive: two nullable columns on clips and two new tables. Numbered 0008 because another open branch adds a 0007;
-whichever merges second points its down_revision at the other.
+Additive: two nullable columns on clips and two new tables. The frame without text is already kept in
+features.thumbnail.frame_key (#138), so no column for it.
 """
 import sqlalchemy as sa
 from alembic import op
 
 revision = "0008"
-down_revision = "0006"
+down_revision = "0007"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("clips", sa.Column("frame_key", sa.String(length=400), nullable=True))
     op.add_column("clips", sa.Column("thumb_id", sa.String(length=40), nullable=True))
+    op.add_column("clips", sa.Column("thumb_chosen_key", sa.String(length=400), nullable=True))
     op.create_table(
         "clip_thumbnails",
         sa.Column("id", sa.String(length=40), nullable=False),
@@ -65,5 +65,5 @@ def downgrade() -> None:
     op.drop_index("ix_clip_thumbnails_account_id", table_name="clip_thumbnails")
     op.drop_index("ix_clip_thumbnails_clip_id", table_name="clip_thumbnails")
     op.drop_table("clip_thumbnails")
+    op.drop_column("clips", "thumb_chosen_key")
     op.drop_column("clips", "thumb_id")
-    op.drop_column("clips", "frame_key")

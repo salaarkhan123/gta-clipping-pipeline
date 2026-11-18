@@ -8,8 +8,8 @@ upload, so it is claimed, heartbeated, cancelled, swept and refunded like every 
   a crash here, or the worker dying (the stale-job sweeper);
 - the new thumbnail is added to the clip's gallery; it is never chosen for the user.
 
-The frame comes from the clip's stored `frame_key` (the free thumbnail's frame without text); the text is the
-clip's hook, drawn with our renderer (thumbs.write_thumbnail), so spelling is exact.
+The frame comes from `features.thumbnail.frame_key` (the free thumbnail's frame without text, #138); the text is
+the clip's hook, drawn with our renderer (thumbs.write_thumbnail), so spelling is exact.
 """
 import hashlib
 import json
@@ -28,8 +28,9 @@ from .deps import ApiError
 from .imagegen import GenerationFailed, editors_from, generate, style_look
 from .imagegen.prompts import MAX_INSTRUCTION
 from .models import Clip, ClipThumbnail, Job, new_id, utcnow
-from .pipeline.thumbs import Canvas, canvas_of, thumb_text
+from .pipeline.thumbs import Canvas, canvas_of
 from .storage import get_storage
+from .thumbnails import frame_key_of, words_for
 
 log = logging.getLogger("clipapi.thumbnails")
 PREFIX = "thm"
@@ -97,11 +98,13 @@ def fingerprint(clip_id: str, style: str, instruction: str | None) -> str:
 
 
 def hook_of(clip: Clip, job: Job | None) -> str | None:
-    """The words a clip's thumbnail carries: the editor's hook, else the AI's hook or title (swears masked when the
-    clip's job had `censor` on)."""
-    edit_hook = (clip.edit or {}).get("hook_text") if isinstance(clip.edit, dict) else None
-    meta = {**(clip.meta or {}), **({"hook": edit_hook} if edit_hook else {})}
-    return thumb_text(meta, bool(((job.options if job else None) or {}).get("censor")))
+    """The words the clip's free thumbnail carries (its hook, else its title; none with `thumbnail_text` off), so a
+    premium one says the same."""
+    return words_for(clip.meta, (job.options if job else None) or {})
+
+
+def frame_of(clip: Clip) -> str | None:
+    return frame_key_of(clip.features)
 
 
 def canvas_for_clip(clip: Clip) -> Canvas | None:
@@ -120,7 +123,7 @@ def ensure_original(db, clip: Clip) -> ClipThumbnail:
     if row is None:
         job = db.get(Job, clip.job_id)
         row = ClipThumbnail(id=new_id("thb"), clip_id=clip.id, account_id=job.account_id, kind="original",
-                            clean_key=clip.frame_key or clip.thumb_key or "", image_key=clip.thumb_key or "",
+                            clean_key=frame_of(clip) or clip.thumb_key or "", image_key=clip.thumb_key or "",
                             text=None, show_text=True)
         db.add(row)
         db.flush()
@@ -169,7 +172,7 @@ def run_thumbnail_job(job_id: str, editors=None) -> str:
         opts = dict(job.options or {})
         clip = db.get(Clip, opts.get("clip_id"))
         source = db.get(Job, clip.job_id) if clip is not None else None
-        frame_key = clip.frame_key if clip is not None and clip.deleted_at is None else None
+        frame_key = frame_of(clip) if clip is not None and clip.deleted_at is None else None
         text, canvas, accent = (hook_of(clip, source), canvas_for_clip(clip), accent_of(source)) if clip else (None, None, None)
     work = Path(tempfile.mkdtemp(prefix="thm_", dir=s.work_dir))
     stop = threading.Event()

@@ -79,8 +79,9 @@ def make_clip(client, user, credits: int = 100, frame: bytes | None = None, with
                    expires_at=utcnow() + timedelta(days=7)))
         db.flush()
         db.add(Clip(id=clip_id, job_id=job_id, idx=1, start_sec=0, end_sec=20, score=1.0, signals={},
-                    features={"thumbnail": {"canvas": {"size": [720, 1280], "avoid": [], "seam": None, "span": [0, 1]}}},
-                    video_key=f"{base}.mp4", thumb_key=f"{base}.jpg", frame_key=f"{base}.frame.jpg" if with_frame else None,
+                    features={"thumbnail": {"canvas": {"size": [720, 1280], "avoid": [], "seam": None, "span": [0, 1]},
+                                            **({"frame_key": f"{base}.frame.jpg"} if with_frame else {})}},
+                    video_key=f"{base}.mp4", thumb_key=f"{base}.jpg",
                     meta={"hook": HOOK, "title": "t"}))
         if credits:
             ledger.grant(db, account["id"], credits, "grant", f"test:{clip_id}")
@@ -157,7 +158,8 @@ def test_with_no_premium_request_clips_get_the_free_thumbnail_and_its_frame_at_n
     clip, = job["clips"]
     with new_session() as db:
         row = db.get(Clip, clip["id"])
-        assert row.frame_key and get_storage().exists(row.frame_key) and row.thumb_id is None
+        frame = row.features["thumbnail"]["frame_key"]
+        assert get_storage().exists(frame) and row.thumb_id is None and row.thumb_chosen_key is None
     g = client.get(f"/v1/clips/{clip['id']}/thumbnails", headers=headers).json()
     assert [t["id"] for t in g["thumbnails"]] == ["original"] and g["selected"] == "original"
     assert g["premium"] is None                                     # the flag is off by default
@@ -399,7 +401,8 @@ def test_not_enough_credits_reserves_nothing(client, user, premium):
 # ---------- choosing and editing: free ----------
 def shown_key(c) -> str:
     with new_session() as db:
-        return db.get(Clip, c["clip_id"]).thumb_key
+        clip = db.get(Clip, c["clip_id"])
+        return clip.thumb_chosen_key or clip.thumb_key
 
 
 def test_choosing_a_thumbnail_and_switching_back_is_free(client, user, premium, monkeypatch):
@@ -420,6 +423,23 @@ def test_choosing_a_thumbnail_and_switching_back_is_free(client, user, premium, 
     assert client.post(f"/v1/clips/{c['clip_id']}/thumbnails/thb_nope/select", headers=c["headers"]).status_code == 404
 
 
+def test_a_hook_edit_redraws_the_original_but_never_the_chosen_premium_one(client, user, premium, monkeypatch):
+    use(monkeypatch, Ok())
+    c = make_clip(client, user)
+    order(client, c)
+    assert run_thumbnail() == "SUCCEEDED"
+    pid = client.get(f"/v1/clips/{c['clip_id']}/thumbnails", headers=c["headers"]).json()["thumbnails"][1]["id"]
+    client.post(f"/v1/clips/{c['clip_id']}/thumbnails/{pid}/select", headers=c["headers"])
+    storage, s = get_storage(), get_settings()
+    chosen = shown_key(c)
+    storage.fetch(chosen, s.work_dir / "before.jpg")
+    r = client.patch(f"/v1/clips/{c['clip_id']}", headers=c["headers"], json={"hook": "Clean escape"})
+    assert r.status_code == 200, r.text
+    assert shown_key(c) == chosen                                   # still the premium one
+    storage.fetch(chosen, s.work_dir / "after.jpg")
+    assert (s.work_dir / "before.jpg").read_bytes() == (s.work_dir / "after.jpg").read_bytes()
+
+
 def test_editing_the_text_or_turning_it_off_is_free_and_redrawn_by_us(client, user, premium):
     c = make_clip(client, user)
     before = balance(client, c["headers"])
@@ -428,7 +448,7 @@ def test_editing_the_text_or_turning_it_off_is_free_and_redrawn_by_us(client, us
     assert g["thumbnails"][0]["show_text"] is False and g["selected"] == "original"
     with new_session() as db:
         clip = db.get(Clip, c["clip_id"])
-        shown, frame = clip.thumb_key, clip.frame_key
+        shown, frame = clip.thumb_chosen_key, clip.features["thumbnail"]["frame_key"]
     s = get_settings()
     get_storage().fetch(shown, s.work_dir / "a.jpg")
     get_storage().fetch(frame, s.work_dir / "b.jpg")
@@ -464,7 +484,7 @@ def test_a_takedown_removes_premium_thumbnails_too(client, user, premium, monkey
     takedown(url=url)
     assert not any(get_storage().exists(k) for k in keys)
     with new_session() as db:
-        assert not get_storage().exists(db.get(Clip, c["clip_id"]).frame_key)
+        assert not get_storage().exists(db.get(Clip, c["clip_id"]).features["thumbnail"]["frame_key"])
 
 
 # ---------- the custom instruction is data ----------

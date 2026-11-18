@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     max_render_sec: int = 6 * 3600    # reframe/captions: max video rendered per job
     charge_once_per_upload: bool = True   # after a video is analysed once, tools only charge for minutes rendered
     visual_search: bool = True        # Video Finder also searches what is on screen (CLIP)
+    # trio, grid4, ots and the auto layout chosen per moment are our own reading of WayinVideo's names, not yet
+    # checked on real gaming footage. Off: they are not offered and auto draws one layout per video, as before.
+    provisional_layouts: bool = False
     stale_job_minutes: int = 5        # RUNNING job with no heartbeat for this long is failed + refunded
 
     # Link import (app/ingest, agent E). An import is free; the imported file then follows the upload limits
@@ -93,7 +96,14 @@ class Settings(BaseSettings):
     # Stripe
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
-    plans: str = ""                   # JSON list overriding app/plans.py DEFAULT_PLANS
+    # Stripe Price IDs for the plans in app/plans.py (created by the owner in Stripe, see DEPLOY.md). Prices and
+    # credits themselves live in app/plans.py only; a plan whose Price ID is empty cannot be bought.
+    stripe_price_starter_month: str = ""
+    stripe_price_starter_year: str = ""
+    stripe_price_pro_month: str = ""
+    stripe_price_pro_year: str = ""
+    stripe_price_scale_month: str = ""
+    stripe_price_scale_year: str = ""
 
     # AI titles, hashtags and virality scores (optional; off when the key is empty)
     anthropic_api_key: str = ""

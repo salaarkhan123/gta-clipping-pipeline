@@ -9,7 +9,7 @@ import logging
 from datetime import timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -24,12 +24,13 @@ from .ingest.fetch import check_hop
 from .ingest.runner import IMPORT_PREFIX
 from .ingest.sources import SOURCES, classify
 from .models import Account, ImportLog, Job, Upload, new_id, utcnow
+from .plans import PLANS, plan_of
 from .routes_media import ACTIVE, ALLOWED_EXT, iso, upload_json
 
 log = logging.getLogger("clipapi.ingest")
 router = APIRouter()
-BULK_MAX = 10               # links per bulk request. One number for everyone: plan limits are the owner's call.
-MAX_ACTIVE_IMPORTS = 10     # imports one account may have waiting or running at once
+BULK_MAX = PLANS[0]["bulk_import_max"]   # links per bulk request on the free plan; paid plans allow more (app/plans.py)
+MAX_ACTIVE_IMPORTS = 10     # imports one account may have waiting or running at once (at least its plan's bulk size)
 CONSENT_TEXT = "I own this content or have permission to clip it."
 _IS_IMPORT = Job.id.like(f"{IMPORT_PREFIX}\\_%", escape="\\")
 
@@ -92,8 +93,9 @@ def create_import(db: Session, account: Account, url: str) -> tuple[Job, bool]:
     for job in active:
         if db.get(Upload, job.upload_id).source_url == source.url:
             return job, False
-    if len(active) >= MAX_ACTIVE_IMPORTS:
-        raise ApiError(429, "too_many_imports", f"{MAX_ACTIVE_IMPORTS} imports are already waiting or running. "
+    most = max(MAX_ACTIVE_IMPORTS, plan_of(account)["bulk_import_max"])   # one full bulk import always fits
+    if len(active) >= most:
+        raise ApiError(429, "too_many_imports", f"{most} imports are already waiting or running. "
                                                 "Wait for one to finish before adding more.")
     now = utcnow()
     expires = now + timedelta(days=s.retention_days)
@@ -123,11 +125,15 @@ def own_import(db: Session, p: Principal, import_id: str, lock: bool = False) ->
 
 
 @router.get("/v1/imports/sources")
-def import_sources():
-    """What can be imported, the limits, and the confirmation every import needs. No login needed."""
+def import_sources(request: Request, db: Session = Depends(get_db)):
+    """What can be imported, the limits, and the confirmation every import needs. No login needed: without one,
+    `bulk_max` is the Free plan's. Signed in (session or API key), it is your plan's links per bulk import."""
     s = get_settings()
+    bulk_max = BULK_MAX
+    if request.headers.get("authorization"):          # a bad token is a 401, never a silent Free answer
+        bulk_max = plan_of(current_principal(request, db).account)["bulk_import_max"]
     return {"enabled": s.imports_enabled, "sources": list(SOURCES), "file_types": sorted(ALLOWED_EXT),
-            "bulk_max": BULK_MAX, "consent": CONSENT_TEXT,
+            "bulk_max": bulk_max, "consent": CONSENT_TEXT,
             "max_bytes": min(s.import_max_bytes, s.max_upload_bytes),
             "max_duration_sec": min(s.import_max_duration_sec, s.max_duration_sec)}
 
@@ -172,14 +178,17 @@ def preview(body: PreviewRequest, p: Principal = Depends(current_principal)):
 
 @router.post("/v1/imports/bulk")
 def create_bulk(body: BulkImportRequest, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
-    """Import up to 10 links. Each link is its own import with its own log row; the answer lists every link with
-    its import or the reason it was refused."""
+    """Import several links at once: up to the plan's `bulk_import_max` (Free and Starter 10, Pro 30, Scale 50).
+    Each link is its own import with its own log row; the answer lists every link with its import or the reason it
+    was refused."""
     require_enabled(p)
     require_consent(body.consent)
     if not body.urls:
         raise ApiError(422, "no_urls", "Send at least one link in urls.")
-    if len(body.urls) > BULK_MAX:
-        raise ApiError(422, "too_many_urls", f"Send at most {BULK_MAX} links at once.")
+    plan = plan_of(p.account)
+    if len(body.urls) > plan["bulk_import_max"]:
+        raise ApiError(422, "too_many_urls", f"The {plan['name']} plan imports at most {plan['bulk_import_max']} "
+                                             "links at once.")
     results, account_id = [], p.account.id
     for url in body.urls:
         try:
