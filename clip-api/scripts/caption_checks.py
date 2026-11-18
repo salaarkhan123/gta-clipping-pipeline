@@ -11,6 +11,7 @@ Usage (from clip-api/, heavy steps through ~/ClutchClips-eval/heavy.sh):
       and face. Writes DIR/<game>.json. Needs the eval videos in ~/ClutchClips-eval (EVAL_DIR overrides).
   python scripts/caption_checks.py measure --data DIR [--json OUT]
       The numbers, per game and overall, for 9:16 auto and the 16:9 original frame. Light: no video is read.
+      --hud hands the renderer the labelled HUD as the game's HUD table (what a measured layouts.HUD_REGIONS gives).
   python scripts/caption_checks.py sheet --data DIR --out DIR [--only gta5] [--aspect 9:16]
       Render each window as a preview, cut a contact sheet per game (DIR/<game>-<aspect>.jpg), delete the renders.
 
@@ -283,16 +284,35 @@ def hook_for(words) -> str | None:
     return " ".join(w[2] for w in words[:6]) or None
 
 
-def check_window(item: dict, window: dict, setup: str, style: str = "impact", boxes: list | None = None) -> dict:
+def hud_table(item: dict) -> tuple:
+    """The labelled HUD of an eval video as a layouts.HUD_REGIONS entry (what a measured HUD table would hold)."""
+    return tuple((b["kind"], tuple(b["box"])) for b in item["boxes"] if b["kind"] != "facecam")
+
+
+def check_window(item: dict, window: dict, setup: str, style: str = "impact", boxes: list | None = None,
+                 hud: bool = False) -> dict:
+    """The numbers for one window, rendered as the product renders it: the game from the labels, the detected
+    webcam. `hud` hands the renderer the labelled HUD as the game's HUD table (layouts.HUD_REGIONS); without it
+    the renderer knows only the HUD the reframing agent's table has."""
     words = [tuple(w) for w in window["words"]]
     plan = plan_for(item, setup)
     src = (item["width"], item["height"])
     play = L.ASPECTS[setup] if SETUPS[setup]["vertical"] else src
-    with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / "cap.ass"
-        R.text_track(path, words, src_w=src[0], src_h=src[1], zoom=1.0, chat="none", plan=plan, font="Arial",
-                     style=style, hook=hook_for(words), **SETUPS[setup])
-        styles, events = read_ass(path)
+    game = item.get("game")
+    saved = dict(L.HUD_REGIONS)
+    if hud and game:
+        L.HUD_REGIONS[L.HUD_GAMES.get(game, game)] = hud_table(item)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "cap.ass"
+            cam = item["scene"].get("cam")
+            R.text_track(path, words, src_w=src[0], src_h=src[1], zoom=1.0, chat="none", plan=plan, font="Arial",
+                         style=style, hook=hook_for(words), game=game, facecam=cam if cam else None,
+                         **SETUPS[setup])
+            styles, events = read_ass(path)
+    finally:
+        L.HUD_REGIONS.clear()
+        L.HUD_REGIONS.update(saved)
     keep = keep_out_boxes(plan, boxes if boxes is not None else item["boxes"], src)
     return {"timing": timing(words, events), "dead_air": dead_air(words, events), "reading": reading(events),
             "placement": overlap(events, styles, play, keep), "layout": plan.layout if plan else "original"}
@@ -382,12 +402,12 @@ def cmd_prepare(args) -> int:
     return 0
 
 
-def measure(data: Path, style: str = "impact") -> dict:
+def measure(data: Path, style: str = "impact", hud: bool = False) -> dict:
     report = {}
     for f in sorted(data.glob("*.json")):
         item = json.loads(f.read_text())
         for setup in SETUPS:
-            results = [check_window(item, w, setup, style) for w in item["windows"]]
+            results = [check_window(item, w, setup, style, hud=hud) for w in item["windows"]]
             report.setdefault(setup, {})[item["video"]] = summarise(results)
             report[setup][item["video"]]["layout"] = sorted({r["layout"] for r in results})
     for setup, games in report.items():
@@ -400,7 +420,7 @@ def measure(data: Path, style: str = "impact") -> dict:
 
 
 def cmd_measure(args) -> int:
-    report = measure(Path(args.data), args.style)
+    report = measure(Path(args.data), args.style, args.hud)
     if args.json:
         Path(args.json).write_text(json.dumps(report, indent=1))
     cols = ("words", "appear_early_p95_ms", "active_share", "active_p95_ms", "dead_air_share", "cps_p95",
@@ -434,7 +454,8 @@ def cmd_sheet(args) -> int:
                     clip = Path(tmp) / "clip.mp4"
                     R.render_clip(src, w["start"], w["end"], clip, src_w=item["width"], src_h=item["height"],
                                   zoom=1.0, chat="none", words=words, font="Arial", style=args.style,
-                                  plan=plan, preview=True, hook=hook_for(words), loudness=False, **SETUPS[setup])
+                                  plan=plan, preview=True, hook=hook_for(words), loudness=False, game=item.get("game"),
+                                  facecam=item["scene"].get("cam"), **SETUPS[setup])
                     # Frames where text is on screen: the hook, then while words are being said.
                     times = [1.0] + [s + 0.15 for s, _, _ in words[2::max(1, len(words) // 5)]][:5]
                     for t in times[: args.per_window]:
@@ -471,6 +492,7 @@ def main(argv=None) -> int:
     p.add_argument("--data", required=True)
     p.add_argument("--json")
     p.add_argument("--style", default="impact")
+    p.add_argument("--hud", action="store_true", help="hand the renderer the labelled HUD as the game's HUD table")
     p = sub.add_parser("sheet")
     p.add_argument("--data", required=True)
     p.add_argument("--out", required=True)
