@@ -261,22 +261,26 @@ def render_shot(shot: dict, seg_file: Path, seg: dict, tmp: Path, stt, budget: f
 
 
 def encode_loop(src: Path, out: Path, start: float, seconds: float, size: tuple[int, int]) -> dict:
-    """<out>.mp4 + <out>.webm (muted) under MAX_BYTES each, and <out>.webp poster. Returns the file names."""
+    """<out>.mp4 (muted) under MAX_BYTES, <out>.webm when VP9 fits under it too (the site treats it as optional),
+    and <out>.webp poster. Returns the file names."""
     w, h = size
     vf = (f"scale={w}:{h}:force_original_aspect_ratio=increase:flags=lanczos,crop={w}:{h},fps=30,"
           f"format=yuv420p")
     files = {}
-    for ext, codec in (("mp4", ["-c:v", "libx264", "-profile:v", "high", "-preset", "slow", "-movflags", "+faststart"]),
-                       ("webm", ["-c:v", "libvpx-vp9", "-b:v", "0", "-row-mt", "1", "-cpu-used", "2"])):
+    for ext, codec, crf, worst in (
+            ("mp4", ["-c:v", "libx264", "-profile:v", "high", "-preset", "slow", "-movflags", "+faststart"], 26, 44),
+            ("webm", ["-c:v", "libvpx-vp9", "-b:v", "0", "-row-mt", "1", "-cpu-used", "2"], 36, 54)):
         path = out.with_suffix(f".{ext}")
-        crf = 26 if ext == "mp4" else 36
         while True:
             ffmpeg("-ss", f"{start:.3f}", "-t", f"{seconds:.3f}", *SAFE_IN, "-i", src, "-an", "-vf", vf, *codec,
                    "-crf", str(crf), path)
-            if path.stat().st_size <= MAX_BYTES or crf >= 44:
+            if path.stat().st_size <= MAX_BYTES or crf >= worst:
                 break
             crf += 3
         if path.stat().st_size > MAX_BYTES:
+            if ext == "webm":
+                path.unlink()
+                continue
             raise PipelineError("too_big", f"{path.name} is over {MAX_BYTES} bytes even at crf {crf}")
         files["src" if ext == "mp4" else "webm"] = path.name
     poster = out.with_suffix(".webp")
@@ -506,6 +510,34 @@ def requests(sources: dict, raw_shots: list, work: Path, out: Path, featured: Pa
     return code
 
 
+HERO_CLIPS = 6
+
+
+def default_picks(out: Path, exclude: set) -> dict:
+    """featured.json's shape for when the owner has saved no picks: every confirmed candidate except `exclude`,
+    in the engine's rank order, taking each source's best before any source's second best (so the hero's six
+    clips mix games and creators). Variant sections keep their render order."""
+    sections = {}
+    for path in sorted(out.glob("*/candidates.json")):
+        cands = [c for c in load(path)["candidates"] if c["cid"] not in exclude
+                 and str(c.get("commercial_permission", "")).startswith(CONFIRMED)]
+        section = path.parent.name
+        if section not in VARIANT_SECTIONS:
+            order = {}
+            for c in cands:
+                order.setdefault(c.get("source", {}).get("id"), []).append(c)
+            seen = [sorted(v, key=lambda c: c.get("rank") or 99) for v in order.values()]
+            cands = []
+            for tier in range(max(map(len, seen), default=0)):
+                cands += [v[tier] for v in seen if tier < len(v)]
+        pick = {"clips": [c["cid"] for c in cands]}
+        if section == "hero-vertical-clips":
+            pick["show"] = HERO_CLIPS
+        if pick["clips"]:
+            sections[section] = pick
+    return {"version": 1, "updated_by": "make_site_media.py defaults (no owner picks saved)", "sections": sections}
+
+
 def publish(featured: Path, out: Path, public: Path) -> int:
     """Copy only the featured candidates (each section's `clips[:show]`, in the owner's order) into
     public/<section>/ under the ids the site reads, and write that section's manifest.json. A section the picker
@@ -543,6 +575,9 @@ def publish(featured: Path, out: Path, public: Path) -> int:
             else:
                 pid = f"{ORDINAL[section]}-{n}"
             used.add(pid)
+            if c.get("webm") and c.get("src") and \
+                    (out / section / c["webm"]).stat().st_size >= (out / section / c["src"]).stat().st_size:
+                del c["webm"]         # the site tries webm first only to save bytes: one no smaller is dead weight
             for key, ext in (("src", None), ("webm", None), ("poster", None), ("words", ".words.json")):
                 if c.get(key):        # a words file may belong to another candidate (captions "plain")
                     name = f"{pid}{ext or Path(c[key]).suffix}"
@@ -583,6 +618,7 @@ def main(argv=None) -> int:
     p.add_argument("--count", type=int, default=1, help="more: how many new moments")
     p.add_argument("--featured", type=Path, help="publish: the owner's featured.json")
     p.add_argument("--public", type=Path, help="publish: clip-api/web-src/public/media")
+    p.add_argument("--exclude", help="publish without featured.json: comma-separated cids to leave out")
     a = p.parse_args(argv)
     only = set(a.only.split(",")) if a.only else None
     work = a.work.expanduser()
@@ -606,7 +642,13 @@ def main(argv=None) -> int:
     if a.step == "publish":
         if not (a.featured and a.public):
             p.error("publish needs --featured and --public")
-        return publish(a.featured.expanduser(), out, a.public.expanduser())
+        featured = a.featured.expanduser()
+        if not featured.exists():       # the owner has not saved picks: every confirmed candidate, best first
+            featured = work / "default-featured.json"
+            featured.write_text(json.dumps(default_picks(out, set(a.exclude.split(",")) if a.exclude else set()),
+                                           indent=1) + "\n")
+            print(f"no {a.featured.name}: publishing the default picks written to {featured}")
+        return publish(featured, out, a.public.expanduser())
     raw = load(a.shots)["shots"]
     if a.step == "more":
         if not (a.section and a.like):

@@ -25,8 +25,8 @@ def test_expand_gives_one_candidate_per_moment_with_its_cid():
 
 def _candidate(out: Path, section: str, cid: str, creator: str, words: str | None = None,
                permission: str = "owner-confirmed 2026-11-18") -> dict:
-    for ext in ("mp4", "webm", "webp"):
-        (out / section / f"{cid}.{ext}").write_bytes(cid.encode())
+    for ext, size in (("mp4", 100), ("webm", 60), ("webp", 10)):        # a webm smaller than its mp4 is kept
+        (out / section / f"{cid}.{ext}").write_bytes(b"x" * size)
     c = {"cid": cid, "kind": "video", "src": f"{cid}.mp4", "webm": f"{cid}.webm", "poster": f"{cid}.webp",
          "credit": f"Footage: {creator}", "commercial_permission": permission,
          "source": {"id": "s", "creator": creator, "url": f"https://x/{creator}"}}
