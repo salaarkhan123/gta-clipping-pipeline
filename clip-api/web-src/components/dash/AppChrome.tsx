@@ -111,6 +111,8 @@ export function TopBar({ me, onLogout }: { me: any; onLogout: () => void }) {
             <b title={me.email}>{me.email}</b><span className="muted">{plan} plan · {me.credits.toLocaleString()} credits</span></p>
           <Link className={`${MENU_ITEM} hover:bg-chip-hover`} href="/dashboard/billing/"><Icon name="card" size={18} className="text-muted" />Billing and credits</Link>
           <Link className={`${MENU_ITEM} hover:bg-chip-hover`} href="/dashboard/keys/"><Icon name="code" size={18} className="text-muted" />API keys</Link>
+          <Link className={`${MENU_ITEM} hover:bg-chip-hover`} href="/dashboard/cases/"><Icon name="summary" size={18} className="text-muted" />Reports about my content</Link>
+          {me.is_admin && <Link className={`${MENU_ITEM} hover:bg-chip-hover`} href="/dashboard/admin/cases/"><Icon name="sliders" size={18} className="text-muted" />Admin: cases</Link>}
           <a className={`${MENU_ITEM} hidden hover:bg-chip-hover narrow:flex`} href={`${API}/docs`} target="_blank" rel="noreferrer"><Icon name="external" size={18} className="text-muted" />API docs</a>
           <button type="button" className={`${MENU_ITEM} hover:bg-chip-hover`} onClick={onLogout}><Icon name="logout" size={18} className="text-muted" />Log out</button>
         </Menu>
