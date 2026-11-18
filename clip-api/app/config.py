@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     max_render_sec: int = 6 * 3600    # reframe/captions: max video rendered per job
     charge_once_per_upload: bool = True   # after a video is analysed once, tools only charge for minutes rendered
     visual_search: bool = True        # Video Finder also searches what is on screen (CLIP)
+    # trio, grid4, ots and the auto layout chosen per moment are our own reading of WayinVideo's names, not yet
+    # checked on real gaming footage. Off: they are not offered and auto draws one layout per video, as before.
+    provisional_layouts: bool = False
     stale_job_minutes: int = 5        # RUNNING job with no heartbeat for this long is failed + refunded
 
     # Link import (app/ingest, agent E). An import is free; the imported file then follows the upload limits
