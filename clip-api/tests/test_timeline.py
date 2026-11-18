@@ -60,7 +60,8 @@ def test_signals_from_a_decoded_wav_match_the_pipe(video, tmp_path):
     _, piped = audio_timeline(video)
     wav = wav_timeline(extract_audio(video, tmp_path / "a.wav").path)
     assert len(wav["audio_flux"]) == len(piped["audio_flux"])
-    assert 19 <= int(np.argmax(wav["audio_flux"])) <= 21 and 19 <= int(np.argmax(piped["audio_flux"])) <= 21
+    # The burst starts at 20 s in both. The last second is left out: it is a padded part second where the sound stops.
+    assert 19 <= int(np.argmax(wav["audio_flux"][:-2])) <= 21 and 19 <= int(np.argmax(piped["audio_flux"][:-2])) <= 21
 
 
 def test_a_signal_with_weight_zero_costs_nothing(video, tmp_path, monkeypatch):
