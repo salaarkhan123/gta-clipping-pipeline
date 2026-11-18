@@ -47,6 +47,10 @@ class Case:
 
 # Every route with an id in its path. Denial for all of them: nobody 401, B 404 (B's API key may get 403
 # session_required on login-only routes), a guessed id 404.
+# To add a route: add one line here, ("METHOD", "/path/{param}"): Case(...). Give `body` for POST/PATCH, `query`
+# for required query parameters, and `owner=(status, error code or None)` for a read A may make. The path
+# parameter must be a key of World.ids; if it is a new kind of id, make one for A in `world` and add it there.
+# An id sent in the JSON body goes in BODY_ROUTES instead.
 ROUTES: dict[tuple[str, str], Case] = {
     ("DELETE", "/v1/keys/{key_id}"): Case(),
     ("GET", "/v1/jobs/{job_id}"): Case(owner=(200, None)),
