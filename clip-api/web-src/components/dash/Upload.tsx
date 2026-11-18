@@ -37,7 +37,7 @@ export function UploadProgress({ up, onCancel }: { up: Progress; onCancel: () =>
     <div className="uploading">
       <p>Uploading {up.name}</p>
       <progress max={100} value={up.pct} aria-label={`Uploading ${up.name}`} />
-      <p className="muted">{up.pct}% <button className="link" onClick={onCancel}>Cancel</button></p>
+      <p className="muted">{up.pct < 100 ? `${up.pct}%` : "Checking the video…"} <button className="link" onClick={onCancel}>Cancel</button></p>
     </div>
   );
 }

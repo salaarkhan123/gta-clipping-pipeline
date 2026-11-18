@@ -211,7 +211,8 @@ bucket, valid for `SIGNED_URL_TTL_SEC` (at most 7 days, R2's limit; longer value
   (`api/s3/presigned-urls/`). So media is served from `<account id>.r2.cloudflarestorage.com`.
 - Buckets are private unless public access is turned on (`buckets/public-buckets/`). Leave the r2.dev URL and
   custom domains off.
-- The site reads captions from the bucket in the browser, so the bucket needs CORS rules (`buckets/cors/`).
+- The site reads captions from the bucket and sends uploads to it in the browser, so the bucket needs CORS rules
+  (`buckets/cors/`).
 - R2 does not document the `response-content-disposition` override, so each file is also stored with
   `Content-Disposition: attachment; filename=...` (documented on PutObject). The Download button saves the clip
   under its name; `<video>` and `<img>` ignore the header.
@@ -240,8 +241,8 @@ per further million.
    [
      {
        "AllowedOrigins": ["https://clutchclips.io"],
-       "AllowedMethods": ["GET", "HEAD"],
-       "AllowedHeaders": ["range"],
+       "AllowedMethods": ["GET", "HEAD", "PUT"],
+       "AllowedHeaders": ["range", "content-type"],
        "ExposeHeaders": ["Content-Length", "Content-Range", "Content-Type", "ETag"],
        "MaxAgeSeconds": 3600
      }
@@ -275,8 +276,18 @@ per further million.
 6. Switch: set `STORAGE_BACKEND=s3`, `docker compose up -d api worker` (when no job is RUNNING), then run
    `migrate_storage.py` once more to pick up anything written in between. It must end with `failed 0`.
 7. Verify: run one job on the site, play a clip, open the editor (captions load from the bucket), press
-   Download (saved under the clip's name). The browser console shows no CSP or CORS error. Keep the local files
-   for a week (`data/storage` in the `data` volume), then delete them.
+   Download (saved under the clip's name). Upload a video: the browser's network tab shows `PUT` requests to the
+   bucket host, not one long `POST /v1/uploads`. The browser console shows no CSP or CORS error. Keep the local
+   files for a week (`data/storage` in the `data` volume), then delete them.
+
+**Direct uploads** (#62): with `STORAGE_BACKEND=s3` the site sends videos straight to the bucket in parts of 16 MiB
+or more, four at a time, instead of through the droplet (`app/routes_direct_upload.py`). A part that fails is
+retried; after a dropped connection, picking the same file again resumes from the parts already stored (the token
+lasts 24 hours). Each part URL signs its exact size, so the bucket refuses anything else. The upload is recorded
+only after every part is stored at the agreed size; then the API downloads the file once (free from R2) to check
+the size, hash it for re-upload detection, and read it as a video within the limits. A file that fails is
+deleted. Unfinished uploads are aborted by R2 after 7 days. On local storage the site keeps using
+`POST /v1/uploads`.
 
 **Roll back:** set `STORAGE_BACKEND=local` and `docker compose up -d api worker`. Files created while on R2 are
 only in the bucket; copy them back with `aws s3 sync` (endpoint as above, region `auto`) before deleting it.
@@ -306,7 +317,9 @@ droplet's region.
 
 1. In the DigitalOcean panel: create a Space in the droplet's region with **file listing restricted**, and a
    Spaces access key limited to that bucket. Add the CORS rule from the R2 section (Settings, CORS
-   Configurations: origin `https://clutchclips.io`, GET and HEAD, header `range`).
+   Configurations: origin `https://clutchclips.io`, GET, HEAD and PUT, headers `range` and `content-type`), and
+   a lifecycle rule that aborts unfinished multipart uploads after 7 days (R2 does this by default; Spaces does
+   not): `aws s3api put-bucket-lifecycle-configuration --endpoint-url $S3_ENDPOINT_URL --bucket <space> --lifecycle-configuration '{"Rules":[{"ID":"abort-parts","Status":"Enabled","Filter":{"Prefix":""},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":7}}]}'`.
 2. Add to the server's env file (keep `STORAGE_BACKEND=local` for now):
    `S3_ENDPOINT_URL=https://<region>.digitaloceanspaces.com`, `S3_REGION=<region>` (for example `nyc3`),
    `S3_BUCKET=<space name>`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`. Then `docker compose up -d api worker`

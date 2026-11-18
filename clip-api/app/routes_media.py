@@ -357,35 +357,52 @@ async def create_upload(request: Request, response: Response, filename: str = Qu
         if size == 0:
             raise ApiError(422, "empty_body", "The request body was empty. Send the video file as the body.")
         content_hash = digest.hexdigest()
-        # The same bytes from the same account, while the first copy is still stored: hand back that upload.
-        # Nothing new is stored, and jobs on it are priced as on any upload that was already analysed.
-        same = db.execute(select(Upload).where(
-            Upload.account_id == p.account.id, Upload.content_hash == content_hash, Upload.size_bytes == size,
-            Upload.deleted_at.is_(None), Upload.expires_at > utcnow()).order_by(Upload.created_at.desc()).limit(1)
-        ).scalar_one_or_none()
+        same = same_upload(db, p.account.id, content_hash, size)
         if same is not None:
             response.status_code = 200
             return {**upload_json(same), "reused": True}
-        try:
-            info = await run_in_threadpool(probe, tmp)
-        except PipelineError as e:
-            raise ApiError(415, e.code, e.message) from None
-        if info.duration > s.max_duration_sec:
-            raise ApiError(413, "video_too_long", f"Maximum video length is {s.max_duration_sec // 3600} hours.")
-        if info.duration < s.min_duration_sec:
-            raise ApiError(422, "video_too_short", f"Minimum video length is {s.min_duration_sec} seconds.")
+        info = await probe_upload(tmp)
         upload_id = new_id("upl")
         key = f"uploads/{p.account.id}/{upload_id}{ext}"
         await run_in_threadpool(get_storage().put, key, tmp)
     finally:
         tmp.unlink(missing_ok=True)
-    safe_name = re.sub(r"[^\w.\- ]+", "_", Path(filename).name)[:255] or "upload" + ext
+    upload = record_upload(db, p, upload_id, key, filename, size, content_hash, info)
+    return {**upload_json(upload), "reused": False}
+
+
+def same_upload(db: Session, account_id: str, content_hash: str, size: int) -> Upload | None:
+    """The same bytes from the same account, while the first copy is still stored: that upload is handed back.
+    Nothing new is stored, and jobs on it are priced as on any upload that was already analysed."""
+    return db.execute(select(Upload).where(
+        Upload.account_id == account_id, Upload.content_hash == content_hash, Upload.size_bytes == size,
+        Upload.deleted_at.is_(None), Upload.expires_at > utcnow()).order_by(Upload.created_at.desc()).limit(1)
+    ).scalar_one_or_none()
+
+
+async def probe_upload(path: Path):
+    """The video's facts, or the ApiError a user sees for a file that is not a video or is out of bounds."""
+    s = get_settings()
+    try:
+        info = await run_in_threadpool(probe, path)
+    except PipelineError as e:
+        raise ApiError(415, e.code, e.message) from None
+    if info.duration > s.max_duration_sec:
+        raise ApiError(413, "video_too_long", f"Maximum video length is {s.max_duration_sec // 3600} hours.")
+    if info.duration < s.min_duration_sec:
+        raise ApiError(422, "video_too_short", f"Minimum video length is {s.min_duration_sec} seconds.")
+    return info
+
+
+def record_upload(db: Session, p: Principal, upload_id: str, key: str, filename: str, size: int,
+                  content_hash: str, info) -> Upload:
+    safe_name = re.sub(r"[^\w.\- ]+", "_", Path(filename).name)[:255] or "upload" + Path(key).suffix
     upload = Upload(id=upload_id, account_id=p.account.id, filename=safe_name, storage_key=key, size_bytes=size,
                     duration_sec=info.duration, width=info.width, height=info.height, has_audio=info.has_audio,
-                    content_hash=content_hash, expires_at=utcnow() + timedelta(days=s.retention_days))
+                    content_hash=content_hash, expires_at=utcnow() + timedelta(days=get_settings().retention_days))
     db.add(upload)
     db.commit()
-    return {**upload_json(upload), "reused": False}
+    return upload
 
 
 @router.get("/v1/uploads")

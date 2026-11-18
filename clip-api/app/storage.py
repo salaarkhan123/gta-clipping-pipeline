@@ -1,6 +1,7 @@
 """Object storage behind one interface: local disk (dev/tests) or S3-compatible (Cloudflare R2, DigitalOcean Spaces)."""
 import mimetypes
 import shutil
+from contextlib import contextmanager
 from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -135,6 +136,50 @@ class S3Storage:
                 raise RuntimeError(f"{len(r['Errors'])} objects under {prefix} not deleted, "
                                    f"first {e.get('Key')}: {e.get('Code')} {e.get('Message')}")
         return len(found)
+
+    # Direct uploads (app/routes_direct_upload.py): the browser PUTs parts to signed URLs; the api starts,
+    # checks and completes the multipart upload.
+    def start_multipart(self, key: str) -> str:
+        return self.client.create_multipart_upload(Bucket=self.bucket, Key=key, **object_headers(key))["UploadId"]
+
+    def part_url(self, key: str, upload_id: str, part_number: int, size: int, ttl_sec: int) -> str:
+        """Signed PUT for one part. Content-Length is signed: a body of any other size is refused by the bucket."""
+        return self.client.generate_presigned_url(
+            "upload_part", Params={"Bucket": self.bucket, "Key": key, "UploadId": upload_id,
+                                   "PartNumber": part_number, "ContentLength": size},
+            ExpiresIn=min(ttl_sec, MAX_SIGNED_URL_SEC))
+
+    def parts(self, key: str, upload_id: str) -> dict[int, tuple[int, str]]:
+        """Uploaded parts: part number -> (bytes, ETag). LookupError once the upload is completed or aborted."""
+        with upload_gone():
+            pages = self.client.get_paginator("list_parts").paginate(Bucket=self.bucket, Key=key, UploadId=upload_id)
+            return {p["PartNumber"]: (p["Size"], p["ETag"]) for page in pages for p in page.get("Parts", [])}
+
+    def complete_multipart(self, key: str, upload_id: str, etags: dict[int, str]) -> None:
+        with upload_gone():
+            self.client.complete_multipart_upload(
+                Bucket=self.bucket, Key=key, UploadId=upload_id,
+                MultipartUpload={"Parts": [{"PartNumber": n, "ETag": etags[n]} for n in sorted(etags)]})
+
+    def abort_multipart(self, key: str, upload_id: str) -> None:
+        """Discard the parts; nothing to do if the upload is already completed or aborted."""
+        try:
+            with upload_gone():
+                self.client.abort_multipart_upload(Bucket=self.bucket, Key=key, UploadId=upload_id)
+        except LookupError:
+            pass
+
+
+@contextmanager
+def upload_gone():
+    """A multipart upload the bucket no longer knows (completed, aborted, expired) as LookupError."""
+    from botocore.exceptions import ClientError
+    try:
+        yield
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") in ("NoSuchUpload", "404"):
+            raise LookupError("no such multipart upload") from None
+        raise
 
 
 def object_headers(key: str) -> dict:
