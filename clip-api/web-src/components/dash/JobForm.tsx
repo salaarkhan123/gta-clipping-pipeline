@@ -24,6 +24,8 @@ const MIN_SPAN = 10;      // the shortest part of a video the API will search (i
 // The export size the dashboard asks for. No plan exports above it today, and the API never goes above the
 // video's own size or the plan's limit.
 const RESOLUTION = "1080";
+// New website jobs start with previews (the API's own default stays "full" for API customers).
+export const RENDER = "preview";
 const languageName = (code: string) => { try { return new Intl.DisplayNames(["en"], { type: "language" }).of(code) || code; } catch { return code; } };
 
 // Clip Maker: what to look for, where, how long, and what is done to each clip. Built from what the API lists:
@@ -63,7 +65,8 @@ export function JobForm({ upload, listed, onStarted, template }: { upload: any; 
   // Every setting is stated, including the ones this form has no control for, so a change to the API's defaults
   // can never change what the dashboard makes. Then only the names the API lists are sent.
   function body() {
-    const options: Record<string, unknown> = { facecam_region: "auto", zoom: 1, resolution: RESOLUTION, chat_region: f.chat_region,
+    // render "preview": fast small clips to choose from first; each card's Export button renders full quality.
+    const options: Record<string, unknown> = { facecam_region: "auto", zoom: 1, resolution: RESOLUTION, render: RENDER, chat_region: f.chat_region,
       ...look, ...(pre ? {} : AS_IT_IS), template: pre && chosen ? chosen.id : null, ...(pre && chosen ? extrasFrom(chosen, listed) : {}),
       prompt: f.prompt.trim() || null, range: f.range, source_lang: f.source_lang || null };
     if (has("duration")) options.duration = f.duration; else options.clip_length = f.clip_length;

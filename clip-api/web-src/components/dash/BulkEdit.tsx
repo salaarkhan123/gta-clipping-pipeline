@@ -53,7 +53,7 @@ export function BulkEdit({ clips, jobs, listed, known, onClose, onDone }: { clip
         <Custom listed={listed} look={l} onLook={onLook} setAspect={setAspect} />
         <div className="bulk-foot">
         {oneRunOnly ? <p className="notice">These clips come from {runs.length} runs. Bulk edit takes clips from one run at a time: pick clips from one run.</p>
-          : <p aria-live="polite">{known.exportQuote ? <QuoteLine quote={quote} what="This export" /> : "You only use credits for the minutes rendered."}</p>}
+          : <p aria-live="polite">{known.exportQuote ? <QuoteLine quote={quote} what="This export" exact /> : "You only use credits for the minutes rendered."}</p>}
         {state?.problem && <p className="error" role="alert">{state.problem}</p>}
         {working && <progress max={100} value={state?.progress ?? 0} aria-label="Export progress" />}
         {state?.done && <p className="notice" role="status">Done. The new files are on the cards.</p>}

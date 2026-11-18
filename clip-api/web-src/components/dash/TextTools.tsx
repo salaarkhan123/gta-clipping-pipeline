@@ -10,9 +10,13 @@ import { Languages, useLanguages } from "@/lib/languages";
 import { Icon } from "./Icon";
 import { isActive, JobNote } from "./JobNote";
 import { useDash } from "./Shell";
+import { BackTitle, PAGE_HEAD, SECTION_HEAD } from "./ui";
 
 type Kind = "transcript" | "summary";
 const NAME: Record<Kind, string> = { transcript: "Video Transcripts", summary: "Video Summary" };
+const LINES = "grid max-h-[70vh] list-none gap-[2px] overflow-y-auto";
+const LINE = "grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 rounded-8 px-[10px] py-2 text-[14.5px] hover:bg-chip";
+const TIME = "pt-[2px] text-[13px] tabular-nums text-lime";
 
 // The upload id from ?id=, the project (for the name, price fields and jobs), and a reload.
 function useProject() {
@@ -94,16 +98,15 @@ export function TextTool({ kind }: { kind: Kind }) {
   }
   const cancel = (jobId: string) => api(`/v1/jobs/${jobId}/cancel`, { body: {} }).then(reload).catch(fail);
 
-  const head = <div className="back-title"><Link href="/dashboard/" aria-label="Back to Home"><Icon name="back" size={20} /></Link>
-    <h1 id={title}>{NAME[kind]}</h1></div>;
+  const head = <BackTitle title={NAME[kind]} id={title} />;
   if (gone) return <div className="form-col">{head}<p className="empty-note">This video isn't here any more. Videos are kept for 7 days. <Link href="/dashboard/">Pick another one</Link></p></div>;
   if (!project || result === undefined || !langs) return <div className="form-col">{head}<p className="muted">Loading…</p></div>;
   const off = kind === "summary" && !langs.summaries;
   const wide = kind === "transcript" && result;
 
   return (
-    <div className={`text-tool ${wide ? "wide stack" : "form-col"}`}>
-      <div className="page-head-row">{head}
+    <div className={`${wide ? "wide stack" : "form-col"} [&_.src-card]:m-0 [&_.src-card]:w-full [&_.src-card]:flex-row [&_.src-card]:items-center [&_.src-thumb]:w-28`}>
+      <div className={PAGE_HEAD}>{head}
         <Link className="btn small ghost" href={`/dashboard/project/?id=${project.upload_id}`}>Open the project</Link></div>
       <div className="src-card">
         <span className="src-thumb" aria-hidden="true">{project.clips?.find((c: any) => c.thumb_url) ? <img src={project.clips.find((c: any) => c.thumb_url).thumb_url} alt="" /> : <Icon name="film" size={26} />}</span>
@@ -136,30 +139,30 @@ function TranscriptView({ t, uploadId }: { t: any; uploadId: string }) {
   const rows: any[] = (t.segments || []).filter((s: any) => !q || s.text.toLowerCase().includes(q.toLowerCase()));
   return (
     <section className="panel" aria-label="Transcript">
-      <div className="results-head">
+      <div className={SECTION_HEAD}>
         <p className="muted small">{t.segments?.length || 0} lines · language {t.language}{t.language_detected ? " (detected)" : ""}</p>
         <div className="row">
           <label className="sr-only" htmlFor="tr-find">Find in the transcript</label>
-          <input id="tr-find" className="tr-find" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a word" />
+          <input id="tr-find" className="w-44 px-3 py-[7px] text-[14px]" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a word" />
           {["txt", "srt", "vtt"].map((f) => <button key={f} type="button" className="btn small ghost" onClick={() => downloadTranscript(uploadId, f).catch(fail)}>
             <Icon name="download" size={16} />{f.toUpperCase()}</button>)}
         </div>
       </div>
       {!rows.length ? <p className="muted">{q ? "No line has that word." : "No speech was found in this video."}</p>
-        : <ol className="tr-lines">{rows.map((s, i) => <li key={i}><time>{clock(s.start)}</time><span>{s.text}{s.translation && <em>{s.translation}</em>}</span></li>)}</ol>}
+        : <ol className={LINES}>{rows.map((s, i) => <li key={i} className={LINE}><time className={TIME}>{clock(s.start)}</time><span>{s.text}{s.translation && <em className="block not-italic text-muted">{s.translation}</em>}</span></li>)}</ol>}
     </section>
   );
 }
 
 function SummaryView({ s }: { s: any }) {
   return (
-    <section className="panel summary" aria-label="Summary">
-      {s.title && <h2>{s.title}</h2>}
+    <section className="panel" aria-label="Summary">
+      {s.title && <h2 className="m-0 text-[20px]">{s.title}</h2>}
       {s.summary && <p>{s.summary}</p>}
-      {s.tags?.length > 0 && <ul className="chip-row" aria-label="Tags">{s.tags.map((t: string) => <li key={t} className="chip">#{t}</li>)}</ul>}
+      {s.tags?.length > 0 && <ul className="chip-row m-0 list-none" aria-label="Tags">{s.tags.map((t: string) => <li key={t} className="chip">#{t}</li>)}</ul>}
       {s.highlights?.length > 0 && <>
-        <h3>Highlights</h3>
-        <ol className="tr-lines">{s.highlights.map((h: any, i: number) => <li key={i}><time>{clock(h.start)}{typeof h.end === "number" ? `–${clock(h.end)}` : ""}</time><span>{h.text}</span></li>)}</ol>
+        <h3 className="mt-1 text-[15px]">Highlights</h3>
+        <ol className={LINES}>{s.highlights.map((h: any, i: number) => <li key={i} className={LINE}><time className={TIME}>{clock(h.start)}{typeof h.end === "number" ? `–${clock(h.end)}` : ""}</time><span>{h.text}</span></li>)}</ol>
       </>}
     </section>
   );

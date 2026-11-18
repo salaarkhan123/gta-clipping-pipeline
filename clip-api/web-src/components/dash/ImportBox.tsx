@@ -22,7 +22,8 @@ export function useImportSources(): Sources | null | undefined {
   useEffect(() => {
     let on = true;
     if (!asked) {
-      asked = api<Sources>("/v1/imports/sources", { auth: false }).then((r) => (Array.isArray(r?.sources) ? r : null))
+      // Signed in, so the API answers with this account's own limits (bulk_max can differ by plan).
+      asked = api<Sources>("/v1/imports/sources").then((r) => (Array.isArray(r?.sources) ? r : null))
         .catch((e) => { if (e instanceof ApiError && (e.status === 404 || e.status === 405)) return null; asked = null; return null; });
     }
     asked.then((r) => on && setS(r));

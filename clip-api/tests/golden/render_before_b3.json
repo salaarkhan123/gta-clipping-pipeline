@@ -1,0 +1,1437 @@
+{
+ "words": [
+  [
+   0.0,
+   0.3,
+   "So"
+  ],
+  [
+   0.32,
+   0.6,
+   "we"
+  ],
+  [
+   0.62,
+   1.0,
+   "absolutely"
+  ],
+  [
+   1.02,
+   1.4,
+   "destroyed"
+  ],
+  [
+   1.42,
+   1.7,
+   "the"
+  ],
+  [
+   1.72,
+   2.2,
+   "cops!"
+  ],
+  [
+   2.9,
+   3.2,
+   "Three"
+  ],
+  [
+   3.22,
+   3.6,
+   "hundred"
+  ],
+  [
+   3.62,
+   4.1,
+   "grand,"
+  ],
+  [
+   4.12,
+   4.4,
+   "easy"
+  ],
+  [
+   4.42,
+   4.9,
+   "money"
+  ],
+  [
+   5.6,
+   6.0,
+   "let's"
+  ],
+  [
+   6.02,
+   6.6,
+   "{go}"
+  ],
+  [
+   6.62,
+   7.2,
+   "again\\now"
+  ]
+ ],
+ "cases": {
+  "tall": {
+   "vertical": true,
+   "caption_top": 1180,
+   "play": [
+    1080,
+    1920
+   ]
+  },
+  "tall_hook": {
+   "vertical": true,
+   "caption_top": 1180,
+   "play": [
+    1080,
+    1920
+   ],
+   "hook": "He never saw it coming",
+   "hook_top": 760
+  },
+  "wide_span_hook": {
+   "vertical": true,
+   "caption_top": 756,
+   "play": [
+    1920,
+    1080
+   ],
+   "hook": "Three hundred grand",
+   "hook_top": 194,
+   "span": [
+    0.0,
+    0.6667
+   ]
+  },
+  "source": {
+   "vertical": false,
+   "caption_top": 0,
+   "play": [
+    1280,
+    720
+   ],
+   "hook": "Easy money",
+   "hook_top": 72
+  },
+  "impact_center": {
+   "vertical": true,
+   "caption_top": 0,
+   "play": [
+    1080,
+    1920
+   ],
+   "hook": "Big win",
+   "hook_top": 900,
+   "center": 640
+  }
+ },
+ "ass": {
+  "impact/tall": {
+   "chunks": 9,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,Anton,232,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,4.0,0,1,11,0,5,0,0,0,1\nStyle: CapShadow,Anton,232,&HFF000000,&HFF000000,&HFF000000,&H50000000,0,0,0,0,100,100,4.0,0,1,11,6,5,0,0,0,1\nStyle: Hook,DejaVu Sans,70,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,0,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:00.62,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}SO  WE\nDialogue: 1,0:00:00.00,0:00:00.62,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}SO  WE\nDialogue: 0,0:00:00.62,0:00:01.02,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}ABSOLUTELY\nDialogue: 1,0:00:00.62,0:00:01.02,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}ABSOLUTELY{\\c&HFFFFFF&}\nDialogue: 0,0:00:01.02,0:00:01.72,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}DESTROYED  THE\nDialogue: 1,0:00:01.02,0:00:01.72,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}DESTROYED{\\c&HFFFFFF&}  THE\nDialogue: 0,0:00:01.72,0:00:02.50,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}COPS!\nDialogue: 1,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}COPS!{\\c&HFFFFFF&}\nDialogue: 0,0:00:02.90,0:00:03.62,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}THREE  HUNDRED\nDialogue: 1,0:00:02.90,0:00:03.62,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}THREE  {\\c&H3CFFB8&}HUNDRED{\\c&HFFFFFF&}\nDialogue: 0,0:00:03.62,0:00:04.12,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}GRAND\nDialogue: 1,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}GRAND{\\c&HFFFFFF&}\nDialogue: 0,0:00:04.12,0:00:05.20,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}EASY  MONEY\nDialogue: 1,0:00:04.12,0:00:05.20,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}EASY  {\\c&H3CFFB8&}MONEY{\\c&HFFFFFF&}\nDialogue: 0,0:00:05.60,0:00:06.62,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}LET'S  GO\nDialogue: 1,0:00:05.60,0:00:06.62,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}LET'S  GO\nDialogue: 0,0:00:06.62,0:00:07.20,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}AGAINNOW\nDialogue: 1,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}AGAINNOW{\\c&HFFFFFF&}\n"
+  },
+  "impact/tall_hook": {
+   "chunks": 9,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,Anton,232,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,4.0,0,1,11,0,5,0,0,0,1\nStyle: CapShadow,Anton,232,&HFF000000,&HFF000000,&HFF000000,&H50000000,0,0,0,0,100,100,4.0,0,1,11,6,5,0,0,0,1\nStyle: Hook,DejaVu Sans,70,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,760,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 2,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}HE NEVER SAW IT COMING\nDialogue: 0,0:00:00.00,0:00:00.62,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}SO  WE\nDialogue: 1,0:00:00.00,0:00:00.62,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}SO  WE\nDialogue: 0,0:00:00.62,0:00:01.02,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}ABSOLUTELY\nDialogue: 1,0:00:00.62,0:00:01.02,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}ABSOLUTELY{\\c&HFFFFFF&}\nDialogue: 0,0:00:01.02,0:00:01.72,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}DESTROYED  THE\nDialogue: 1,0:00:01.02,0:00:01.72,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}DESTROYED{\\c&HFFFFFF&}  THE\nDialogue: 0,0:00:01.72,0:00:02.50,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}COPS!\nDialogue: 1,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}COPS!{\\c&HFFFFFF&}\nDialogue: 0,0:00:02.90,0:00:03.62,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}THREE  HUNDRED\nDialogue: 1,0:00:02.90,0:00:03.62,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}THREE  {\\c&H3CFFB8&}HUNDRED{\\c&HFFFFFF&}\nDialogue: 0,0:00:03.62,0:00:04.12,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}GRAND\nDialogue: 1,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}GRAND{\\c&HFFFFFF&}\nDialogue: 0,0:00:04.12,0:00:05.20,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}EASY  MONEY\nDialogue: 1,0:00:04.12,0:00:05.20,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}EASY  {\\c&H3CFFB8&}MONEY{\\c&HFFFFFF&}\nDialogue: 0,0:00:05.60,0:00:06.62,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}LET'S  GO\nDialogue: 1,0:00:05.60,0:00:06.62,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}LET'S  GO\nDialogue: 0,0:00:06.62,0:00:07.20,CapShadow,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}AGAINNOW\nDialogue: 1,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\pos(540,1330)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}AGAINNOW{\\c&HFFFFFF&}\n"
+  },
+  "impact/wide_span_hook": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,Anton,131,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,2.3,0,1,6,0,5,0,0,0,1\nStyle: CapShadow,Anton,131,&HFF000000,&HFF000000,&HFF000000,&H50000000,0,0,0,0,100,100,2.3,0,1,6,3,5,0,0,0,1\nStyle: Hook,DejaVu Sans,57,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,729,194,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 2,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}THREE HUNDRED GRAND\nDialogue: 0,0:00:00.00,0:00:00.62,CapShadow,,0,0,0,,{\\pos(640,748)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur4}SO  WE\nDialogue: 1,0:00:00.00,0:00:00.62,Cap,,0,0,0,,{\\pos(640,748)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}SO  WE\nDialogue: 0,0:00:00.62,0:00:01.42,CapShadow,,0,0,0,,{\\pos(640,748)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur4}ABSOLUTELY  DESTROYED\nDialogue: 1,0:00:00.62,0:00:01.42,Cap,,0,0,0,,{\\pos(640,748)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}ABSOLUTELY{\\c&HFFFFFF&}  DESTROYED\nDialogue: 0,0:00:01.42,0:00:02.50,CapShadow,,0,0,0,,{\\pos(640,748)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur4}THE  COPS!\nDialogue: 1,0:00:01.42,0:00:02.50,Cap,,0,0,0,,{\\pos(640,748)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}THE  {\\c&H3CFFB8&}COPS!{\\c&HFFFFFF&}\nDialogue: 0,0:00:02.90,0:00:03.62,CapShadow,,0,0,0,,{\\pos(640,748)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur4}THREE  HUNDRED\nDialogue: 1,0:00:02.90,0:00:03.62,Cap,,0,0,0,,{\\pos(640,748)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}THREE  {\\c&H3CFFB8&}HUNDRED{\\c&HFFFFFF&}\nDialogue: 0,0:00:03.62,0:00:04.12,CapShadow,,0,0,0,,{\\pos(640,748)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur4}GRAND\nDialogue: 1,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\pos(640,748)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}GRAND{\\c&HFFFFFF&}\nDialogue: 0,0:00:04.12,0:00:05.20,CapShadow,,0,0,0,,{\\pos(640,748)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur4}EASY  MONEY\nDialogue: 1,0:00:04.12,0:00:05.20,Cap,,0,0,0,,{\\pos(640,748)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}EASY  {\\c&H3CFFB8&}MONEY{\\c&HFFFFFF&}\nDialogue: 0,0:00:05.60,0:00:06.62,CapShadow,,0,0,0,,{\\pos(640,748)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur4}LET'S  GO\nDialogue: 1,0:00:05.60,0:00:06.62,Cap,,0,0,0,,{\\pos(640,748)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}LET'S  GO\nDialogue: 0,0:00:06.62,0:00:07.20,CapShadow,,0,0,0,,{\\pos(640,748)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur4}AGAINNOW\nDialogue: 1,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\pos(640,748)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}AGAINNOW{\\c&HFFFFFF&}\n"
+  },
+  "impact/source": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1280\nPlayResY: 720\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,Anton,87,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,1.5,0,1,4,0,5,0,0,0,1\nStyle: CapShadow,Anton,87,&HFF000000,&HFF000000,&HFF000000,&H50000000,0,0,0,0,100,100,1.5,0,1,4,2,5,0,0,0,1\nStyle: Hook,DejaVu Sans,38,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,9,0,8,60,60,72,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 2,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}EASY MONEY\nDialogue: 0,0:00:00.00,0:00:00.62,CapShadow,,0,0,0,,{\\pos(640,499)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur3}SO  WE\nDialogue: 1,0:00:00.00,0:00:00.62,Cap,,0,0,0,,{\\pos(640,499)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}SO  WE\nDialogue: 0,0:00:00.62,0:00:01.42,CapShadow,,0,0,0,,{\\pos(640,499)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur3}ABSOLUTELY  DESTROYED\nDialogue: 1,0:00:00.62,0:00:01.42,Cap,,0,0,0,,{\\pos(640,499)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}ABSOLUTELY{\\c&HFFFFFF&}  DESTROYED\nDialogue: 0,0:00:01.42,0:00:02.50,CapShadow,,0,0,0,,{\\pos(640,499)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur3}THE  COPS!\nDialogue: 1,0:00:01.42,0:00:02.50,Cap,,0,0,0,,{\\pos(640,499)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}THE  {\\c&H3CFFB8&}COPS!{\\c&HFFFFFF&}\nDialogue: 0,0:00:02.90,0:00:03.62,CapShadow,,0,0,0,,{\\pos(640,499)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur3}THREE  HUNDRED\nDialogue: 1,0:00:02.90,0:00:03.62,Cap,,0,0,0,,{\\pos(640,499)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}THREE  {\\c&H3CFFB8&}HUNDRED{\\c&HFFFFFF&}\nDialogue: 0,0:00:03.62,0:00:04.12,CapShadow,,0,0,0,,{\\pos(640,499)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur3}GRAND\nDialogue: 1,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\pos(640,499)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}GRAND{\\c&HFFFFFF&}\nDialogue: 0,0:00:04.12,0:00:05.20,CapShadow,,0,0,0,,{\\pos(640,499)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur3}EASY  MONEY\nDialogue: 1,0:00:04.12,0:00:05.20,Cap,,0,0,0,,{\\pos(640,499)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}EASY  {\\c&H3CFFB8&}MONEY{\\c&HFFFFFF&}\nDialogue: 0,0:00:05.60,0:00:06.62,CapShadow,,0,0,0,,{\\pos(640,499)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur3}LET'S  GO\nDialogue: 1,0:00:05.60,0:00:06.62,Cap,,0,0,0,,{\\pos(640,499)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}LET'S  GO\nDialogue: 0,0:00:06.62,0:00:07.20,CapShadow,,0,0,0,,{\\pos(640,499)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur3}AGAINNOW\nDialogue: 1,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\pos(640,499)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}AGAINNOW{\\c&HFFFFFF&}\n"
+  },
+  "impact/impact_center": {
+   "chunks": 9,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,Anton,232,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,4.0,0,1,11,0,5,0,0,0,1\nStyle: CapShadow,Anton,232,&HFF000000,&HFF000000,&HFF000000,&H50000000,0,0,0,0,100,100,4.0,0,1,11,6,5,0,0,0,1\nStyle: Hook,DejaVu Sans,70,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,900,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 2,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}BIG WIN\nDialogue: 0,0:00:00.00,0:00:00.62,CapShadow,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}SO  WE\nDialogue: 1,0:00:00.00,0:00:00.62,Cap,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}SO  WE\nDialogue: 0,0:00:00.62,0:00:01.02,CapShadow,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}ABSOLUTELY\nDialogue: 1,0:00:00.62,0:00:01.02,Cap,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}ABSOLUTELY{\\c&HFFFFFF&}\nDialogue: 0,0:00:01.02,0:00:01.72,CapShadow,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}DESTROYED  THE\nDialogue: 1,0:00:01.02,0:00:01.72,Cap,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}DESTROYED{\\c&HFFFFFF&}  THE\nDialogue: 0,0:00:01.72,0:00:02.50,CapShadow,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}COPS!\nDialogue: 1,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}COPS!{\\c&HFFFFFF&}\nDialogue: 0,0:00:02.90,0:00:03.62,CapShadow,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}THREE  HUNDRED\nDialogue: 1,0:00:02.90,0:00:03.62,Cap,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}THREE  {\\c&H3CFFB8&}HUNDRED{\\c&HFFFFFF&}\nDialogue: 0,0:00:03.62,0:00:04.12,CapShadow,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}GRAND\nDialogue: 1,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}GRAND{\\c&HFFFFFF&}\nDialogue: 0,0:00:04.12,0:00:05.20,CapShadow,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}EASY  MONEY\nDialogue: 1,0:00:04.12,0:00:05.20,Cap,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}EASY  {\\c&H3CFFB8&}MONEY{\\c&HFFFFFF&}\nDialogue: 0,0:00:05.60,0:00:06.62,CapShadow,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}LET'S  GO\nDialogue: 1,0:00:05.60,0:00:06.62,Cap,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}LET'S  GO\nDialogue: 0,0:00:06.62,0:00:07.20,CapShadow,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)\\blur7}AGAINNOW\nDialogue: 1,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\pos(540,626)\\q2\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)}{\\c&H3CFFB8&}AGAINNOW{\\c&HFFFFFF&}\n"
+  },
+  "pop/tall": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,78,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,60,642,1\nStyle: Hook,DejaVu Sans,70,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,0,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H00FFFF&\\fscx114\\fscy114}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H00FFFF&\\fscx114\\fscy114}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H00FFFF&\\fscx114\\fscy114}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H00FFFF&\\fscx114\\fscy114}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H00FFFF&\\fscx114\\fscy114}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H00FFFF&\\fscx114\\fscy114}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "pop/tall_hook": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,78,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,60,642,1\nStyle: Hook,DejaVu Sans,70,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,760,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}HE NEVER SAW IT COMING\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H00FFFF&\\fscx114\\fscy114}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H00FFFF&\\fscx114\\fscy114}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H00FFFF&\\fscx114\\fscy114}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H00FFFF&\\fscx114\\fscy114}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H00FFFF&\\fscx114\\fscy114}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H00FFFF&\\fscx114\\fscy114}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "pop/wide_span_hook": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,699,240,1\nStyle: Hook,DejaVu Sans,57,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,729,194,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}THREE HUNDRED GRAND\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H00FFFF&\\fscx114\\fscy114}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H00FFFF&\\fscx114\\fscy114}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H00FFFF&\\fscx114\\fscy114}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H00FFFF&\\fscx114\\fscy114}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H00FFFF&\\fscx114\\fscy114}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H00FFFF&\\fscx114\\fscy114}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "pop/source": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,60,70,1\nStyle: Hook,DejaVu Sans,57,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,72,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}EASY MONEY\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H00FFFF&\\fscx114\\fscy114}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H00FFFF&\\fscx114\\fscy114}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H00FFFF&\\fscx114\\fscy114}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H00FFFF&\\fscx114\\fscy114}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H00FFFF&\\fscx114\\fscy114}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H00FFFF&\\fscx114\\fscy114}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "pop/impact_center": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,78,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,60,1822,1\nStyle: Hook,DejaVu Sans,70,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,900,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}BIG WIN\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H00FFFF&\\fscx114\\fscy114}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H00FFFF&\\fscx114\\fscy114}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H00FFFF&\\fscx114\\fscy114}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H00FFFF&\\fscx114\\fscy114}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H00FFFF&\\fscx114\\fscy114}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H00FFFF&\\fscx114\\fscy114}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H00FFFF&\\fscx114\\fscy114}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "bold/tall": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,78,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,60,642,1\nStyle: Hook,DejaVu Sans,70,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,0,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H00FFFF&}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H00FFFF&}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H00FFFF&}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H00FFFF&}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H00FFFF&}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H00FFFF&}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H00FFFF&}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H00FFFF&}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H00FFFF&}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H00FFFF&}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H00FFFF&}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H00FFFF&}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H00FFFF&}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H00FFFF&}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "bold/tall_hook": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,78,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,60,642,1\nStyle: Hook,DejaVu Sans,70,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,760,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}HE NEVER SAW IT COMING\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H00FFFF&}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H00FFFF&}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H00FFFF&}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H00FFFF&}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H00FFFF&}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H00FFFF&}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H00FFFF&}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H00FFFF&}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H00FFFF&}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H00FFFF&}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H00FFFF&}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H00FFFF&}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H00FFFF&}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H00FFFF&}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "bold/wide_span_hook": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,699,240,1\nStyle: Hook,DejaVu Sans,57,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,729,194,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}THREE HUNDRED GRAND\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H00FFFF&}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H00FFFF&}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H00FFFF&}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H00FFFF&}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H00FFFF&}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H00FFFF&}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H00FFFF&}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H00FFFF&}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H00FFFF&}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H00FFFF&}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H00FFFF&}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H00FFFF&}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H00FFFF&}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H00FFFF&}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "bold/source": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,60,70,1\nStyle: Hook,DejaVu Sans,57,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,72,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}EASY MONEY\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H00FFFF&}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H00FFFF&}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H00FFFF&}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H00FFFF&}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H00FFFF&}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H00FFFF&}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H00FFFF&}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H00FFFF&}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H00FFFF&}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H00FFFF&}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H00FFFF&}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H00FFFF&}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H00FFFF&}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H00FFFF&}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "bold/impact_center": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,78,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,60,1822,1\nStyle: Hook,DejaVu Sans,70,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,900,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}BIG WIN\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H00FFFF&}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H00FFFF&}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H00FFFF&}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H00FFFF&}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H00FFFF&}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H00FFFF&}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H00FFFF&}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H00FFFF&}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H00FFFF&}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H00FFFF&}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H00FFFF&}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H00FFFF&}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H00FFFF&}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H00FFFF&}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "neon/tall": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,78,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,60,642,1\nStyle: Hook,DejaVu Sans,70,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,0,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H66FF7A&\\fscx110\\fscy110}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H66FF7A&\\fscx110\\fscy110}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H66FF7A&\\fscx110\\fscy110}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H66FF7A&\\fscx110\\fscy110}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H66FF7A&\\fscx110\\fscy110}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H66FF7A&\\fscx110\\fscy110}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "neon/tall_hook": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,78,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,60,642,1\nStyle: Hook,DejaVu Sans,70,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,760,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}HE NEVER SAW IT COMING\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H66FF7A&\\fscx110\\fscy110}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H66FF7A&\\fscx110\\fscy110}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H66FF7A&\\fscx110\\fscy110}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H66FF7A&\\fscx110\\fscy110}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H66FF7A&\\fscx110\\fscy110}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H66FF7A&\\fscx110\\fscy110}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "neon/wide_span_hook": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,699,240,1\nStyle: Hook,DejaVu Sans,57,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,729,194,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}THREE HUNDRED GRAND\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H66FF7A&\\fscx110\\fscy110}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H66FF7A&\\fscx110\\fscy110}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H66FF7A&\\fscx110\\fscy110}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H66FF7A&\\fscx110\\fscy110}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H66FF7A&\\fscx110\\fscy110}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H66FF7A&\\fscx110\\fscy110}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "neon/source": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,60,70,1\nStyle: Hook,DejaVu Sans,57,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,72,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}EASY MONEY\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H66FF7A&\\fscx110\\fscy110}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H66FF7A&\\fscx110\\fscy110}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H66FF7A&\\fscx110\\fscy110}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H66FF7A&\\fscx110\\fscy110}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H66FF7A&\\fscx110\\fscy110}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H66FF7A&\\fscx110\\fscy110}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "neon/impact_center": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,78,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,60,1822,1\nStyle: Hook,DejaVu Sans,70,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,900,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}BIG WIN\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H66FF7A&\\fscx110\\fscy110}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H66FF7A&\\fscx110\\fscy110}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H66FF7A&\\fscx110\\fscy110}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H66FF7A&\\fscx110\\fscy110}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H66FF7A&\\fscx110\\fscy110}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H66FF7A&\\fscx110\\fscy110}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H66FF7A&\\fscx110\\fscy110}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "boxed/tall": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,70,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,3,10,0,2,60,60,650,1\nStyle: Hook,DejaVu Sans,63,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,0,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H00FFFF&}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H00FFFF&}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H00FFFF&}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H00FFFF&}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H00FFFF&}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H00FFFF&}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H00FFFF&}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H00FFFF&}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H00FFFF&}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H00FFFF&}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H00FFFF&}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H00FFFF&}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H00FFFF&}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H00FFFF&}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "boxed/tall_hook": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,70,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,3,10,0,2,60,60,650,1\nStyle: Hook,DejaVu Sans,63,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,760,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}HE NEVER SAW IT COMING\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H00FFFF&}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H00FFFF&}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H00FFFF&}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H00FFFF&}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H00FFFF&}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H00FFFF&}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H00FFFF&}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H00FFFF&}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H00FFFF&}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H00FFFF&}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H00FFFF&}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H00FFFF&}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H00FFFF&}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H00FFFF&}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "boxed/wide_span_hook": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,57,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,3,10,0,2,60,699,247,1\nStyle: Hook,DejaVu Sans,51,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,729,194,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}THREE HUNDRED GRAND\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H00FFFF&}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H00FFFF&}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H00FFFF&}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H00FFFF&}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H00FFFF&}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H00FFFF&}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H00FFFF&}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H00FFFF&}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H00FFFF&}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H00FFFF&}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H00FFFF&}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H00FFFF&}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H00FFFF&}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H00FFFF&}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "boxed/source": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,57,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,3,10,0,2,60,60,70,1\nStyle: Hook,DejaVu Sans,51,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,72,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}EASY MONEY\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H00FFFF&}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H00FFFF&}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H00FFFF&}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H00FFFF&}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H00FFFF&}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H00FFFF&}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H00FFFF&}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H00FFFF&}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H00FFFF&}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H00FFFF&}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H00FFFF&}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H00FFFF&}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H00FFFF&}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H00FFFF&}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "boxed/impact_center": {
+   "chunks": 8,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,70,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,3,10,0,2,60,60,1830,1\nStyle: Hook,DejaVu Sans,63,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,900,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}BIG WIN\nDialogue: 0,0:00:00.00,0:00:00.32,Cap,,0,0,0,,{\\c&H00FFFF&}SO{\\c&HFFFFFF&\\fscx100\\fscy100} WE ABSOLUTELY\nDialogue: 0,0:00:00.32,0:00:00.62,Cap,,0,0,0,,SO {\\c&H00FFFF&}WE{\\c&HFFFFFF&\\fscx100\\fscy100} ABSOLUTELY\nDialogue: 0,0:00:00.62,0:00:01.02,Cap,,0,0,0,,SO WE {\\c&H00FFFF&}ABSOLUTELY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.02,0:00:01.42,Cap,,0,0,0,,{\\c&H00FFFF&}DESTROYED{\\c&HFFFFFF&\\fscx100\\fscy100} THE\nDialogue: 0,0:00:01.42,0:00:01.72,Cap,,0,0,0,,DESTROYED {\\c&H00FFFF&}THE{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:01.72,0:00:02.50,Cap,,0,0,0,,{\\c&H00FFFF&}COPS!{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:02.90,0:00:03.22,Cap,,0,0,0,,{\\c&H00FFFF&}THREE{\\c&HFFFFFF&\\fscx100\\fscy100} HUNDRED\nDialogue: 0,0:00:03.22,0:00:03.62,Cap,,0,0,0,,THREE {\\c&H00FFFF&}HUNDRED{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:03.62,0:00:04.12,Cap,,0,0,0,,{\\c&H00FFFF&}GRAND,{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:04.12,0:00:04.42,Cap,,0,0,0,,{\\c&H00FFFF&}EASY{\\c&HFFFFFF&\\fscx100\\fscy100} MONEY\nDialogue: 0,0:00:04.42,0:00:05.20,Cap,,0,0,0,,EASY {\\c&H00FFFF&}MONEY{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:05.60,0:00:06.02,Cap,,0,0,0,,{\\c&H00FFFF&}LET'S{\\c&HFFFFFF&\\fscx100\\fscy100} GO\nDialogue: 0,0:00:06.02,0:00:06.62,Cap,,0,0,0,,LET'S {\\c&H00FFFF&}GO{\\c&HFFFFFF&\\fscx100\\fscy100}\nDialogue: 0,0:00:06.62,0:00:07.20,Cap,,0,0,0,,{\\c&H00FFFF&}AGAINNOW{\\c&HFFFFFF&\\fscx100\\fscy100}\n"
+  },
+  "clean/tall": {
+   "chunks": 5,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,58,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,60,662,1\nStyle: Hook,DejaVu Sans,52,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,0,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:01.42,Cap,,0,0,0,,So we absolutely destroyed\nDialogue: 0,0:00:01.42,0:00:02.50,Cap,,0,0,0,,the cops!\nDialogue: 0,0:00:02.90,0:00:04.12,Cap,,0,0,0,,Three hundred grand,\nDialogue: 0,0:00:04.12,0:00:05.20,Cap,,0,0,0,,easy money\nDialogue: 0,0:00:05.60,0:00:07.20,Cap,,0,0,0,,let's go againnow\n"
+  },
+  "clean/tall_hook": {
+   "chunks": 5,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,58,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,60,662,1\nStyle: Hook,DejaVu Sans,52,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,760,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}HE NEVER SAW IT COMING\nDialogue: 0,0:00:00.00,0:00:01.42,Cap,,0,0,0,,So we absolutely destroyed\nDialogue: 0,0:00:01.42,0:00:02.50,Cap,,0,0,0,,the cops!\nDialogue: 0,0:00:02.90,0:00:04.12,Cap,,0,0,0,,Three hundred grand,\nDialogue: 0,0:00:04.12,0:00:05.20,Cap,,0,0,0,,easy money\nDialogue: 0,0:00:05.60,0:00:07.20,Cap,,0,0,0,,let's go againnow\n"
+  },
+  "clean/wide_span_hook": {
+   "chunks": 5,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,48,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,699,256,1\nStyle: Hook,DejaVu Sans,43,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,729,194,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}THREE HUNDRED GRAND\nDialogue: 0,0:00:00.00,0:00:01.42,Cap,,0,0,0,,So we absolutely destroyed\nDialogue: 0,0:00:01.42,0:00:02.50,Cap,,0,0,0,,the cops!\nDialogue: 0,0:00:02.90,0:00:04.12,Cap,,0,0,0,,Three hundred grand,\nDialogue: 0,0:00:04.12,0:00:05.20,Cap,,0,0,0,,easy money\nDialogue: 0,0:00:05.60,0:00:07.20,Cap,,0,0,0,,let's go againnow\n"
+  },
+  "clean/source": {
+   "chunks": 5,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,48,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,60,70,1\nStyle: Hook,DejaVu Sans,43,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,72,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}EASY MONEY\nDialogue: 0,0:00:00.00,0:00:01.42,Cap,,0,0,0,,So we absolutely destroyed\nDialogue: 0,0:00:01.42,0:00:02.50,Cap,,0,0,0,,the cops!\nDialogue: 0,0:00:02.90,0:00:04.12,Cap,,0,0,0,,Three hundred grand,\nDialogue: 0,0:00:04.12,0:00:05.20,Cap,,0,0,0,,easy money\nDialogue: 0,0:00:05.60,0:00:07.20,Cap,,0,0,0,,let's go againnow\n"
+  },
+  "clean/impact_center": {
+   "chunks": 5,
+   "ass": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,DejaVu Sans,58,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,1,0,1,6,2,2,60,60,1842,1\nStyle: Hook,DejaVu Sans,52,&H00050D0A,&H00050D0A,&H003CFFB8,&H003CFFB8,1,0,0,0,100,100,0,0,3,14,0,8,90,90,900,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 1,0:00:00.00,0:00:02.50,Hook,,0,0,0,,{\\fad(120,220)}BIG WIN\nDialogue: 0,0:00:00.00,0:00:01.42,Cap,,0,0,0,,So we absolutely destroyed\nDialogue: 0,0:00:01.42,0:00:02.50,Cap,,0,0,0,,the cops!\nDialogue: 0,0:00:02.90,0:00:04.12,Cap,,0,0,0,,Three hundred grand,\nDialogue: 0,0:00:04.12,0:00:05.20,Cap,,0,0,0,,easy money\nDialogue: 0,0:00:05.60,0:00:07.20,Cap,,0,0,0,,let's go againnow\n"
+  }
+ },
+ "cams": {
+  "corner": [
+   [
+    0.75,
+    0.0,
+    0.25,
+    0.25
+   ],
+   [
+    0.875,
+    0.125,
+    0.047,
+    0.111
+   ]
+  ],
+  "bottom": [
+   [
+    0.172,
+    0.786,
+    0.186,
+    0.211
+   ],
+   [
+    0.265,
+    0.889,
+    0.07,
+    0.139
+   ]
+  ],
+  "none": [
+   null,
+   null
+  ]
+ },
+ "graphs": {
+  "9:16/auto/corner": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=302:180:968:0,scale=1080:640,setsar=1[top];[b]crop=606:720:326:0,scale=1080:1280,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 580,
+   "hook_top": 760,
+   "seam": 640,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    400.9635555555554,
+    78.46400000000003,
+    679.036444444444,
+    490.496
+   ]
+  },
+  "9:16/auto/bottom": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=244:144:216:554,scale=1080:640,setsar=1[top];[b]crop=606:720:482:0,scale=1080:1280,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 580,
+   "hook_top": 760,
+   "seam": 640,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    283.14617271699854,
+    0.0,
+    796.8538272830011,
+    640.0000000000001
+   ]
+  },
+  "9:16/auto/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=404:720:436:0,scale=1080:1920,setsar=1,format=yuv420p[v]",
+   "caption_top": 1344,
+   "hook_top": 345,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "9:16/full/corner": {
+   "layout": "pip",
+   "graph": "[0:v]split=2[a][b];[a]crop=404:720:436:0,scale=1080:1920,setsar=1[base];[b]crop=320:178:960:0,scale=388:218,setsar=1,drawbox=x=0:y=0:w=iw:h=ih:color=white:t=4[in];[base][in]overlay=42:96,format=yuv420p[v]",
+   "caption_top": 1344,
+   "hook_top": 345,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    188.58639999999994,
+    122.63245,
+    283.41359999999986,
+    263.1418
+   ]
+  },
+  "9:16/full/bottom": {
+   "layout": "pip",
+   "graph": "[0:v]split=2[a][b];[a]crop=404:720:482:0,scale=1080:1920,setsar=1[base];[b]crop=238:150:220:554,scale=388:246,setsar=1,drawbox=x=0:y=0:w=iw:h=ih:color=white:t=4[in];[base][in]overlay=42:96,format=yuv420p[v]",
+   "caption_top": 1344,
+   "hook_top": 366,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    141.08602150537638,
+    96.0,
+    330.91397849462385,
+    332.4961693548388
+   ]
+  },
+  "9:16/full/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=404:720:436:0,scale=1080:1920,setsar=1,format=yuv420p[v]",
+   "caption_top": 1344,
+   "hook_top": 345,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "9:16/fit/corner": {
+   "layout": "fit",
+   "graph": "[0:v]split=2[a][b];[a]crop=404:720:436:0,scale=270:480,setsar=1,boxblur=8:2,scale=1080:1920,eq=brightness=-0.12,setsar=1[bg];[b]crop=1280:720:0:0,scale=1080:608,setsar=1[main];[bg][main]overlay=0:656,format=yuv420p[v]",
+   "caption_top": 1294,
+   "hook_top": 506,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    912.006,
+    674.6352,
+    977.9939999999999,
+    772.4928
+   ]
+  },
+  "9:16/fit/bottom": {
+   "layout": "fit",
+   "graph": "[0:v]split=2[a][b];[a]crop=404:720:482:0,scale=270:480,setsar=1,boxblur=8:2,scale=1080:1920,eq=brightness=-0.12,setsar=1[bg];[b]crop=1280:720:0:0,scale=1080:608,setsar=1[main];[bg][main]overlay=0:656,format=yuv420p[v]",
+   "caption_top": 1294,
+   "hook_top": 506,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    237.05999999999997,
+    1124.6768000000002,
+    335.34000000000003,
+    1247.2192000000002
+   ]
+  },
+  "9:16/fit/none": {
+   "layout": "fit",
+   "graph": "[0:v]split=2[a][b];[a]crop=404:720:436:0,scale=270:480,setsar=1,boxblur=8:2,scale=1080:1920,eq=brightness=-0.12,setsar=1[bg];[b]crop=1280:720:0:0,scale=1080:608,setsar=1[main];[bg][main]overlay=0:656,format=yuv420p[v]",
+   "caption_top": 1294,
+   "hook_top": 506,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "9:16/split2/corner": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=302:180:968:0,scale=1080:640,setsar=1[top];[b]crop=606:720:326:0,scale=1080:1280,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 580,
+   "hook_top": 760,
+   "seam": 640,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    400.9635555555554,
+    78.46400000000003,
+    679.036444444444,
+    490.496
+   ]
+  },
+  "9:16/split2/bottom": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=244:144:216:554,scale=1080:640,setsar=1[top];[b]crop=606:720:482:0,scale=1080:1280,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 580,
+   "hook_top": 760,
+   "seam": 640,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    283.14617271699854,
+    0.0,
+    796.8538272830011,
+    640.0000000000001
+   ]
+  },
+  "9:16/split2/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=404:720:436:0,scale=1080:1920,setsar=1,format=yuv420p[v]",
+   "caption_top": 1344,
+   "hook_top": 345,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "9:16/pip/corner": {
+   "layout": "pip",
+   "graph": "[0:v]split=2[a][b];[a]crop=404:720:436:0,scale=1080:1920,setsar=1[base];[b]crop=320:178:960:0,scale=388:218,setsar=1,drawbox=x=0:y=0:w=iw:h=ih:color=white:t=4[in];[base][in]overlay=42:96,format=yuv420p[v]",
+   "caption_top": 1344,
+   "hook_top": 345,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    188.58639999999994,
+    122.63245,
+    283.41359999999986,
+    263.1418
+   ]
+  },
+  "9:16/pip/bottom": {
+   "layout": "pip",
+   "graph": "[0:v]split=2[a][b];[a]crop=404:720:482:0,scale=1080:1920,setsar=1[base];[b]crop=238:150:220:554,scale=388:246,setsar=1,drawbox=x=0:y=0:w=iw:h=ih:color=white:t=4[in];[base][in]overlay=42:96,format=yuv420p[v]",
+   "caption_top": 1344,
+   "hook_top": 366,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    141.08602150537638,
+    96.0,
+    330.91397849462385,
+    332.4961693548388
+   ]
+  },
+  "9:16/pip/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=404:720:436:0,scale=1080:1920,setsar=1,format=yuv420p[v]",
+   "caption_top": 1344,
+   "hook_top": 345,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "9:16/screen_first/corner": {
+   "layout": "screen_first",
+   "graph": "[0:v]split=2[a][b];[a]crop=578:720:350:0,scale=1080:1344,setsar=1[top];[b]crop=320:170:960:4,scale=1080:576,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 1194,
+   "hook_top": 192,
+   "seam": 1344,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    408.0239999999999,
+    1402.7295,
+    671.9759999999997,
+    1793.8379999999997
+   ]
+  },
+  "9:16/screen_first/bottom": {
+   "layout": "screen_first",
+   "graph": "[0:v]split=2[a][b];[a]crop=578:720:482:0,scale=1080:1344,setsar=1[top];[b]crop=272:144:202:554,scale=1080:576,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 1194,
+   "hook_top": 192,
+   "seam": 1344,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    308.8315554452987,
+    1344.0,
+    771.1684445547011,
+    1920.0
+   ]
+  },
+  "9:16/screen_first/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=404:720:436:0,scale=1080:1920,setsar=1,format=yuv420p[v]",
+   "caption_top": 1344,
+   "hook_top": 345,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "9:16/gameplay_a/corner": {
+   "layout": "gameplay_a",
+   "graph": "[0:v]split=2[a][b];[a]crop=202:180:1018:0,scale=1080:960,setsar=1[top];[b]crop=810:720:124:0,scale=1080:960,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 900,
+   "hook_top": 1080,
+   "seam": 960,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    331.4453333333331,
+    117.69600000000004,
+    748.554666666666,
+    735.7439999999999
+   ]
+  },
+  "9:16/gameplay_a/bottom": {
+   "layout": "gameplay_a",
+   "graph": "[0:v]split=2[a][b];[a]crop=170:150:252:554,scale=1080:960,setsar=1[top];[b]crop=770:684:482:16,scale=1080:960,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 900,
+   "hook_top": 1080,
+   "seam": 960,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    171.97472353870464,
+    0.0,
+    908.0252764612961,
+    917.004739336493
+   ]
+  },
+  "9:16/gameplay_a/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=404:720:436:0,scale=1080:1920,setsar=1,format=yuv420p[v]",
+   "caption_top": 1344,
+   "hook_top": 345,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "9:16/gameplay_b/corner": {
+   "layout": "gameplay_b",
+   "graph": "[0:v]split=2[a][b];[a]crop=810:720:124:0,scale=1080:960,setsar=1[top];[b]crop=202:180:1018:0,scale=1080:960,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 810,
+   "hook_top": 192,
+   "seam": 960,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    331.4453333333331,
+    1077.6960000000001,
+    748.554666666666,
+    1695.7440000000001
+   ]
+  },
+  "9:16/gameplay_b/bottom": {
+   "layout": "gameplay_b",
+   "graph": "[0:v]split=2[a][b];[a]crop=770:684:482:16,scale=1080:960,setsar=1[top];[b]crop=170:150:252:554,scale=1080:960,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 810,
+   "hook_top": 192,
+   "seam": 960,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    171.97472353870464,
+    960.0,
+    908.0252764612961,
+    1877.004739336493
+   ]
+  },
+  "9:16/gameplay_b/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=404:720:436:0,scale=1080:1920,setsar=1,format=yuv420p[v]",
+   "caption_top": 1344,
+   "hook_top": 345,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "4:5/auto/corner": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=320:132:960:22,scale=1080:450,setsar=1[top];[b]crop=864:720:70:0,scale=1080:900,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 390,
+   "hook_top": 570,
+   "seam": 450,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    408.0239999999999,
+    0.0,
+    671.9759999999997,
+    391.1084999999999
+   ]
+  },
+  "4:5/auto/bottom": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=348:144:164:554,scale=1080:450,setsar=1[top];[b]crop=750:626:482:46,scale=1080:900,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 390,
+   "hook_top": 570,
+   "seam": 450,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    359.3996526916396,
+    0.0,
+    720.6003473083603,
+    450.0
+   ]
+  },
+  "4:5/auto/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=576:720:352:0,scale=1080:1350,setsar=1,format=yuv420p[v]",
+   "caption_top": 944,
+   "hook_top": 243,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "4:5/full/corner": {
+   "layout": "pip",
+   "graph": "[0:v]split=2[a][b];[a]crop=576:720:352:0,scale=1080:1350,setsar=1[base];[b]crop=320:178:960:0,scale=388:218,setsar=1,drawbox=x=0:y=0:w=iw:h=ih:color=white:t=4[in];[base][in]overlay=42:66,format=yuv420p[v]",
+   "caption_top": 944,
+   "hook_top": 308,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    188.58639999999994,
+    92.63245,
+    283.41359999999986,
+    233.14180000000002
+   ]
+  },
+  "4:5/full/bottom": {
+   "layout": "full",
+   "graph": "[0:v]crop=576:720:220:0,scale=1080:1350,setsar=1,format=yuv420p[v]",
+   "caption_top": 910,
+   "hook_top": 243,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    114.00000000000003,
+    1040.6475,
+    332.4000000000002,
+    1312.74
+   ]
+  },
+  "4:5/full/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=576:720:352:0,scale=1080:1350,setsar=1,format=yuv420p[v]",
+   "caption_top": 944,
+   "hook_top": 243,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "4:5/fit/corner": {
+   "layout": "fit",
+   "graph": "[0:v]split=2[a][b];[a]crop=576:720:352:0,scale=270:336,setsar=1,boxblur=8:2,scale=1080:1350,eq=brightness=-0.12,setsar=1[bg];[b]crop=1280:720:0:0,scale=1080:608,setsar=1[main];[bg][main]overlay=0:370,format=yuv420p[v]",
+   "caption_top": 1008,
+   "hook_top": 220,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    912.006,
+    388.6352,
+    977.9939999999999,
+    486.4928
+   ]
+  },
+  "4:5/fit/bottom": {
+   "layout": "fit",
+   "graph": "[0:v]split=2[a][b];[a]crop=576:720:482:0,scale=270:336,setsar=1,boxblur=8:2,scale=1080:1350,eq=brightness=-0.12,setsar=1[bg];[b]crop=1280:720:0:0,scale=1080:608,setsar=1[main];[bg][main]overlay=0:370,format=yuv420p[v]",
+   "caption_top": 1008,
+   "hook_top": 220,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    237.05999999999997,
+    838.6768000000001,
+    335.34000000000003,
+    961.2192000000001
+   ]
+  },
+  "4:5/fit/none": {
+   "layout": "fit",
+   "graph": "[0:v]split=2[a][b];[a]crop=576:720:352:0,scale=270:336,setsar=1,boxblur=8:2,scale=1080:1350,eq=brightness=-0.12,setsar=1[bg];[b]crop=1280:720:0:0,scale=1080:608,setsar=1[main];[bg][main]overlay=0:370,format=yuv420p[v]",
+   "caption_top": 1008,
+   "hook_top": 220,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "4:5/split2/corner": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=320:132:960:22,scale=1080:450,setsar=1[top];[b]crop=864:720:70:0,scale=1080:900,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 390,
+   "hook_top": 570,
+   "seam": 450,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    408.0239999999999,
+    0.0,
+    671.9759999999997,
+    391.1084999999999
+   ]
+  },
+  "4:5/split2/bottom": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=348:144:164:554,scale=1080:450,setsar=1[top];[b]crop=750:626:482:46,scale=1080:900,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 390,
+   "hook_top": 570,
+   "seam": 450,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    359.3996526916396,
+    0.0,
+    720.6003473083603,
+    450.0
+   ]
+  },
+  "4:5/split2/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=576:720:352:0,scale=1080:1350,setsar=1,format=yuv420p[v]",
+   "caption_top": 944,
+   "hook_top": 243,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "4:5/pip/corner": {
+   "layout": "pip",
+   "graph": "[0:v]split=2[a][b];[a]crop=576:720:352:0,scale=1080:1350,setsar=1[base];[b]crop=320:178:960:0,scale=388:218,setsar=1,drawbox=x=0:y=0:w=iw:h=ih:color=white:t=4[in];[base][in]overlay=42:66,format=yuv420p[v]",
+   "caption_top": 944,
+   "hook_top": 308,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    188.58639999999994,
+    92.63245,
+    283.41359999999986,
+    233.14180000000002
+   ]
+  },
+  "4:5/pip/bottom": {
+   "layout": "pip",
+   "graph": "[0:v]split=2[a][b];[a]crop=576:720:482:0,scale=1080:1350,setsar=1[base];[b]crop=238:150:220:554,scale=388:246,setsar=1,drawbox=x=0:y=0:w=iw:h=ih:color=white:t=4[in];[base][in]overlay=42:66,format=yuv420p[v]",
+   "caption_top": 944,
+   "hook_top": 336,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    141.08602150537638,
+    66.0,
+    330.91397849462385,
+    302.4961693548388
+   ]
+  },
+  "4:5/pip/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=576:720:352:0,scale=1080:1350,setsar=1,format=yuv420p[v]",
+   "caption_top": 944,
+   "hook_top": 243,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "4:5/screen_first/corner": {
+   "layout": "screen_first",
+   "graph": "[0:v]split=2[a][b];[a]crop=820:720:112:0,scale=1080:946,setsar=1[top];[b]crop=320:118:960:22,scale=1080:404,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 796,
+   "hook_top": 135,
+   "seam": 946,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    408.0239999999999,
+    946.0,
+    671.9759999999997,
+    1337.1084999999998
+   ]
+  },
+  "4:5/screen_first/bottom": {
+   "layout": "screen_first",
+   "graph": "[0:v]split=2[a][b];[a]crop=746:654:482:32,scale=1080:946,setsar=1[top];[b]crop=386:144:144:554,scale=1080:404,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 796,
+   "hook_top": 135,
+   "seam": 946,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    377.8610215276053,
+    946.0,
+    702.1389784723945,
+    1350.0
+   ]
+  },
+  "4:5/screen_first/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=576:720:352:0,scale=1080:1350,setsar=1,format=yuv420p[v]",
+   "caption_top": 944,
+   "hook_top": 243,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "4:5/gameplay_a/corner": {
+   "layout": "gameplay_a",
+   "graph": "[0:v]split=2[a][b];[a]crop=288:180:974:0,scale=1080:674,setsar=1[top];[b]crop=920:576:14:72,scale=1080:676,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 614,
+   "hook_top": 794,
+   "seam": 674,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    393.57724444444403,
+    82.63240000000003,
+    686.4227555555548,
+    516.5536
+   ]
+  },
+  "4:5/gameplay_a/bottom": {
+   "layout": "gameplay_a",
+   "graph": "[0:v]split=2[a][b];[a]crop=238:148:220:554,scale=1080:674,setsar=1[top];[b]crop=852:532:212:18,scale=1080:676,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 614,
+   "hook_top": 794,
+   "seam": 674,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    275.80645161290334,
+    0.0,
+    804.1935483870973,
+    658.288306451613
+   ]
+  },
+  "4:5/gameplay_a/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=576:720:352:0,scale=1080:1350,setsar=1,format=yuv420p[v]",
+   "caption_top": 944,
+   "hook_top": 243,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "4:5/gameplay_b/corner": {
+   "layout": "gameplay_b",
+   "graph": "[0:v]split=2[a][b];[a]crop=920:576:14:72,scale=1080:676,setsar=1[top];[b]crop=288:180:974:0,scale=1080:674,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 526,
+   "hook_top": 135,
+   "seam": 676,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    393.57724444444403,
+    758.6324000000001,
+    686.4227555555548,
+    1192.5536
+   ]
+  },
+  "4:5/gameplay_b/bottom": {
+   "layout": "gameplay_b",
+   "graph": "[0:v]split=2[a][b];[a]crop=852:532:212:18,scale=1080:676,setsar=1[top];[b]crop=238:148:220:554,scale=1080:674,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 526,
+   "hook_top": 135,
+   "seam": 676,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    275.80645161290334,
+    676.0,
+    804.1935483870973,
+    1334.2883064516132
+   ]
+  },
+  "4:5/gameplay_b/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=576:720:352:0,scale=1080:1350,setsar=1,format=yuv420p[v]",
+   "caption_top": 944,
+   "hook_top": 243,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "1:1/auto/corner": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=346:114:932:22,scale=1080:360,setsar=1[top];[b]crop=900:600:34:60,scale=1080:720,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 300,
+   "hook_top": 480,
+   "seam": 360,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    461.47250698974807,
+    -1.103669984094595e-14,
+    704.4299471885673,
+    360.0
+   ]
+  },
+  "1:1/auto/bottom": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=434:144:120:554,scale=1080:360,setsar=1[top];[b]crop=800:532:240:18,scale=1080:720,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 300,
+   "hook_top": 480,
+   "seam": 360,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    395.51972215331165,
+    0.0,
+    684.4802778466881,
+    360.0
+   ]
+  },
+  "1:1/auto/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=720:720:280:0,scale=1080:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "1:1/full/corner": {
+   "layout": "fit",
+   "graph": "[0:v]split=2[a][b];[a]crop=720:720:214:0,scale=270:270,setsar=1,boxblur=8:2,scale=1080:1080,eq=brightness=-0.12,setsar=1[bg];[b]crop=1280:720:0:0,scale=1080:608,setsar=1[main];[bg][main]overlay=0:236,format=yuv420p[v]",
+   "caption_top": 874,
+   "hook_top": 86,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    912.006,
+    254.6352,
+    977.9939999999999,
+    352.4928
+   ]
+  },
+  "1:1/full/bottom": {
+   "layout": "full",
+   "graph": "[0:v]crop=720:720:220:0,scale=1080:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 702,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    91.20000000000002,
+    832.518,
+    265.92000000000013,
+    1050.192
+   ]
+  },
+  "1:1/full/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=720:720:280:0,scale=1080:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "1:1/fit/corner": {
+   "layout": "fit",
+   "graph": "[0:v]split=2[a][b];[a]crop=720:720:214:0,scale=270:270,setsar=1,boxblur=8:2,scale=1080:1080,eq=brightness=-0.12,setsar=1[bg];[b]crop=1280:720:0:0,scale=1080:608,setsar=1[main];[bg][main]overlay=0:236,format=yuv420p[v]",
+   "caption_top": 874,
+   "hook_top": 86,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    912.006,
+    254.6352,
+    977.9939999999999,
+    352.4928
+   ]
+  },
+  "1:1/fit/bottom": {
+   "layout": "fit",
+   "graph": "[0:v]split=2[a][b];[a]crop=720:720:482:0,scale=270:270,setsar=1,boxblur=8:2,scale=1080:1080,eq=brightness=-0.12,setsar=1[bg];[b]crop=1280:720:0:0,scale=1080:608,setsar=1[main];[bg][main]overlay=0:236,format=yuv420p[v]",
+   "caption_top": 874,
+   "hook_top": 86,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    237.05999999999997,
+    704.6768000000001,
+    335.34000000000003,
+    827.2192000000001
+   ]
+  },
+  "1:1/fit/none": {
+   "layout": "fit",
+   "graph": "[0:v]split=2[a][b];[a]crop=720:720:280:0,scale=270:270,setsar=1,boxblur=8:2,scale=1080:1080,eq=brightness=-0.12,setsar=1[bg];[b]crop=1280:720:0:0,scale=1080:608,setsar=1[main];[bg][main]overlay=0:236,format=yuv420p[v]",
+   "caption_top": 874,
+   "hook_top": 86,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "16:9/auto/corner": {
+   "layout": "full",
+   "graph": "[0:v]crop=1280:720:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 236,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    1621.344,
+    33.10200000000001,
+    1738.656,
+    206.92799999999997
+   ]
+  },
+  "16:9/auto/bottom": {
+   "layout": "full",
+   "graph": "[0:v]crop=1280:720:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 702,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    421.43999999999994,
+    832.518,
+    596.1600000000001,
+    1050.192
+   ]
+  },
+  "16:9/auto/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=1280:720:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "16:9/full/corner": {
+   "layout": "full",
+   "graph": "[0:v]crop=1280:720:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 236,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    1621.344,
+    33.10200000000001,
+    1738.656,
+    206.92799999999997
+   ]
+  },
+  "16:9/full/bottom": {
+   "layout": "full",
+   "graph": "[0:v]crop=1280:720:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 702,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    421.43999999999994,
+    832.518,
+    596.1600000000001,
+    1050.192
+   ]
+  },
+  "16:9/full/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=1280:720:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "16:9/fit/corner": {
+   "layout": "fit",
+   "graph": "[0:v]crop=1280:720:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 236,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    1621.344,
+    33.10200000000001,
+    1738.656,
+    206.92799999999997
+   ]
+  },
+  "16:9/fit/bottom": {
+   "layout": "fit",
+   "graph": "[0:v]crop=1280:720:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 702,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    421.43999999999994,
+    832.518,
+    596.1600000000001,
+    1050.192
+   ]
+  },
+  "16:9/fit/none": {
+   "layout": "fit",
+   "graph": "[0:v]crop=1280:720:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "16:9/split2/corner": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=106:180:1066:0,scale=640:1080,setsar=1[left];[b]crop=852:720:80:0,scale=1280:1080,setsar=1[right];[left][right]hstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.3333333333333333,
+    1.0
+   ],
+   "head": [
+    85.3759999999993,
+    132.40800000000004,
+    554.6239999999988,
+    827.7119999999999
+   ]
+  },
+  "16:9/split2/bottom": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=116:196:280:522,scale=640:1080,setsar=1[left];[b]crop=774:654:482:32,scale=1280:1080,setsar=1[right];[left][right]hstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.3333333333333333,
+    1.0
+   ],
+   "head": [
+    -3.123264772571867e-13,
+    173.4725274725286,
+    639.9999999999997,
+    970.8131868131875
+   ]
+  },
+  "16:9/split2/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=1280:720:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "16:9/pip/corner": {
+   "layout": "full",
+   "graph": "[0:v]crop=1280:720:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 236,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    1621.344,
+    33.10200000000001,
+    1738.656,
+    206.92799999999997
+   ]
+  },
+  "16:9/pip/bottom": {
+   "layout": "full",
+   "graph": "[0:v]crop=1280:720:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 702,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": [
+    421.43999999999994,
+    832.518,
+    596.1600000000001,
+    1050.192
+   ]
+  },
+  "16:9/pip/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=1280:720:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  },
+  "16:9/screen_first/corner": {
+   "layout": "screen_first",
+   "graph": "[0:v]split=2[a][b];[a]crop=922:720:10:0,scale=1384:1080,setsar=1[left];[b]crop=88:180:1074:0,scale=536:1080,setsar=1[right];[left][right]hstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.0,
+    0.7208333333333333
+   ],
+   "head": [
+    1417.3760000000002,
+    132.40800000000004,
+    1886.6239999999998,
+    827.7119999999999
+   ]
+  },
+  "16:9/screen_first/bottom": {
+   "layout": "screen_first",
+   "graph": "[0:v]split=2[a][b];[a]crop=768:600:482:60,scale=1384:1080,setsar=1[left];[b]crop=116:234:280:484,scale=536:1080,setsar=1[right];[left][right]hstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.0,
+    0.7208333333333333
+   ],
+   "head": [
+    1383.9999999999998,
+    320.78324175824235,
+    1919.9999999999998,
+    988.5560439560443
+   ]
+  },
+  "16:9/screen_first/none": {
+   "layout": "full",
+   "graph": "[0:v]crop=1280:720:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "seam": null,
+   "text_span": [
+    0.0,
+    1.0
+   ],
+   "head": null
+  }
+ }
+}

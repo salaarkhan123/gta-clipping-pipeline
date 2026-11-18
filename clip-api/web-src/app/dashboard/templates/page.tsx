@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Icon } from "@/components/dash/Icon";
 import { LookSketch } from "@/components/dash/LookSketch";
 import { useDash } from "@/components/dash/Shell";
+import { BackTitle } from "@/components/dash/ui";
 import { Tabs } from "@/components/dash/Tabs";
 import { useVideoChooser } from "@/components/dash/Upload";
 import { api } from "@/lib/api";
@@ -69,7 +70,7 @@ export default function Templates() {
 
   return (
     <div className="wide stack">
-      <div className="back-title"><Link href="/dashboard/" aria-label="Back to Home"><Icon name="back" size={20} /></Link><h1>Game templates</h1></div>
+      <BackTitle title="Game templates" />
       <p className="muted small">A template tunes what we look for in a game and sets the clip length, caption style and editing. You can still change every setting before you start.</p>
       {templates === null ? <p className="muted">Loading templates…</p> : !templates.length ? <p className="muted">No templates to show right now.</p> : <>
         <Tabs label="Game" panel="template-list" value={shownGame} onChange={pick}
