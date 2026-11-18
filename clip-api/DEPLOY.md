@@ -18,6 +18,12 @@ schema. On a selftest failure it prints the rollback command. Caddy and Postgres
 not restarted; `web/` is served straight from the checkout, so the site updates with the pull. A change to the
 `Caddyfile` needs `docker compose up -d caddy` as well.
 
+**Security headers** (in the `Caddyfile`, on both domains): HSTS (one year, includeSubDomains, no preload),
+nosniff, `strict-origin-when-cross-origin`, `X-Frame-Options: DENY` plus `frame-ancestors 'none'`, a minimal
+`Permissions-Policy`, and no `Server` or `Via` header. The site's Content-Security-Policy allows only itself, the API
+domain and `*.digitaloceanspaces.com` for media. When the site starts loading from a new origin (fonts, a CDN,
+analytics), add that origin to the policy in the same PR, or the browser blocks it.
+
 ## Schema migrations
 
 Alembic, in `app/migrations/`. Migrations are additive only (new tables, new nullable or defaulted columns, new
