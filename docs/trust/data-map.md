@@ -51,7 +51,7 @@ through `app/storage.py`. Downloads are signed links that expire after `SIGNED_U
 | Visual search (CLIP) and face detection for the facecam | On our server (`app/pipeline/visual.py`, `app/pipeline/facecam.py`) | Nothing leaves the server. Face detection finds a box; no face template is stored | n/a |
 | AI judge: titles, hook, rating, cut | Anthropic Messages API, only when `ANTHROPIC_API_KEY` is set (`app/ai.py:23`, `:357`) | One JPEG frame of the clip, up to about 2,500+ characters of its timed transcript, its signal scores, and the user's `prompt` (`app/ai.py:254-280`) | Inputs and outputs deleted within 30 days; flagged content up to 2 years; no training on API data. See [privacy-law-review.md](privacy-law-review.md#providers) |
 | Translation and summaries | Anthropic, when `TRANSLATION_PROVIDER` / `SUMMARY_PROVIDER` is `ai` (both `none` by default) | Transcript text | As above |
-| Premium AI thumbnail (#140, not merged, off by default) | Google Gemini, fallback Black Forest Labs | A frame and the facecam crop (a face) | Gemini paid tier: 55 days for abuse monitoring, no training. BFL: may train on inputs unless we opt out by email |
+| Premium AI thumbnail (#152, not merged, off by default) | Google Gemini, paid tier only, every request with `store: false`. No other image provider | One frame of the clip, a close-up of the face in it, and the prompt (the style and the user's custom styling). No video, no account details | 55 days for abuse monitoring only; no training on the paid tier. A free-tier key must never be used: Google trains on free-tier inputs and people may review them |
 
 ## 4. Payments
 
@@ -117,4 +117,4 @@ must be added here when it is (Postmark keeps messages 45 days by default, Resen
 | No form for copyright or likeness complaints; no case records | #145, #146, #148 |
 | Policy acceptance was not recorded before this PR; accounts created earlier show `consent_required: true` | this PR; the site asks them on next login (#147) |
 | No admin role in the app | #145 |
-| BFL trains on API inputs unless opted out | owner decision before #140 ships |
+| Black Forest Labs trains on API inputs by default and offers no verifiable opt-out | Removed in #152 (owner rule, 2026-11-18: customer footage never goes to a provider that trains on API inputs without the user's explicit, informed authorization) |
