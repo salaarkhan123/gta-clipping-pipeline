@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { API, api, ApiError, clock, getToken } from "@/lib/api";
 import { Icon, IconName } from "./Icon";
+import { BACKDROP, thumbVar } from "./ProjectCard";
 import { useDash } from "./Shell";
 
 export async function downloadSubtitles(clipId: string, format = "srt") {
@@ -63,8 +64,7 @@ export function ClipCard({ clip, onChange, project, uploadId, lit, number, selec
         <h3 title={name} className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-body text-[13.5px] font-semibold leading-[1.3]">
           {rank && <b className="tabular-nums text-lime">#{rank}</b>} {name}</h3>
       </header>
-      <div className="group/media relative aspect-video overflow-hidden rounded-8 bg-black">
-        {clip.thumb_url && <img src={clip.thumb_url} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-[14px]" />}
+      <div style={clip.thumb_url ? thumbVar(clip.thumb_url) : undefined} className={`group/media relative aspect-video overflow-hidden rounded-8 bg-black ${clip.thumb_url ? BACKDROP : ""}`}>
         <video controls preload="none" poster={clip.thumb_url || undefined} src={clip.video_url} className="relative block h-full w-full object-contain" />
         <span className={`${BADGE} right-2`}>{clock(clip.start_sec)} – {clock(clip.end_sec)}</span>
         {clip.edited === true && <span className={`${BADGE} left-2 text-cyan`}>Edited</span>}

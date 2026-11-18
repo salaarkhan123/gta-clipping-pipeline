@@ -21,9 +21,9 @@ export function ProjectCard({ p }: { p: any }) {
   const ends = expiry(p.expires_at);
   return (
     <Link href={`/dashboard/project/?id=${p.upload_id}`} className="group grid gap-1 rounded-12 [overflow-wrap:anywhere]">
-      <span className="relative grid aspect-video place-items-center overflow-hidden rounded-12 border border-solid border-line bg-card text-[13px] text-muted transition-[border-color] duration-200
-        ease-[ease] group-hover:border-lime after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:top-[45%] after:bg-[linear-gradient(transparent,rgba(0,0,0,.78))] after:content-['']">
-        {p.thumb_url ? <Letterbox src={p.thumb_url} /> : <Icon name="film" size={30} />}
+      <span style={p.thumb_url ? thumbVar(p.thumb_url) : undefined} className={`relative grid aspect-video place-items-center overflow-hidden rounded-12 border border-solid border-line bg-card text-[13px] text-muted transition-[border-color] duration-200
+        ease-[ease] group-hover:border-lime after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:top-[45%] after:bg-[linear-gradient(transparent,rgba(0,0,0,.78))] after:content-[''] ${p.thumb_url ? BACKDROP : ""}`}>
+        {p.thumb_url ? <img src={p.thumb_url} alt="" loading="lazy" className="relative h-full w-full object-contain" /> : <Icon name="film" size={30} />}
         {p.active && <span className={`${PILL} left-2 text-cyan`}>Working on it</span>}
         <span className={`${PILL} right-2 tabular-nums text-text`}>{clock(p.duration_sec)}</span>
         <span className="absolute bottom-2 left-[10px] z-[1] grid text-left font-body text-[12px] font-semibold leading-[1.35] text-text">
@@ -37,13 +37,11 @@ export function ProjectCard({ p }: { p: any }) {
   );
 }
 
-// A picture of any shape in a 16:9 frame: the whole picture in the middle, over a blurred copy that fills the frame.
-export function Letterbox({ src }: { src: string }) {
-  return <>
-    <img src={src} alt="" loading="lazy" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-[14px]" />
-    <img src={src} alt="" loading="lazy" className="relative h-full w-full object-contain" />
-  </>;
-}
+// A 9:16 thumbnail (hook text burned in) in a 16:9 frame: the whole picture in the middle, and the frame's sides
+// filled by a blurred, darkened copy of the same image drawn in CSS (the frame's ::before), so nothing is cropped.
+// Put `thumbVar(url)` in the frame's style and BACKDROP in its classes; the picture itself needs `relative`.
+export const thumbVar = (src: string) => ({ "--thumb": `url("${src.replace(/"/g, "%22")}")` }) as React.CSSProperties;
+export const BACKDROP = "before:pointer-events-none before:absolute before:inset-[-16px] before:content-[''] before:[background:var(--thumb)_center/cover_no-repeat] before:blur-[14px] before:brightness-[.45]";
 
 // `row`: one line that scrolls sideways (Home's recent projects). Otherwise a grid (Library).
 export const ProjectGrid = ({ projects, row }: { projects: any[]; row?: boolean }) => (
