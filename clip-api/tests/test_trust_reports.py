@@ -229,6 +229,8 @@ ADMIN_BODIES = {
     ("GET", "/v1/admin/trust/cases"): None,
     ("GET", "/v1/admin/trust/cases/{reference}"): None,
     ("POST", "/v1/admin/trust/cases/{reference}/decisions"): {"action": "note", "note": "access test"},
+    ("GET", "/v1/admin/accounts/{account_id}/export"): None,                       # (#149) emailed requests
+    ("POST", "/v1/admin/accounts/{account_id}/delete"): {"note": "access test"},
 }
 
 
@@ -236,20 +238,21 @@ def test_every_admin_route_has_an_access_case():
     assert admin_routes() == sorted(ADMIN_BODIES)
 
 
-def _call(client, method, path, headers, ref):
-    return client.request(method, path.replace("{reference}", ref), headers=headers or {},
-                          json=ADMIN_BODIES[(method, path)])
+def _call(client, method, path, headers, ref, account_id):
+    return client.request(method, path.replace("{reference}", ref).replace("{account_id}", account_id),
+                          headers=headers or {}, json=ADMIN_BODIES[(method, path)])
 
 
 @pytest.mark.parametrize("method, path", admin_routes())
 def test_admin_routes_refuse_everyone_but_an_admin_login(client, mail, people, method, path):
     ref = client.post("/v1/trust/reports", json=body()).json()["reference"]
-    assert _call(client, method, path, None, ref).status_code == 401
-    r = _call(client, method, path, people["user"], ref)
+    _, throwaway = signup(client)           # the admin's own call may delete it
+    assert _call(client, method, path, None, ref, throwaway["id"]).status_code == 401
+    r = _call(client, method, path, people["user"], ref, throwaway["id"])
     assert r.status_code == 403 and r.json()["error"]["code"] == "admin_required"
-    r = _call(client, method, path, people["admin_key"], ref)
+    r = _call(client, method, path, people["admin_key"], ref, throwaway["id"])
     assert r.status_code == 403 and r.json()["error"]["code"] == "session_required"
-    assert _call(client, method, path, people["admin"], ref).status_code == 200
+    assert _call(client, method, path, people["admin"], ref, throwaway["id"]).status_code == 200
 
 
 def test_the_case_list_leaves_out_contact_details_and_the_case_page_has_them(client, mail, people, content):

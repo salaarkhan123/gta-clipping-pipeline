@@ -9,6 +9,15 @@ from .config import get_settings
 from .security import make_token
 
 
+def _checked_prefix(prefix: str) -> str:
+    """A prefix inside one top-level folder (`clips/<job>/`, `transcripts/<upload>`): never a whole folder, never
+    the whole store, so a missing id cannot turn a delete into a wipe."""
+    top, _, rest = prefix.partition("/")
+    if not top or not rest or rest.startswith("/") or ".." in prefix.split("/") or prefix.startswith("/"):
+        raise ValueError(f"bad storage prefix: {prefix!r}")
+    return prefix
+
+
 class LocalStorage:
     def __init__(self, root: Path):
         self.root = root
@@ -37,6 +46,29 @@ class LocalStorage:
 
     def delete(self, key: str) -> None:
         self.path(key).unlink(missing_ok=True)
+
+    def keys(self, prefix: str) -> list[str]:
+        """Every stored key that starts with `prefix`, sorted."""
+        root = self.root.resolve()
+        folder = (root / prefix.rpartition("/")[0]).resolve()
+        if folder != root and root not in folder.parents:
+            raise ValueError("bad storage prefix")
+        if not folder.is_dir():
+            return []
+        found = (p.relative_to(root).as_posix() for p in folder.rglob("*") if p.is_file())
+        return sorted(k for k in found if k.startswith(prefix))
+
+    def delete_prefix(self, prefix: str) -> int:
+        """Delete every key under `prefix` (see _checked_prefix). Returns how many were deleted."""
+        keys = self.keys(_checked_prefix(prefix))
+        for key in keys:
+            self.delete(key)
+        for key in keys:                       # empty folders left behind
+            folder = self.path(key).parent
+            while folder != self.root.resolve() and folder.is_dir() and not any(folder.iterdir()):
+                folder.rmdir()
+                folder = folder.parent
+        return len(keys)
 
 
 class S3Storage:
@@ -91,6 +123,19 @@ class S3Storage:
 
     def delete(self, key: str) -> None:
         self.client.delete_object(Bucket=self.bucket, Key=key)
+
+    def keys(self, prefix: str) -> list[str]:
+        """Every stored key that starts with `prefix`, sorted (all pages of list_objects_v2)."""
+        pages = self.client.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix)
+        return sorted(o["Key"] for page in pages for o in page.get("Contents", []))
+
+    def delete_prefix(self, prefix: str) -> int:
+        """Delete every key under `prefix` (see _checked_prefix), one request each: DeleteObjects needs a
+        checksum some S3-compatible services refuse. Returns how many were deleted."""
+        keys = self.keys(_checked_prefix(prefix))
+        for key in keys:
+            self.delete(key)
+        return len(keys)
 
 
 def transcript_key(upload_id: str) -> str:

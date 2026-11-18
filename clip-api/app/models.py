@@ -22,7 +22,7 @@ class Account(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    status: Mapped[str] = mapped_column(String(20), default="active")  # active | suspended
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active | suspended | deleted
     plan: Mapped[str | None] = mapped_column(String(20), default="free")
     stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -35,6 +35,10 @@ class Account(Base):
     # Can use the admin routes (/v1/admin/...) from a website login. Set with scripts/admin.py make-admin.
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # Account deletion (#149, app/account_data.py): the row stays, without personal data, for the ledger and
+    # payments that point at it. The hash (HMAC of the old email) only withholds a second free sign-up grant.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deleted_email_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
 
 class ApiKey(Base):

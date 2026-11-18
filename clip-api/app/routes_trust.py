@@ -159,9 +159,9 @@ def _owner_mail(db: Session, case: TrustCase, subject: str, text: str) -> list[s
     who = case.claimant_organization or case.claimant_name
     for account_id in decisions.owners(db, case):
         acct = db.get(Account, account_id)
-        if acct is None:
+        if acct is None or acct.status == "deleted":       # a deleted account has no address to write to
             continue
-        mine = [f"{t.kind} {t.target_id}" for t in decisions.targets(db, case) if t.account_id == account_id]
+        mine =[f"{t.kind} {t.target_id}" for t in decisions.targets(db, case) if t.account_id == account_id]
         send_email(acct.email, f"{subject} ({case.reference})",
                    f"{text}\n\nCase: {case.reference} ({case.kind})\nReported by: {who}\nThe work or person: "
                    f"{case.work[:1000]}\nYour content in this case: {', '.join(mine) or 'none found'}\n\n"
@@ -200,7 +200,7 @@ def _after(db: Session, case: TrustCase, action: str, body: Decision) -> None:
                        + (f"\n\n{body.message}" if body.message else ""))
     elif action == "terminate":
         acct = db.get(Account, body.account_id)
-        if acct is not None:
+        if acct is not None and acct.status != "deleted":
             send_email(acct.email, f"Your account was suspended ({case.reference})",
                        "Your ClutchClips account was suspended for a serious violation of our policies. Reply to "
                        "this email if you believe this is a mistake.")
@@ -262,20 +262,12 @@ def _my_case(db: Session, p: Principal, reference: str) -> tuple[TrustCase, list
     return case, mine
 
 
-def _my_case_json(case: TrustCase, mine: list) -> dict:
-    """What the reported account holder sees: never the claimant's email, address or phone."""
-    return {"reference": case.reference, "kind": case.kind, "status": case.status,
-            "reported_by": case.claimant_organization or case.claimant_name, "work": case.work,
-            "your_content": [{"kind": t.kind, "id": t.target_id, "state": t.state} for t in mine],
-            "can_counter_notice": case.status in ("disabled", "removed"), "created_at": trust.iso(case.created_at)}
-
-
 @router.get("/v1/trust/my-cases")
 def my_cases(p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
     """Reports about your content: who reported it (name or organisation), the work, your items and the status."""
     ids = select(CaseTarget.case_id).where(CaseTarget.account_id == p.account.id)
     cases = db.execute(select(TrustCase).where(TrustCase.id.in_(ids)).order_by(TrustCase.created_at.desc())).scalars()
-    return {"cases": [_my_case_json(c, [t for t in decisions.targets(db, c) if t.account_id == p.account.id])
+    return {"cases": [trust.my_case_json(c, [t for t in decisions.targets(db, c) if t.account_id == p.account.id])
                       for c in cases]}
 
 
@@ -308,4 +300,4 @@ def counter_notice(reference: str, body: CounterNotice, p: Principal = Depends(s
         send_email(admin, f"Counter-notice on {case.reference}",
                    f"Restore after {restore_after:%Y-%m-%d} unless a court action is reported: "
                    f"{get_settings().public_web_url}/dashboard/admin/cases/?ref={case.reference}")
-    return _my_case_json(case, mine)
+    return trust.my_case_json(case, mine)

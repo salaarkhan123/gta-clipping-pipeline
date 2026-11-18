@@ -117,7 +117,8 @@ PUBLIC_BODY_IDS = {
 # Account routes that list things: as B they must hold none of A's ids.
 LISTINGS = ("/v1/me", "/v1/keys", "/v1/uploads", "/v1/jobs", "/v1/clips", "/v1/projects", "/v1/imports",
             "/v1/credits", "/v1/templates/custom", "/v1/me/consents",        # consents: #158
-            "/v1/trust/my-cases")                                             # reports about your content: #146
+            "/v1/trust/my-cases",                                             # reports about your content: #146
+            "/v1/me/export")                                                  # download my data: #149
 PUBLIC_GETS = {
     "/health": "status only", "/v1/auth/verify": "takes an emailed token", "/v1/languages": "fixed list",
     "/v1/options": "fixed list", "/v1/templates": "catalogue", "/v1/templates/games": "catalogue",
@@ -448,6 +449,8 @@ def test_listings_show_a_their_own(client, world):
     assert ids["template_id"] in client.get("/v1/templates/custom", headers=a).text
     assert ids["key_id"] in client.get("/v1/keys", headers=a).text
     assert ids["reference"] in client.get("/v1/trust/my-cases", headers=a).text
+    mine = client.get("/v1/me/export", headers=a).text
+    assert all(ids[k] in mine for k in ("upload_id", "job_id", "clip_id", "template_id", "key_id", "reference"))
 
 
 # ---- AC2: signed file links ----
