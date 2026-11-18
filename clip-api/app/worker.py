@@ -21,6 +21,7 @@ from sqlalchemy import select, update
 
 from . import ledger
 from . import languages
+from . import log_safety
 from .ai import default_ai
 from .config import get_settings
 from .plan_grants import sweep_yearly_grants
@@ -532,11 +533,11 @@ def run_once(transcriber: Transcriber | None = None, pipeline=run_pipeline,
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    log_safety.install()
     s = get_settings()
     s.check_production()
     if s.sentry_dsn:
-        import sentry_sdk
-        sentry_sdk.init(dsn=s.sentry_dsn, traces_sample_rate=0.0)
+        log_safety.init_sentry(s.sentry_dsn)
     init_db()
     provider_for(s.transcription_provider, None)                 # an unknown provider stops the worker here, not mid-job
     FasterWhisperTranscriber.workers = s.transcribe_parallel     # before the models load

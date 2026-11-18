@@ -7,13 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from . import routes_auth, routes_billing, routes_export, routes_ingest, routes_media, routes_meta, routes_projects, routes_templates, routes_text, routes_tools
+from . import log_safety, routes_auth, routes_billing, routes_export, routes_ingest, routes_media, routes_meta, routes_projects, routes_templates, routes_text, routes_tools
 from .config import get_settings
 from .db import get_engine, init_db
 from .deps import ApiError
 from .render_options import refused_layout
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+log_safety.install()
 
 
 @asynccontextmanager
@@ -21,8 +22,7 @@ async def lifespan(_app: FastAPI):
     s = get_settings()
     s.check_production()
     if s.sentry_dsn:
-        import sentry_sdk
-        sentry_sdk.init(dsn=s.sentry_dsn, traces_sample_rate=0.0)
+        log_safety.init_sentry(s.sentry_dsn)
     init_db()
     yield
 
