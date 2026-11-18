@@ -5,6 +5,7 @@ import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "./globals.css";
+import "./app-shell.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {

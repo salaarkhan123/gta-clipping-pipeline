@@ -1,18 +1,20 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BulkEdit } from "@/components/dash/BulkEdit";
 import { ClipCard, ClipFilter, ClipSort, ClipToolbar, numbering, useSteadyOrder } from "@/components/dash/ClipCard";
 import { FindPanel } from "@/components/dash/FindPanel";
 import { Icon, IconName, Soon } from "@/components/dash/Icon";
 import { isActive, JobNote } from "@/components/dash/JobNote";
 import { useDash } from "@/components/dash/Shell";
-import { Tabs } from "@/components/dash/Tabs";
 import { Timeline } from "@/components/dash/Timeline";
 import { isTool, Tool, ToolPanel } from "@/components/dash/ToolPanel";
 import { api, ApiError, clock } from "@/lib/api";
+import { useClipOptions } from "@/lib/options";
+import { useRoutes } from "@/lib/routes";
 
 const TOOL_OF_JOB: Record<string, string> = { clips: "Clip Maker", render: "Reframe / Captions", find: "Video Finder" };
-const BULK_SOON: [IconName, string][] = [["pencil", "Bulk edit"], ["send", "Bulk schedule"], ["sparkle", "Create montage"]];
+const BULK_SOON: [IconName, string][] = [["send", "Bulk schedule"], ["sparkle", "Create montage"]];
 type View = "clips" | "find";
 
 // Every read signs new links for the same files. A refresh keeps the links already on the page, so polling a
@@ -52,7 +54,11 @@ export default function Project() {
   const [sort, setSort] = useState<ClipSort>("score"), [filter, setFilter] = useState<ClipFilter>("all");
   const [picked, setPicked] = useState<Set<string>>(new Set()), [exporting, setExporting] = useState(0);
   const [lit, setLit] = useState<{ id: string } | null>(null);                // the clip a timeline marker jumped to
+  // Two views, like the tool's own flow: the settings form (one centred column), then the results grid.
+  // null until the project loads: a project with nothing made yet opens on the form.
+  const [making, setMaking] = useState<boolean | null>(null);
   const all = useRef<HTMLInputElement>(null);
+  const known = useRoutes(), listed = useClipOptions(), [bulkEdit, setBulkEdit] = useState(false);
 
   const load = useCallback(async (pid: string) => {
     try { const next = await api(`/v1/projects/${pid}`); setProject((old: any) => keepLinks(old, next)); }
@@ -84,7 +90,9 @@ export default function Project() {
   // Arriving with a tool chosen: bring it into view, once.
   const loaded = !!project;
   useEffect(() => {
-    if (loaded && open.tool) document.getElementById(open.tool === "find" ? "results" : "tools")?.scrollIntoView({ block: "start" });
+    if (!loaded) return;
+    setMaking(open.tool ? open.tool !== "find" : !project.clips.length && !project.jobs.some(isActive));
+    if (open.tool === "find") document.getElementById("results")?.scrollIntoView({ block: "start" });
   }, [loaded]);   // eslint-disable-line react-hooks/exhaustive-deps
   // A timeline marker was picked: show its card (it is in the list by now), then let the highlight fade.
   useEffect(() => {
@@ -105,7 +113,9 @@ export default function Project() {
 
   if (gone) return <><h1 className="dash-title">Project not found</h1>
     <p className="muted">This video isn't here any more. Videos are kept for 7 days. <Link href="/dashboard/">Back to Home</Link></p></>;
-  if (!project) return <p className="muted">Loading…</p>;
+  if (!project || making === null) return <p className="muted">Loading…</p>;
+  const title = <div className="back-title"><Link href="/dashboard/" aria-label="Back to Home"><Icon name="back" size={20} /></Link><h1 title={project.filename}>{project.filename}</h1></div>;
+  const started = () => { setMaking(false); setView("clips"); load(project.upload_id); };
 
   const cancel = (jobId: string) => api(`/v1/jobs/${jobId}/cancel`, { body: {} }).then(() => load(project.upload_id)).catch(fail);
   const notes = project.jobs.filter((j: any) => j.tool !== "find" && (isActive(j) || j.status === "FAILED")).slice(0, 6);
@@ -130,51 +140,75 @@ export default function Project() {
     } catch (e) { fail(e); } finally { setExporting(0); }
   }
 
+  if (making) return (
+    <div className="form-col">
+      <div className="page-head-row">{title}
+        {(clips.length > 0 || anyActive) && <button type="button" className="btn small ghost" onClick={() => setMaking(false)}>
+          {clips.length ? `Back to the clips (${clips.length})` : "Back to the results"}</button>}</div>
+      <ToolPanel upload={project} open={open} onStarted={started} />
+    </div>
+  );
+
   return (
-    <>
-      <p className="crumb"><Link href="/dashboard/">Home</Link> / {project.filename}</p>
-      <h1 className="dash-title">{project.filename}</h1>
-      <section className="source">
-        <video controls preload="metadata" src={project.source_url}
-          style={project.width && project.height ? { aspectRatio: `${project.width} / ${project.height}` } : undefined} />
-        <Timeline duration={project.duration_sec} clips={clips} numbers={numbers} onPick={jump} />
-        <p className="muted">{clock(project.duration_sec)} · {project.width}×{project.height} · kept until {new Date(project.expires_at).toLocaleDateString()}.
-          {" "}If the preview doesn't play, your browser can't show this file type; clips still work.</p>
-      </section>
-      <ToolPanel upload={project} open={open} onStarted={() => load(project.upload_id)} />
+    <div className="wide stack">
+      <div className="page-head-row">{title}
+        <button type="button" className="btn small primary" onClick={() => setMaking(true)}><Icon name="plus" size={16} />Make more</button></div>
+      <details className="source-peek">
+        <summary>Source video and where each clip came from</summary>
+        <section className="source">
+          <video controls preload="metadata" src={project.source_url}
+            style={project.width && project.height ? { aspectRatio: `${project.width} / ${project.height}` } : undefined} />
+          <Timeline duration={project.duration_sec} clips={clips} numbers={numbers} onPick={jump} />
+          <p className="muted">{clock(project.duration_sec)} · {project.width}×{project.height} · kept until {new Date(project.expires_at).toLocaleDateString()}.
+            {" "}If the preview doesn't play, your browser can't show this file type; clips still work.</p>
+        </section>
+      </details>
       {notes.length > 0 && <section aria-label="Jobs">
         {notes.map((j: any) => <JobNote key={j.job_id} job={j} name={TOOL_OF_JOB[j.tool] || j.tool} onCancel={cancel} />)}
       </section>}
-      <section id="results" aria-label="Results">
-        <Tabs label="Results" panel="results-panel" value={view} onChange={setView}
-          tabs={[["clips", chosen.length ? `Clips (${chosen.length}/${shown.length} selected)` : "Clips"], ["find", "Find moments"]]} />
+      <section id="results" aria-label="Results" className="stack-s">
+        <div className="results-head">
+          <h2>{view === "clips" ? "All clips" : "Find moments"}</h2>
+          {view === "clips" && clips.length > 0 && <ClipToolbar sort={sort} filter={filter} sorts={["score", "time"]} onSort={setSort} onFilter={setFilter} />}
+        </div>
+        {view === "clips" && clips.length > 0 && <div className="select-bar">
+          <span className="select-left">
+            <label className="check pick-all"><input ref={all} type="checkbox" checked={shown.length > 0 && chosen.length === shown.length} disabled={!shown.length}
+              onChange={(e) => selectAll(e.target.checked)} />
+              <span className="count" aria-live="polite">{chosen.length ? `${chosen.length} of ${shown.length} selected` : "Select all"}</span></label>
+            {chosen.length > 0 && <button type="button" className="link small" onClick={() => selectAll(false)}>Clear selection</button>}
+          </span>
+          <div className="bulk" role="group" aria-label="Actions for the selected clips">
+            {known?.exportRoute && listed
+              ? <button type="button" className="btn small ghost" disabled={!chosen.length} onClick={() => setBulkEdit(true)}><Icon name="pencil" size={16} />Bulk edit</button>
+              : <button type="button" className="btn small ghost" disabled><Icon name="pencil" size={16} />Bulk edit <Soon /></button>}
+            {BULK_SOON.map(([icon, label]) => <button key={label} type="button" className="btn small ghost" disabled title={`${label}: coming soon`}><Icon name={icon} size={16} />{label} <Soon /></button>)}
+            <button type="button" className="btn small primary" disabled={!chosen.length || exporting > 0}
+              title={chosen.length ? "Downloads the files as they are. Nothing is rendered again and no credits are used." : "Tick clips to export them together."}
+              onClick={exportChosen}><Icon name="download" size={16} />{exporting ? `Downloading ${Math.min(exporting, chosen.length)} of ${chosen.length}…` : "Bulk export"}</button>
+          </div>
+        </div>}
+        <div className="result-tabs" role="tablist" aria-label="Results">
+          <button type="button" role="tab" aria-selected={view === "clips"} aria-controls="results-panel" onClick={() => setView("clips")}>
+            Clips {clips.length > 0 && <span className="tab-count">{chosen.length}/{shown.length} selected</span>}</button>
+          <button type="button" role="tab" aria-selected={view === "find"} aria-controls="results-panel" onClick={() => setView("find")}><Icon name="plus" size={16} />Find moments</button>
+        </div>
         <div id="results-panel" role="tabpanel" aria-label={view === "clips" ? "Clips" : "Find moments"} className="results">
           {view === "find" ? <FindPanel upload={project} jobs={findJobs} finds={finds} onStarted={() => load(project.upload_id)} onCancel={cancel} /> : <>
-            {clips.length > 0 && <>
-              <div className="clips-bar">
-                <label className="check pick-all"><input ref={all} type="checkbox" checked={shown.length > 0 && chosen.length === shown.length} disabled={!shown.length}
-                  onChange={(e) => selectAll(e.target.checked)} /><span aria-live="polite">{chosen.length ? `${chosen.length} of ${shown.length} selected` : "Select all"}</span></label>
-                <ClipToolbar sort={sort} filter={filter} sorts={["score", "time"]} onSort={setSort} onFilter={setFilter} />
-              </div>
-              {/* The same line holds the hint and the bulk actions, so ticking the first clip does not move the grid. */}
-              {chosen.length > 0 ? <div className="bulk" role="group" aria-label="Actions for the selected clips">
-                  <button type="button" className="btn small primary" disabled={exporting > 0} title="Downloads the files as they are. Nothing is rendered again and no credits are used."
-                    onClick={exportChosen}><Icon name="download" size={16} />{exporting ? `Downloading ${Math.min(exporting, chosen.length)} of ${chosen.length}…` : "Bulk export"}</button>
-                  {BULK_SOON.map(([icon, label]) => <button key={label} type="button" className="btn small ghost" disabled><Icon name={icon} size={16} />{label} <Soon /></button>)}
-                </div>
-                : <p className="bulk muted small">Tick clips to export them together. Bulk export downloads the files as they are: nothing is rendered again and no credits are used.</p>}
-            </>}
-            {!clips.length && <p className="muted">{anyActive ? "Your clips will show up here when they're ready." : "No clips yet. Pick a tool above to make some."}</p>}
+            {!clips.length && <p className="empty-note">{anyActive ? "Your clips will show up here as they're ready." : "No clips yet."}{" "}
+              {!anyActive && <button type="button" className="link" onClick={() => setMaking(true)}>Make some</button>}</p>}
             {clips.length > 0 && !shown.length && <p className="muted">No clips match this filter.</p>}
             {anyActive && clips.length > 0 && <p className="muted small" role="status">More clips are on the way. New ones join at the end; the list is sorted again when the run finishes.</p>}
             <div className="clips">
               {shown.map((c: any) => (
-                <ClipCard key={c.id} clip={c} lit={lit?.id === c.id} number={numbers.get(c.id)} selected={picked.has(c.id)} onSelect={select}
+                <ClipCard key={c.id} clip={c} uploadId={project.upload_id} lit={lit?.id === c.id} number={numbers.get(c.id)} selected={picked.has(c.id)} onSelect={select}
                   onChange={(n) => setProject((p: any) => ({ ...p, clips: p.clips.map((x: any) => (x.id === n.id ? n : x)) }))} />))}
             </div>
           </>}
         </div>
       </section>
-    </>
+      {bulkEdit && known?.exportRoute && listed && <BulkEdit clips={chosen} jobs={project.jobs} listed={listed} known={known}
+        onClose={() => setBulkEdit(false)} onDone={() => load(project.upload_id)} />}
+    </div>
   );
 }

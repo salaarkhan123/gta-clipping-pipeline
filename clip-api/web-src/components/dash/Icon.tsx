@@ -36,6 +36,13 @@ const PATHS = {
   dislike: <><path d="M16.5 13.5 13 20a2.2 2.2 0 0 1-2.6-2.6l.8-3.4h-5a2 2 0 0 1-2-2.4l1.1-5.5a2 2 0 0 1 2-1.6H16.5v9Z" /><path d="M16.5 13.5h3v-9h-3" /></>,
   bookmark: <path d="M7 4.5h10a1 1 0 0 1 1 1V20l-6-4-6 4V5.5a1 1 0 0 1 1-1Z" />,
   send: <path d="M20 4 10.5 13.5M20 4l-6 16-3.5-6.5L4 10l16-6Z" />,
+  arrow: <path d="M5 12h14M13 6l6 6-6 6" />,
+  back: <path d="M19 12H5M11 6l-6 6 6 6" />,
+  globe: <><circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c2.4 2.6 3.5 5.4 3.5 8.5s-1.1 5.9-3.5 8.5c-2.4-2.6-3.5-5.4-3.5-8.5s1.1-5.9 3.5-8.5Z" /></>,
+  chevron: <path d="m7 10 5 5 5-5" />,
+  grid: <><rect x="4" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" /></>,
+  play: <path d="M7.5 5v14l11-7-11-7Z" />,
+  pause: <path d="M8 5v14M16 5v14" />,
 } as const;
 
 export type IconName = keyof typeof PATHS;
