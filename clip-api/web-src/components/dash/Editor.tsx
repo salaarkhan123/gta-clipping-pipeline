@@ -276,7 +276,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
 
       {confirm && body && <Confirm title="Render this clip again" onClose={() => setConfirm(false)}>
         <p className="muted">{stamp(keptLength(edit))} long · {edit.cuts.length} cut{edit.cuts.length === 1 ? "" : "s"} · {String(look.aspect)}{look.captions ? " · subtitles" : ""}</p>
-        <p aria-live="polite">{known.exportQuote ? <QuoteLine quote={quote} what="This render" /> : "You only use credits for the minutes rendered."}</p>
+        <p aria-live="polite">{known.exportQuote ? <QuoteLine quote={quote} what="This render" exact /> : "You only use credits for the minutes rendered."}</p>
         <div className="editor-actions">
           <button type="button" className="btn small ghost" onClick={() => setConfirm(false)}>Back</button>
           <button type="button" className="btn small primary" disabled={!!known.exportQuote && quote.state !== "ok"} onClick={startRender}>

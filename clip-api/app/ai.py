@@ -227,6 +227,24 @@ LANGUAGE_RULE = (
     "kind labels do not change."
 )
 
+# (render, agent B) The `hook_style` clip option: the tone of the on-screen hook. "serious" is the judge's own tone
+# and adds nothing, so a request without the option is byte for byte what it was before.
+HOOK_TONES = {
+    "casual": "relaxed and everyday, like talking to a friend",
+    "informative": "a plain fact about what happens, no hype",
+    "conversational": "a direct line to the viewer, like a question or an aside",
+    "humorous": "funny, with a light joke about the moment",
+    "parody": "playful exaggeration that mocks the moment affectionately",
+    "inspirational": "uplifting, about effort, skill or a comeback",
+    "dramatic": "suspense and stakes, as if something big is about to happen",
+    "empathetic": "warm, sharing what the person on screen feels",
+    "persuasive": "a reason the viewer must keep watching",
+    "neutral": "flat and descriptive, no emotion",
+    "excited": "high energy, hyped, with an exclamation",
+    "calm": "quiet and understated",
+}
+HOOK_STYLE_RULE = "\n\nHOOK TONE. Write the hook in this tone: {tone}. The 6-word limit and the facts stay the same."
+
 
 class ClaudeAI:
     def __init__(self, api_key: str, model: str, client: httpx.Client | None = None):
@@ -269,6 +287,9 @@ class ClaudeAI:
         language = name_of(context.get("language")) if isinstance(context.get("language"), str) else None
         if language:
             body["system"] += LANGUAGE_RULE.format(name=language)
+        tone = HOOK_TONES.get(context.get("hook_style")) if isinstance(context.get("hook_style"), str) else None
+        if tone:
+            body["system"] += HOOK_STYLE_RULE.format(tone=tone)
         headers = {"x-api-key": self.api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
         for attempt in (1, 2):
             try:

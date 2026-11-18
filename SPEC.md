@@ -81,7 +81,7 @@ run_pipeline(input_path, options: PipelineOptions, out_dir, progress_cb=None, tr
 ### Launch-tier additions (2026-11-14, second pass)
 
 - **Subscriptions** (`app/plans.py`, `app/routes_billing.py`): Free, Starter, Pro, Scale. `POST /v1/billing/subscribe {plan_id, interval}` opens Stripe Checkout; `invoice.paid` grants the plan's monthly credits (12 months up front on yearly); `customer.subscription.deleted` returns the account to Free; `POST /v1/billing/portal` opens Stripe's portal. Credit packs still exist as top-ups. Credits do not expire. **Plan prices and credit amounts are placeholders.**
-- **Plan limits:** export resolution (`max_side`: Free 720p, paid 1080p) and Reframe/Captions minutes per job (`max_render_min`). 2K/4K export is not built.
+- **Plan limits** (`app/plans.py`): export resolution (`max_side`: Free 720p, Starter 1080p, Pro and Scale 2K/4K, never above the source), Reframe/Captions minutes per job (`max_render_min`), links per bulk import (`bulk_import_max`) and saved templates (`custom_templates_max`).
 - **Aspect ratios:** `aspect` = 9:16, 4:5, 1:1, 16:9 on every tool.
 - **Auto facecam:** `facecam_region: "auto"` (the default) finds a face that stays in one place and uses the split layout; falls back to full-frame when none is found.
 - **Visual search:** Video Finder embeds one frame every 2 s with CLIP (local, free) and matches text to frames; `mode` = auto | speech | visual. Weaker than a multimodal model that watches the video.
@@ -105,7 +105,8 @@ Not built yet: AI Montage Maker, AI Video Enhancer, AI Video Editor, automatic f
 - Submit, in one transaction: lock the account row, check limits, insert the job, insert `reserve` (-cost); 402 `insufficient_credits` if short.
 - Each job is settled exactly once under the key `settle:<job_id>`: `commit` on success, `release` (+cost) on failure, timeout, cancel or worker loss. A second settle is a no-op.
 - Grants: one-time free signup grant after email verification (`signup:<account_id>`); Stripe top-ups keyed on the Checkout Session id, with the credit amount taken from server-side pack config.
-- **Pack prices in `config.py` are placeholders.** Measure cost per source minute on the real server, then set `CREDIT_PACKS`. Reference: WayinVideo's yearly plans come to about $0.010-0.012 per credit.
+- Plans (owner, 2026-11-17): WayinVideo's Starter, Pro and Scale prices and credits, in `app/plans.py` only (no env override); Stripe Price IDs from `STRIPE_PRICE_<PLAN>_<INTERVAL>`. Subscribers from before then keep their plan (`LEGACY_PLANS`). Yearly plans grant credits monthly (owner, 2026-11-17): month 1 when the yearly invoice is paid, months 2 to 12 from the worker's sweep (`app/plan_grants.py`, ledger keys `grant:<subscription>:<period start>:<month>`), until a refund, dispute, cancellation or the period end; credits already granted are kept. Legacy yearly plans keep the year up front.
+- **Pack prices in `config.py` are placeholders.** Set `CREDIT_PACKS` once the owner decides. The cost per source minute and the margin of every plan and pack are in the plans PR (`feat/pricing-wayin-plans`).
 
 ## 8. API (all built; interactive docs at `/docs`)
 

@@ -15,6 +15,23 @@ CAPTION_STYLES = {
     "boxed": {"hl": "&H00FFFF&", "scale": 100, "upper": True,  "box": True,  "size": 0.9,  "words": 3, "chars": 18},
     "clean": {"hl": None,        "scale": 100, "upper": False, "box": False, "size": 0.75, "words": 5, "chars": 30},
 }
+# More styles, drawn by build_styled. `mode`: bounce, the word being said grows in; karaoke, the line fills with
+# `hl` as it is said; reveal, the words appear one at a time; still, one line that does not change (`border` is
+# BorderStyle, Outline, Shadow; `box` a box of `box_colour` behind it); tag, lower case with a filled box of `hl`
+# behind the keyword only.
+STYLED = {
+    "bounce":   {"hl": "&H00FFFF&", "upper": True,  "size": 1.0,  "words": 3, "chars": 18, "mode": "bounce"},
+    "karaoke":  {"hl": "&H3CFFB8&", "upper": True,  "size": 1.0,  "words": 4, "chars": 22, "mode": "karaoke"},
+    "reveal":   {"hl": "&H00FFFF&", "upper": True,  "size": 1.0,  "words": 4, "chars": 22, "mode": "reveal"},
+    "outline":  {"hl": None,        "upper": True,  "size": 1.0,  "words": 3, "chars": 18, "mode": "still",
+                 "border": "1,9,0"},
+    "subtitle": {"hl": None,        "upper": False, "size": 0.7,  "words": 8, "chars": 42, "mode": "still",
+                 "border": "3,8,0", "box": True, "box_colour": "&H60000000"},
+    "tag":      {"hl": "&H3CFFB8&", "upper": False, "size": 0.95, "words": 3, "chars": 18, "mode": "tag"},
+}
+STYLE_NAMES = (*CAPTION_STYLES, *STYLED)
+BOUNCE = (80, 120, 118)     # bounce: the word being said grows from this % of its size, over this many ms, to this %
+TAG_PAD = 6                 # tag: pixels of box around the keyword (more covers the next word's first letter)
 
 PAUSE = 0.35          # a gap this long between two words always starts a new line
 GLUE = 0.2            # a short word followed this quickly belongs with the next word
@@ -195,7 +212,8 @@ def _hook_style(font: str, size: int, left: int, right: int, hook_top: int, k: f
 
 
 def build_impact(words, path: Path, vertical: bool, font: str, play: tuple[int, int], hook: str | None, hook_top: int,
-                 span: tuple[float, float], center: int | None, accent: str | None) -> int:
+                 span: tuple[float, float], center: int | None, accent: str | None,
+                 hook_at: tuple[float, float] | None = None) -> int:
     """The impact style: see build_ass. One event pair per caption: a soft shadow, and the words over it."""
     play_w, play_h = play
     m = impact_size(play_h)
@@ -221,7 +239,8 @@ def build_impact(words, path: Path, vertical: bool, font: str, play: tuple[int, 
     on, off = "{\\c" + ass_colour(accent or ACCENT) + "}", "{\\c&HFFFFFF&}"
     lines = []
     if hook:
-        lines.append(f"Dialogue: 2,{ass_time(0)},{ass_time(HOOK_SECONDS)},Hook,,0,0,0,,{{\\fad(120,220)}}{_clean(hook, True)}")
+        a, b = hook_at or (0, HOOK_SECONDS)
+        lines.append(f"Dialogue: 2,{ass_time(a)},{ass_time(b)},Hook,,0,0,0,,{{\\fad(120,220)}}{_clean(hook, True)}")
     for ci, chunk in enumerate(chunks):
         start, end = chunk[0][0], chunk[-1][1]
         if ci + 1 < len(chunks):
@@ -244,7 +263,8 @@ def build_impact(words, path: Path, vertical: bool, font: str, play: tuple[int, 
 
 def build_ass(words, path: Path, vertical: bool, caption_top: int, font: str, style: str = "pop",
               play: tuple[int, int] = (1080, 1920), hook: str | None = None, hook_top: int = 0,
-              span: tuple[float, float] = (0.0, 1.0), *, center: int | None = None, accent: str | None = None) -> int:
+              span: tuple[float, float] = (0.0, 1.0), *, center: int | None = None, accent: str | None = None,
+              hook_at: tuple[float, float] | None = None) -> int:
     """A few words at a time. Returns the number of captions.
     `hook` is one line of text shown in a box for the first HOOK_SECONDS, `hook_top` pixels from the top.
     `span` is the part of the frame's width (fractions, left and right) the text is centred in: the gameplay
@@ -256,9 +276,15 @@ def build_ass(words, path: Path, vertical: bool, caption_top: int, font: str, st
     `impact` shows one or two words (a third when all three are short) in upper case in the bundled heavy font,
     with a dark outline and a soft shadow, the keyword in `accent` (#RRGGBB; the brand lime when None). `center`
     is the row of the middle of the capitals, in `play` pixels (the lower third when None); `caption_top` is not
-    used. `play` is the frame the numbers are for, reframed or not. A word too wide for the line is drawn smaller."""
+    used. `play` is the frame the numbers are for, reframed or not. A word too wide for the line is drawn smaller.
+
+    The STYLED styles (bounce, karaoke, reveal, outline, subtitle, tag) sit where the word-highlight ones do.
+    `hook_at` is when the hook is on screen, (from, to) seconds on the clip's timeline; None: the first HOOK_SECONDS."""
     if style == "impact":
-        return build_impact(words, path, vertical, font, play, hook, hook_top, span, center, accent)
+        return build_impact(words, path, vertical, font, play, hook, hook_top, span, center, accent, hook_at)
+    if style in STYLED:
+        return build_styled(words, path, vertical, caption_top, font, STYLED[style], play, hook, hook_top, span,
+                            hook_at)
     st = CAPTION_STYLES.get(style, CAPTION_STYLES["pop"])
     if vertical:
         play_w, play_h = play
@@ -286,7 +312,8 @@ def build_ass(words, path: Path, vertical: bool, caption_top: int, font: str, st
     off = "{\\c&HFFFFFF&\\fscx100\\fscy100}" if st["hl"] else ""
     lines = []
     if hook:
-        lines.append(f"Dialogue: 1,{ass_time(0)},{ass_time(HOOK_SECONDS)},Hook,,0,0,0,,{{\\fad(120,220)}}{_clean(hook, True)}")
+        a, b = hook_at or (0, HOOK_SECONDS)
+        lines.append(f"Dialogue: 1,{ass_time(a)},{ass_time(b)},Hook,,0,0,0,,{{\\fad(120,220)}}{_clean(hook, True)}")
     for ci, chunk in enumerate(chunks):
         chunk_end = chunk[-1][1]
         if ci + 1 < len(chunks):
@@ -302,3 +329,77 @@ def build_ass(words, path: Path, vertical: bool, caption_top: int, font: str, st
             lines.append(f"Dialogue: 0,{ass_time(s)},{ass_time(max(end, s + 0.05))},Cap,,0,0,0,,{text}")
     path.write_text(head + "\n".join(lines) + "\n", encoding="utf-8")
     return len(chunks)
+
+
+def build_styled(words, path: Path, vertical: bool, caption_top: int, font: str, st: dict,
+                 play: tuple[int, int] = (1080, 1920), hook: str | None = None, hook_top: int = 0,
+                 span: tuple[float, float] = (0.0, 1.0), hook_at: tuple[float, float] | None = None) -> int:
+    """The STYLED caption styles: placed and sized as the word-highlight styles are (see build_ass), drawn as
+    `st["mode"]` says. Returns the number of captions."""
+    if vertical:
+        play_w, play_h = play
+        size = int((78 if play_h >= play_w else 64) * st["size"])
+        margin_v = max(80, play_h - caption_top - size - 20)
+    else:
+        play_w, play_h, size, margin_v = 1920, 1080, int(64 * st["size"]), 70
+    left, right = int(span[0] * play_w), int((1 - span[1]) * play_w)
+    mode, hl = st["mode"], st["hl"]
+    # karaoke: the words go from white (secondary) to the highlight (primary) as they are said
+    primary = _style_colour(hl) if mode == "karaoke" else "&H00FFFFFF"
+    outline = st["box_colour"] if st.get("box") else "&H00000000"
+    styles = (f"Style: Cap,{font},{size},{primary},&H00FFFFFF,{outline},&H80000000,1,0,0,0,"
+              f"100,100,1,0,{st.get('border', '1,6,2')},2,{60 + left},{60 + right},{margin_v},1\n")
+    if mode == "tag":       # the keyword again, in dark letters on a box of the highlight colour
+        styles += (f"Style: Tag,{font},{size},&H00101010,&H00101010,{_style_colour(hl)},{_style_colour(hl)},1,0,0,0,"
+                   f"100,100,1,0,3,{TAG_PAD},0,2,{60 + left},{60 + right},{margin_v},1\n")
+    head = (
+        "[Script Info]\nScriptType: v4.00+\n"
+        f"PlayResX: {play_w}\nPlayResY: {play_h}\nWrapStyle: 0\n\n"
+        "[V4+ Styles]\n" + STYLE_FORMAT + styles +
+        f"Style: Hook,{font},{int(size * 0.9)},{HOOK_TEXT},{HOOK_TEXT},{HOOK_BOX},{HOOK_BOX},1,0,0,0,"
+        f"100,100,0,0,3,14,0,8,{90 + left},{90 + right},{hook_top},1\n\n"
+        "[Events]\n" + EVENT_FORMAT)
+    chunks = group_words(words, st["words"], st["chars"])
+    lines = []
+    if hook:
+        a, b = hook_at or (0, HOOK_SECONDS)
+        lines.append(f"Dialogue: 1,{ass_time(a)},{ass_time(b)},Hook,,0,0,0,,{{\\fad(120,220)}}{_clean(hook, True)}")
+    for ci, chunk in enumerate(chunks):
+        texts = [_clean(t, st["upper"]) for _, _, t in chunk]
+        first, last = chunk[0][0], chunk[-1][1]
+        if ci + 1 < len(chunks):
+            last = min(last + 0.3, chunks[ci + 1][0][0])
+        when = f"{ass_time(first)},{ass_time(max(last, first + 0.05))}"
+        if mode in ("still", "tag"):
+            lines.append(f"Dialogue: 0,{when},Cap,,0,0,0,,{' '.join(texts)}")
+            key = keyword(texts) if mode == "tag" else None
+            if key is not None:     # the same line on top with every word but the keyword invisible
+                hide, show = "{\\alpha&HFF&}", "{\\alpha&H00&}"
+                text = " ".join(show + t + hide if i == key else t for i, t in enumerate(texts))
+                lines.append(f"Dialogue: 1,{when},Tag,,0,0,0,,{hide}{text}")
+        elif mode == "karaoke":     # one event; \kf fills each word over the time it is said
+            parts, at = [], first
+            for (s, e, _), t in zip(chunk, texts):
+                gap = max(0, round((s - at) * 100))
+                parts.append((f"{{\\k{gap}}}" if gap else "") + f"{{\\kf{max(1, round((e - s) * 100))}}}{t}")
+                at = e
+            lines.append(f"Dialogue: 0,{when},Cap,,0,0,0,,{' '.join(parts)}")
+        else:                       # bounce, reveal: one event per word
+            small, ms, big = BOUNCE
+            for wi, (s, _e, _) in enumerate(chunk):
+                end = chunk[wi + 1][0] if wi + 1 < len(chunk) else last
+                if mode == "bounce":
+                    grow = f"{{\\c{hl}\\fscx{small}\\fscy{small}\\t(0,{ms},\\fscx{big}\\fscy{big})}}"
+                    text = " ".join(grow + t + "{\\c&HFFFFFF&\\fscx100\\fscy100}" if j == wi else t
+                                    for j, t in enumerate(texts))
+                else:               # reveal: the words said so far, the newest in the highlight colour
+                    text = " ".join("{\\c" + hl + "}" + t + "{\\c&HFFFFFF&}" if j == wi else t
+                                    for j, t in enumerate(texts[:wi + 1]))
+                lines.append(f"Dialogue: 0,{ass_time(s)},{ass_time(max(end, s + 0.05))},Cap,,0,0,0,,{text}")
+    path.write_text(head + "\n".join(lines) + "\n", encoding="utf-8")
+    return len(chunks)
+
+
+def _style_colour(colour: str) -> str:
+    """An override colour (&HBBGGRR&) as a style colour (&HAABBGGRR, opaque)."""
+    return "&H00" + colour[2:8]
