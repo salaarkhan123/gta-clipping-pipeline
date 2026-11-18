@@ -140,3 +140,17 @@ def test_the_stored_frame_goes_when_the_clip_expires(client, user, video, transc
         db.commit()
     worker.sweep_expired()
     assert not get_storage().exists(record["frame_key"])
+
+
+@pytest.mark.parametrize("render", ["none", "preview", "full"])
+def test_every_render_mode_gets_the_same_kind_of_thumbnail(video, transcriber, tmp_path, render):
+    """The thumbnail is drawn from the source, not from the rendered video: a clip with no video yet (render
+    "none") or only a preview has the same thumbnail, with its hook, as a full render."""
+    def judge(text, frame, context):
+        return {"title": "A title", "hook": "No way he made that", "virality": {"score": 80}}
+    r, = run_pipeline(video, PipelineOptions(max_clips=1, clip_length=10, tighten=False, render=render),
+                      tmp_path / "out", transcriber=transcriber, judge=judge)
+    assert (r.video_path is None) is (render == "none")
+    assert r.thumb_path.exists() and r.frame_path.exists() and r.features["thumbnail"]["text"] is True
+    with Image.open(r.thumb_path) as im:
+        assert im.size == (360, 640)                                          # 720 short side, never above the source
