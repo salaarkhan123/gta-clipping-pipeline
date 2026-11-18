@@ -12,12 +12,14 @@ const DOCS = "https://api.clutchclips.io/docs";
 // Shown above the nav when set. Only for something real that has shipped; null hides the bar.
 const ANNOUNCEMENT: { text: string; href: string; cta: string } | null = null;
 
-// Wordmark until the owner's logo arrives (~/ClutchClips-eval/website-media/brand/). `small`: the app's top bar
-// size; the name hides on a phone there.
+// The ClutchClips logo everywhere (header, footer, phone menu, app top bar): the mark is app/icon.svg, the same file
+// as the favicon, next to the wordmark in Geist. A new logo is a one-file change: replace app/icon.svg.
+// `small`: the app's top bar size; the name hides on a phone there.
 export function Logo({ small }: { small?: boolean }) {
+  const size = small ? 28 : 32;
   return (
-    <Link href="/" aria-label="ClutchClips home" className={`flex flex-none items-center gap-2 font-sans font-semibold tracking-[-0.03em] text-fg ${small ? "text-[17px]" : "text-[20px]"}`}>
-      <span aria-hidden="true" className={`grid flex-none place-items-center rounded-8 bg-fg font-bold tracking-[-0.04em] text-btn-ink ${small ? "h-7 w-7 text-[11px]" : "h-8 w-8 text-[12px]"}`}>CC</span>
+    <Link href="/" aria-label="ClutchClips home" className={`flex flex-none items-center font-sans font-bold tracking-[-0.03em] text-fg ${small ? "gap-2 text-[17px]" : "gap-[10px] text-[20px]"}`}>
+      <img src="/icon.svg" alt="" width={size} height={size} className="block flex-none" />
       <span className={small ? "narrow:hidden" : undefined}>ClutchClips</span>
     </Link>
   );
