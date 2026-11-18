@@ -151,7 +151,7 @@ def test_the_new_options_change_no_default_and_no_stored_job():
     # is one the worker's RenderOptions(**options) and PipelineOptions(**options) know.
     assert set(o.model_dump()) == {"vertical", "aspect", "chat_region", "zoom", "captions", "caption_style", "censor",
                                    "layout", "facecam_region", "facecam_box", "caption_position", "caption_accent",
-                                   "camera", "split_ratio"}
+                                   "camera", "split_ratio", "thumbnail_text"}
     assert set(o.model_dump()) <= {f.name for f in fields(RenderOptions)}
     assert "resolution" not in ClipOptions().model_dump() and "resolution" not in ReframeOptions().model_dump()
     sent = ReframeOptions(resolution="720", layout="pip").model_dump()
