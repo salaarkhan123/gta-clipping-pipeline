@@ -17,8 +17,8 @@ import { useRoutes } from "@/lib/routes";
 const TOOL_OF_JOB: Record<string, string> = { clips: "Clip Maker", render: "Reframe / Captions", find: "Video Finder" };
 const BULK_SOON: [IconName, string][] = [["send", "Bulk schedule"], ["sparkle", "Create montage"]];
 type View = "clips" | "find";
-const TAB = "relative inline-flex cursor-pointer items-center gap-2 rounded-t-8 border-0 bg-transparent px-[14px] py-[10px] font-body text-[14px] font-medium leading-[normal] text-muted "
-  + "aria-selected:bg-panel aria-selected:text-text aria-selected:after:absolute aria-selected:after:inset-x-[10px] aria-selected:after:-bottom-px aria-selected:after:h-[2px] aria-selected:after:bg-lime aria-selected:after:content-['']";
+const TAB = "relative inline-flex min-h-[38px] cursor-pointer items-center gap-2 rounded-full border-0 bg-transparent px-4 py-2 font-body text-[14px] font-medium leading-[normal] text-muted hover:text-text "
+  + "aria-selected:bg-chip-hover aria-selected:text-text";
 
 // Every read signs new links for the same files. A refresh keeps the links already on the page, so polling a
 // running job does not restart the source video or a clip that is playing. Links are valid for an hour, so
@@ -117,7 +117,7 @@ export default function Project() {
   if (gone) return <><h1 className="dash-title">Project not found</h1>
     <p className="muted">This video isn't here any more. Videos are kept for 7 days. <Link href="/dashboard/">Back to Home</Link></p></>;
   if (!project || making === null) return <p className="muted">Loading…</p>;
-  const title = <BackTitle title={project.filename} />;
+  const title = <div className="grid min-w-0 gap-[2px]"><BackTitle title={project.filename} /><p className="muted m-0 pl-[46px] text-[13px] tabular-nums">{clock(project.duration_sec)} · {clips.length} clip{clips.length === 1 ? "" : "s"} · kept until {new Date(project.expires_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p></div>;
   const started = () => { setMaking(false); setView("clips"); load(project.upload_id); };
 
   const cancel = (jobId: string) => api(`/v1/jobs/${jobId}/cancel`, { body: {} }).then(() => load(project.upload_id)).catch(fail);
@@ -191,9 +191,9 @@ export default function Project() {
               onClick={exportChosen}><Icon name="download" size={16} />{exporting ? `Downloading ${Math.min(exporting, chosen.length)} of ${chosen.length}…` : "Bulk export"}</button>
           </div>
         </div>}
-        <div className="flex items-center gap-1 border-0 border-b border-solid border-line-soft" role="tablist" aria-label="Results">
+        <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Results">
           <button type="button" role="tab" className={TAB} aria-selected={view === "clips"} aria-controls="results-panel" onClick={() => setView("clips")}>
-            Clips {clips.length > 0 && <span className="tabular-nums text-lime">{chosen.length}/{shown.length} selected</span>}</button>
+            Clips {clips.length > 0 && <span className="tabular-nums text-muted">{shown.length}</span>}</button>
           <button type="button" role="tab" className={TAB} aria-selected={view === "find"} aria-controls="results-panel" onClick={() => setView("find")}><Icon name="plus" size={16} />Find moments</button>
         </div>
         <div id="results-panel" role="tabpanel" aria-label={view === "clips" ? "Clips" : "Find moments"} className="results">
