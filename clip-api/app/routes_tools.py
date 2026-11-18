@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from .config import get_settings
+from .languages import SourceLanguage
 from .db import get_db
 from .deps import ApiError, Principal, current_principal
 from .models import Upload
@@ -35,11 +36,13 @@ class Segment(BaseModel):
 class ReframeOptions(LayoutOptions):
     vertical: bool = True
     captions: bool = False
+    source_lang: SourceLanguage | None = None     # (languages) spoken language; null: detected
 
 
 class CaptionOptions(LayoutOptions):
     vertical: bool = False      # keep the source framing by default; set true to reframe as well
     captions: bool = True
+    source_lang: SourceLanguage | None = None     # (languages) spoken language; null: detected
 
 
 class RenderRequest(BaseModel):
@@ -66,6 +69,7 @@ class FindRequest(BaseModel):
     make_clips: bool = True
     clip_length: int = Field(30, ge=10, le=60)
     options: LayoutOptions = LayoutOptions()
+    source_lang: SourceLanguage | None = None     # (languages) spoken language; null: detected
     webhook_url: str | None = Field(default=None, max_length=500)
 
 
@@ -123,7 +127,8 @@ def find(body: FindRequest, p: Principal = Depends(current_principal), db: Sessi
                 raise ApiError(422, "visual_unavailable", "Visual search is turned off on this server.")
             raise ApiError(422, "no_audio", "This video has no audio track to search.")
         opts = {"tool": "find", "query": body.query.strip(), "mode": body.mode, "max_results": body.max_results,
-                "make_clips": body.make_clips, "clip_length": body.clip_length, **body.options.model_dump()}
+                "make_clips": body.make_clips, "clip_length": body.clip_length, **body.options.model_dump(),
+                **({"source_lang": body.source_lang} if body.source_lang else {})}
         needs_index = ((speech_ok and not storage.exists(transcript_key(upload.id)))
                        or (visual_ok and not storage.exists(vindex_key(upload.id))))
         render_sec = max(60.0, body.max_results * body.clip_length if body.make_clips else 0.0)

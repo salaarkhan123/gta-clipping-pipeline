@@ -18,11 +18,13 @@ from sqlalchemy.orm import Session
 from . import ledger
 from .ai import MomentPrompt
 from .config import get_settings
+from .languages import LanguageCode, SourceLanguage
 from .db import get_db
 from .deps import ApiError, Principal, current_principal
 from .models import Clip, ClipFeedback, CreditLedger, Job, Upload, new_id, utcnow
 from .pipeline import MIN_CLIP, PipelineError, probe
 from .pipeline.moments import BUCKETS, MAX_CLIPS, kind_of
+from .pipeline.translate import as_text, caption_rows
 from .security import is_public_https_url, read_token
 from .render_options import LayoutOptions  # noqa: F401  (re-exported: routes_tools imports it from here)
 from .scoring import display_scores
@@ -68,6 +70,11 @@ class ClipOptions(LayoutOptions):
                                   # reads it as your interest; it never changes what a job costs.
     template: str | None = None   # a game template id from GET /v1/templates: tunes detection and the AI judge.
                                   # Send the template's `options` too; they are not applied for you.
+    # (languages, agent F) The spoken language (null: detected), the language of titles, hooks and translated
+    # subtitles (null: the spoken one), and which subtitles a download shows by default. None changes the cost.
+    source_lang: SourceLanguage | None = None
+    target_lang: LanguageCode | None = None
+    caption_display: Literal["original", "translation", "both"] = "original"
 
     @field_validator("project_name")
     @classmethod
@@ -147,6 +154,7 @@ def upload_json(u: Upload) -> dict:
     return {"upload_id": u.id, "filename": u.filename, "size_bytes": u.size_bytes,
             "duration_sec": round(u.duration_sec, 2), "width": u.width, "height": u.height,
             "has_audio": u.has_audio, "analyzed": bool(u.analyzed), "credits_required": credits_for(u.duration_sec),
+            "language": u.language,
             "created_at": iso(u.created_at), "expires_at": iso(u.expires_at)}
 
 
@@ -482,20 +490,34 @@ def subtitle_cues(words: list[dict], max_words: int = 7, max_chars: int = 42, ga
 
 @router.get("/v1/clips/{clip_id}/subtitles", response_class=PlainTextResponse)
 def clip_subtitles(clip_id: str, format: Literal["srt", "vtt", "txt"] = "srt",
+                   caption_display: Literal["original", "translation", "both"] | None = None,
                    p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
-    """Subtitle file for a clip that was rendered with captions. Times are relative to the clip."""
+    """Subtitle file for a clip that was rendered with captions. Times are relative to the clip.
+    `caption_display`: the spoken words (`original`), their translation into the job's `target_lang`
+    (`translation`), or both, original first. Left out: the job's own `caption_display` option."""
     clip = db.get(Clip, clip_id)
     if not clip or clip.deleted_at:
         raise ApiError(404, "not_found", "No such clip.")
-    own_job(db, p, clip.job_id)
+    job = own_job(db, p, clip.job_id)
     if not clip.captions_key:
         raise ApiError(404, "no_captions", "This clip has no captions (it was rendered with captions off, or has no speech).")
+    display = caption_display or (job.options or {}).get("caption_display") or "original"
     tmp = get_settings().work_dir / f"cap_{uuid.uuid4().hex}.json"
     try:
         get_storage().fetch(clip.captions_key, tmp)
-        cues = subtitle_cues(json.loads(tmp.read_text()).get("words", []))
+        captions = json.loads(tmp.read_text())
+        cues = subtitle_cues(captions.get("words", []))
     finally:
         tmp.unlink(missing_ok=True)
+    if display != "original":           # (languages, agent F)
+        rows = caption_rows(captions)
+        if rows is None:
+            raise ApiError(409, "no_translation", "This clip's captions have no translation. Run the job with "
+                                                  "target_lang set on a server where translation is configured.")
+        lang = (captions.get("translation") or {}).get("language") or "translated"
+        suffix = lang if display == "translation" else f"{captions.get('language') or 'orig'}-{lang}"
+        return PlainTextResponse(as_text(rows, display, format, joined=True), headers={
+            "content-disposition": f'attachment; filename="{clip.id}.{suffix}.{format}"'})
     if format == "txt":
         body = " ".join(c[2] for c in cues) + "\n"
     elif format == "vtt":
