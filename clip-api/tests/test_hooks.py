@@ -62,9 +62,19 @@ def test_a_failing_writer_is_only_a_missed_rewrite():
     assert clips[1]["hook"] == "Chase ends in the river"
 
 
-def test_best_line_prefers_exclamations_then_short_lines():
+def test_best_line_is_a_whole_short_sentence_with_the_most_exclamations():
     assert best_line(["we went to the shop", "oh my god no way", "a"]) == "oh my god no way"
     assert best_line(["ok", "fine"]) is None
+    # From the 2-hour benchmark: never half a sentence, never a dangling "and".
+    assert best_line(["do. Where's... Chibly! Chibly marked the spot for us."]) == "Chibly marked the spot for us"
+    assert best_line(["Whoa shit. Oh my god, and then he flew off."]) is None     # 2 words, then 8: none fits
+    assert best_line(["Oh my god we did it and"]) == "Oh my god we did it"
+
+
+def test_a_stand_in_hook_must_say_something():
+    clips = rows("Cop never saw it coming", "Cop never saw it coming", titles=["t", "Chase ends in the river"])
+    distinct(clips)
+    assert clips[1]["hook"] == "Chase ends in the river"                      # the one-letter title is skipped
 
 
 # ---------- in the pipeline ----------

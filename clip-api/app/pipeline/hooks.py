@@ -60,12 +60,27 @@ def taken_by(hook: str, used: list[str]) -> bool:
     return generic(hook) or any(same(hook, u) for u in used)
 
 
+DANGLING = frozenset("and but so or to of the a an with for because like if then".split())
+
+
 def best_line(lines: list[str]) -> str | None:
-    """The clip's most striking line: the one with the most exclamations, then the shortest of 3 words or more."""
-    good = [x for x in (" ".join(str(t).split()) for t in lines) if len(x.split()) >= 3]
+    """The clip's most striking whole sentence of 3 to MAX_WORDS words: the most exclamations, then the shortest.
+    Transcript lines are split into sentences first, so a hook never starts or stops halfway through one."""
+    good = []
+    for s in (s for t in lines for s in re.split(r"(?<=[.?!])\s+", " ".join(str(t).split()))):
+        words = s.strip(" .,…").split()
+        while words and words[-1].lower().strip(",.!?") in DANGLING:
+            words.pop()
+        if 3 <= len(words) <= MAX_WORDS and len(" ".join(words)) <= MAX_CHARS:
+            good.append(" ".join(words))
     if not good:
         return None
     return min(good, key=lambda x: (-sum(x.lower().count(e) for e in EXCLAIM), len(x)))
+
+
+def usable(hook: str | None) -> bool:
+    """A stand-in hook says something: at least 2 words and 6 characters."""
+    return hook is not None and len(hook.split()) >= 2 and len(hook) >= 6
 
 
 def distinct(clips: list[dict], writer: Writer | None = None) -> dict:
@@ -97,7 +112,7 @@ def distinct(clips: list[dict], writer: Writer | None = None) -> dict:
                 candidate = clean(make())
             except Exception:                    # a failed rewrite is only a missed rewrite
                 candidate = None
-            if candidate is not None and not taken_by(candidate, used):
+            if usable(candidate) and not taken_by(candidate, used):
                 new = candidate
                 break
         clip["rewritten"] = {"from": hook, "by": by if new is not None else "dropped"}
