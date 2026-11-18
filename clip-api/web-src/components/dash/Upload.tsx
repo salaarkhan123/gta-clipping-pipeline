@@ -43,7 +43,8 @@ export function UploadProgress({ up, onCancel }: { up: Progress; onCancel: () =>
 }
 
 // What the chosen video is for: the dialog's heading, and the query that opens the right tool on the project page.
-export type VideoTarget = { title: string; query: string };
+// `path`: the page that opens with the chosen video (default: its project page).
+export type VideoTarget = { title: string; query: string; path?: string };
 
 // "Which video?" for a tool tile or a template. With no projects it goes straight to the file chooser; otherwise
 // one dialog lists the stored videos next to an upload button. Either way the project opens with `target.query`.
@@ -63,7 +64,7 @@ export function useVideoChooser(projects: any[] | null) {
         if (file && waiting.current) setPicking({ target: waiting.current, file });
       }} />
       {picking && <VideoPicker title={picking.target.title} projects={projects} file={picking.file} onClose={() => setPicking(null)}
-        onPick={(id) => router.push(`/dashboard/project/?id=${id}&${picking.target.query}`)} />}
+        onPick={(id) => router.push(`${picking.target.path || "/dashboard/project/"}?id=${id}${picking.target.query ? `&${picking.target.query}` : ""}`)} />}
     </>
   );
   return { choose, element };

@@ -8,6 +8,7 @@ import { useDash } from "@/components/dash/Shell";
 import { SourceBar } from "@/components/dash/SourceBar";
 import { useVideoChooser } from "@/components/dash/Upload";
 import { api, takePendingFile } from "@/lib/api";
+import { useLanguageSwitches } from "@/lib/languages";
 import { isBuilt, ToolEntry, TOOLS } from "@/lib/tools";
 
 const RECENT = 10;
@@ -30,10 +31,11 @@ function Home() {
   useEffect(() => { if (!anyActive) return; const id = setInterval(load, 4000); return () => clearInterval(id); }, [anyActive, load]);
 
   // The top bar's Tools menu lands here with ?tool=: ask which video, once the projects are known.
-  const choose = (t: ToolEntry) => chooser.choose({ title: t.name, query: `tool=${t.tool}` });
+  const on = useLanguageSwitches();
+  const choose = (t: ToolEntry) => chooser.choose(t.page ? { title: t.name, query: "", path: t.page } : { title: t.name, query: `tool=${t.tool}` });
   useEffect(() => {
     if (projects === null) return;
-    const want = TOOLS.find((t) => t.tool && t.tool === query.get("tool"));
+    const want = TOOLS.find((t) => (t.tool || t.page) && t.id === query.get("tool"));
     if (!want) return;
     window.history.replaceState(null, "", window.location.pathname);
     choose(want);
@@ -57,12 +59,12 @@ function Home() {
             const body = <>
               <span className="tool-ico"><Icon name={t.icon} size={22} /></span>
               <span className="tool-name">{t.name}</span>
-              {isBuilt(t) ? t.badge === "new" && <small className="tool-badge">New</small> : <small className="tool-badge soon">Soon</small>}
+              {isBuilt(t, on) ? t.badge === "new" && <small className="tool-badge">New</small> : <small className="tool-badge soon">Soon</small>}
             </>;
             return (
               <li key={t.id}>
                 {t.href ? <Link className="tool-tile" href={t.href} title={t.text}>{body}</Link>
-                  : t.tool ? <button type="button" className="tool-tile" title={t.text} onClick={() => choose(t)}>{body}</button>
+                  : isBuilt(t, on) ? <button type="button" className="tool-tile" title={t.text} onClick={() => choose(t)}>{body}</button>
                   : <span className="tool-tile soon" aria-disabled="true" title={`${t.text} Coming soon.`}>{body}<span className="sr-only">, coming soon</span></span>}
               </li>);
           })}

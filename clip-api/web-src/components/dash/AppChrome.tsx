@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/Chrome";
 import { API } from "@/lib/api";
+import { useLanguageSwitches } from "@/lib/languages";
 import { isBuilt, toolHref, TOOLS } from "@/lib/tools";
 import { Icon, IconName } from "./Icon";
 
@@ -57,6 +58,7 @@ function Menu({ label, button, className = "", children }: { label: string; butt
 }
 
 export function TopBar({ me, onLogout }: { me: any; onLogout: () => void }) {
+  const on = useLanguageSwitches();
   const plan = me.plan[0].toUpperCase() + me.plan.slice(1);
   return (
     <header className="topbar">
@@ -69,7 +71,7 @@ export function TopBar({ me, onLogout }: { me: any; onLogout: () => void }) {
         <Menu label="Tools" className="wide-only" button={<>Tools<Icon name="chevron" size={16} /></>}>
           <ul className="menu-list">
             {TOOLS.map((t) => (
-              <li key={t.id}>{isBuilt(t)
+              <li key={t.id}>{isBuilt(t, on)
                 ? <Link className="menu-item" href={toolHref(t)}><Icon name={t.icon} size={18} />{t.name}</Link>
                 : <span className="menu-item soon" aria-disabled="true"><Icon name={t.icon} size={18} />{t.name}<small className="soon-tag">Soon</small></span>}</li>))}
           </ul>
