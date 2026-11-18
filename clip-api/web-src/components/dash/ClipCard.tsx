@@ -27,13 +27,14 @@ export function numbering(clips: any[]): Map<string, number> {
   return new Map(made.map((c, i) => [c.id, i + 1]));
 }
 
-const SOON: [IconName, string][] = [["calendar", "Schedule"], ["scissors", "Trim"], ["reframe", "Reframe"]];
+const SOON: [IconName, string][] = [["calendar", "Schedule"]];
 
 // One clip as a card: tick box, rank and title, the preview with its time range, the score, and its actions.
 // `project` links back to where it came from (Library). `lit` marks the card the timeline just jumped to.
 // `onSelect` adds the tick box (the project page's bulk actions).
-export function ClipCard({ clip, onChange, project, lit, number, selected, onSelect }: { clip: any; onChange: (c: any) => void;
-  project?: { id: string; name: string }; lit?: boolean; number?: number; selected?: boolean; onSelect?: (id: string, on: boolean) => void }) {
+// `uploadId` (or `project`) gives the card its Edit action: the editor needs the source video.
+export function ClipCard({ clip, onChange, project, uploadId, lit, number, selected, onSelect }: { clip: any; onChange: (c: any) => void;
+  project?: { id: string; name: string }; uploadId?: string; lit?: boolean; number?: number; selected?: boolean; onSelect?: (id: string, on: boolean) => void }) {
   const { fail } = useDash();
   // A reply signs new links for the same files; the ones on the page stay, so a playing clip is not restarted.
   const merge = (r: any) => onChange({ ...clip, ...r, video_url: clip.video_url, thumb_url: clip.thumb_url || r.thumb_url, captions_url: clip.captions_url || r.captions_url });
@@ -45,6 +46,7 @@ export function ClipCard({ clip, onChange, project, lit, number, selected, onSel
   const titles: string[] = clip.titles?.length ? (clip.titles.includes(clip.title) ? clip.titles : [clip.title, ...clip.titles]) : [];
   const retitle = (title: string) => api(`/v1/clips/${clip.id}`, { method: "PATCH", body: { title } }).then(merge).catch(fail);
   const name = nameOf(clip, number), rank = rankOf(clip);
+  const source = uploadId || project?.id;
   return (
     <article id={`clip-${clip.id}`} tabIndex={-1} aria-label={name}
       className={`clip ${clip.kept === false ? "dropped" : ""} ${lit ? "lit" : ""} ${selected ? "picked" : ""}`}>
@@ -68,6 +70,8 @@ export function ClipCard({ clip, onChange, project, lit, number, selected, onSel
           <a className="icon-btn go" href={clip.video_url} download aria-label={`Download ${name}`} title="Download"><Icon name="download" size={18} /></a>
           <button type="button" className="icon-btn" disabled={!clip.captions_url} aria-label={clip.captions_url ? `Download the captions file for ${name}` : "No captions file: this clip has no captions"}
             title={clip.captions_url ? "Captions file (SRT)" : "This clip has no captions"} onClick={() => downloadSubtitles(clip.id).catch(fail)}><Icon name="captions" size={18} /></button>
+          {source && <Link className="btn small ghost clip-edit" href={`/dashboard/edit/?project=${source}&clip=${clip.id}`} aria-label={`Edit ${name}`}
+            title="Trim, cut by transcript, captions and look"><Icon name="sliders" size={16} />Edit</Link>}
         </div>
       </div>
       <p className="clip-desc" title={clip.description || undefined}>{clip.description || <span className="muted">No description for this clip.</span>}</p>

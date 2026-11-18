@@ -12,7 +12,7 @@ export const TOOLS: ToolEntry[] = [
   { id: "templates", icon: "gamepad", name: "Game Templates", text: "Layouts, captions and length tuned to a game, in one pick.", href: "/dashboard/templates/", badge: "new" },
   { id: "captions", icon: "captions", name: "AI Captions", text: "Burn word-by-word captions into any part of a video.", tool: "captions" },
   { id: "reframe", icon: "reframe", name: "AI Reframe", text: "Reshape wide footage to vertical, portrait or square.", tool: "reframe" },
-  { id: "editor", icon: "sliders", name: "Video Editor", text: "Trim and restyle a clip after it's made." },
+  { id: "editor", icon: "sliders", name: "Video Editor", text: "Trim, cut by transcript and restyle a clip: open Edit on any clip.", href: "/dashboard/library/?view=clips", badge: "new" },
   { id: "highlights", icon: "bolt", name: "One-Click Highlights", text: "One montage from the best parts of a stream." },
   { id: "transcripts", icon: "transcript", name: "Video Transcripts", text: "Everything that was said, with timestamps." },
   { id: "summary", icon: "summary", name: "Video Summary", text: "The short version of a long stream." },

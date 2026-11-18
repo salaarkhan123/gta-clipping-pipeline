@@ -84,6 +84,12 @@ button.source-chip:hover:not(:disabled) { background: var(--chip); color: var(--
 .source-chip:disabled { opacity: .5; cursor: default; }
 .source-chip.plain { color: var(--muted); cursor: help; }
 .source-bar > .error { width: 100%; }
+.source-import { position: relative; width: 100%; padding: 4px 18px 18px; border-radius: var(--r-l); border: 1px solid var(--line); background: var(--panel); }
+.source-import .import { border-top: 0; }
+.source-import .import-head { padding-right: 40px; }
+.source-close { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border: 0; }
+.source-recent { width: 100%; }
+.source-recent .import-recent h3 { font-size: 14px; color: var(--muted); }
 .bulk-list { list-style: none; display: grid; gap: 6px; }
 .bulk-list li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: var(--r-s); background: var(--bg-2); font-size: 14px; }
 .bulk-url { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -136,10 +142,10 @@ a.tool-tile:hover .tool-ico, button.tool-tile:hover .tool-ico { border-color: va
 .back-title a { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: var(--r-s); color: var(--muted); }
 .back-title a:hover { background: var(--chip); color: var(--text); }
 .back-title h1 { min-width: 0; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-m); background: var(--panel); border: 1px solid var(--line-soft); }
-.dash .seg.tabs button { padding: 7px 16px; border: 0; border-radius: var(--r-s); background: none; color: var(--muted); font-size: 14px; }
-.dash .seg.tabs button.on { background: var(--chip-hover); color: var(--text); }
-.dash .seg.tabs button:hover:not(.on) { background: none; color: var(--text); }
+.segmented { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-m); background: var(--panel); border: 1px solid var(--line-soft); }
+.dash .segmented.tabs button { padding: 7px 16px; border: 0; border-radius: var(--r-s); background: none; color: var(--muted); font-size: 14px; }
+.dash .segmented.tabs button.on { background: var(--chip-hover); color: var(--text); }
+.dash .segmented.tabs button:hover:not(.on) { background: none; color: var(--text); }
 
 /* ---------- Results grid ---------- */
 .results-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
@@ -172,6 +178,7 @@ a.tool-tile:hover .tool-ico, button.tool-tile:hover .tool-ico { border-color: va
 .dash .clip-bar .icon-btn:hover:not(:disabled) { background: var(--chip-hover); color: var(--text); }
 .dash .clip-bar .icon-btn.go { background: none; color: var(--accent); }
 .dash .clip-bar .icon-btn.go:hover { background: var(--lime-wash); box-shadow: none; }
+.dash .clip-bar .clip-edit { min-height: 30px; padding: 4px 10px; margin-left: 4px; border-radius: var(--r-s); font-size: 12.5px; gap: 5px; }
 .dash .clip-desc { font-size: 13px; color: #c9cfd6; min-height: 3em; }
 .dash .score-badge .rank.score b { font-size: 22px; }
 

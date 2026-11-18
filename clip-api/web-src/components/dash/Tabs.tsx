@@ -16,7 +16,7 @@ export function Tabs<T extends string>({ label, tabs, value, onChange, panel, se
     refs.current[j]?.focus();
   }
   return (
-    <div className={seg ? "tabs seg" : "tabs"} role="tablist" aria-label={label}>
+    <div className={seg ? "tabs segmented" : "tabs"} role="tablist" aria-label={label}>
       {tabs.map(([id, name], i) => (
         <button key={id} ref={(el) => { refs.current[i] = el; }} type="button" role="tab" aria-selected={value === id} aria-controls={panel}
           tabIndex={value === id ? 0 : -1} className={value === id ? "on" : ""} onClick={() => onChange(id)} onKeyDown={(e) => onKey(e, i)}>{name}</button>))}
