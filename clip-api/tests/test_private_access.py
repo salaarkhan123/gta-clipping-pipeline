@@ -19,7 +19,7 @@ import jwt
 import pytest
 from sqlalchemy import select, update
 
-from app import worker
+from app import storage, worker
 from app.config import get_settings
 from app.db import new_session
 from app.ingest import platforms
@@ -30,6 +30,7 @@ from app.security import make_token
 from tests.conftest import FakeTranscriber
 from tests.ingest_support import FakeYDL
 from tests.test_api import balance, upload
+from tests.test_check_storage import s3  # noqa: F401  (fixture: a private bucket on a local S3 server)
 
 FILE_LINK = "/v1/files/"
 DONE = ("SUCCEEDED", "FAILED", "CANCELED")
@@ -239,7 +240,7 @@ def world(client, video) -> World:
 
 def assert_denied_and_silent(r, world: World, allowed: set[int], where: str):
     assert r.status_code in allowed, f"{where}: {r.status_code} {r.text[:300]}"
-    assert FILE_LINK not in r.text, f"{where} handed out a file link"
+    assert FILE_LINK not in r.text and "X-Amz-" not in r.text, f"{where} handed out a file link"
     leaked = [s for s in world.secrets_of_a if s in r.text]
     assert not leaked, f"{where} leaked {leaked}"
 
@@ -548,3 +549,54 @@ def test_a_taken_down_import_stops_issuing_links(client, video):
     with new_session() as db:
         assert db.execute(select(Upload.deleted_at).where(Upload.id == up)).scalar_one() is not None
         assert db.execute(select(Export.storage_key).where(Export.clip_id == clip["id"])).scalars().all() == [None]
+
+
+# ---- S3: presigned links, issued only to the owner (kept last: the fixture switches the storage backend) ----
+
+def test_s3_presigns_every_link_for_the_ttl_and_only_for_the_owner(client, video, s3, monkeypatch):  # noqa: F811
+    import httpx
+    from urllib.parse import parse_qs, urlparse
+    monkeypatch.setattr(get_settings(), "signed_url_ttl_sec", 600)
+    a, a_account = signup(client)
+    b, _ = signup(client)
+    b_key, _ = api_key(client, b)
+    up = upload(client, a, video)["upload_id"]
+    job, export, clip = preview_and_export(client, a, up)
+    project = client.get(f"/v1/projects/{up}", headers=a).json()
+    links = {"source": project["source_url"], "preview": clip["preview_url"], "export": clip["export_url"],
+             "thumb": clip["thumb_url"], "captions": clip["captions_url"]}
+    for name, url in links.items():
+        assert url and url.startswith(s3), name
+        q = parse_qs(urlparse(url).query)
+        assert q["X-Amz-Expires"] == ["600"] and q["X-Amz-Signature"], name           # presigned for the TTL
+        assert httpx.get(url).status_code == 200, name
+        assert httpx.get(url.split("?")[0]).status_code == 403, name                  # the bucket is private
+    assert urlparse(links["export"]).path.split("/", 2)[2].startswith(f"exports/{export}/")
+    assert urlparse(links["source"]).path.endswith(f"uploads/{a_account['id']}/{up}.mp4")
+    owned = {up, job, export, clip["id"]}
+    for path in (f"/v1/jobs/{job}", f"/v1/jobs/{export}", f"/v1/projects/{up}", "/v1/clips", "/v1/projects",
+                 "/v1/jobs", "/v1/uploads"):
+        for headers in (None, b, b_key):
+            r = client.get(path, headers=headers or {})
+            assert r.status_code in (200, 401, 404), path
+            assert "X-Amz-" not in r.text and s3 not in r.text and not owned & set(re.findall(r"\w+_\w+", r.text)), path
+    token = make_token("file", "file", timedelta(hours=1), k=f"uploads/{a_account['id']}/{up}.mp4")
+    assert client.get(f"/v1/files/{token}").status_code == 404     # with a bucket, the api serves no files itself
+
+
+def test_s3_url_asks_for_the_configured_ttl(monkeypatch):
+    calls = []
+
+    class Client:
+        def generate_presigned_url(self, method, Params, ExpiresIn):
+            calls.append((method, Params, ExpiresIn))
+            return "https://bucket.example/signed"
+
+    s3_storage = object.__new__(storage.S3Storage)
+    s3_storage.client, s3_storage.bucket = Client(), "private-bucket"
+    for ttl in (60, 3600):
+        monkeypatch.setattr(get_settings(), "signed_url_ttl_sec", ttl)
+        assert s3_storage.url("exports/job_1/exp_1.mp4") == "https://bucket.example/signed"
+        method, params, expires = calls[-1]
+        assert (method, expires) == ("get_object", ttl)
+        assert params["Bucket"] == "private-bucket" and params["Key"] == "exports/job_1/exp_1.mp4"
