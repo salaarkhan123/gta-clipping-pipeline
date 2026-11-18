@@ -105,3 +105,15 @@ def test_wayin_benchmark_sheet_loads_fifteen_moments():
     assert (rows[0]["start"], rows[0]["end"]) == (2338.0, 2430.0)            # their #1: 38:58 to 40:30
     found = ev.score(rows, [{"start": 2340, "end": 2400, "title": "a"}], duration=4680)
     assert found["great_found"] == "1 of 15" and len(found["great_missed"]) == 14
+
+
+def test_v1_scores_of_a_real_run_stay_the_same():
+    # The selection-only run on staging 347ca2f, scored by the v1 harness before eval set v2: 7 of 15, the same
+    # moments as the 2026-11-16 benchmark in docs/super-board/runs/2026-11-16-swarm.md.
+    root = Path(__file__).resolve().parent.parent / "eval"
+    rows = ev.load_labels(root / "wayin-zias-iceman.csv")
+    s = ev.score(rows, ev.load_clips(root / "runs" / "zias-iceman.staging-347ca2f.json"))
+    assert (s["clips"], s["good_rate"], s["mean_label"], s["great_found"], s["great_recall"]) == (23, 0.304, 3.0, "7 of 15", 0.467)
+    assert (s["unlabelled"], s["duplicate_pairs"], s["per_quarter"]) == (16, 0, [6, 6, 6, 5])
+    assert sorted(int(c["row"]) for c in s["per_clip"] if c["row"]) == [1, 3, 5, 9, 11, 12, 15]
+    assert (s["precision@20"], s["precision@40"]) == (0.3, 0.175)        # new in v2: 6 of the best 20, 7 of 40
