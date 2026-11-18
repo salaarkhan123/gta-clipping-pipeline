@@ -218,12 +218,12 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
         {render.problem && <p className="error">{render.problem}</p>}
       </div>}
 
-      <div className="overflow-hidden rounded-[24px] border border-solid border-line-soft [background:radial-gradient(ellipse_at_50%_0%,rgba(255,255,255,.05),transparent_60%),theme(colors.panel)]">
+      <div className="flex flex-col overflow-hidden rounded-[24px] border border-solid border-line-soft [background:radial-gradient(ellipse_at_50%_0%,rgba(255,255,255,.05),transparent_60%),theme(colors.panel)]">
         <div className={`grid h-[min(680px,calc(100vh-250px))] min-h-[520px] ${open ? "grid-cols-[minmax(260px,1fr)_minmax(300px,1.1fr)_288px_88px]" : "grid-cols-[minmax(280px,1fr)_minmax(320px,1.35fr)_88px]"}
-          mid:flex mid:h-auto mid:min-h-0 mid:flex-col`}>
+          mid:contents`}>
 
           {/* What was said: click a word to jump, shift-click to select, cut or restore. */}
-          <section aria-label="What was said" className="flex min-h-0 flex-col gap-3 border-0 border-r border-solid border-line-soft p-5 mid:order-4 mid:max-h-[480px] mid:border-r-0 mid:border-t narrow:p-4">
+          <section aria-label="What was said" className="flex min-h-0 flex-col gap-3 border-0 border-r border-solid border-line-soft p-5 mid:order-5 mid:max-h-[480px] mid:border-r-0 mid:border-t narrow:p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Tabs seg label="Text" panel="editor-text" value={tab} onChange={setTab} tabs={[["transcript", "Transcript"], ["captions", "Caption lines"]]} />
               {tab === "transcript" && <div className="flex items-center gap-1" role="group" aria-label="Selected words">
@@ -312,7 +312,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
           </section>
 
           {/* The open tool's settings. */}
-          {open && <section aria-label={open.title} className="flex min-h-0 flex-col gap-3 border-0 border-l border-solid border-line-soft bg-[rgba(255,255,255,.02)] p-4 mid:order-3 mid:border-l-0 mid:border-t">
+          {open && <section aria-label={open.title} className="flex min-h-0 flex-col gap-3 border-0 border-l border-solid border-line-soft bg-[rgba(255,255,255,.02)] p-4 mid:order-4 mid:border-l-0 mid:border-t">
             <div className="flex items-center justify-between gap-2">
               <h2 className="m-0 text-[15px] font-semibold">{open.title}</h2>
               <button type="button" className={ICON_BTN} aria-label={`Close ${open.title}`} onClick={() => setTool(null)}><Icon name="close" size={18} /></button>
@@ -333,7 +333,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
 
           {/* The tool rail: the built tools open their panel; the planned ones are labelled and do nothing. */}
           <nav aria-label="Editing tools" className="flex min-h-0 flex-col gap-1 overflow-y-auto border-0 border-l border-solid border-line-soft p-2
-            mid:order-2 mid:flex-row mid:overflow-x-auto mid:border-l-0 mid:border-t">
+            mid:order-3 mid:flex-row mid:overflow-x-auto mid:border-l-0 mid:border-t">
             {tools.map((x) => <button key={x.id} type="button" aria-pressed={tool === x.id} onClick={() => setTool(tool === x.id ? null : x.id)}
               className={`${RAIL_ITEM} cursor-pointer text-soft hover:bg-chip hover:text-text aria-pressed:bg-chip-hover aria-pressed:text-text`}>
               <Icon name={x.icon} size={22} /><span>{x.label}</span></button>)}
@@ -400,7 +400,7 @@ function Timeline({ duration, clip, edit, t, sel, playing, view, onToggle, onTri
   for (let s = Math.ceil(lo / step) * step; s <= hi; s += step) ticks.push(s);
   const inside = cutsInside(edit);
   return (
-    <section aria-label="Timeline" className="grid gap-2 border-0 border-t border-solid border-line-soft px-5 pb-4 pt-3 narrow:px-3">
+    <section aria-label="Timeline" className="grid gap-2 border-0 border-t mid:order-2 border-solid border-line-soft px-5 pb-4 pt-3 narrow:px-3">
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 narrow:grid-cols-[auto_1fr]">
         <div className="flex items-center gap-1 narrow:hidden">
           {inside.length > 0 && <span className="text-[12.5px] text-muted">{inside.length} cut{inside.length === 1 ? "" : "s"}{" "}
@@ -418,7 +418,7 @@ function Timeline({ duration, clip, edit, t, sel, playing, view, onToggle, onTri
           <button type="button" className={ICON_BTN} aria-label="Zoom in" disabled={pad <= MIN_PAD} onClick={() => setPad((p) => Math.max(MIN_PAD, p / 3))}><Icon name="zoomIn" size={18} /></button>
         </div>
       </div>
-      <div className="relative h-5 select-none text-[11px] tabular-nums text-dim" aria-hidden="true">
+      <div className="relative h-5 select-none text-[11px] tabular-nums text-dim narrow:[&>span:nth-child(even)]:hidden" aria-hidden="true">
         {ticks.map((s) => <span key={s} className="absolute top-0 -translate-x-1/2 whitespace-nowrap" style={{ left: pct(s) }}>{stamp(s).replace(/\.0$/, "")}</span>)}
       </div>
       <div className="relative h-14 cursor-pointer overflow-hidden rounded-12 border border-solid border-line bg-card-2

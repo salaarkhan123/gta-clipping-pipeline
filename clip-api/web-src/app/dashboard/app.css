@@ -401,4 +401,9 @@
   .form-col .panel { padding: 16px; }
   .dash .templates { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 10px; }
 }
+/* Pill fields everywhere in the app, like the rest of the site. */
+.dash select, .dash input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),
+.picker select, .picker input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]) {
+  border-radius: 999px; padding-left: 16px; padding-right: 16px; background-color: theme('colors.surface'); border-color: theme('colors.line'); }
+.dash select:focus, .dash input:focus { border-color: theme('colors.line-strong'); }
 

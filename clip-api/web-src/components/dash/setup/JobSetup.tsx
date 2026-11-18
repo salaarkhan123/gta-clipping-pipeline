@@ -137,8 +137,8 @@ export function JobSetup({ source, listed, template, price, onOptions, onCreate,
                   : <img src="/media/setup/source-16x9.webp" alt="" className="h-full w-full object-cover opacity-80" onError={(e) => { e.currentTarget.style.display = "none"; }} />}
                 {(res || source.badge) && <span className="absolute left-2 top-2 rounded-8 bg-[rgba(0,0,0,.66)] px-2 py-[2px] text-[12px] font-medium [backdrop-filter:blur(6px)]">{res || source.badge}</span>}
                 {source.duration && <span className="absolute bottom-2 right-2 rounded-8 bg-[rgba(0,0,0,.66)] px-2 py-[2px] text-[12px] font-medium tabular-nums">{clock(source.duration)}</span>}
-                <button type="button" onClick={onRemove} aria-label="Remove this video and start again" title="Remove"
-                  className="absolute right-2 top-2 grid h-9 w-9 cursor-pointer place-items-center rounded-full border-0 bg-[rgba(0,0,0,.6)] text-text hover:bg-[rgba(0,0,0,.85)]"><Icon name="trash" size={17} /></button>
+                <button type="button" onClick={onRemove} aria-label="Choose a different video" title="Choose a different video"
+                  className="absolute right-2 top-2 grid h-9 w-9 cursor-pointer place-items-center rounded-full border-0 bg-[rgba(0,0,0,.6)] text-text hover:bg-[rgba(0,0,0,.85)]"><Icon name="close" size={17} /></button>
               </div>
               {source.detail && <p className="m-0 overflow-hidden text-ellipsis whitespace-nowrap px-1 text-[12.5px] text-muted">{source.detail}</p>}
               <div className="flex flex-wrap gap-1">
