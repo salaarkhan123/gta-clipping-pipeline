@@ -73,6 +73,13 @@ uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-cl
   every candidate reads it. Off by default because the local model makes a 2-hour job slower on the droplet
   (numbers in the U1 PR); turn it on with a hosted provider or a bigger machine. It helps only with the AI judge
   (without one, candidates are transcribed by the caption model anyway).
+- `LLM_PASS` (default `true`, U3): with `ANTHROPIC_API_KEY` set and a whole transcript of the upload (whole mode
+  above, or an earlier Video Finder or transcript job), the AI reads the transcript in 5-minute chunks (1 minute
+  overlap, 8 at a time) and proposes moments; the judge rates them mixed with the strongest signal windows, the
+  same number of candidates as before. Without a whole transcript, or when the AI fails (3 tries per chunk,
+  60 s each, 150 s for the whole pass), candidates come from the signals exactly as before. A job's counts
+  show what happened: `llm_chunks`, `llm_chunks_failed`, `llm_tokens_in`, `llm_tokens_out`, `llm_pass_skipped`,
+  `llm_pass_failed`. `false` turns it off.
 
 ## Running more than one job at once
 

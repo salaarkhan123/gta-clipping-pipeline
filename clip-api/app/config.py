@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     # AI titles, hashtags and virality scores (optional; off when the key is empty)
     anthropic_api_key: str = ""
     ai_model: str = "claude-haiku-5-5"
+    # (U3) With the AI key and a whole transcript of the upload, an LLM reads the transcript in 5-minute chunks and
+    # proposes moments for the judge (app/pipeline/llm_pass.py). Costs tokens per job (measured in the U3 PR);
+    # false: candidates are nominated from the signals only, as before.
+    llm_pass: bool = True
 
     # Pipeline
     whisper_model: str = "small.en"   # captions. "none" disables transcription and captions

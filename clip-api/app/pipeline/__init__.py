@@ -10,6 +10,11 @@ With a `judge` (the AI), the signals only nominate ~3x more candidates than aske
 one from its transcript and a frame, and the best-rated are rendered. Loud is not the same as good: the
 judge throws out intro cards, menus and dead air that happen to be loud.
 
+With a `proposer` too and a whole transcript of the analysed part (U3, llm_pass.py), an LLM first reads the
+transcript in overlapping 5-minute chunks and proposes moments; the judge then rates those mixed with the
+strongest signal windows instead of windows from every quarter. Without either, or when the pass fails, the
+candidates are nominated exactly as before.
+
 Three options change what is selected (all optional; without them nothing changes):
 - `duration`, a clip-length bucket (moments.BUCKETS): every clip's length, in the source and as rendered, is
   inside it. Windows are nominated at the bucket's nominal length, the judge gets enough transcript to cut
@@ -40,6 +45,7 @@ from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_cha
 from .transcribe import Transcriber, Transcript, exclamation_hits, extract_wav, in_language, snap_to_speech
 from .edit import FLASH_LEN, KEEP_PAUSE, MAX_REMOVED, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, select_cuts, with_flash_forward, zoom_expr, zoom_peaks
 from .moments import BUCKETS, MAX_CLIPS, NOMINAL, Moment
+from .llm_pass import PASS_BUDGET_SEC, PassResult, Proposal, Proposer, mix, run_pass
 from .variety import HORIZON, min_gap_for, pick_distinct
 from .windows import fits, pick_spread, pick_windows
 
@@ -189,7 +195,8 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                  fast_transcriber: Transcriber | None = None, timer: Timer | None = None,
                  transcript: Heard | None = None, source_audio: SourceAudio | None = None,
                  on_clip: Callable[[ClipResult], None] | None = None,
-                 on_moments: Callable[[list[Moment]], None] | None = None) -> list[ClipResult]:
+                 on_moments: Callable[[list[Moment]], None] | None = None,
+                 proposer: Proposer | None = None) -> list[ClipResult]:
     """`timer`, when given, receives how long each stage took and how much work it did (see timing.py).
     `transcript` (heard.Heard) is what earlier jobs transcribed of this recording: candidates it covers are read
     from it instead of transcribed again (the rough pass from any model, captions only from the caption model's
@@ -198,7 +205,9 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     then cut from it. Without it nothing is extracted up front, which is faster when only candidates are read.
     `on_clip` is called with each clip as soon as it is rendered (best first); the return value is every clip in
     the order of the video. `on_moments` is called once, before anything is rendered, with the chosen moments
-    (moments.Moment, best first)."""
+    (moments.Moment, best first).
+    `proposer` (llm_pass.Proposer, used only with a `judge`) reads the whole transcript in chunks and proposes
+    moments for the judge (U3). It runs only when `transcript` covers the whole analysed part."""
     progress = progress_cb or (lambda stage, pct: None)
     timer = timer or Timer()
     t_begin = time.monotonic()
@@ -277,26 +286,44 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     # the rough text came from), otherwise only the caption model's own text.
     heard = transcript if transcript is not None else Heard()
     second_pass = rough is not transcriber
+    # (U3) With a judge, a proposer and the whole transcript, an LLM reads all of it and proposes moments.
+    cut_lengths = limits or (JUDGE_MIN_LEN, JUDGE_MAX_LEN)
+    passed = None
+    if judge is not None and proposer is not None and use_asr:
+        passed = _llm_pass(heard, t0, t1, proposer, options, cut_lengths, timer, progress, deadline)
     # With a judge, nominate from every quarter of a long video so it sees the whole thing; it still decides.
-    picks = (pick_spread if judge is not None else pick_windows)(total, length, count, span,
-                                                                 **({"skip_edges": False} if ranged else {}))
-    if not picks:
+    # A pass that read every chunk has already seen the whole thing: the signals then add their strongest windows.
+    spread = judge is not None and (passed is None or not passed.complete)
+    picks = (pick_spread if spread else pick_windows)(total, length, count, span,
+                                                      **({"skip_edges": False} if ranged else {}))
+    if not picks and not (passed and passed.proposals):
         raise PipelineError("no_moments", "No stand-out moments were found in this video.")
     if ranged:      # back to source seconds, and inside the range
         picks = [(max(t0, s + base), min(t1, e + base), m) for s, e, m in picks]
-    top = max(p[2] for p in picks) or 1.0
+    top = max((p[2] for p in picks), default=0.0) or 1.0
     # Don't pad the result with filler: drop windows far weaker than the best one.
     picks = [p for p in picks if p[2] / top >= MIN_RELATIVE_SCORE]
+    nominated = [(s, e, None, m) for s, e, m in picks]
+    if passed is not None:
+        nominated = mix([_fit_proposal(p, cut_lengths, t0, t1) for p in passed.proposals], picks, count)
+        timer.count("llm_candidates", sum(1 for x in nominated if x[2] is not None))
     candidates: list[_Candidate] = []
-    for start, end, mean in picks:
+    for start, end, proposal, mean in nominated:
         a, b = int(start) - base, max(int(start) + 1, int(end)) - base
+        features = {}
+        if passed is not None:      # who nominated it, and what the proposer said about it
+            features["nominated_by"] = "signals" if proposal is None else ("both" if mean is not None else "llm")
+            if proposal is not None:
+                features["proposal"] = {"kind": proposal.kind, "strength": proposal.strength, "why": proposal.why}
+        if mean is None:            # a moment only the proposer found: the signals' strength over its own span
+            mean = float(total[a:b].mean()) if b > a else 0.0
         parts = {name: float(weights[name] * vals[a:b].mean()) for name, vals in series.items()}
         denom = sum(parts.values()) or 1.0
         candidates.append(_Candidate(
-            start=start, end=end, base=mean / top,
+            start=start, end=end, base=min(1.0, mean / top),
             signals={k: round(v / denom, 3) for k, v in parts.items()},
             features={"window_mean": round(mean, 4), **{f"{k}_mean": round(v, 4) for k, v in parts.items()},
-                      **{f"{k}_peak": round(float(vals[a:b].max()), 4) for k, vals in series.items()}}))
+                      **{f"{k}_peak": round(float(vals[a:b].max()), 4) for k, vals in series.items()}, **features}))
 
     # 3. Whisper on candidates only: features, re-rank bonus, edge snapping, captions.
     for i, c in enumerate(candidates):
@@ -306,7 +333,8 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         progress("transcribing", 45 + int((15 if judge else 25) * i / len(candidates)))
         pad = JUDGE_PAD if judge is not None else PAD
         if judge is not None and limits:      # enough either side for the judge to grow the window to the bucket's longest
-            pad = max(JUDGE_PAD, (limits[1] - length) / 2)
+            own = c.end - c.start if "proposal" in c.features else length      # a proposal has its own length
+            pad = max(JUDGE_PAD, (limits[1] - own) / 2)
         made = _transcribe(c, i, rough, input_path, t1, out_dir, deadline, pad=pad, audio=audio, floor=t0,
                            heard=heard, any_model=second_pass, timed=timer.stage("transcribe_rough"))
         if made:
@@ -434,6 +462,48 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
             on_clip(results[-1])
     progress("done", 100)
     return sorted(results, key=lambda r: r.index)
+
+
+def _llm_pass(heard: Heard, t0: float, t1: float, proposer: Proposer, options: PipelineOptions,
+              cut_lengths: tuple[float, float], timer: Timer, progress,
+              deadline: Deadline | None = None) -> PassResult | None:
+    """(U3) The transcript pass, or None when it cannot run or read nothing: nomination is then as before.
+    The job's counts say what it did: chunks, failed chunks, proposals and tokens, or why it did not run."""
+    if not heard.covers(t0, t1):
+        timer.count("llm_pass_skipped")         # no whole transcript of the analysed part (TRANSCRIBE_WHOLE off)
+        return None
+    progress("judging", 40)                 # a stage name the dashboard already shows
+    context = {"cut_range": (math.ceil(cut_lengths[0]), math.floor(cut_lengths[1])),
+               **({"focus": options.judge_focus} if options.judge_focus else {}),
+               **({"prompt": options.prompt} if options.prompt else {})}
+    budget = deadline.remaining(PASS_BUDGET_SEC) if deadline else PASS_BUDGET_SEC     # out of time: the job times out
+    with timer.stage("llm_pass"):
+        try:
+            passed = run_pass(heard, t0, t1, proposer, context, budget=budget)
+        except Exception:                       # a broken proposer never fails the job: nominate as before
+            passed = None
+    if passed is None or not passed.ok:
+        timer.count("llm_pass_failed")
+        return None
+    timer.count("llm_chunks", passed.chunks)
+    timer.count("llm_chunks_failed", len(passed.failed))
+    timer.count("llm_proposals", len(passed.proposals))
+    timer.count("llm_tokens_in", passed.tokens_in)
+    timer.count("llm_tokens_out", passed.tokens_out)
+    return passed
+
+
+def _fit_proposal(p: Proposal, lengths: tuple[float, float], floor: float, ceiling: float) -> Proposal:
+    """A proposal as a candidate the judge can cut: at most the longest clip (keeping the end, where the payoff
+    is), at least the shortest (grown on both sides), inside [floor, ceiling]."""
+    shortest, longest = lengths
+    start, end = max(floor, p.start), min(ceiling, p.end)
+    if end - start > longest:
+        start = end - longest
+    if end - start < shortest:
+        grow = (shortest - (end - start)) / 2
+        start, end = max(floor, start - grow), min(ceiling, end + grow)
+    return Proposal(round(start, 2), round(end, 2), p.kind, p.why, p.strength, list(p.chunks))
 
 
 def _span(part: dict | None, duration: float) -> tuple[float, float]:

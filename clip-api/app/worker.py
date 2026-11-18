@@ -372,6 +372,8 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             # The pipeline's judge takes (text, frame, context); the AI client takes (text, context, frame).
             extra = ({"judge": lambda text, frame, ctx: ai.clip_meta(text, {**ctx, **lang_ctx}, frame),
                       "fast_transcriber": indexer} if ai is not None else {})
+            if ai is not None and s.llm_pass and hasattr(ai, "propose_moments"):
+                extra["proposer"] = ai.propose_moments          # (U3) reads the whole transcript, when there is one
             # (U1) What this upload already has transcribed (a whole transcript, pieces of earlier clip jobs) is read
             # instead of transcribed again, and what this job transcribes is kept for the next one.
             heard, whole = load_heard(storage, upload_id, language or "en", work)
