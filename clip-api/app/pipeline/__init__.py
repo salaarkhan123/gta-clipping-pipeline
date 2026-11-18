@@ -42,6 +42,8 @@ from .timing import Timer
 from .stt import SourceAudio, slice_wav
 from .heard import Heard, model_of
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
+from .timeline import AUDIO as TIMELINE_AUDIO, STANDBY_REJECT, audio_timeline, keyframes, scene_changes, \
+    standby_seconds, wav_timeline
 from .transcribe import Transcriber, Transcript, exclamation_hits, extract_wav, in_language, snap_to_speech
 from .edit import FLASH_LEN, KEEP_PAUSE, MAX_REMOVED, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, select_cuts, with_flash_forward, zoom_expr, zoom_peaks
 from .moments import BUCKETS, MAX_CLIPS, NOMINAL, Moment
@@ -49,7 +51,9 @@ from .llm_pass import PASS_BUDGET_SEC, PassResult, Proposal, Proposer, mix, run_
 from .variety import HORIZON, min_gap_for, pick_distinct
 from .windows import fits, pick_spread, pick_windows
 
-WEIGHTS = {"chat_motion": 1.0, "audio": 0.7}   # hand-set; the learned ranker replaces these later
+# Hand-set; the learned ranker replaces these later. The timeline signals (timeline.py) are computed only when their
+# weight is above 0; their defaults come from the U2 check against the labelled tuning moments.
+WEIGHTS = {"chat_motion": 1.0, "audio": 0.7, "audio_flux": 0.35, "audio_bursts": 0.35, "scene": 0.0}
 TRANSCRIPT_BONUS = 0.15                        # max re-rank bonus from exclamation phrases
 PAD = 4.0                                      # seconds of audio transcribed either side of a candidate
 JUDGE_PAD = 8.0                                # ... when a judge chooses the cut: room to grow a 30 s window to 45 s
@@ -62,8 +66,6 @@ SILENT_DB = -90.0                             # the level given to seconds outsi
 JUDGE_WEIGHT = 0.75                           # final rank = 0.75 * judge score + 0.25 * signal strength
 JUDGE_FLOOR = 20                              # judge scores below this are junk (menus, intro cards, dead air)
 JUDGE_THREADS = 4
-STANDBY = "standby"                           # (U2) per-second signal, 1 = a BRB / starting-soon / empty-chair screen
-STANDBY_SHARE = 0.5                           # a span at least this much on standby is a standby span
 
 # judge(transcript_text, frame_path, context) -> {"virality": {"score": 0-100, ...}, ...} or None
 Judge = Callable[[str, Path | None, dict], dict | None]
@@ -258,6 +260,8 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         layout, facecam = resolve_facecam(input_path, info, options, deadline)
 
     # 1. Cheap signals over the analysed part of the source.
+    weights = {**WEIGHTS, **(options.weights or {})}
+    heard_audio = [k for k in TIMELINE_AUDIO if weights.get(k, 0) > 0]      # timeline signals from the same decode
     series: dict[str, np.ndarray] = {}
     if options.chat_region != "none":
         progress("chat_motion", 5)
@@ -270,20 +274,33 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     audio: Path | None = source_audio.path if source_audio is not None else None
     if info.has_audio:
         progress("audio", 30)
+        extra: dict[str, list[float]] = {}
         with timer.stage("audio_signal"):
-            # A caller that already decoded the audio measured its levels in that pass; otherwise measure now.
-            db = (source_audio.levels if source_audio is not None else audio_rms_db(input_path, deadline, **part)) or []
+            # A caller that already decoded the audio measured its levels in that pass; otherwise measure now, with
+            # the timeline's audio signals from the same decode when any of them counts.
+            if source_audio is not None:
+                db = source_audio.levels or []
+                if heard_audio:
+                    extra = wav_timeline(source_audio.path, **part)
+            elif heard_audio:
+                db, extra = audio_timeline(input_path, deadline, **part)
+            else:
+                db = audio_rms_db(input_path, deadline, **part) or []
         if ranged and source_audio is not None:
             db = db[base:int(math.ceil(t1))]
         if db:
             series["audio"] = normalise(baseline_z(db, floor=1.0), n)
+        for name in heard_audio:
+            series[name] = _scored(extra.get(name) or [], n)
         if ranged:      # the edit stage reads loudness by source second: put the measured part back in its place
             db = [SILENT_DB] * base + list(db)
+    if weights.get("scene", 0) > 0:
+        with timer.stage("scene"):
+            series["scene"] = _scored(scene_changes(input_path, deadline, **part), n)
     if not series:
         raise PipelineError("no_signal", "This video has no audio track and no chat region was set, "
                                          "so there is nothing to score moments with.")
 
-    weights = {**WEIGHTS, **(options.weights or {})}
     total = np.zeros(n)
     for name, vals in series.items():
         total += weights[name] * vals
@@ -321,17 +338,13 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     picks = [p for p in picks if p[2] / top >= MIN_RELATIVE_SCORE]
     nominated = [(s, e, None, m) for s, e, m in picks]
     if passed is not None:
-        # Never a proposal on a standby screen (U2's signal): the transcript cannot see one, the signal can.
-        fitted = [_fit_proposal(p, cut_lengths, t0, t1) for p in passed.proposals]
-        kept = [p for p in fitted if not _standby(series, p.start, p.end, base)]
-        if len(kept) < len(fitted):
-            timer.count("llm_proposals_standby", len(fitted) - len(kept))
-        nominated = mix(kept, picks, count)
+        # A proposal on a standby screen is dropped by the standby stage below, like any candidate (U2).
+        nominated = mix([_fit_proposal(p, cut_lengths, t0, t1) for p in passed.proposals], picks, count)
         timer.count("llm_candidates", sum(1 for x in nominated if x[2] is not None))
     candidates: list[_Candidate] = []
     for start, end, proposal, mean in nominated:
         a, b = int(start) - base, max(int(start) + 1, int(end)) - base
-        features = {"standby": True} if _standby(series, start, end, base) else {}
+        features = {}
         if passed is not None:      # who nominated it, and what the proposer said about it
             features["nominated_by"] = "signals" if proposal is None else ("both" if mean is not None else "llm")
             if proposal is not None:
@@ -379,6 +392,18 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
             _snap(c, t1, limits, t0)
 
     timer.count("candidates", len(candidates))
+    # Standby footage (starting-soon and BRB screens, an empty chair, a menu left open) never becomes a clip.
+    proposed = sum(1 for c in candidates if "proposal" in c.features)
+    with timer.stage("standby"):
+        series["standby"] = np.zeros(n)        # 0/1 per second; known inside the candidates, 0 elsewhere
+        candidates = _without_standby(candidates, input_path, deadline, use_asr, timer, series["standby"], base)
+    if passed is not None:      # (U3) proposals the standby stage dropped: the transcript cannot see a BRB screen
+        dropped = proposed - sum(1 for c in candidates if "proposal" in c.features)
+        if dropped:
+            timer.count("llm_proposals_standby", dropped)
+    if not candidates:
+        raise PipelineError("no_moments", "Only standby footage (a still screen with nobody talking) was found in "
+                                          "this video.")
     if judge is None:
         ranked = sorted(candidates, key=lambda c: c.final, reverse=True)
     else:
@@ -526,15 +551,6 @@ def _llm_pass(heard: Heard, t0: float, t1: float, proposer: Proposer, options: P
     return passed
 
 
-def _standby(series: dict, start: float, end: float, base: int) -> bool:
-    """Whether [start, end] is mostly a standby screen by the per-second `standby` signal (U2); False without it."""
-    vals = series.get(STANDBY)
-    a, b = max(0, int(start) - base), int(math.ceil(end)) - base
-    if vals is None or b <= a or a >= len(vals):
-        return False
-    return float(np.mean(np.asarray(vals[a:b], dtype=float) > 0.5)) >= STANDBY_SHARE
-
-
 def _fit_proposal(p: Proposal, lengths: tuple[float, float], floor: float, ceiling: float) -> Proposal:
     """A proposal as a candidate the judge can cut: at most the longest clip (keeping the end, where the payoff
     is), at least the shortest (grown on both sides), inside [floor, ceiling]."""
@@ -546,6 +562,46 @@ def _fit_proposal(p: Proposal, lengths: tuple[float, float], floor: float, ceili
         grow = (shortest - (end - start)) / 2
         start, end = max(floor, start - grow), min(ceiling, end + grow)
     return Proposal(round(start, 2), round(end, 2), p.kind, p.why, p.strength, list(p.chunks))
+
+
+def _without_standby(candidates: list[_Candidate], src: Path, deadline, heard_words: bool, timer: Timer,
+                      per_second: np.ndarray | None = None, base: int = 0) -> list[_Candidate]:
+    """The standby contract (shared with the judge and U3): every candidate gets `features.standby_share`, the share
+    of its seconds where the picture stands still and (when it was transcribed) nobody speaks, and
+    `features.standby`, True only at STANDBY_REJECT or more. Those are dropped. `per_second` (second i is source
+    second base + i) gets 1 for every standby second found inside a candidate."""
+    def seconds(c: _Candidate):
+        frames = keyframes(src, c.start, c.end - c.start, deadline)
+        speech = [(s + c.offset, e + c.offset) for s, e, _w in c.transcript.words] if heard_words else None
+        if heard_words and not c.transcript.words:        # no word timings: a segment is speech too
+            speech = [(s + c.offset, e + c.offset) for s, e, _t in c.transcript.segments]
+        return standby_seconds(frames, c.start, c.end, speech)
+
+    with ThreadPoolExecutor(JUDGE_THREADS) as pool:
+        found = list(pool.map(seconds, candidates))
+    kept = []
+    for c, sec in zip(candidates, found):
+        share = 0.0 if sec is None else round(float(sec.mean()), 3)
+        c.features["standby_share"] = share
+        c.features["standby"] = share >= STANDBY_REJECT
+        if sec is not None and per_second is not None:
+            a = int(c.start) - base
+            for k in np.flatnonzero(sec):
+                if 0 <= a + k < len(per_second):
+                    per_second[a + k] = 1.0
+        if c.features["standby"]:
+            timer.count("standby_rejected")
+        else:
+            kept.append(c)
+    return kept
+
+
+def _scored(vals: list[float], n: int) -> np.ndarray:
+    """A timeline signal against its own rolling baseline, scaled like the others (as chat motion is)."""
+    if not vals:
+        return np.zeros(n)
+    floor = max(float(np.std(vals)) * 0.1, 1e-6)
+    return normalise(baseline_z(vals, floor=floor), n)
 
 
 def _span(part: dict | None, duration: float) -> tuple[float, float]:
@@ -700,7 +756,8 @@ def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path,
                                        "lines": [(round(s, 1), t) for s, _e, t in c.transcript.segments],
                                        "window": (round(c.start - c.offset, 1), round(c.end - c.offset, 1)),
                                        **({"cut_range": (math.ceil(limits[0]), math.floor(limits[1]))} if limits else {}),
-                                       **({"focus": focus} if focus else {})})
+                                       **({"focus": focus} if focus else {}),
+                                       **({"standby": c.features["standby_share"]} if c.features.get("standby_share") else {})})
 
     with timer.stage("judge_ai"), ThreadPoolExecutor(JUDGE_THREADS) as pool:
         metas = list(pool.map(rate, range(len(candidates))))

@@ -81,6 +81,17 @@ uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-cl
   show what happened: `llm_chunks`, `llm_chunks_failed`, `llm_tokens_in`, `llm_tokens_out`, `llm_pass_skipped`,
   `llm_pass_failed`. `false` turns it off.
 
+## Moment signals (U2)
+
+- Moments are scored per second from loudness (`audio`, 0.7), how fast the sound changes (`audio_flux`, 0.35) and
+  laughter-like bursts (`audio_bursts`, 0.35), plus on-screen chat motion when a chat region is set. The two new
+  signals come from the loudness decode (one ffmpeg process, two outputs), so audio is still decoded once; they
+  add about 17 CPU-seconds per 2-hour video for their FFTs. `pipeline/timeline.py` has them.
+- `scene` (picture change between key frames) is built but off (weight 0): it costs a key-frame decode.
+- Standby: a candidate whose picture stands still with nobody talking for 90% of its seconds never becomes a clip
+  (starting-soon and BRB screens, an empty chair, a menu left open). Each clip records `features.standby`, the
+  share. It decodes only the key frames inside each candidate.
+
 ## Provisional layouts
 
 `PROVISIONAL_LAYOUTS` (default `false`) controls the layouts that are built but not yet checked on real gaming

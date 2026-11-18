@@ -332,17 +332,14 @@ def test_the_worker_hands_over_the_proposer_only_with_ai_and_the_setting_on(clie
 
 # ---------- standby screens (U2's signal) ----------
 
-def test_the_standby_signal_marks_a_span_only_when_mostly_on_standby():
+def test_a_proposal_inside_a_standby_stretch_is_dropped_by_the_real_standby_stage(video, tmp_path, monkeypatch):
+    # U2's stage decides from key frames which seconds are standby; here the first 10 s are a BRB screen.
     import numpy as np
-    flags = np.zeros(100)
-    flags[20:40] = 1.0
-    assert P._standby({"standby": flags}, 20, 40, 0) and P._standby({"standby": flags}, 15, 40, 0)
-    assert not P._standby({"standby": flags}, 0, 30, 0)                    # a third of it
-    assert not P._standby({"audio": flags}, 20, 40, 0)                     # no standby signal: never standby
 
-
-def test_a_standby_span_is_never_proposed_and_a_standby_candidate_never_judged(video, tmp_path, monkeypatch):
-    monkeypatch.setattr(P, "_standby", lambda series, start, end, base: start < 10)    # the first 10 s: a BRB screen
+    def first_ten_still(frames, start, end, speech=None):
+        n = max(1, int(round(end - start)))
+        return np.ones(n, dtype=bool) if start < 10 else np.zeros(n, dtype=bool)
+    monkeypatch.setattr(P, "standby_seconds", first_ten_still)
     seen = []
 
     def judging(text, frame, ctx):
@@ -352,8 +349,9 @@ def test_a_standby_span_is_never_proposed_and_a_standby_candidate_never_judged(v
     clips = run_pipeline(video, PipelineOptions(**OPTS), tmp_path / "o", transcriber=FakeTranscriber(), judge=judging,
                          timer=timer, transcript=story_transcript(), proposer=story_proposer())
     counts = timer.as_dict()["counts"]
-    assert counts["llm_proposals_standby"] == 1 and counts["llm_candidates"] == 0      # the story was on standby
+    assert counts["llm_candidates"] == 1 and counts["llm_proposals_standby"] == 1      # proposed, then dropped
     assert seen and clips and all(c.start >= 9.5 for c in clips)
+    assert all(c.features["standby"] is False and "standby_share" in c.features for c in clips)
 
 
 def test_the_judge_never_rates_a_standby_candidate_and_all_standby_is_no_moments(tmp_path):
