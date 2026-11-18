@@ -401,6 +401,8 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                         timer, limits=cut_limits, floor=t0, every=every,
                         quality_floor=options.quality_floor,
                         timeline=lambda c: _timeline(series, c.offset, c.end + JUDGE_PAD, base))
+        if not ranked:      # (U4) automatic discovery found no moment over the quality floor: a refunded failure
+            raise PipelineError("no_moments", "No moment in this video reached the quality bar for a clip.")
     # Without the new options this is max_clips over the whole video, as before. A long list is spread by how
     # many moments there really are, and "same topic" only counts between clips near each other (variety.py).
     many = limits is not None or options.limit is not None
@@ -799,6 +801,8 @@ def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path,
     # If the judge failed for some, rank them by signals after the good ones; junk only fills an otherwise empty result.
     unrated.sort(key=lambda c: c.final, reverse=True)
     out = (keep if rated else unrated) if every else keep + unrated
+    if every and rated:
+        return out          # automatic discovery: nothing over the floor is no clip, never a filler one
     return out if out else junk[:1]
 
 

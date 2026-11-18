@@ -35,16 +35,19 @@ def test_the_best_clip_keeps_its_hook_and_repeats_are_rewritten_by_the_writer():
     stats = distinct(clips, writer)
     assert [c["hook"] for c in clips] == ["Cop never saw it coming", "Second take 1", "Plane lands on the highway"]
     assert clips[1]["rewritten"] == {"from": "The cop never saw that coming", "by": "ai"} and "rewritten" not in clips[0]
-    assert calls == [("he flew it right under the bridge", ["Cop never saw it coming"])]    # told what is taken
+    assert calls == [("he flew it right under the bridge", ["Cop never saw it coming", "Plane lands on the highway"])]
     assert stats == {"hooks": 3, "duplicates": 1, "rewritten": 1, "dropped": 0, "left": 0}
 
 
 def test_without_a_writer_a_title_then_the_clips_own_line_stands_in():
-    clips = rows("Wait for it", titles=["Wait for it", "Tow truck yeets the police car"]) + \
-        rows("Tow truck yeets the police car", lines=["ok", "no way he just did that", "bro what"])
+    clips = rows("Wait for it", titles=["Wait for it", "Chase ends under the bridge"]) + \
+        rows("Tow truck yeets the police car") + \
+        rows("Tow truck yeets the police car", titles=["Tow truck yeets the police car"],
+             lines=["ok", "no way he just did that", "bro what"])
     stats = distinct(clips)
-    assert clips[0]["hook"] == "Tow truck yeets the police car" and clips[0]["rewritten"]["by"] == "title"
-    assert clips[1]["hook"] == "no way he just did that" and clips[1]["rewritten"]["by"] == "transcript"
+    assert clips[0]["hook"] == "Chase ends under the bridge" and clips[0]["rewritten"]["by"] == "title"
+    assert clips[1]["hook"] == "Tow truck yeets the police car" and "rewritten" not in clips[1]   # its own: kept
+    assert clips[2]["hook"] == "no way he just did that" and clips[2]["rewritten"]["by"] == "transcript"
     assert stats["duplicates"] == 2 and stats["left"] == 0
 
 

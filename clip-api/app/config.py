@@ -87,7 +87,8 @@ class Settings(BaseSettings):
     stripe_price_scale_month: str = ""
     stripe_price_scale_year: str = ""
 
-    # AI titles, hashtags and virality scores (optional; off when the key is empty)
+    # AI titles, hashtags and the AI rating of each clip (optional; off when the key is empty). The rating is the
+    # model's opinion of the clip, 0-100, never a probability or prediction of views or virality.
     anthropic_api_key: str = ""
     ai_model: str = "claude-haiku-5-5"
     # (U3) With the AI key and a whole transcript of the upload, an LLM reads the transcript in 5-minute chunks and

@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 import app.pipeline as P
-from app.ai import SCORES, SYSTEM, TOOL, ClaudeAI, parse_meta, system_for
+from app.ai import SCORES, SCORING_VERSION, SYSTEM, TOOL, ClaudeAI, parse_meta, system_for
 from app.pipeline import PipelineOptions, run_pipeline
 from app.pipeline.transcribe import Transcript, sentences, snap_to_sentences
 from tests.test_launch import three_bursts  # noqa: F401  (fixture)
@@ -117,7 +117,7 @@ def test_the_pipeline_sends_the_timeline_to_the_judge(three_bursts, tmp_path):  
     assert any(a - 3 <= t <= b + P.JUDGE_PAD for t, _v in seen[0]["timeline"]["audio"])
 
 
-# ---------- 30-50 clips for a long video ----------
+# ---------- automatic discovery: a quality floor, never a quota ----------
 
 def run_judge(out_dir, scores, **kw):
     """_judge over one 30 s candidate every 100 s, the i-th rated scores[i] (no video: no frames)."""
@@ -129,30 +129,43 @@ def run_judge(out_dir, scores, **kw):
     return P._judge(cands, judge, out_dir / "missing.mp4", out_dir, lambda *a: None, None, **kw)
 
 
-def test_a_long_video_asked_for_every_moment_is_topped_up_to_30_but_never_with_junk(tmp_path):
-    scores = [80] * 10 + [17] * 15 + [10] * 15                     # 10 good, 15 weak, 15 junk (menus, ads)
-    assert len(run_judge(tmp_path, scores, every=True)) == 10                 # a short video, or no fill: as before
-    out = run_judge(tmp_path, scores, every=True, fill=P.LONG_MIN_CLIPS)
-    assert len(out) == 25 and all(c.features["judge_score"] >= P.FILL_FLOOR for c in out)
-    assert [c.features["judge_score"] for c in out[:10]] == [80] * 10       # the good ones first
-    many = run_judge(tmp_path, [80] * 45, every=True, fill=P.LONG_MIN_CLIPS)
-    assert len(many) == 45                                          # more than 30: nothing to top up
+def test_every_moment_means_every_moment_over_the_quality_floor_and_nothing_to_fill_a_quota(tmp_path):
+    scores = [80] * 10 + [45] * 5 + [30] * 15 + [10] * 15         # 10 strong, 5 ordinary, 15 weak, 15 junk
+    out = run_judge(tmp_path, scores, every=True)
+    assert len(out) == 15 and all(c.features["judge_score"] >= P.QUALITY_FLOOR for c in out)
+    assert P.QUALITY_FLOOR == 40                                    # stated in the PR; CLIP_QUALITY_FLOOR sets it
+    assert len(run_judge(tmp_path, scores, every=True, quality_floor=60)) == 10
+    assert run_judge(tmp_path, [30] * 40, every=True) == []          # no clip rather than filler
 
 
-def test_the_pipeline_asks_for_the_fill_only_on_a_long_video_asked_for_every_moment(monkeypatch, video, tmp_path):
-    got = []
-    real = P._judge
+def test_a_count_asked_for_still_fills_it_from_the_best_above_the_junk_floor(tmp_path):
+    out = run_judge(tmp_path, [80] * 2 + [30] * 5 + [10] * 3)       # not automatic: as before
+    assert len(out) == 7 and min(c.features["judge_score"] for c in out) >= P.JUDGE_FLOOR
 
-    def spy(*a, **k):
-        got.append(k.get("fill"))
-        return real(*a, **k)
-    monkeypatch.setattr(P, "_judge", spy)
-    judge = lambda text, frame, ctx: {"title": "t", "virality": {"score": 70}}          # noqa: E731
-    run_pipeline(video, PipelineOptions(duration="0-30", tighten=False), tmp_path / "a", judge=judge)
-    monkeypatch.setattr(P, "LONG_VIDEO_SEC", 30.0)                                    # make 40 s "long"
-    run_pipeline(video, PipelineOptions(duration="0-30", tighten=False), tmp_path / "b", judge=judge)
-    run_pipeline(video, PipelineOptions(duration="0-30", limit=2, tighten=False), tmp_path / "c", judge=judge)
-    assert got == [0, P.LONG_MIN_CLIPS, 0]
+
+def test_no_moment_over_the_floor_fails_the_job_and_refunds_it(client, user, video, monkeypatch):
+    from app import worker
+    from tests.test_api import balance, upload
+    from tests.test_launch import FakeAI
+
+    class Weak(FakeAI):
+        def clip_meta(self, transcript, context, thumb=None):
+            meta = super().clip_meta(transcript, context, thumb)
+            return {**meta, "virality": {"score": 30}}
+    headers, _ = user
+    up = upload(client, headers, video)
+    before = balance(client, headers)
+    r = client.post("/v1/clips", json={"upload_id": up["upload_id"], "options": {"duration": "0-30"}}, headers=headers)
+    assert r.status_code == 202, r.text
+    assert worker.run_once(Talker(), ai=Weak()) == "FAILED"
+    job = client.get(f"/v1/jobs/{r.json()['job_id']}", headers=headers).json()
+    assert job["error"]["code"] == "no_moments" and job["clips"] == [] and balance(client, headers) == before
+
+
+def test_the_worker_hands_over_the_configured_floor(monkeypatch):
+    from app.config import get_settings
+    assert get_settings().clip_quality_floor == P.QUALITY_FLOOR
+    assert PipelineOptions().quality_floor == P.QUALITY_FLOOR
 
 
 def test_the_clip_object_carries_the_five_scores():
@@ -166,4 +179,4 @@ def test_the_clip_object_carries_the_five_scores():
              meta=parse_meta(V2), video_key="v.mp4", thumb_key=None, captions_key=None)
     out = clip_json(c, Storage())
     assert out["scores"] == {"hook": 80, "payoff": 90, "clarity": 70, "emotion": 60, "pacing": 50}
-    assert out["virality"]["score"] == 70 and out["virality_score"] == 70
+    assert out["virality"]["score"] == 70 and out["virality_score"] == 70 and out["scoring_version"] == SCORING_VERSION
