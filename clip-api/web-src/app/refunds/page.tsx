@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Decision, LegalPage } from "@/components/LegalPage";
+import { LegalPage, Review } from "@/components/LegalPage";
 import { SUPPORT_EMAIL } from "@/lib/legal";
 
 // "What happens automatically" matches the code: app/ledger.py (settle once; claw_back stops at zero),
@@ -27,23 +27,25 @@ const sections = [
     </ul>
   </> },
   { id: "money", title: "Money refunds", body: <>
-    <p><Decision>this section is a proposal for the owner to confirm</Decision></p>
+    <p><mark className="rounded-[4px] bg-[rgba(255,182,72,.16)] px-1 font-semibold text-warn">[Draft, subject to legal review]</mark></p>
     <ul>
       <li><strong>Credit packs.</strong> You can ask for a refund of a credit pack within 14 days of buying it, as long as none of its credits
         have been used.</li>
       <li><strong>Used credits.</strong> Credits that have been used are not refunded.</li>
       <li><strong>Subscriptions.</strong> You can cancel at any time and keep the plan until the end of the period you paid for. Refunds of
         subscription payments are at our discretion, for example when you were charged after cancelling or by mistake.</li>
+      <li><strong>Failed jobs.</strong> Credits for jobs that fail, time out or are cancelled come back automatically (see above).</li>
       <li><strong>Mistakes and outages.</strong> If we charged you in error or the service did not work, tell us and we will put it right.</li>
     </ul>
+    <p>This does not limit rights you have under the law where you live.</p>
     <p>To ask for a refund, email <a href={`mailto:${SUPPORT_EMAIL}?subject=Refund%20request`}>{SUPPORT_EMAIL}</a> from the address on your
       account, with the date and amount of the payment. Approved refunds go back to the card you paid with, through Stripe.</p>
   </> },
   { id: "statutory", title: "Your legal rights", body: <>
-    <p>Nothing in this policy limits rights you have by law. If you live in the EU or UK, you normally have 14 days to withdraw from an online
-      purchase. Because credits are digital content you can use straight away, you may lose that right once you start using them, if you
-      agreed to that at purchase. Unused purchases stay within the 14-day right. <Decision>confirm the EU/UK withdrawal wording with counsel and
-      whether checkout must ask for that agreement</Decision></p>
+    <p>This policy does not limit rights you have under the law where you live.</p>
+    <p>If you live in the EU or UK, you normally have 14 days to withdraw from an online purchase without giving a reason. Credits are digital
+      content you can use straight away. If you ask for immediate access and agree that you lose the right of withdrawal once you start
+      using the credits, the right ends when you use them. Credits you have not used stay within the 14-day right. <Review /></p>
   </> },
   { id: "more", title: "More", body: <>
     <p>How credits and plans work is in the <Link href="/terms/">Terms of Service</Link>. Prices are on the{" "}

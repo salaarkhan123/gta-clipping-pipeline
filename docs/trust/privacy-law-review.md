@@ -178,3 +178,13 @@ non-DRM videos the user says they own or may clip, never evade a block, and log 
 | 9 | BFL training opt-out before #140 ships | Opt out (email) before enabling |
 | 10 | Keep YouTube link import | Unchanged (best effort, "may fail") pending counsel |
 | 11 | Quebec privacy impact assessments, provider DPAs accepted | Owner action |
+
+## 12. Outstanding compliance items
+
+Decided by the owner on 2026-11-18 as still open, not solved. The legal pages (#147) mark them.
+
+| Item | Status |
+|---|---|
+| French versions of `/privacy` and `/terms` for Quebec (Law 25, Charter of the French language) | Open: needed before marketing in Quebec |
+| EU and UK representatives (GDPR and UK GDPR Art. 27) | Open: appoint before marketing in the EU or UK, or state the service is not offered there |
+| EU/UK 14-day withdrawal: checkout does not yet ask for consent to immediate use | Open: counsel to confirm wording and whether Stripe Checkout must ask |

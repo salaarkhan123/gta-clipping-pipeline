@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Decision, LegalPage, Owner } from "@/components/LegalPage";
+import { Decision, LegalPage, Owner, Review } from "@/components/LegalPage";
 import { OWNER, SUPPORT_EMAIL } from "@/lib/legal";
 
 // Credits and billing statements match app/ledger.py (reserve and settle once, refunds), app/routes_media.py and
@@ -70,8 +70,8 @@ const sections = [
       <li>Credits don&apos;t expire while your account exists.</li>
       <li>New accounts get a one-time grant of free credits once the email address is confirmed. The amount is shown on the{" "}
         <Link href="/pricing/">pricing page</Link>.</li>
-      <li>Credits have no cash value, cannot be transferred to another account and are not refunded when unused, except as the{" "}
-        <Link href="/refunds/">Refund Policy</Link> says <Decision>proposed</Decision>.</li>
+      <li>Credits have no cash value and cannot be transferred to another account. Unused credits are refunded only as the{" "}
+        <Link href="/refunds/">Refund Policy</Link> says.</li>
     </ul>
   </> },
   { id: "plans", title: "Plans and subscriptions", body: <>
@@ -91,17 +91,19 @@ const sections = [
     <p>Refunds: see the <Link href="/refunds/">Refund Policy</Link>.</p>
   </> },
   { id: "copyright", title: "Copyright complaints and repeat infringers", body: <>
-    <p>We respond to copyright notices as the <Link href="/copyright/">Copyright and DMCA Policy</Link> describes. An account that receives
-      In appropriate circumstances we terminate the accounts of repeat infringers (17 U.S.C. 512(i)). <Decision>the threshold; 3 verified notices in 365 days is proposed</Decision>.</p>
+    <p>We respond to copyright notices as the <Link href="/copyright/">Copyright and DMCA Policy</Link> describes. We terminate the accounts
+      of repeat infringers (17 U.S.C. 512(i)): three strikes end an account, and a strike counts only for a valid notice that was not
+      withdrawn and not successfully countered. For a serious violation we may terminate an account at once. Today the owner decides each
+      case by hand. <Decision>which cases count as serious, and whether strikes expire</Decision></p>
   </> },
   { id: "suspension", title: "Suspension and ending the agreement", body: <>
     <ul>
       <li>You can stop using ClutchClips at any time. To delete your account, email us; self-serve deletion is not available yet.</li>
-      <li>We may suspend or close an account that breaks these terms or the Acceptable Use Policy, that is used for fraud or abuse, or when
+      <li>We may suspend or close an account at once if it breaks these terms or the Acceptable Use Policy, is used for fraud or abuse, or
         the law requires it. Where we can, we tell you why and give you a chance to respond.</li>
+      <li>For any other reason, we give you 30 days&apos; notice by email before we close your account. <Review /></li>
       <li>A suspended account cannot log in or use the API, so it cannot start jobs or use its credits.</li>
-      <li>We may change or stop features. <Decision>notice period, and what happens to unused paid credits, if the whole service
-        closes</Decision></li>
+      <li>We may change or stop features. <Decision>what happens to unused paid credits if the whole service closes</Decision></li>
     </ul>
   </> },
   { id: "disclaimers", title: "Disclaimers", body: <>
@@ -115,8 +117,7 @@ const sections = [
   </> },
   { id: "liability", title: "Limitation of liability", body: <>
     <p>As far as the law allows, we are not liable for indirect or consequential losses, such as lost profits, lost revenue or lost data,
-      and our total liability for any claim about the service is limited to the amount you paid us in the 12 months before the claim <Decision>the 12-month cap is
-      proposed</Decision>.
+      and our total liability for any claim about the service is limited to the fees you paid us in the 12 months before the claim <Review />.
       Nothing in these terms limits liability that the law does not allow to be limited, or your rights as a consumer under the law where you live.</p>
   </> },
   { id: "law", title: "Governing law", body: <>

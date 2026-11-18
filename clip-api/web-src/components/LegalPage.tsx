@@ -18,6 +18,16 @@ export function Decision({ children }: { children?: React.ReactNode }) {
   return <mark className={MARK}>[OWNER DECISION{children ? <>: {children}</> : null}]</mark>;
 }
 
+// A rule the owner has set that a lawyer still has to check.
+export function Review() {
+  return <mark className={MARK}>[Subject to legal review]</mark>;
+}
+
+// A compliance step that is known and not done yet.
+export function Outstanding({ children }: { children: React.ReactNode }) {
+  return <mark className={MARK}>[OUTSTANDING: {children}]</mark>;
+}
+
 export const date = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
 

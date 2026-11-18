@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Decision, LegalPage, Owner } from "@/components/LegalPage";
+import { LegalPage, Owner } from "@/components/LegalPage";
 import { OWNER, SUPPORT_EMAIL } from "@/lib/legal";
 
 export const metadata: Metadata = { title: "Acceptable Use Policy · ClutchClips" };
@@ -44,7 +44,8 @@ const sections = [
   </> },
   { id: "enforcement", title: "What we do", body: <>
     <p>Depending on how serious it is, we may remove content, suspend or close the account, and report illegal content to
-      the authorities. In appropriate circumstances we terminate the accounts of repeat infringers (17 U.S.C. 512(i)). <Decision>the threshold; 3 verified notices in 365 days is proposed</Decision>.
+      the authorities. We terminate the accounts of repeat infringers (17 U.S.C. 512(i)) after three strikes, as the{" "}
+      <Link href="/copyright/">Copyright and DMCA Policy</Link> explains, and may terminate an account at once for a serious violation.
       Where we can, we tell you what we did and why, and you can reply to the same email to ask us to look again.</p>
   </> },
 ];

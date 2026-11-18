@@ -80,8 +80,13 @@ const sections = [
       video again. <Decision>how a valid counter-notice is handled, given that removal deletes the files</Decision></p>
   </> },
   { id: "repeat", title: "Repeat infringers", body: <>
-    <p>In appropriate circumstances we terminate the accounts of repeat infringers (17 U.S.C. 512(i)). The owner decides each case by
-      hand. <Decision>the threshold; 3 verified notices in 365 days is proposed</Decision></p>
+    <p>We terminate the accounts of repeat infringers (17 U.S.C. 512(i)):</p>
+    <ul>
+      <li>An account is terminated when it receives three strikes.</li>
+      <li>A strike counts only for a valid notice that was not withdrawn and was not successfully countered.</li>
+      <li>For a serious violation, we may terminate an account at once, without three strikes.</li>
+    </ul>
+    <p>Today the owner keeps the count and decides each case by hand, and tells the account holder by email. <Decision>which cases count as serious, and whether strikes expire</Decision></p>
   </> },
   { id: "misrepresentation", title: "False notices", body: <>
     <p>Under 17 U.S.C. 512(f), a person who knowingly and materially misrepresents that material infringes, or that it was removed by

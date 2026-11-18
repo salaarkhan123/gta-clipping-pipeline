@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Decision, Ext, LegalPage, Owner, Table } from "@/components/LegalPage";
+import { Decision, Ext, LegalPage, Outstanding, Owner, Table } from "@/components/LegalPage";
 import { OWNER } from "@/lib/legal";
 
 // Every statement here matches docs/trust/data-map.md (what the code collects, keeps and sends) and
@@ -175,9 +175,9 @@ const sections = [
   { id: "regions", title: "Quebec, the EU and the UK", body: <>
     <p><strong>Quebec.</strong> The person in charge of the protection of personal information is our privacy officer (see
       &ldquo;Who we are&rdquo;). We tell you here that the service uses automated processing to rank and title clips; it makes no decision
-      about you. <Decision>publish this policy and the Terms in French before marketing in Quebec</Decision></p>
-    <p><strong>EU and UK.</strong> The rights above include all GDPR rights. <Decision>appoint an EU and a UK representative (GDPR Art. 27)
-      before marketing to people there, or state that the service is not offered there</Decision></p>
+      about you. This policy is in English only for now. <Outstanding>French versions of this policy and the Terms, before we market in Quebec</Outstanding></p>
+    <p><strong>EU and UK.</strong> The rights above include all GDPR rights. <Outstanding>an EU and a UK representative (GDPR Art. 27),
+      before we market to people there</Outstanding></p>
     <p><strong>United States.</strong> We do not sell or share personal information for cross-context behavioural advertising, and we do not
       use sensitive personal information to infer characteristics about you.</p>
   </> },
