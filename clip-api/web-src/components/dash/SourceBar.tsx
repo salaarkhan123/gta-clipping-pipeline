@@ -125,6 +125,7 @@ export function SourceBar({ onUploaded, pending }: { onUploaded: (uploadId: stri
             </div>
           </div>}
       </div>
+      <p className="muted small text-center">Upload only videos you own or have permission to clip. See the <a href="/terms/#rights">Terms</a>.</p>
       {tab === "clip" && <div className="flex flex-wrap items-center justify-center gap-3 text-[13px] text-muted">
         <button type="button" className="link small" disabled={!links || !!up} onClick={() => setBox((b) => ({ mode: "many", n: (b?.n || 0) + 1 }))}>Import several links at once</button>
       </div>}
