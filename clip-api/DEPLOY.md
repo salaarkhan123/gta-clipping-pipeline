@@ -102,6 +102,11 @@ links, YouTube best effort) with `POST /v1/imports`. Every import is logged in `
 platform, consent, time) before anything is fetched. Imports are free; the job run on the imported video is what
 costs credits.
 
+`POST /v1/imports/preview {url}` shows what a link is (title, channel, length, thumbnail) before an import. It
+reads metadata only, is free, and stores nothing except a log line (`clipapi.ingest`, "import preview"). Lookups
+are capped at 10 a minute per account and 15 seconds each; answers are cached in memory for 5 minutes per link.
+`IMPORTS_ENABLED=false` switches it off too.
+
 - **Switch imports off:** set `IMPORTS_ENABLED=false` and restart `api` and `worker`. New imports are refused
   with "upload the file instead"; imports already queued fail the same way. Uploads keep working.
 - **Caps** (defaults in brackets): `IMPORT_MAX_BYTES` (8 GB), `IMPORT_MAX_DURATION_SEC` (6 hours),
