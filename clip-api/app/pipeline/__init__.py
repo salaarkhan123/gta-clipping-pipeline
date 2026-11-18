@@ -35,7 +35,7 @@ from .facecam import resolve_facecam
 from .timing import Timer
 from .stt import SourceAudio, slice_wav, window as transcript_window
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
-from .transcribe import Transcriber, Transcript, exclamation_hits, extract_wav, snap_to_speech
+from .transcribe import Transcriber, Transcript, exclamation_hits, extract_wav, in_language, snap_to_speech
 from .edit import FLASH_LEN, KEEP_PAUSE, MAX_REMOVED, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, select_cuts, with_flash_forward, zoom_expr, zoom_peaks
 from .moments import BUCKETS, MAX_CLIPS, NOMINAL, Moment
 from .variety import HORIZON, min_gap_for, pick_distinct
@@ -94,6 +94,10 @@ class PipelineOptions:
                                           # moment that passes the judge's floor (at most moments.MAX_CLIPS)
     range: dict | None = None             # {"start": s, "end": s}: analyse and clip only this part of the source
     project_name: str | None = None       # the user's label for this run (recorded, not interpreted here)
+    # (languages, agent F)
+    source_lang: str | None = None        # spoken language (a code of app/languages.py). None: the transcribers' own
+    target_lang: str | None = None        # language of titles and translated subtitles (recorded, not interpreted here)
+    caption_display: str = "original"     # original | translation | both (recorded: burned captions are the original)
 
 
 @dataclass
@@ -183,6 +187,10 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         raise PipelineError("bad_options", "Unknown chat_region.")
     if judge is not None and options.prompt:
         judge = _with_prompt(judge, options.prompt)
+    # (languages, agent F) Speech in another language than the transcribers' own goes to their multilingual
+    # counterparts. English, or no language given, changes nothing.
+    transcriber = in_language(transcriber, options.source_lang)
+    fast_transcriber = in_language(fast_transcriber, options.source_lang)
 
     progress("probing", 2)
     with timer.stage("probe"):
