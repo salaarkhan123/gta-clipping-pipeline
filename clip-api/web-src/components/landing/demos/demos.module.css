@@ -1,0 +1,76 @@
+/* Motion and caption looks for the landing demos. Layout is Tailwind in the components; only what Tailwind cannot
+   say (keyframes, the caption styles' text effects) lives here. */
+
+/* A demo animates only while its card is the one shown and on screen (data-play), and never for reduced motion. */
+.demo[data-play="false"], .demo[data-play="false"] * { animation-play-state: paused !important; }
+@media (prefers-reduced-motion: reduce) {
+  .demo, .demo *, .demo *::before, .demo *::after { animation: none !important; transition: none !important; }
+}
+
+/* Clips arriving one after another (--d: delay). */
+.rise { animation: rise 6s cubic-bezier(.2,.8,.2,1) var(--d, 0s) infinite both; }
+@keyframes rise {
+  0% { opacity: 0; transform: translateY(18px) scale(.94); }
+  10%, 88% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(-6px); }
+}
+/* The bright band that runs along the long video while it is being read. */
+.scan { animation: scan 6s linear infinite; }
+@keyframes scan { 0% { left: -12%; } 60%, 100% { left: 100%; } }
+/* Three dots between "before" and "after". */
+.dot { animation: dot 1.4s ease-in-out var(--d, 0s) infinite; }
+@keyframes dot { 0%, 100% { opacity: .25; transform: scale(.8); } 50% { opacity: 1; transform: scale(1); } }
+/* A caret after typed text. */
+.caret { display: inline-block; width: 2px; height: 1em; margin-left: 2px; vertical-align: -0.15em; background: currentColor; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+/* The playhead moving over a timeline (--t: seconds per pass). */
+.playhead { animation: playhead var(--t, 8s) linear infinite; }
+@keyframes playhead { from { left: 0%; } to { left: 100%; } }
+/* Silent gaps closing up in the dead-air demo. */
+.gap { animation: gap 5s ease-in-out infinite; }
+@keyframes gap { 0%, 30% { flex-basis: var(--w); opacity: 1; } 55%, 85% { flex-basis: 0; opacity: 0; } 100% { flex-basis: var(--w); opacity: 1; } }
+.strike { animation: strike 5s ease-in-out infinite; }
+@keyframes strike { 0%, 25% { text-decoration-color: transparent; opacity: 1; } 40%, 85% { text-decoration-color: currentColor; opacity: .45; } 100% { text-decoration-color: transparent; opacity: 1; } }
+/* A soft breathing glow on the active choice. */
+.glow { animation: glow 2.4s ease-in-out infinite; }
+@keyframes glow { 0%, 100% { box-shadow: 0 0 0 1px rgba(184,255,60,.55), 0 0 0 rgba(184,255,60,0); } 50% { box-shadow: 0 0 0 1px rgba(184,255,60,.9), 0 0 22px rgba(184,255,60,.25); } }
+/* The hook line showing for the first part of the loop only. */
+.hook { animation: hook 5s ease-in-out infinite; }
+@keyframes hook { 0% { opacity: 0; transform: translateY(-6px) scale(.96); } 6%, 46% { opacity: 1; transform: none; } 54%, 100% { opacity: 0; transform: translateY(-4px); } }
+.hookbar { animation: hookbar 5s linear infinite; }
+@keyframes hookbar { from { left: 0%; } to { left: 100%; } }
+/* A detection box finding the facecam. */
+.find { animation: find 3.2s ease-in-out infinite; }
+@keyframes find { 0% { opacity: 0; transform: scale(1.25); } 20%, 80% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+/* Layout swaps in the reframe demo. */
+.swap { animation: swap .5s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes swap { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+
+/* ---------- Caption looks: our own reading of each style in app/pipeline/captions.py ---------- */
+/* Colours from the renderer: lime #B8FF3C (impact, karaoke, tag), yellow #FFFF00 (pop, bold, boxed, bounce,
+   reveal), green #7AFF66 (neon). */
+.cap { --o: .07em; white-space: nowrap; word-spacing: .12em; color: #fff; font-weight: 800; text-transform: uppercase; text-align: center; line-height: 1.08; letter-spacing: .01em;
+  font-family: inherit;
+  text-shadow: var(--o) 0 0 #000, calc(-1 * var(--o)) 0 0 #000, 0 var(--o) 0 #000, 0 calc(-1 * var(--o)) 0 #000,
+    var(--o) var(--o) 0 #000, calc(-1 * var(--o)) calc(-1 * var(--o)) 0 #000, var(--o) calc(-1 * var(--o)) 0 #000,
+    calc(-1 * var(--o)) var(--o) 0 #000, 0 .12em .3em rgba(0,0,0,.55); }
+.cap .w { display: inline-block; transition: transform .12s, color .12s; }
+.impact { font-family: Anton, Impact, "Arial Narrow", sans-serif; font-weight: 400; font-size: 1.3em; letter-spacing: .02em; }
+.impact .key { color: #b8ff3c; }
+.pop .on { color: #ffff00; transform: scale(1.14); }
+.bold .on { color: #ffff00; }
+.neon .on { color: #7aff66; transform: scale(1.1); filter: drop-shadow(0 0 .25em rgba(122,255,102,.7)); }
+.boxed { font-size: .9em; }
+.boxed .line { display: inline-block; padding: .08em .3em; border-radius: .18em; background: rgba(0,0,0,.78); text-shadow: none; }
+.boxed .on { color: #ffff00; }
+.clean { text-transform: none; font-weight: 700; font-size: .78em; }
+.bounce .on { color: #ffff00; animation: bounce .14s ease-out both; }
+@keyframes bounce { from { transform: scale(.8); } to { transform: scale(1.18); } }
+.karaoke .said { color: #b8ff3c; }
+.reveal .later { visibility: hidden; }
+.reveal .on { color: #ffff00; }
+.outline { --o: .1em; }
+.subtitle { text-transform: none; font-weight: 600; font-size: .7em; text-shadow: none; }
+.subtitle .line { display: inline-block; padding: .15em .45em; border-radius: .2em; background: rgba(0,0,0,.38); }
+.tag { text-transform: lowercase; font-size: .95em; }
+.tag .key { background: #b8ff3c; color: #0a0d05; padding: 0 .18em; border-radius: .14em; text-shadow: none; }

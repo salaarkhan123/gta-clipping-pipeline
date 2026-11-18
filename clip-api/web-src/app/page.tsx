@@ -10,6 +10,12 @@ import { StartBar, StartInput, useStart } from "@/components/StartInput";
 import { Languages, useLanguages } from "@/lib/languages";
 import { freeCredits, useSignupCredits } from "@/lib/plans";
 import { isBuilt, TOOLS } from "@/lib/tools";
+// Landing sections (agent B).
+import { DemoCarousel } from "@/components/landing/sections/DemoCarousel";
+import { EditorSection } from "@/components/landing/sections/EditorSection";
+import { ModelsSection } from "@/components/landing/sections/ModelsSection";
+import { TeamsSection } from "@/components/landing/sections/TeamsSection";
+import { WorkflowSection } from "@/components/landing/sections/WorkflowSection";
 
 const list = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
@@ -58,6 +64,11 @@ export default function Home() {
         </header>
 
         {/* Landing sections (agent B): begin. Carousel under the hero, then the feature sections, in the reference's order. */}
+        <DemoCarousel />
+        <ModelsSection />
+        <WorkflowSection />
+        <EditorSection />
+        <TeamsSection />
         {/* Landing sections (agent B): end */}
 
         <section id="faq" className="px-gutter py-[clamp(64px,8vw,120px)]">

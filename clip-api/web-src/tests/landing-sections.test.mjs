@@ -1,0 +1,62 @@
+// node --test tests/
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+
+const web = fileURLToPath(new URL("../", import.meta.url));
+const source = (path) => readFileSync(join(web, path), "utf8");
+
+test("the landing shows exactly the caption styles the renderer draws", () => {
+  const api = source("../app/render_options.py").match(/CaptionStyle = Literal\[([^\]]+)\]/)[1];
+  const renderer = [...api.matchAll(/"(\w+)"/g)].map((m) => m[1]);
+  const shown = [...source("components/landing/demos/Caption.tsx").matchAll(/\{ id: "(\w+)"/g)].map((m) => m[1]);
+  assert.deepEqual(shown, renderer);
+});
+
+test("the layouts the reframe demo shows are ones the renderer draws, under the app's names", () => {
+  const names = { split2: "Split in two", full: "Full", pip: "Picture in picture", screen_first: "Screen first" };
+  const built = source("../app/pipeline/layouts.py").match(/^LAYOUTS = \(([^)]+)\)/m)[1];
+  const shown = [...source("components/landing/demos/Reframe.tsx").matchAll(/\{ id: "(\w+)", name: "([^"]+)"/g)];
+  assert.equal(shown.length, 4);
+  for (const [, id, name] of shown) {
+    assert.ok(built.includes(`"${id}"`), id);
+    assert.equal(name, names[id], id);
+  }
+});
+
+test("what is not built says Coming soon on the card and offers nothing to click", () => {
+  const soon = source("components/landing/demos/Soon.tsx");
+  assert.match(soon, /<ComingSoonBadge \/>/);
+  assert.doesNotMatch(soon, /<button|<a |href=|onClick/);
+  for (const [file, title] of [["sections/WorkflowSection.tsx", "Auto posting"], ["sections/TeamsSection.tsx", "Team workspace"]]) {
+    const text = source(`components/landing/${file}`);
+    assert.match(text, new RegExp(`title: "${title}", soon: true`), file);
+    assert.match(text, /\.soon && <ComingSoonBadge \/>/, file);
+    assert.doesNotMatch(text, /<button|href=|onClick/, file);
+  }
+  const carousel = source("components/landing/sections/DemoCarousel.tsx");
+  for (const id of ["broll", "voice"]) assert.match(carousel, new RegExp(`id: "${id}",[^}]*soon: true`), id);
+});
+
+test("future features are written in the future tense", () => {
+  const soon = source("components/landing/demos/Soon.tsx");
+  for (const m of soon.matchAll(/text="([^"]+)"/g)) assert.match(m[1], /\bwill\b/, m[1]);
+  assert.match(source("components/landing/sections/WorkflowSection.tsx"), /ClutchClips will post/);
+  assert.match(source("components/landing/sections/TeamsSection.tsx"), /will be able to share/);
+});
+
+test("an AI rating is shown on real footage only when the AI judge rated it", () => {
+  const footage = source("components/landing/demos/Footage.tsx");
+  assert.match(footage, /export const aiRated = \(item: Item \| null\) => typeof item\?\.rating === "number" && item\.rating_source === "ai";/);
+  assert.match(source("components/landing/demos/VodToClips.tsx"), /\{aiRated\(c\) && <AiRating/);
+});
+
+test("demo media never plays sound, waits for reduced motion and carries its credit", () => {
+  const footage = source("components/landing/demos/Footage.tsx");
+  assert.match(footage, /<video muted /);
+  assert.match(footage, /!reduced/);
+  assert.match(footage, /item\.credit/);
+  assert.match(source("components/landing/demos/demos.module.css"), /prefers-reduced-motion: reduce/);
+});
