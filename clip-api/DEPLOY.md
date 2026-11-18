@@ -210,6 +210,32 @@ every admin account when it is empty. A report changes no content.
   send a counter-notice there; a copy goes to the claimant, and the admin decides on `restore` after 10 business
   days.
 
+## Account deletion requests
+
+Users delete their own account at `/dashboard/account/` (`POST /v1/me/delete`) and download their data there
+(`GET /v1/me/export`). For a request that arrives by email:
+
+1. Check the sender owns the account (reply from the account's address).
+2. Access request: `docker compose exec -T api python scripts/admin.py export-account <email or account id> > data.json`
+   and send them the file. PIPEDA gives 30 days to answer.
+3. Deletion request: `docker compose exec -T api python scripts/admin.py delete-account <email or account id> --dry-run`
+   shows what goes; run it again without `--dry-run`. It is safe to repeat (a second run only removes files an
+   interrupted run left). An admin login can do the same with `POST /v1/admin/accounts/{account_id}/delete {note}`,
+   which also emails the user; the CLI does not, so reply to them yourself.
+4. It is refused while a paid plan is live (they cancel in the billing portal first), while a copyright or likeness
+   case about their content is open (finish the case first), or while one of their jobs is running (try again in a
+   few minutes). Queued jobs are cancelled and refunded.
+
+What is deleted: every stored file (uploads, transcripts, search indexes, clips, thumbnails, exports), API keys,
+saved looks, webhook deliveries, premium thumbnails; the email, password, sign-up IP, webhook secret and Stripe ids
+on the account; file names, source links, prompts, titles and edits on its uploads, jobs and clips.
+What is kept: the credit ledger and payments (without identity), policy acceptances and likeness consents (proof of
+consent), the import log and clip feedback (until #150 sets their retention), and cases. A case younger than a year
+gets an `account_deleted` event with the old email (Copyright Act s. 41.26(1)(b)).
+
+**Stripe is not touched.** The Stripe customer record (name, email, card fingerprint) stays in Stripe. If the
+person asks for it to be deleted, delete the customer in the Stripe dashboard (Customers, the customer, Delete).
+
 ## Premium AI thumbnails
 
 A paid option on top of the free thumbnail (#140). The free frame-based thumbnail is always made and stays free,
