@@ -336,8 +336,10 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         meta = _invoice_meta(obj)
         acct = _account(db, meta.get("account_id"), obj.get("customer"))
         plan, interval = _subscribed_plan(obj, meta, acct.plan if acct else None)
-        if acct and not _invoice_subscription(obj):
-            log.info("invoice %s is not for a subscription; no plan credits", obj.get("id"))   # a one-off invoice
+        reason = obj.get("billing_reason") or ""
+        if acct and not _invoice_subscription(obj) and reason and not reason.startswith("subscription"):
+            # A one-off invoice ("manual", "quote_accept", ...): both signals agree it is not a plan renewal.
+            log.info("invoice %s is not for a subscription (%s); no plan credits", obj.get("id"), reason)
         elif acct and plan and plan.get("monthly_credits"):
             acct.plan = plan["id"]
             if obj.get("customer"):
