@@ -3,7 +3,8 @@ import Link from "next/link";
 import { Icon } from "./Icon";
 
 // The row at the top of a page: its title on the left, its actions on the right.
-export const PAGE_HEAD = "flex flex-wrap items-center justify-between gap-3";
+// On a phone every title in it is 20 px, the back-arrow title included.
+export const PAGE_HEAD = "flex flex-wrap items-center justify-between gap-3 narrow:[&_h1]:text-[20px]";
 export const PAGE_TITLE = "text-[22px] narrow:text-[20px]";
 // A section's heading row: a small title or count on the left, sort and filters on the right.
 export const SECTION_HEAD = "flex flex-wrap items-center justify-between gap-[10px]";
