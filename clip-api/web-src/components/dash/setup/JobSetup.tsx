@@ -12,10 +12,9 @@ import { useEffect, useMemo, useState } from "react";
 import { ComingSoonBadge } from "@/components/ComingSoonBadge";
 import { clock } from "@/lib/api";
 import { useLanguages } from "@/lib/languages";
-import { allows, inside, layoutsFor, Listed, onlyListed } from "@/lib/options";
+import { allows, inside, layoutsFor, Listed, offeredBucket, onlyListed, RENDER } from "@/lib/options";
 import { extrasFrom, gameName, gameOf, isPreset, loadCustom, loadTemplates, Look, lookFrom, Saved, startLook, tidy } from "@/lib/templates";
 import { Icon } from "../Icon";
-import { offeredBucket, RENDER } from "../JobForm";
 import { Span } from "../RangeSlider";
 import { useDash } from "../Shell";
 import { LayoutPicker } from "./Layout";
@@ -115,7 +114,7 @@ export function JobSetup({ source, listed, template, price, onOptions, onCreate,
   const create = <button type="button" className="btn primary w-full" disabled={!ready} onClick={() => onCreate(options)}>{step ? "Working…" : "Create"}</button>;
 
   return (
-    <div className="mx-auto grid w-full max-w-[1320px] grid-cols-[minmax(0,1fr)] gap-5">
+    <div className="wide mx-auto grid w-full max-w-[1320px] grid-cols-[minmax(0,1fr)] gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <button type="button" onClick={onRemove} aria-label="Back" className="grid h-9 w-9 flex-none cursor-pointer place-items-center rounded-full border-0 bg-transparent text-muted hover:bg-chip hover:text-text"><Icon name="back" size={20} /></button>

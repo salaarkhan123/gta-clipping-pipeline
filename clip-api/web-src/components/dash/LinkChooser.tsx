@@ -15,7 +15,7 @@ import { isBuilt, ToolEntry, TOOLS } from "@/lib/tools";
 import { ComingSoonBadge } from "@/components/ComingSoonBadge";
 import { Icon } from "./Icon";
 import { JobSetup } from "./setup/JobSetup";
-import { offeredBucket } from "./JobForm";
+import { offeredBucket } from "@/lib/options";
 import { AspectSelect, Picked, PreEdit, Templates } from "./PreEdit";
 import { useDash } from "./Shell";
 import { BackTitle } from "./ui";
@@ -240,7 +240,7 @@ export function LinkChooser() {
       price={quoted ? { state: "ok", credits: quoted.credits, note: quoted.basis ? `Worked out from ${quoted.basis}.` : undefined }
         : { state: "unknown", text: "One credit per minute of video. Once the video is in, the exact price is shown before anything is charged." }}
       onOptions={(opts) => { setup.current = opts; }} onCreate={(opts) => { setup.current = opts; go(); }} onRemove={() => router.push("/dashboard/")}
-      consent={{ checked: consent, onChange: setConsent, text: CONSENT }} step={step} problem={problem || (short ? "Not enough credits for this video." : "")}
+      consent={{ checked: consent, onChange: setConsent, text: CONSENT }} step={step} problem={problem}
       header={toolChips} />
   );
 

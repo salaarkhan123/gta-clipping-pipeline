@@ -69,3 +69,9 @@ export const layoutsFor = (listed: Listed, aspect: string): string[] =>
 export function onlyListed(listed: Listed, options: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(options).filter(([k]) => k in listed));
 }
+
+// Clip lengths offered: the automatic one ("0-90") and the buckets that end at 60 s or sooner (owner, 2026-11-18).
+export const offeredBucket = (b: string) => b === "0-90" || +b.split("-")[1] <= 60;
+// New website jobs start with previews (the API's own default stays "full" for API customers); each card's Export
+// button renders full quality.
+export const RENDER = "preview";

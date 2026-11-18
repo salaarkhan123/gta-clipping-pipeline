@@ -16,9 +16,8 @@ test("a clip with no saved edit opens with its run's dead air as cuts", () => {
 });
 
 test("new website jobs ask for previews; the export dialogs show the exact price", () => {
-  const form = source("components/dash/JobForm.tsx");
-  assert.match(form, /export const RENDER = "preview";/);
-  assert.match(form, /render: RENDER/);
+  assert.match(source("lib/options.ts"), /export const RENDER = "preview";/);
+  assert.match(source("components/dash/setup/JobSetup.tsx"), /render: RENDER/);
   for (const file of ["components/dash/Editor.tsx", "components/dash/BulkEdit.tsx"]) assert.match(source(file), /<QuoteLine [^>]*exact \/>/);
   assert.match(source("components/dash/ClipCard.tsx"), /clip\.rendered !== "full" && <ExportFull/);
 });
