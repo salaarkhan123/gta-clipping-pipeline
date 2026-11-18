@@ -141,7 +141,17 @@ Panel sizes are a public template field, `panels: {"camera": "top" | "bottom" | 
 - The text: the clip's `hook`, else its `title` (swears masked when `censor` is on), upper case in Anton, the keyword in `caption_accent` (default lime), white with a dark outline and shadow. As large as fits (capitals 10% of the short side, down to 5.5%), wrapped to at most three balanced lines, cut short with "…" rather than overflowing. Inside 6% side margins and the safe rows (13%–87% of the height in 9:16, the 3:4 crop profile grids show; 7%–93% otherwise). On the line between stacked panels when there is one, else the upper third, then the lower third; never on the person's head or an inset camera. Text in a script our fonts lack (Anton, then DejaVu Sans Bold) gives the frame alone.
 - When the title arrives after the clip (the find tool, or a clip the judge could not rate), the worker sets it on the same frame then. The AI is always shown the frame without text.
 - `features.thumbnail` records the choice: `at` (source second), `frames` looked at, `score`, `face`, `failed` (checks the frame failed, when every frame failed some), `text` (whether text was drawn) and `canvas` (where text may go, so the text can be set again later).
-- AI-generated thumbnails are a separate paid option, priced in their own ticket. Not built.
+- The frame without text is stored too (`clips.frame_key`, +~90 KB a clip), so text can be redrawn and premium thumbnails start from it.
+
+### Premium thumbnails (#140, paid, behind `PREMIUM_THUMBNAILS`)
+
+- `GET /v1/clips/{id}/thumbnails`: `{selected, thumbnails: [{id ("original" or thb_…), kind, style, url, text, show_text, editable, selected}], pending: [job ids], premium: null | {credits, styles: [{id, name}], instruction_max, consent, note}}`. Free.
+- `POST /v1/clips/{id}/thumbnails/{thumb_id}/select`: the clip's `thumb_url` becomes that one; `original` goes back. Free.
+- `PATCH /v1/clips/{id}/thumbnails/{thumb_id}` `{text?, show_text?}`: redrawn by `thumbs.write_thumbnail`. Free.
+- `POST /v1/clips/{id}/thumbnails/premium/quote` `{style, instruction?}`: `{credits_reserved, credits, likeness_consent_required, consent, note}`. Reserves nothing.
+- `POST /v1/clips/{id}/thumbnails/premium` `{style, instruction?, confirm: true, credits?, likeness_consent}` with optional `Idempotency-Key`: a job `thm_…` (tool `premium_thumbnail`) to poll. 422 `confirm_required`, `likeness_consent_required`, `instruction_not_allowed`, `unknown_style`; 409 `price_changed`, `no_clean_frame`; 402; 404 `premium_thumbnails_off`. An identical request while one is queued or running returns that job.
+- The model never draws text; our renderer draws the hook on the result. A result is never chosen for the user.
+- Schema revision 0008 (additive): `clips.frame_key`, `clips.thumb_id`; tables `clip_thumbnails` and `likeness_consents` (append-only).
 
 ## Score calibration (A)
 

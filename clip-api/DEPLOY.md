@@ -116,6 +116,34 @@ are capped at 10 a minute per account and 15 seconds each; answers are cached in
 The link may be given in any form the site uses (with or without `www.`, tracking parameters, `youtu.be`): it is
 matched by its canonical form. Ordinary uploads are never touched by a takedown.
 
+## Premium AI thumbnails
+
+A paid option on top of the free thumbnail (#140). The free frame-based thumbnail is always made and stays free,
+and so are choosing between a clip's thumbnails and editing or hiding their text. A premium thumbnail restyles the
+clip's thumbnail frame with an image-edit model (Gemini Nano Banana 2.1, one retry on FLUX.1 Kontext [pro]); our
+own renderer then draws the hook, so the words are spelled exactly. Every attempt's provider, time and estimated
+cost is kept in the thumbnail's `info` and the job's `result`.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `PREMIUM_THUMBNAILS` | `false` | The feature flag. Off: the premium routes answer 404 `premium_thumbnails_off`, `/v1/options` does not list them and the website hides the panel. Leave it off until real provider tests and a quality check are done. |
+| `GEMINI_API_KEY` | empty | The primary provider (Google AI Studio key). |
+| `BFL_API_KEY` | empty | The fallback provider (Black Forest Labs). With only one key set, the retry uses the same provider. With neither, the routes answer 503. |
+| `PREMIUM_THUMB_CREDITS` | `25` | The price of one premium thumbnail, in credits (owner OK 2026-11-17). The only price used: the quote, the confirm step and the reservation all read it. |
+| `GEMINI_IMAGE_MODEL` | `gemini-nano-banana-2.1` | The Gemini model id (the stable id in Google's model page). |
+| `GEMINI_IMAGE_SIZE` | `2K` | `1K`, `2K` or `4K`. 2K is $0.0504 an image. |
+| `PREMIUM_THUMB_TIMEOUT_SEC` | `60` | One provider attempt, end to end. |
+| `PREMIUM_THUMB_STYLES` | four presets | JSON list of `{id, name, prompt}`; each prompt describes a look only. |
+
+- The worker runs premium thumbnails in a slot of their own (started when the flag is on), so a 20-second paid
+  job never waits behind a 2-hour VOD. Restart the `worker` after turning the flag on.
+- Credits: reserved once at confirm, settled once. Any failure (provider error or timeout after the retry, safety
+  block, the face lost, cancel, crash, dead worker) is refunded in full.
+- Likeness consent: the first premium thumbnail of a clip needs the user's confirmation that they are the streamer
+  or have their permission; each one is a row in `likeness_consents` (account, clip, wording, time).
+- Benchmark with real calls (about $0.06 a thumbnail), from `clip-api/` with the keys in its settings file:
+  `python scripts/premium_thumb_bench.py <out_dir> --video <file> <moments.csv> --per-video 20`.
+
 ## Moving files to DigitalOcean Spaces
 
 Uploads and clips are stored on the droplet's disk by default (`STORAGE_BACKEND=local`). Spaces moves them to a
