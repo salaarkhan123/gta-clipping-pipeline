@@ -1,0 +1,58 @@
+name: monitor
+
+# Every 15 minutes: read-only `status` from the server (a second key whose forced command runs only `status`),
+# compared with .github/ops/config.json. A breach or a failed check opens, or updates, one issue labelled `ops`
+# assigned to the owner (GitHub emails assignees); it is closed when healthy again. Off until the repo variable
+# OPS_MONITOR is 'on' (docs/devops/setup.md).
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: monitor
+  cancel-in-progress: true
+
+jobs:
+  monitor:
+    if: vars.OPS_MONITOR == 'on'
+    runs-on: ubuntu-latest
+    environment: production-readonly
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Read server status
+        id: status
+        env:
+          OPS_DIR: ${{ runner.temp }}/ops
+          PROD_SSH_KEY: ${{ secrets.PROD_STATUS_SSH_KEY }}
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_KNOWN_HOSTS: ${{ secrets.PROD_KNOWN_HOSTS }}
+          PROD_SSH_USER: ${{ vars.PROD_SSH_USER }}
+          PROD_SSH_PORT: ${{ vars.PROD_SSH_PORT }}
+        run: .github/ops/ssh_ops.sh status status || true
+      - name: Compare with thresholds
+        id: eval
+        env:
+          OPS_DIR: ${{ runner.temp }}/ops
+          SSH_RC: ${{ steps.status.outputs.rc || '255' }}
+        run: |
+          python3 .github/ops/opsctl.py monitor --status "$OPS_DIR/status.env" --ssh-rc "$SSH_RC" > "$OPS_DIR/health.md"
+          cat "$OPS_DIR/health.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Open, update or close the ops issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          OPS_DIR: ${{ runner.temp }}/ops
+          HEALTHY: ${{ steps.eval.outputs.healthy }}
+          SIGNATURE: ${{ steps.eval.outputs.signature }}
+          ASSIGNEE: ${{ vars.OPS_OWNER || github.repository_owner }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create ops --color B60205 --description "Production operations alert" 2>/dev/null || true
+          python3 .github/ops/opsctl.py issue --healthy "$HEALTHY" --body "$OPS_DIR/health.md" \
+            --signature "$SIGNATURE" --assignee "$ASSIGNEE" --run-url "$RUN_URL"
