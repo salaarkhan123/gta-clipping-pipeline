@@ -4,7 +4,8 @@
 // (components/site/MediaFrame.tsx). Sections match ~/ClutchClips-eval/website-media/ folder names.
 import { useEffect, useState } from "react";
 
-export type MediaSection = "hero-long-video" | "hero-vertical-clips" | "captions" | "reframe" | "hook" | "editor" | "clip-finding" | "templates" | "brand";
+export type MediaSection = "hero-long-video" | "hero-vertical-clips" | "captions" | "reframe" | "hook" | "editor" | "clip-finding" | "templates" | "brand"
+  | "setup";                 // job-setup screen stills (app screens)
 
 export type MediaItem = {
   id: string;               // stable key, e.g. "clip-1" or a template id
