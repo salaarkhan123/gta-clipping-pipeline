@@ -22,10 +22,13 @@
 
 {$WEB_DOMAIN} {
 	import security_headers
-	# The static site (Next.js export). It calls the API, shows media from the API (local storage) or a Space,
-	# and sends checkout and the billing portal to Stripe by navigation, which CSP does not restrict.
+	# The static site (Next.js export). It calls the API, shows media from the API (local storage) or the bucket,
+	# reads captions from and uploads to the bucket, and sends checkout and the billing portal to Stripe by
+	# navigation, which CSP does not restrict.
+	# MEDIA_ORIGIN is S3_ENDPOINT_URL (docker-compose.yml): signed links are path-style on that one host
+	# (app/storage.py), R2 or a Space. Empty with local storage.
 	# 'unsafe-inline': the export inlines its hydration scripts and style attributes, which change every build.
-	header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://{$API_DOMAIN} https://*.digitaloceanspaces.com; media-src 'self' blob: https://{$API_DOMAIN} https://*.digitaloceanspaces.com; font-src 'self' data:; connect-src 'self' https://{$API_DOMAIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+	header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://{$API_DOMAIN} {$MEDIA_ORIGIN}; media-src 'self' blob: https://{$API_DOMAIN} {$MEDIA_ORIGIN}; font-src 'self' data:; connect-src 'self' https://{$API_DOMAIN} {$MEDIA_ORIGIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
 	encode gzip
 	root * /srv/web
 	file_server

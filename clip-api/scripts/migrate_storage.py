@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copy every file from local-disk storage into the S3 bucket (DigitalOcean Spaces), keeping the same keys.
+"""Copy every file from local-disk storage into the S3 bucket (Cloudflare R2 or Spaces), keeping the same keys.
 
 Usage: python scripts/migrate_storage.py [--dry-run]
 

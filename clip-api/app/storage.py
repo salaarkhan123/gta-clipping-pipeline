@@ -1,4 +1,4 @@
-"""Object storage behind one interface: local disk (dev/tests) or S3-compatible (DigitalOcean Spaces, R2)."""
+"""Object storage behind one interface: local disk (dev/tests) or S3-compatible (Cloudflare R2, DigitalOcean Spaces)."""
 import mimetypes
 import shutil
 from datetime import timedelta
@@ -7,6 +7,17 @@ from pathlib import Path
 
 from .config import get_settings
 from .security import make_token
+
+# Longest life of a SigV4 presigned URL on S3, R2 and Spaces (R2: 1 second to 7 days).
+MAX_SIGNED_URL_SEC = 7 * 24 * 3600
+# Most keys one DeleteObjects call takes (S3 and R2); ListObjectsV2 pages are the same size.
+DELETE_BATCH = 1000
+
+
+def check_prefix(prefix: str) -> None:
+    """A prefix names a folder ("clips/job_1/"): without the slash "uploads/acct_1" would also match acct_10."""
+    if not prefix.endswith("/") or prefix.strip("/") == "":
+        raise ValueError(f"storage prefix must be a non-empty folder ending in '/': {prefix!r}")
 
 
 class LocalStorage:
@@ -38,6 +49,18 @@ class LocalStorage:
     def delete(self, key: str) -> None:
         self.path(key).unlink(missing_ok=True)
 
+    def keys(self, prefix: str) -> list[str]:
+        check_prefix(prefix)
+        folder = self.path(prefix.rstrip("/"))
+        return sorted(p.relative_to(self.root.resolve()).as_posix() for p in folder.rglob("*") if p.is_file())
+
+    def delete_prefix(self, prefix: str) -> int:
+        """Delete every file under prefix; returns how many."""
+        found = self.keys(prefix)
+        for key in found:
+            self.delete(key)
+        return len(found)
+
 
 class S3Storage:
     """Private bucket; downloads are presigned URLs straight from the bucket (no bytes through the api)."""
@@ -48,16 +71,19 @@ class S3Storage:
         s = get_settings()
         self.bucket = s.s3_bucket
         # Checksums only when the API requires them: boto3's newer default (a CRC on every upload) is
-        # rejected by some S3-compatible services.
+        # rejected by some S3-compatible services (R2 has no full-object CRC32, and none on CopyObject).
+        # Path-style URLs: every signed link is on S3_ENDPOINT_URL's host, the one origin the site's CSP allows
+        # (Caddyfile, MEDIA_ORIGIN).
         self.client = boto3.client(
             "s3", endpoint_url=s.s3_endpoint_url or None, region_name=s.s3_region,
             aws_access_key_id=s.s3_access_key_id, aws_secret_access_key=s.s3_secret_access_key,
             config=Config(signature_version="s3v4", request_checksum_calculation="when_required",
-                          response_checksum_validation="when_required"))
+                          response_checksum_validation="when_required", s3={"addressing_style": "path"}))
 
     def put(self, key: str, src: Path) -> None:
-        content_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
-        self.client.upload_file(str(src), self.bucket, key, ExtraArgs={"ContentType": content_type})
+        # upload_file switches to multipart above 8 MiB with equal-size parts, which R2 requires.
+        # Content-Disposition is stored too: R2 documents it on PutObject, not the response-* override in url().
+        self.client.upload_file(str(src), self.bucket, key, ExtraArgs=object_headers(key))
 
     def fetch(self, key: str, dest: Path) -> None:
         self.client.download_file(self.bucket, key, str(dest))
@@ -83,14 +109,39 @@ class S3Storage:
     def url(self, key: str) -> str:
         # attachment: the site's Download link is cross-origin, where the browser ignores <a download>.
         # <video> and <img> ignore this header, so previews still play from the same URL.
-        name = Path(key).name.replace('"', "")
+        # Also asked for per URL, so objects stored before put() set the header download the same way.
         return self.client.generate_presigned_url(
             "get_object", Params={"Bucket": self.bucket, "Key": key,
-                                  "ResponseContentDisposition": f'attachment; filename="{name}"'},
-            ExpiresIn=get_settings().signed_url_ttl_sec)
+                                  "ResponseContentDisposition": object_headers(key)["ContentDisposition"]},
+            ExpiresIn=min(get_settings().signed_url_ttl_sec, MAX_SIGNED_URL_SEC))
 
     def delete(self, key: str) -> None:
         self.client.delete_object(Bucket=self.bucket, Key=key)
+
+    def keys(self, prefix: str) -> list[str]:
+        check_prefix(prefix)
+        pages = self.client.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix)
+        return [o["Key"] for page in pages for o in page.get("Contents", [])]
+
+    def delete_prefix(self, prefix: str) -> int:
+        """Delete every object under prefix, 1000 keys per DeleteObjects call; returns how many.
+        Raises if the bucket refused any key (DeleteObjects reports those in the body, not the status)."""
+        found = self.keys(prefix)
+        for i in range(0, len(found), DELETE_BATCH):
+            batch = [{"Key": k} for k in found[i:i + DELETE_BATCH]]
+            r = self.client.delete_objects(Bucket=self.bucket, Delete={"Objects": batch, "Quiet": True})
+            if r.get("Errors"):
+                e = r["Errors"][0]
+                raise RuntimeError(f"{len(r['Errors'])} objects under {prefix} not deleted, "
+                                   f"first {e.get('Key')}: {e.get('Code')} {e.get('Message')}")
+        return len(found)
+
+
+def object_headers(key: str) -> dict:
+    """Content-Type from the extension, and attachment with the file's name (see S3Storage.url)."""
+    name = Path(key).name.replace('"', "")
+    return {"ContentType": mimetypes.guess_type(key)[0] or "application/octet-stream",
+            "ContentDisposition": f'attachment; filename="{name}"'}
 
 
 def transcript_key(upload_id: str) -> str:
