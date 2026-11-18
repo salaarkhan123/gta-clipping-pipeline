@@ -165,7 +165,7 @@ class FakeAI:
                 "virality": {"score": 81, "hook": 90, "flow": 70, "value": 85, "trend": 79}, "reason": "r", "source": "ai"}
 
 
-def test_clips_get_ai_titles_scores_and_subtitles(client, user, video):
+def test_clips_get_ai_titles_scores_and_subtitles(client, user, video, transcriber):
     headers, _ = user
     up = upload(client, headers, video)
     r = client.post("/v1/clips", json={"upload_id": up["upload_id"], "options": {"max_clips": 1, "clip_length": 10}},

@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from app import worker
-from app.ai import SYSTEM, TOOL, ClaudeAI, parse_meta, system_for
+from app.ai import SYSTEM, TOOL, TRANSCRIPT_CHARS, ClaudeAI, parse_meta, system_for
 from app.db import new_session
 from app.models import Clip, Job, Upload, new_id, utcnow
 from app.pipeline import PipelineOptions
@@ -289,6 +289,6 @@ def test_the_judge_is_told_the_buckets_range_and_gets_more_transcript_for_long_c
     assert "180 to 298 second" in seen[0]["system"] and "The cut must be 180 to 298 seconds long." in bucket
     assert seen[1]["system"] == SYSTEM and "The cut must be" not in before and plain["kind"] == "story"
     said = [text.split("Transcript with time marks (seconds):\n")[1] for text in (bucket, before)]
-    assert len(said[1]) == 2500 and len(said[0]) == 25 * 298                  # 2,500 characters as before; 25 per second of the longest cut
+    assert len(said[1]) == TRANSCRIPT_CHARS and len(said[0]) == 25 * 298      # TRANSCRIPT_CHARS at least; 25 per second of the longest cut
     short = ai.clip_meta("", {**ctx, "cut_range": (10, 28)})
-    assert short is not None and len(seen[2]["messages"][0]["content"][-1]["text"].split("(seconds):\n")[1]) == 2500
+    assert short is not None and len(seen[2]["messages"][0]["content"][-1]["text"].split("(seconds):\n")[1]) == TRANSCRIPT_CHARS
