@@ -38,7 +38,7 @@ from .stt import SourceAudio, slice_wav
 from .heard import Heard, model_of
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
 from .timeline import AUDIO as TIMELINE_AUDIO, STANDBY_REJECT, audio_timeline, keyframes, scene_changes, \
-    standby_share, wav_timeline
+    standby_seconds, wav_timeline
 from .transcribe import Transcriber, Transcript, exclamation_hits, extract_wav, in_language, snap_to_speech
 from .edit import FLASH_LEN, KEEP_PAUSE, MAX_REMOVED, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, select_cuts, with_flash_forward, zoom_expr, zoom_peaks
 from .moments import BUCKETS, MAX_CLIPS, NOMINAL, Moment
@@ -365,7 +365,8 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     timer.count("candidates", len(candidates))
     # Standby footage (starting-soon and BRB screens, an empty chair, a menu left open) never becomes a clip.
     with timer.stage("standby"):
-        candidates = _without_standby(candidates, input_path, deadline, use_asr, timer)
+        series["standby"] = np.zeros(n)        # 0/1 per second; known inside the candidates, 0 elsewhere
+        candidates = _without_standby(candidates, input_path, deadline, use_asr, timer, series["standby"], base)
     if not candidates:
         raise PipelineError("no_moments", "Only standby footage (a still screen with nobody talking) was found in "
                                           "this video.")
@@ -487,23 +488,32 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     return sorted(results, key=lambda r: r.index)
 
 
-def _without_standby(candidates: list[_Candidate], src: Path, deadline, heard_words: bool,
-                      timer: Timer) -> list[_Candidate]:
-    """Every candidate gets `features.standby`: the share of its seconds where the picture stands still and (when
-    it was transcribed) nobody speaks. Those at STANDBY_REJECT or more are dropped."""
-    def share(c: _Candidate) -> float:
+def _without_standby(candidates: list[_Candidate], src: Path, deadline, heard_words: bool, timer: Timer,
+                      per_second: np.ndarray | None = None, base: int = 0) -> list[_Candidate]:
+    """The standby contract (shared with the judge and U3): every candidate gets `features.standby_share`, the share
+    of its seconds where the picture stands still and (when it was transcribed) nobody speaks, and
+    `features.standby`, True only at STANDBY_REJECT or more. Those are dropped. `per_second` (second i is source
+    second base + i) gets 1 for every standby second found inside a candidate."""
+    def seconds(c: _Candidate):
         frames = keyframes(src, c.start, c.end - c.start, deadline)
         speech = [(s + c.offset, e + c.offset) for s, e, _w in c.transcript.words] if heard_words else None
         if heard_words and not c.transcript.words:        # no word timings: a segment is speech too
             speech = [(s + c.offset, e + c.offset) for s, e, _t in c.transcript.segments]
-        return standby_share(frames, c.start, c.end, speech)
+        return standby_seconds(frames, c.start, c.end, speech)
 
     with ThreadPoolExecutor(JUDGE_THREADS) as pool:
-        shares = list(pool.map(share, candidates))
+        found = list(pool.map(seconds, candidates))
     kept = []
-    for c, sh in zip(candidates, shares):
-        c.features["standby"] = sh
-        if sh >= STANDBY_REJECT:
+    for c, sec in zip(candidates, found):
+        share = 0.0 if sec is None else round(float(sec.mean()), 3)
+        c.features["standby_share"] = share
+        c.features["standby"] = share >= STANDBY_REJECT
+        if sec is not None and per_second is not None:
+            a = int(c.start) - base
+            for k in np.flatnonzero(sec):
+                if 0 <= a + k < len(per_second):
+                    per_second[a + k] = 1.0
+        if c.features["standby"]:
             timer.count("standby_rejected")
         else:
             kept.append(c)
@@ -661,7 +671,8 @@ def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path,
                                        "lines": [(round(s, 1), t) for s, _e, t in c.transcript.segments],
                                        "window": (round(c.start - c.offset, 1), round(c.end - c.offset, 1)),
                                        **({"cut_range": (math.ceil(limits[0]), math.floor(limits[1]))} if limits else {}),
-                                       **({"focus": focus} if focus else {})})
+                                       **({"focus": focus} if focus else {}),
+                                       **({"standby": c.features["standby_share"]} if c.features.get("standby_share") else {})})
 
     with timer.stage("judge_ai"), ThreadPoolExecutor(JUDGE_THREADS) as pool:
         metas = list(pool.map(rate, range(len(candidates))))

@@ -112,8 +112,28 @@ def test_a_standby_candidate_never_becomes_a_clip(still_then_moving, tmp_path):
     clips = run_pipeline(still_then_moving, PipelineOptions(max_clips=3, clip_length=10, tighten=False), tmp_path / "o",
                          timer=timer, on_moments=keep)
     assert clips and all(c.start >= 29 for c in clips)                   # nothing from the still card
-    assert all(m.features["standby"] < STANDBY_REJECT for m in moments)
-    assert all("standby" in c.features for c in clips)
+    assert all(m.features["standby_share"] < STANDBY_REJECT and m.features["standby"] is False for m in moments)
+    assert all("standby_share" in c.features for c in clips)
+
+
+def test_a_candidate_with_a_little_standby_is_still_judged_and_the_judge_is_told(still_then_moving, tmp_path):
+    seen = []
+
+    def judge(text, frame, ctx):
+        seen.append(ctx)
+        return {"title": "t", "virality": {"score": 80}}
+    clips = run_pipeline(still_then_moving, PipelineOptions(max_clips=1, clip_length=20, tighten=False,
+                                                            range={"start": 20, "end": 40}), tmp_path / "o", judge=judge)
+    assert clips and seen                                                  # judged, not dropped
+    share = clips[0].features["standby_share"]
+    assert 0 < share < STANDBY_REJECT and clips[0].features["standby"] is False
+    assert seen[0]["standby"] == share
+
+
+def test_the_judge_prompt_names_the_standby_share_only_when_there_is_some():
+    from app.ai import _standby_line
+    assert _standby_line({}) == "" and _standby_line({"standby": 0.0}) == ""
+    assert "Standby share: 40%" in _standby_line({"standby": 0.4})
 
 
 def test_only_standby_fails_cleanly_and_the_job_is_refunded(all_still, tmp_path, client, user):
