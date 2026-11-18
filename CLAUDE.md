@@ -12,6 +12,19 @@ Project: a public clip-generation API + website for GTA 6 clippers, with credit-
 ## Current phase
 North-star goal first (SPEC.md section 14): a 2-hour VOD gives 30–50 ranked clips with previews in 10 minutes. Build the speed track (S0, S3, S1, S2, S4) and the understanding track (U1–U7) before anything else; every speed PR reports before/after with `scripts/job_timings.py`, every selection PR reports the eval set. The rest of the re-engineering plan (SPEC.md section 13) follows. Tickets live on the ClutchClips build board (`track:speed`, `track:understanding`, `phase:N` labels). Build PRs directly into `staging`; the board is for tracking only.
 
+### Quality bar and priorities (owner, 2026-11-18)
+OpusClip and Wayin are the quality benchmarks; ClutchClips specializes in gaming. Measure against them, never copy their code, assets or branding, and never claim knowledge of their backends. In priority order:
+1. One full-video transcription, shared by every downstream step.
+2. Parallel multimodal highlight detection: audio, dialogue, gameplay events, streamer reactions.
+3. 30+ meaningful, non-duplicate candidates for a 2-hour gameplay video (no filler to reach a count).
+4. Editable clip previews before the final HD render.
+5. Gaming-specific virality scoring with measurable evaluation criteria (sub-scores stored individually; never shown as a probability).
+6. Premium animated template previews made from the owner's six eval videos.
+7. Game-specific layouts, captions and automatic reframing.
+8. Fast on-demand rendering.
+9. AV1, VP9 and H.264 input compatibility.
+10. Controlled comparisons against OpusClip and Wayin on identical footage (paid runs need the owner's approval).
+
 ## Rules
 - Ingestion: uploads, Google Drive / Dropbox imports, and public-link import (Twitch and Kick first; YouTube best effort, "may fail, upload instead").
   - Public, non-DRM content only. Never use logins, cookies, accounts, proxies, IP rotation, client spoofing or impersonation, or any other way around a block, paywall, age gate or rate limit. If a site refuses, fail cleanly and tell the user to upload the file.
