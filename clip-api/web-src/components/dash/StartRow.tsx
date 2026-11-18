@@ -22,9 +22,12 @@ export function StartRow({ upload, label, busy, perMinute, onStart, quote }: { u
   );
 }
 
-export function QuoteLine({ quote, what = "This run" }: { quote: Quote; what?: string }) {
+// `exact`: the quote is the price (exports), not a most-it-can-be reservation. The API's note says when it is less.
+export function QuoteLine({ quote, what = "This run", exact }: { quote: Quote; what?: string; exact?: boolean }) {
   if (quote.state === "asking") return <>Working out the price…</>;
   if (quote.state === "failed") return <span className="warn">No price yet: {quote.message}</span>;
   if (quote.state !== "ok") return null;
-  return <><b className="price">{what} reserves {creditWords(quote.credits)}.</b> {quote.note || "The exact amount from the API; nothing is reserved until you start."}</>;
+  const price = exact ? (quote.credits === 0 ? `${what} is free.` : `${what} costs ${creditWords(quote.credits)}.`)
+    : `${what} reserves ${creditWords(quote.credits)}.`;
+  return <><b className="price">{price}</b> {quote.note || "The exact amount from the API; nothing is reserved until you start."}</>;
 }
