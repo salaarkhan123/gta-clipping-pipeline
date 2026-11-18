@@ -4,14 +4,14 @@
  "permission": "owner-confirmed 2026-11-18",
  "credits": [
   {
-   "creator": "iiTzTimmy",
-   "url": "https://www.youtube.com/watch?v=ovyMOe_017I"
+   "creator": "TmarTn2",
+   "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
   }
  ],
  "items": [
   {
    "id": "original",
-   "candidate": "original--timmy-m1",
+   "candidate": "original--forza-m1",
    "label": "Original 16:9",
    "kind": "video",
    "src": "original.mp4",
@@ -19,49 +19,134 @@
    "width": 960,
    "height": 540,
    "duration_sec": 8.0,
-   "game": "Valorant",
+   "game": "Forza Horizon 5",
    "aspect": "16:9",
    "layout": "original",
    "rank": 1,
    "rating": 99,
    "rating_source": "signals",
-   "credit": "Footage: iiTzTimmy",
+   "credit": "Footage: TmarTn2",
+   "commercial_permission": "owner-confirmed 2026-11-18",
    "source": {
-    "id": "timmy",
-    "creator": "iiTzTimmy",
-    "title": "I Might Be Getting TOO Good at Valorant\u2026 (Lowest To Highest Rank Challenge)",
-    "url": "https://www.youtube.com/watch?v=ovyMOe_017I",
-    "start_sec": 2200.35,
-    "end_sec": 2208.35
-   },
-   "commercial_permission": "owner-confirmed 2026-11-18"
+    "id": "forza",
+    "creator": "TmarTn2",
+    "title": "Forza Horizon 5 - Part 1 - The Beginning",
+    "url": "https://www.youtube.com/watch?v=78kntDlbjMI",
+    "start_sec": 2598.85,
+    "end_sec": 2606.85
+   }
   },
   {
    "id": "full",
-   "candidate": "full--timmy-m1",
+   "candidate": "full--forza-m1",
    "label": "Fill",
    "kind": "video",
    "src": "full.mp4",
+   "webm": "full.webm",
    "poster": "full.webp",
    "width": 540,
    "height": 960,
    "duration_sec": 8.0,
-   "game": "Valorant",
+   "game": "Forza Horizon 5",
    "aspect": "9:16",
    "layout": "full",
    "rank": 1,
    "rating": 99,
    "rating_source": "signals",
-   "credit": "Footage: iiTzTimmy",
+   "credit": "Footage: TmarTn2",
+   "commercial_permission": "owner-confirmed 2026-11-18",
    "source": {
-    "id": "timmy",
-    "creator": "iiTzTimmy",
-    "title": "I Might Be Getting TOO Good at Valorant\u2026 (Lowest To Highest Rank Challenge)",
-    "url": "https://www.youtube.com/watch?v=ovyMOe_017I",
-    "start_sec": 2198.35,
-    "end_sec": 2206.35
-   },
-   "commercial_permission": "owner-confirmed 2026-11-18"
+    "id": "forza",
+    "creator": "TmarTn2",
+    "title": "Forza Horizon 5 - Part 1 - The Beginning",
+    "url": "https://www.youtube.com/watch?v=78kntDlbjMI",
+    "start_sec": 2604.65,
+    "end_sec": 2612.65
+   }
+  },
+  {
+   "id": "split2",
+   "candidate": "split2--forza-m1",
+   "label": "Facecam split",
+   "kind": "video",
+   "src": "split2.mp4",
+   "webm": "split2.webm",
+   "poster": "split2.webp",
+   "width": 540,
+   "height": 960,
+   "duration_sec": 8.0,
+   "game": "Forza Horizon 5",
+   "aspect": "9:16",
+   "layout": "split2",
+   "rank": 1,
+   "rating": 99,
+   "rating_source": "signals",
+   "credit": "Footage: TmarTn2",
+   "commercial_permission": "owner-confirmed 2026-11-18",
+   "source": {
+    "id": "forza",
+    "creator": "TmarTn2",
+    "title": "Forza Horizon 5 - Part 1 - The Beginning",
+    "url": "https://www.youtube.com/watch?v=78kntDlbjMI",
+    "start_sec": 2604.65,
+    "end_sec": 2612.65
+   }
+  },
+  {
+   "id": "pip",
+   "candidate": "pip--forza-m1",
+   "label": "Picture in picture",
+   "kind": "video",
+   "src": "pip.mp4",
+   "webm": "pip.webm",
+   "poster": "pip.webp",
+   "width": 540,
+   "height": 960,
+   "duration_sec": 8.0,
+   "game": "Forza Horizon 5",
+   "aspect": "9:16",
+   "layout": "pip",
+   "rank": 1,
+   "rating": 99,
+   "rating_source": "signals",
+   "credit": "Footage: TmarTn2",
+   "commercial_permission": "owner-confirmed 2026-11-18",
+   "source": {
+    "id": "forza",
+    "creator": "TmarTn2",
+    "title": "Forza Horizon 5 - Part 1 - The Beginning",
+    "url": "https://www.youtube.com/watch?v=78kntDlbjMI",
+    "start_sec": 2604.65,
+    "end_sec": 2612.65
+   }
+  },
+  {
+   "id": "screen_first",
+   "candidate": "screen_first--forza-m1",
+   "label": "Screen first",
+   "kind": "video",
+   "src": "screen_first.mp4",
+   "webm": "screen_first.webm",
+   "poster": "screen_first.webp",
+   "width": 540,
+   "height": 960,
+   "duration_sec": 8.0,
+   "game": "Forza Horizon 5",
+   "aspect": "9:16",
+   "layout": "screen_first",
+   "rank": 1,
+   "rating": 99,
+   "rating_source": "signals",
+   "credit": "Footage: TmarTn2",
+   "commercial_permission": "owner-confirmed 2026-11-18",
+   "source": {
+    "id": "forza",
+    "creator": "TmarTn2",
+    "title": "Forza Horizon 5 - Part 1 - The Beginning",
+    "url": "https://www.youtube.com/watch?v=78kntDlbjMI",
+    "start_sec": 2604.65,
+    "end_sec": 2612.65
+   }
   }
  ]
 }
