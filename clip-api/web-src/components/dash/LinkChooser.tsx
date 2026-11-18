@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, clock, videoFileProblem } from "@/lib/api";
 import { useLanguages } from "@/lib/languages";
+import { polishLook } from "@/lib/polish";
 import { allows, inside, Listed, onlyListed, useClipOptions } from "@/lib/options";
 import { route } from "@/lib/routes";
 import { AS_IT_IS, extrasFrom, loadCustom, loadTemplates, Look, lookFrom, Saved, startLook, tidy } from "@/lib/templates";
@@ -73,6 +74,7 @@ export function LinkChooser() {
   const file = useRef<HTMLInputElement>(null);
   // AI Clipping uses the full job-setup screen; it hands back the options it would send.
   const setup = useRef<Record<string, unknown> | null>(null), [template, setTemplate] = useState<string | undefined>(undefined);
+  const [preset, setPreset] = useState<Partial<Look>>({});           // Home's polish chips
   // "Upload the file instead": the uploaded video opens on the chosen tool's own form, where its price is shown.
   const { up, start: upload, cancel } = useUpload((u) => router.push(kind === "transcripts" ? `/dashboard/transcript/?id=${u.upload_id}`
     : kind === "summary" ? `/dashboard/summary/?id=${u.upload_id}` : `/dashboard/project/?id=${u.upload_id}&tool=${kind}`));
@@ -82,6 +84,7 @@ export function LinkChooser() {
     const u = q.get("url") || "";
     setUrl(u);
     setTemplate(q.get("template") || undefined);
+    setPreset(polishLook(window.location.search));
     const t = TOOLS.find((x) => x.id === q.get("tool"));
     if (t && kindOf(t)) setKind(kindOf(t)!);
     // No preview route, or it could not answer (rate limit, server busy): the plain card, and the import says the rest.
@@ -234,7 +237,7 @@ export function LinkChooser() {
 
   // AI Clipping: the full job-setup screen. The price is the API's own estimate for this link, never worked out here.
   if (kind === "clips" && !refused && listed && preview !== undefined && !confirm) return (
-    <JobSetup listed={listed} template={template}
+    <JobSetup listed={listed} template={template} preset={preset}
       source={{ title: preview?.title || hostOf(url), duration, thumb: preview?.thumbnail_url, badge: PLATFORM[preview?.platform || ""] || null,
         detail: [KIND[preview?.kind || ""], PLATFORM[preview?.platform || ""] || preview?.platform, preview?.channel].filter(Boolean).join(" · ") || url }}
       price={quoted ? { state: "ok", credits: quoted.credits, note: quoted.basis ? `Worked out from ${quoted.basis}.` : undefined }

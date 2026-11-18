@@ -28,7 +28,7 @@ function Home() {
   const [projects, setProjects] = useState<any[] | null>(null);
   const [pending, setPending] = useState<File | null>(null);
   const chooser = useVideoChooser(projects);
-  const open = (id: string) => router.push(`/dashboard/project/?id=${id}`);
+  const open = (id: string, query = "") => router.push(`/dashboard/project/?id=${id}${query}`);
 
   const load = useCallback(() => api("/v1/projects").then((r) => setProjects(r.projects)).catch(fail), [fail]);
   useEffect(() => { load(); setPending(takePendingFile()); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
