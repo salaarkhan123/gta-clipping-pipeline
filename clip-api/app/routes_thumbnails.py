@@ -32,7 +32,7 @@ from .db import get_db
 from .deps import ApiError, Principal, current_principal
 from .imagegen import style_look
 from .imagegen.prompts import MAX_INSTRUCTION, InstructionRefused, clean_instruction
-from .models import Clip, ClipThumbnail, Job, LikenessConsent, new_id, utcnow
+from .models import Clip, ClipThumbnail, Job, LikenessConsent, new_id
 from .pipeline.thumbs import Canvas, write_thumbnail
 from .routes_media import ACTIVE, iso, job_json
 from .storage import get_storage

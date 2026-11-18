@@ -33,7 +33,7 @@ from PIL import Image, ImageDraw, ImageFont  # noqa: E402
 
 from app.config import Settings  # noqa: E402
 from app.imagegen import GenerationFailed, editors_from, generate, style_look  # noqa: E402
-from app.imagegen.base import PROVIDER_ERROR, ProviderFailed  # noqa: E402
+from app.imagegen.base import ProviderFailed  # noqa: E402
 from app.imagegen.prompts import clean_instruction  # noqa: E402
 from app.pipeline import PipelineOptions, probe  # noqa: E402
 from app.pipeline.captions import FONT_DIR, IMPACT_FILE  # noqa: E402
