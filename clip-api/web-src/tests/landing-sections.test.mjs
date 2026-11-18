@@ -15,12 +15,15 @@ test("the landing shows exactly the caption styles the renderer draws", () => {
   assert.deepEqual(shown, renderer);
 });
 
-test("the layouts the reframe demo names are ones the renderer draws", () => {
-  const names = { "Split in two": "split2", Full: "full", "Picture in picture": "pip", "Screen first": "screen_first" };
+test("the layouts the reframe demo shows are ones the renderer draws, under the app's names", () => {
+  const names = { split2: "Split in two", full: "Full", pip: "Picture in picture", screen_first: "Screen first" };
   const built = source("../app/pipeline/layouts.py").match(/^LAYOUTS = \(([^)]+)\)/m)[1];
-  const shown = [...source("components/landing/demos/Reframe.tsx").matchAll(/\{ name: "([^"]+)"/g)].map((m) => m[1]);
-  assert.ok(shown.length > 0);
-  for (const n of shown) assert.ok(names[n] && built.includes(`"${names[n]}"`), n);
+  const shown = [...source("components/landing/demos/Reframe.tsx").matchAll(/\{ id: "(\w+)", name: "([^"]+)"/g)];
+  assert.equal(shown.length, 4);
+  for (const [, id, name] of shown) {
+    assert.ok(built.includes(`"${id}"`), id);
+    assert.equal(name, names[id], id);
+  }
 });
 
 test("what is not built says Coming soon on the card and offers nothing to click", () => {
@@ -44,9 +47,16 @@ test("future features are written in the future tense", () => {
   assert.match(source("components/landing/sections/TeamsSection.tsx"), /will be able to share/);
 });
 
-test("demo media never plays sound and waits for reduced motion", () => {
-  const frames = source("components/landing/demos/Frames.tsx");
-  assert.match(frames, /<video[^>]* muted /);
-  assert.match(frames, /!reduced/);
+test("an AI rating is shown on real footage only when the AI judge rated it", () => {
+  const footage = source("components/landing/demos/Footage.tsx");
+  assert.match(footage, /export const aiRated = \(item: Item \| null\) => typeof item\?\.rating === "number" && item\.rating_source === "ai";/);
+  assert.match(source("components/landing/demos/VodToClips.tsx"), /\{aiRated\(c\) && <AiRating/);
+});
+
+test("demo media never plays sound, waits for reduced motion and carries its credit", () => {
+  const footage = source("components/landing/demos/Footage.tsx");
+  assert.match(footage, /<video muted /);
+  assert.match(footage, /!reduced/);
+  assert.match(footage, /item\.credit/);
   assert.match(source("components/landing/demos/demos.module.css"), /prefers-reduced-motion: reduce/);
 });

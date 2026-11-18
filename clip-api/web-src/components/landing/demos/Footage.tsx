@@ -6,9 +6,8 @@ import { useInView, useReducedMotion } from "./motion";
 // Real footage from the media pipeline (public/media/<section>/manifest.json, read through lib/media.ts). Until a
 // section has a manifest, every demo draws its labelled placeholder instead.
 
-// Fields the media pipeline adds to an item beyond lib/media.ts's MediaItem.
-export type Item = MediaItem & { rank?: number; rating_source?: string; hook?: string; words?: string; credit?: string;
-  layout?: string; caption_style?: string };
+// Fields the media pipeline sends that lib/media.ts's MediaItem does not name yet.
+export type Item = MediaItem & { hook?: string };
 export type Word = { start: number; end: number; text: string };
 
 export function useItem(section: MediaSection, id: string): Item | null {
@@ -35,7 +34,7 @@ export function useWords(section: MediaSection, item: Item | null): Word[] {
 
 // The AI rating is shown only when the AI judge rated the clip; a clip ranked on signals alone has none (the app
 // says the same on its clip cards).
-export const aiRated = (item: Item | null) => typeof item?.rating === "number" && !!item.rating_source && item.rating_source !== "signals";
+export const aiRated = (item: Item | null) => typeof item?.rating === "number" && item.rating_source === "ai";
 
 // One item: the poster, then a muted loop once it is on screen and playing. Never sound, never for reduced motion.
 // The footage credit the permission asks for sits in a corner.
