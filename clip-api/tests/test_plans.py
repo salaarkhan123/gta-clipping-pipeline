@@ -239,6 +239,22 @@ def test_bulk_import_takes_up_to_the_plans_batch(client, user, web, plan_id, mos
     assert more.status_code == 429 and more.json()["error"]["code"] == "too_many_imports"
 
 
+@pytest.mark.parametrize("plan_id,most", [("free", 10), ("starter_v2", 10), ("pro_v2", 30), ("scale_v2", 50),
+                                          ("agency", 10)])
+def test_import_sources_tells_a_signed_in_caller_their_plans_batch(client, user, plan_id, most):
+    headers, account = user
+    set_account(account["id"], plan=plan_id)
+    assert client.get("/v1/imports/sources").json()["bulk_max"] == 10              # no login: the Free plan's, as before
+    assert client.get("/v1/imports/sources", headers=headers).json()["bulk_max"] == most
+    key = client.post("/v1/keys", json={"name": "ci"}, headers=headers).json()["key"]
+    assert client.get("/v1/imports/sources", headers={"Authorization": f"Bearer {key}"}).json()["bulk_max"] == most
+
+
+def test_import_sources_refuses_a_bad_token_instead_of_answering_for_free(client):
+    r = client.get("/v1/imports/sources", headers={"Authorization": "Bearer not-a-token"})
+    assert r.status_code == 401 and r.json()["error"]["code"] == "unauthorized"
+
+
 @pytest.mark.parametrize("plan_id,size", [("free", (720, 1280)), ("starter_v2", (1080, 1920)),
                                           ("pro_v2", (2160, 3840)), ("scale_v2", (2160, 3840)), ("agency", (1080, 1920))])
 def test_a_4k_export_is_capped_at_the_plans_resolution(plan_id, size):

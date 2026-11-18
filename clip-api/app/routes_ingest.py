@@ -9,7 +9,7 @@ import logging
 from datetime import timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -125,11 +125,15 @@ def own_import(db: Session, p: Principal, import_id: str, lock: bool = False) ->
 
 
 @router.get("/v1/imports/sources")
-def import_sources():
-    """What can be imported, the limits, and the confirmation every import needs. No login needed."""
+def import_sources(request: Request, db: Session = Depends(get_db)):
+    """What can be imported, the limits, and the confirmation every import needs. No login needed: without one,
+    `bulk_max` is the Free plan's. Signed in (session or API key), it is your plan's links per bulk import."""
     s = get_settings()
+    bulk_max = BULK_MAX
+    if request.headers.get("authorization"):          # a bad token is a 401, never a silent Free answer
+        bulk_max = plan_of(current_principal(request, db).account)["bulk_import_max"]
     return {"enabled": s.imports_enabled, "sources": list(SOURCES), "file_types": sorted(ALLOWED_EXT),
-            "bulk_max": BULK_MAX, "consent": CONSENT_TEXT,
+            "bulk_max": bulk_max, "consent": CONSENT_TEXT,
             "max_bytes": min(s.import_max_bytes, s.max_upload_bytes),
             "max_duration_sec": min(s.import_max_duration_sec, s.max_duration_sec)}
 
