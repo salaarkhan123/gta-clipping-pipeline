@@ -30,6 +30,9 @@ def r2(monkeypatch):
     admin = boto3.client("s3", endpoint_url=url, region_name="us-east-1", aws_access_key_id="k",
                          aws_secret_access_key="s")
     admin.create_bucket(Bucket=BUCKET)
+    for page in admin.get_paginator("list_objects_v2").paginate(Bucket=BUCKET):   # moto keeps state per process
+        for o in page.get("Contents", []):
+            admin.delete_object(Bucket=BUCKET, Key=o["Key"])
     for name, value in dict(STORAGE_BACKEND="s3", S3_ENDPOINT_URL=url, S3_BUCKET=BUCKET, S3_ACCESS_KEY_ID="k",
                             S3_SECRET_ACCESS_KEY="s", S3_REGION="auto").items():
         monkeypatch.setenv(name, value)
