@@ -74,6 +74,7 @@ def make_clip(client, user, credits: int = 100, frame: bytes | None = None, with
                       size_bytes=1, duration_sec=60, width=1280, height=720, has_audio=True,
                       source_url=f"https://www.twitch.tv/videos/{uuid.uuid4().int % 10 ** 9}",
                       expires_at=utcnow() + timedelta(days=7)))
+        db.flush()                       # parents first: Postgres checks each foreign key as the row goes in
         db.add(Job(id=job_id, account_id=account["id"], upload_id=upload_id, status="SUCCEEDED",
                    options={"tool": "clips"}, duration_sec=60, credits_reserved=1, credits_charged=1,
                    expires_at=utcnow() + timedelta(days=7)))

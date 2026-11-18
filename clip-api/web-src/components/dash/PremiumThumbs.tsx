@@ -5,7 +5,25 @@ import { creditWords, followJob, useQuote } from "@/lib/exporting";
 import { chooseThumb, editThumb, Gallery, loadGallery, newOrderKey, orderPremium, premiumQuotePath, styleName } from "@/lib/thumbs";
 import { Icon } from "./Icon";
 import { useDash } from "./Shell";
-import s from "./PremiumThumbs.module.css";
+
+// Tailwind classes with the brand tokens (tailwind.config.ts), as the rest of the dashboard.
+const s = {
+  panel: "mt-6 p-4 border border-solid border-line rounded-16 bg-card",
+  title: "flex items-center gap-2 m-0 font-display text-[18px] font-bold",
+  gallery: "grid gap-2.5 grid-cols-[repeat(auto-fill,minmax(108px,1fr))]",
+  tile: "grid gap-1.5 p-1.5 border-2 border-solid border-line rounded-12 bg-panel text-text cursor-pointer text-left disabled:cursor-progress",
+  on: "!border-lime",
+  img: "w-full aspect-[9/16] object-contain rounded-8 bg-black",
+  label: "flex items-center justify-between gap-1 text-[12px] text-muted",
+  none: "grid place-items-center aspect-[9/16] text-[12px] text-muted text-center p-1.5",
+  pending: "cursor-default border-dashed",
+  row: "flex flex-wrap items-end gap-2.5",
+  grow: "grow basis-[220px]",
+  check: "flex items-start gap-2 text-[14px]",
+  premium: "grid gap-2.5",
+  legend: "flex items-center gap-1.5",
+  confirm: "flex flex-wrap items-center gap-2.5 p-2.5 rounded-12 bg-panel",
+};
 
 // The clip's thumbnails in the editor: the gallery to choose from (free), the text on the chosen one (free), and,
 // when the API lists it, the paid "Premium thumbnail" panel with its exact price shown before confirming.
@@ -34,8 +52,8 @@ export function ThumbnailPanel({ clip }: { clip: any }) {
         {g.thumbnails.map((t) => (
           <button key={t.id} type="button" role="radio" aria-checked={t.selected} className={`${s.tile} ${t.selected ? s.on : ""}`}
             disabled={!!busy} onClick={() => !t.selected && run("choose", () => chooseThumb(clip.id, t.id), "Thumbnail chosen. Switching is free.")}>
-            {t.url ? <img src={t.url} alt="" loading="lazy" /> : <span className={s.none}>No picture</span>}
-            <span className={s.label}>{t.kind === "original" ? "Original · free" : styleName(g.premium, t.style)}{t.selected && <Icon name="check" size={14} />}</span>
+            {t.url ? <img src={t.url} alt="" loading="lazy" className={s.img} /> : <span className={s.none}>No picture</span>}
+            <span className={`${s.label} ${t.selected ? "text-lime" : ""}`}>{t.kind === "original" ? "Original · free" : styleName(g.premium, t.style)}{t.selected && <Icon name="check" size={14} />}</span>
           </button>
         ))}
         {g.pending.length > 0 && <div className={`${s.tile} ${s.pending}`} aria-live="polite"><span className={s.none}>Making a premium thumbnail…</span></div>}
@@ -55,7 +73,7 @@ function TextControls({ thumb, hook, busy, onSave }: { thumb: Gallery["thumbnail
   const changed = (text.trim() || null) !== (thumb.text || null) || show !== thumb.show_text;
   return (
     <div className={s.row}>
-      <label className="grow">Text on the thumbnail<input value={text} maxLength={80} placeholder={hook || "The clip's hook"} disabled={!show}
+      <label className={s.grow}>Text on the thumbnail<input value={text} maxLength={80} placeholder={hook || "The clip's hook"} disabled={!show}
         onChange={(e) => setText(e.target.value)} /></label>
       <label className={s.check}><input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} />Show text</label>
       <button type="button" className="btn small ghost" disabled={busy || !changed} onClick={() => onSave({ text: text.trim() || null, show_text: show })}>Save text</button>
@@ -97,12 +115,12 @@ function PremiumBox({ clip, g, onDone }: { clip: any; g: Gallery; onDone: () => 
 
   return (
     <fieldset className={`panels ${s.premium}`}>
-      <legend><Icon name="sparkle" size={16} />Premium thumbnail</legend>
+      <legend className={s.legend}><Icon name="sparkle" size={16} />Premium thumbnail</legend>
       <p className="muted small">AI restyles this clip's frame. The streamer's face and the gameplay stay as they are; ClutchClips draws the text, so it's spelled exactly. Your free thumbnail is kept.</p>
       <div className={s.row}>
         <label>Style<select value={style} onChange={(e) => setStyle(e.target.value)}>
           {premium.styles.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-        <label className="grow">Custom styling (optional)<input value={notes} maxLength={premium.instruction_max} placeholder="e.g. warm sunset tones"
+        <label className={s.grow}>Custom styling (optional)<input value={notes} maxLength={premium.instruction_max} placeholder="e.g. warm sunset tones"
           onChange={(e) => setNotes(e.target.value)} /></label>
       </div>
       {needsConsent && <label className={s.check}><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />{premium.consent}</label>}
@@ -117,7 +135,7 @@ function PremiumBox({ clip, g, onDone }: { clip: any; g: Gallery; onDone: () => 
           <Icon name="sparkle" size={16} />{price == null ? "Generate" : `Generate for ${creditWords(price)}`}</button>
       ) : (
         <div className={s.confirm} role="group" aria-label="Confirm the premium thumbnail">
-          <p className="small">This uses <b>{creditWords(price || 0)}</b> of your balance. If it fails, they're refunded in full.</p>
+          <p className="small basis-full m-0">This uses <b>{creditWords(price || 0)}</b> of your balance. If it fails, they're refunded in full.</p>
           <button type="button" className="btn small ghost" disabled={state.working} onClick={() => setConfirming(null)}>Back</button>
           <button type="button" className="btn small primary" disabled={state.working} onClick={start}>{state.working ? "Making it…" : `Confirm ${creditWords(price || 0)}`}</button>
         </div>
