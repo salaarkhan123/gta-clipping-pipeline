@@ -62,6 +62,8 @@ SILENT_DB = -90.0                             # the level given to seconds outsi
 JUDGE_WEIGHT = 0.75                           # final rank = 0.75 * judge score + 0.25 * signal strength
 JUDGE_FLOOR = 20                              # judge scores below this are junk (menus, intro cards, dead air)
 JUDGE_THREADS = 4
+STANDBY = "standby"                           # (U2) per-second signal, 1 = a BRB / starting-soon / empty-chair screen
+STANDBY_SHARE = 0.5                           # a span at least this much on standby is a standby span
 
 # judge(transcript_text, frame_path, context) -> {"virality": {"score": 0-100, ...}, ...} or None
 Judge = Callable[[str, Path | None, dict], dict | None]
@@ -305,12 +307,17 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     picks = [p for p in picks if p[2] / top >= MIN_RELATIVE_SCORE]
     nominated = [(s, e, None, m) for s, e, m in picks]
     if passed is not None:
-        nominated = mix([_fit_proposal(p, cut_lengths, t0, t1) for p in passed.proposals], picks, count)
+        # Never a proposal on a standby screen (U2's signal): the transcript cannot see one, the signal can.
+        fitted = [_fit_proposal(p, cut_lengths, t0, t1) for p in passed.proposals]
+        kept = [p for p in fitted if not _standby(series, p.start, p.end, base)]
+        if len(kept) < len(fitted):
+            timer.count("llm_proposals_standby", len(fitted) - len(kept))
+        nominated = mix(kept, picks, count)
         timer.count("llm_candidates", sum(1 for x in nominated if x[2] is not None))
     candidates: list[_Candidate] = []
     for start, end, proposal, mean in nominated:
         a, b = int(start) - base, max(int(start) + 1, int(end)) - base
-        features = {}
+        features = {"standby": True} if _standby(series, start, end, base) else {}
         if passed is not None:      # who nominated it, and what the proposer said about it
             features["nominated_by"] = "signals" if proposal is None else ("both" if mean is not None else "llm")
             if proposal is not None:
@@ -493,6 +500,15 @@ def _llm_pass(heard: Heard, t0: float, t1: float, proposer: Proposer, options: P
     return passed
 
 
+def _standby(series: dict, start: float, end: float, base: int) -> bool:
+    """Whether [start, end] is mostly a standby screen by the per-second `standby` signal (U2); False without it."""
+    vals = series.get(STANDBY)
+    a, b = max(0, int(start) - base), int(math.ceil(end)) - base
+    if vals is None or b <= a or a >= len(vals):
+        return False
+    return float(np.mean(np.asarray(vals[a:b], dtype=float) > 0.5)) >= STANDBY_SHARE
+
+
 def _fit_proposal(p: Proposal, lengths: tuple[float, float], floor: float, ceiling: float) -> Proposal:
     """A proposal as a candidate the judge can cut: at most the longest clip (keeping the end, where the payoff
     is), at least the shortest (grown on both sides), inside [floor, ceiling]."""
@@ -638,6 +654,13 @@ def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path,
     count; moments it failed to rate are used only when it rated none at all."""
     timer = timer or Timer()
     progress("judging", 60)
+    # A candidate flagged as a standby screen (U2: BRB, intro card, empty chair, menu) is never judged or kept.
+    standby = [c for c in candidates if c.features.get("standby")]
+    if standby:
+        timer.count("standby_rejected", len(standby))
+        candidates = [c for c in candidates if not c.features.get("standby")]
+        if not candidates:
+            raise PipelineError("no_moments", "No stand-out moments were found in this video.")
     with timer.stage("judge_frames"):
         frames = [_frame(src, (c.start + c.end) / 2, out_dir / f"cand{i}.jpg", deadline) for i, c in enumerate(candidates)]
 

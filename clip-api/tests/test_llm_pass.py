@@ -328,3 +328,49 @@ def test_the_worker_hands_over_the_proposer_only_with_ai_and_the_setting_on(clie
         return []
     worker.run_once(FakeTranscriber(), pipeline=pipeline, ai=ProposingAI())
     assert ("proposer" in got) is enabled and "judge" in got
+
+
+# ---------- standby screens (U2's signal) ----------
+
+def test_the_standby_signal_marks_a_span_only_when_mostly_on_standby():
+    import numpy as np
+    flags = np.zeros(100)
+    flags[20:40] = 1.0
+    assert P._standby({"standby": flags}, 20, 40, 0) and P._standby({"standby": flags}, 15, 40, 0)
+    assert not P._standby({"standby": flags}, 0, 30, 0)                    # a third of it
+    assert not P._standby({"audio": flags}, 20, 40, 0)                     # no standby signal: never standby
+
+
+def test_a_standby_span_is_never_proposed_and_a_standby_candidate_never_judged(video, tmp_path, monkeypatch):
+    monkeypatch.setattr(P, "_standby", lambda series, start, end, base: start < 10)    # the first 10 s: a BRB screen
+    seen = []
+
+    def judging(text, frame, ctx):
+        seen.append(ctx["window"])
+        return judge(text, frame, ctx)
+    timer = Timer()
+    clips = run_pipeline(video, PipelineOptions(**OPTS), tmp_path / "o", transcriber=FakeTranscriber(), judge=judging,
+                         timer=timer, transcript=story_transcript(), proposer=story_proposer())
+    counts = timer.as_dict()["counts"]
+    assert counts["llm_proposals_standby"] == 1 and counts["llm_candidates"] == 0      # the story was on standby
+    assert seen and clips and all(c.start >= 9.5 for c in clips)
+
+
+def test_the_judge_never_rates_a_standby_candidate_and_all_standby_is_no_moments(tmp_path):
+    cands = [P._Candidate(start=0.0, end=30.0, base=1.0, signals={"i": 0}, features={"standby": True}),
+             P._Candidate(start=100.0, end=130.0, base=1.0, signals={"i": 1}, features={})]
+    rated = []
+
+    def judging(text, frame, ctx):
+        rated.append(ctx["signals"]["i"])
+        return {"title": "t", "virality": {"score": 80}}
+    out = P._judge(cands, judging, tmp_path / "none.mp4", tmp_path, lambda *a: None, None)
+    assert rated == [1] and [c.start for c in out] == [100.0]
+    with pytest.raises(P.PipelineError) as e:
+        P._judge(cands[:1], judging, tmp_path / "none.mp4", tmp_path, lambda *a: None, None)
+    assert e.value.code == "no_moments"
+
+
+def test_the_transcript_pass_is_told_never_to_propose_standby():
+    system, _text = moments_request([], {"chunk": (0.0, 300.0)})
+    assert "Never propose a standby" in system and "empty chair" in system and "BRB" in system
