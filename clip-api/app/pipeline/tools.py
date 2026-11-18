@@ -14,7 +14,8 @@ from . import ClipResult
 from .ff import Deadline, PipelineError, PipelineTimeout, probe
 import logging
 
-from .censor import mask_words
+from .censor import mask, mask_words
+from .edit import remap_words
 from .facecam import resolve_facecam
 from .render import CHAT_REGIONS, render_clip, render_thumb
 from .stt import LocalProvider, extract_audio
@@ -35,7 +36,7 @@ class RenderOptions:
     chat_region: str = "none"
     zoom: float = 1.0
     captions: bool = False
-    caption_style: str = "pop"        # impact | pop | bold | neon | boxed | clean
+    caption_style: str = "pop"        # a name from captions.STYLE_NAMES
     caption_font: str = "DejaVu Sans"
     caption_position: str = "auto"    # impact only: auto | seam | lower | center
     caption_accent: str | None = None # impact only: the keyword's colour, #RRGGBB; None = the brand lime
@@ -45,6 +46,94 @@ class RenderOptions:
     camera: str | None = None         # two-panel layouts: "top" | "bottom"; None = the layout's own
     split_ratio: float | None = None  # two-panel layouts: the top panel's share of the height, 0.25 to 0.75
     source_lang: str | None = None    # (languages, agent F) recorded; the worker hands the matching transcriber in
+    render: str = "full"              # clip jobs only: Reframe and Captions always render in full
+    hook_style: str = "serious"       # the AI's tone for the hook (clip jobs); recorded here
+    hook_position: str = "beginning"  # exports: "beginning" | "end" of the clip
+    hook_duration_ms: int | None = None   # exports: how long the hook shows; None = 2.5 s
+    hook_overlay: bool = True         # exports: burn the clip's hook text in
+
+
+@dataclass
+class ExportItem:
+    """One stored clip to render again (run_export), as its job left it. Read from the database by the caller."""
+    clip_id: str
+    start: float
+    end: float
+    segments: list                    # source seconds, in playing order (cuts and the flash-forward included)
+    flash: bool = False               # the first segment is a flash-forward
+    zoom_at: list = ()                # punch-in zooms on the rendered timeline
+    words: list | None = None         # caption words on the rendered timeline; None: transcribed now if wanted
+    hook: str | None = None           # the clip's hook text
+
+
+@dataclass
+class ExportResult:
+    clip_id: str
+    video_path: Path
+    seconds: float                    # the rendered length
+
+
+def planned_seconds(segments: list) -> float:
+    """What an export of these segments renders, in seconds: what it is priced on."""
+    return round(sum(max(0.0, float(e) - float(s)) for s, e in segments), 3)
+
+
+def run_export(src: Path, items: list[ExportItem], options: RenderOptions, out_dir: Path, progress_cb=None,
+               transcriber: Transcriber | None = None, deadline: Deadline | None = None,
+               timer=None) -> list[ExportResult]:
+    """Render stored clips again with new options (POST /v1/clips/export): the same moments, cuts and words,
+    at `options.resolution`, in the layout, caption style and hook placement asked for. Captions are the clip's
+    own words when it has them; a clip made without captions is transcribed now (needs `transcriber`). With the
+    auto layout each moment gets its own (facecam.moment_facecam). Counts `rendered_sec` on `timer`."""
+    from .edit import zoom_expr
+    from .facecam import moment_facecam
+    progress = progress_cb or (lambda stage, pct: None)
+    src, out_dir = Path(src), Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    progress("probing", 2)
+    info = probe(src, deadline)
+    layout, facecam = _layout(src, info, options, deadline)
+    results = []
+    for i, item in enumerate(items, 1):
+        progress("rendering", 5 + int(93 * (i - 1) / max(1, len(items))))
+        segments = [(max(0.0, float(s)), min(float(e), info.duration)) for s, e in item.segments]
+        segments = [(s, e) for s, e in segments if e - s > 0.05]
+        if not segments:
+            raise PipelineError("bad_segment", "This clip's times fall outside its video.")
+        body = segments[1:] if item.flash and len(segments) > 1 else segments      # the moment, without its tease
+        lo, hi = min(s for s, _ in body), max(e for _, e in body)
+        words = []
+        if options.captions and info.has_audio:
+            words = item.words
+            if words is None:
+                if transcriber is None:
+                    raise PipelineError("transcription_unavailable", "Captions are not available on this server right now.")
+                spoken = transcribe_range(src, lo, hi, transcriber, out_dir, deadline).words
+                words = remap_words(spoken, segments)
+            if options.censor:
+                words = mask_words(words)
+        hook = item.hook if options.hook_overlay else None
+        if hook and options.censor:
+            hook = " ".join(mask(w) for w in hook.split())
+        lay, cam = layout, facecam
+        if options.layout == "auto" and options.vertical:
+            lay, cam = moment_facecam(src, info, lo, hi, layout, facecam, deadline)
+        video = out_dir / f"export-{i}.mp4"
+        render_clip(src, item.start, item.end, video, src_w=info.width, src_h=info.height, vertical=options.vertical,
+                    zoom=options.zoom, chat=options.chat_region, words=words, font=options.caption_font,
+                    layout=lay, facecam=cam, style=options.caption_style, aspect=options.aspect,
+                    max_side=options.max_side, deadline=deadline, segments=segments,
+                    punch=zoom_expr(list(item.zoom_at)) if options.vertical else "1", has_audio=info.has_audio,
+                    hook=hook, flash=item.flash, resolution=options.resolution, position=options.caption_position,
+                    accent=options.caption_accent, camera=options.camera, split_ratio=options.split_ratio,
+                    hook_position=options.hook_position, hook_ms=options.hook_duration_ms)
+        seconds = planned_seconds(segments)
+        if timer is not None:
+            timer.count("clips")
+            timer.count("rendered_sec", round(seconds, 1))
+        results.append(ExportResult(item.clip_id, video, seconds))
+    progress("done", 100)
+    return results
 
 
 def _layout(src, info, options, deadline=None) -> tuple[str, object]:
