@@ -2,7 +2,7 @@
 // A pasted link: pick what to make from it, see the price, tick consent, then one button imports the video and
 // starts the tool on it. Steps on the page follow the import; the project (or tool) page follows the job.
 // Data: POST /v1/imports/preview when this API has it (found in /openapi.json, never probed), GET /v1/options,
-// GET /v1/languages, the template routes, POST /v1/imports, then the tool's own route. Styles: app-shell.css `.chooser`.
+// GET /v1/languages, the template routes, POST /v1/imports, then the tool's own route. Tailwind utilities.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -19,8 +19,10 @@ import { captionStyles, firstStyle, framing } from "./ToolPanel";
 import { ACCEPT, UploadProgress, useUpload } from "./Upload";
 
 type Kind = "clips" | "find" | "captions" | "reframe" | "transcripts" | "summary";
-type Preview = { url?: string; platform?: string; supported?: boolean; title?: string; channel?: string; duration_sec?: number;
-  thumbnail_url?: string; kind?: string; refusal?: string | { code?: string; message?: string } | null };
+// POST /v1/imports/preview: always 200; a link it will not import has `supported: false` and a `refusal`. A refusal for
+// a limit (too long, too big) still fills the title and the picture, so the card is shown with it.
+type Preview = { url?: string; platform?: string; supported?: boolean; title?: string | null; channel?: string | null; duration_sec?: number | null;
+  thumbnail_url?: string | null; kind?: "video" | "clip" | "live" | "upcoming" | null; refusal?: { code?: string; message?: string } | string | null };
 const CONSENT = "I own this video or have permission to clip it";
 const AUTO = "0-90";
 const BUCKETS: Record<string, string> = { "0-90": "Auto (under 90 s)", "0-30": "Under 30 seconds", "30-60": "30 to 60 seconds", "60-90": "60 to 90 seconds",
@@ -29,6 +31,14 @@ const shortest = (b: string) => +b.split("-")[0] || 0;
 const GO: Record<Kind, string> = { clips: "Import and find the clips", find: "Import and search", captions: "Import and add captions",
   reframe: "Import and reframe", transcripts: "Import and transcribe", summary: "Import and summarise" };
 const PLATFORM: Record<string, string> = { twitch: "Twitch", kick: "Kick", youtube: "YouTube", gdrive: "Google Drive", dropbox: "Dropbox", direct: "Direct link" };
+const KIND: Record<string, string> = { video: "Video", clip: "Clip", live: "Live now", upcoming: "Upcoming" };
+const CHIP = "inline-flex min-h-[40px] items-center gap-2 rounded-full border border-solid px-4 font-body text-[14px] font-medium leading-[normal] disabled:opacity-60 narrow:min-h-[36px] narrow:px-3 narrow:text-[13px]";
+// The template step reuses the job form's pre-edit panel (presets, saved looks, "Add template"), laid out as tall cards.
+const TEMPLATES = "w-full [&_section.preedit]:bg-panel [&_section.preedit]:p-[18px] [&_.looks]:max-h-[640px] [&_.looks]:grid-cols-4 [&_.looks]:gap-x-[14px] [&_.looks]:gap-y-[18px] "
+  + "narrow:[&_.looks]:max-h-[520px] narrow:[&_.looks]:grid-cols-2 [&_.look-art]:aspect-[9/16] [&_.look-art]:rounded-12 [&_.look-art]:bg-bg [&_.look-art_img]:object-contain "
+  + "[&_.look]:relative [&_.look_strong]:text-[14.5px] [&_.look-tools]:absolute [&_.look-tools]:right-2 [&_.look-tools]:top-2 [&_.look-tools]:opacity-0 "
+  + "[&_.look:hover_.look-tools]:opacity-100 [&_.look:focus-within_.look-tools]:opacity-100 [@media(hover:none)]:[&_.look-tools]:opacity-100 "
+  + "[&_.look-tools_.icon-btn]:h-8 [&_.look-tools_.icon-btn]:w-8 [&_.look-tools_.icon-btn]:rounded-full [&_.look-tools_.icon-btn]:border-0 [&_.look-tools_.icon-btn]:bg-[rgba(7,8,10,.82)] [&_.look-tools_.icon-btn]:text-text";
 const perMinute = (k: Kind) => k !== "captions" && k !== "reframe";
 const minutes = (sec: number) => Math.max(1, Math.ceil(sec / 60));            // the API's rule: one credit per started minute
 const kindOf = (t: ToolEntry): Kind | null => (t.tool || (t.id === "transcripts" ? "transcripts" : t.id === "summary" ? "summary" : t.id === "templates" ? "clips" : null)) as Kind | null;
@@ -60,8 +70,14 @@ export function LinkChooser() {
     setUrl(u);
     const t = TOOLS.find((x) => x.id === q.get("tool"));
     if (t && kindOf(t)) setKind(kindOf(t)!);
+    // No preview route, or it could not answer (rate limit, server busy): the plain card, and the import says the rest.
+    // A 422 is the API refusing the link itself: shown word for word.
     route("post", "/v1/imports/preview").then((r) => r
-      ? api<Preview>("/v1/imports/preview", { body: { url: u } }).then(setPreview).catch((e) => setPreview({ supported: false, refusal: e instanceof Error ? e.message : "" }))
+      ? api<Preview>("/v1/imports/preview", { body: { url: u } }).then(setPreview).catch((e) => {
+          if (e instanceof ApiError && e.status === 422) setPreview({ supported: false, refusal: { message: e.message } });
+          else if (e instanceof ApiError && e.status === 401) fail(e);
+          else setPreview(null);
+        })
       : setPreview(null));
     loadTemplates().then(setTemplates).catch(() => {});
     loadCustom().then(setSaved).catch(fail);
@@ -156,66 +172,82 @@ export function LinkChooser() {
       : `Uses one credit per minute rendered, up to ${estimate}. The import is free.`;
 
   return (
-    <div className="chooser">
-      <header className="chooser-head">{head}</header>
-      <ul className="chooser-tools" aria-label="What to make">
+    <div className="mx-auto grid w-full max-w-[980px] justify-items-center gap-[18px] pb-[120px] narrow:pb-10">
+      <header className="relative grid w-full justify-items-center">
+        <Link href="/dashboard/" aria-label="Back to Home" className="absolute left-0 top-0 grid h-9 w-9 place-items-center rounded-8 text-muted hover:bg-chip hover:text-text"><Icon name="back" size={20} /></Link>
+        <h1 className="px-10 text-center text-[26px] narrow:text-[20px]">What should we make from this video?</h1>
+      </header>
+
+      <ul className="flex max-w-[900px] list-none flex-wrap justify-center gap-2" aria-label="What to make">
         {chips.map((t) => {
           const k = kindOf(t), ok = isBuilt(t, on) && !!k;
-          const sel = ok && k === kind && (t.id === "templates" ? false : true);
+          const sel = ok && k === kind && t.id !== "templates";
           return <li key={t.id}>{ok
-            ? <button type="button" className="tool-chip" aria-pressed={sel} disabled={busy} onClick={() => { setKind(k!); if (t.id === "templates") document.getElementById("chooser-templates")?.scrollIntoView({ block: "start" }); }}>
-                <Icon name={t.icon} size={18} />{t.name}</button>
-            : <span className="tool-chip soon" aria-disabled="true"><Icon name={t.icon} size={18} />{t.name}<small className="soon-tag">Soon</small></span>}</li>;
+            ? <button type="button" aria-pressed={sel} disabled={busy} onClick={() => { setKind(k!); if (t.id === "templates") document.getElementById("chooser-templates")?.scrollIntoView({ block: "start" }); }}
+                className={`${CHIP} cursor-pointer ${sel ? "border-lime bg-lime-wash text-lime" : "border-transparent bg-chip text-text hover:bg-chip-hover"}`}><Icon name={t.icon} size={18} />{t.name}</button>
+            : <span className={`${CHIP} cursor-default border-dashed border-line bg-transparent text-dim`} aria-disabled="true"><Icon name={t.icon} size={18} />{t.name}<small className="soon-tag">Soon</small></span>}</li>;
         })}
       </ul>
 
-      <p className="link-pill" title={url}><Icon name="link" size={16} /><span>{url}</span></p>
-      <article className="preview-card">
-        {preview === undefined ? <p className="muted">Looking at the link…</p> : <>
-          {preview?.thumbnail_url && <span className="preview-thumb"><img src={preview.thumbnail_url} alt="" />
-            {duration && <span className="project-len">{clock(duration)}</span>}</span>}
-          <strong>{preview?.title || hostOf(url)}</strong>
-          <span className="muted small">{[preview?.kind && tidy(preview.kind), PLATFORM[preview?.platform || ""] || preview?.platform, preview?.channel, !preview?.thumbnail_url && duration ? clock(duration) : null]
-            .filter(Boolean).join(" · ") || "The video's details show once it is imported."}</span>
+      <p className="inline-flex max-w-[min(100%,420px)] items-center gap-2 rounded-full bg-chip px-4 py-[9px] text-[14px] text-muted" title={url}>
+        <Icon name="link" size={16} /><span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{url}</span></p>
+      <article className="grid w-[min(100%,400px)] gap-[6px] rounded-16 border border-solid border-line bg-panel p-[10px]" aria-label="The video">
+        {preview === undefined ? <p className="px-1 py-6 text-center text-muted">Looking at the link…</p> : <>
+          <span className="relative block aspect-video overflow-hidden rounded-12 bg-black">
+            {preview?.thumbnail_url ? <img src={preview.thumbnail_url} alt="" className="h-full w-full object-cover" />
+              : <span className="grid h-full w-full place-items-center content-center gap-2 text-center [background:radial-gradient(ellipse_at_20%_0%,rgba(184,255,60,.18),transparent_60%),radial-gradient(ellipse_at_90%_100%,rgba(60,240,255,.14),transparent_55%),#0d0f12]">
+                  <Icon name={preview?.platform === "kick" || preview?.platform === "twitch" ? "live" : "film"} size={30} className="text-lime" />
+                  <b className="font-display text-[15px] text-text">{PLATFORM[preview?.platform || ""] || hostOf(url)}</b>
+                  <small className="text-[12px] text-muted">{preview ? "No picture for this link" : "Details show once it is in"}</small></span>}
+            {duration && <span className="absolute bottom-2 right-2 rounded-full bg-[rgba(7,8,10,.85)] px-2 py-[2px] font-body text-[12px] font-semibold tabular-nums">{clock(duration)}</span>}
+          </span>
+          <strong className="overflow-hidden text-ellipsis whitespace-nowrap px-1 font-body text-[15px] font-semibold leading-[1.3]">{preview?.title || hostOf(url)}</strong>
+          <span className="px-1 pb-[2px] text-[13px] text-muted">{[KIND[preview?.kind || ""], PLATFORM[preview?.platform || ""] || preview?.platform, preview?.channel]
+            .filter(Boolean).join(" · ") || (preview === null ? "The video's details show once it is in." : "")}</span>
         </>}
       </article>
-      {refused && <div className="error refusal" role="alert">
+      {refused && <div className="error grid w-[min(100%,560px)] gap-[10px]" role="alert">
         <p>{refusalText(preview!.refusal) || "This link can't be imported."}</p>
         <input ref={file} type="file" accept={ACCEPT} hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) { const bad = videoFileProblem(f); if (bad) setProblem(bad); else upload(f); } }} />
-        {up ? <UploadProgress up={up} onCancel={cancel} /> : <button type="button" className="btn small primary" onClick={() => file.current?.click()}><Icon name="upload" size={16} />Upload the file instead</button>}
+        {up ? <UploadProgress up={up} onCancel={cancel} /> : <div><button type="button" className="btn small primary" onClick={() => file.current?.click()}><Icon name="upload" size={16} />Upload the file instead</button></div>}
       </div>}
 
-      {!refused && listed && langs && look && <section className="panel chooser-options" aria-label="Options">
-        {(kind === "clips" || kind === "transcripts" || kind === "summary") && <div className="opt-rows">
-          <label>Language spoken<select value={o.source_lang} disabled={busy} onChange={(e) => set({ source_lang: e.target.value })}>
-            {listed.source_lang?.nullable !== false && <option value="">Detect it for me</option>}
-            {(listed.source_lang?.values || langs.languages.filter((l) => l.transcribe).map((l) => l.code)).map((c: string) =>
-              <option key={c} value={c}>{langs.languages.find((l) => l.code === c)?.name || c}</option>)}</select></label>
-          {kind === "clips" && "duration" in listed && <label>Clip length<select value={o.duration} disabled={busy} onChange={(e) => set({ duration: e.target.value })}>
-            {[AUTO, ...(listed.duration.values || []).filter((b: string) => b !== AUTO)].filter((b) => allows(listed, "duration", b)).map((b) => (
-              <option key={b} value={b} disabled={!!duration && shortest(b) > duration}>{BUCKETS[b] || b}</option>))}</select></label>}
-          {kind === "summary" && langs.translation && <label>Write the summary in<select value={o.target_lang} disabled={busy} onChange={(e) => set({ target_lang: e.target.value })}>
-            <option value="">The language spoken</option>{langs.languages.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}</select></label>}
-        </div>}
-        {kind === "find" && <div className="opt-rows">
-          <label>What are you looking for?<input value={o.query} maxLength={200} disabled={busy} placeholder="a police chase, or something that was said" onChange={(e) => set({ query: e.target.value })} /></label>
-          <label>Clip length<select value={o.clip_length} disabled={busy} onChange={(e) => set({ clip_length: +e.target.value })}>
-            {inside(listed.clip_length, [15, 20, 30, 40, 45, 60]).map((n) => <option key={n} value={n}>{n} seconds</option>)}</select></label>
-        </div>}
-        {kind === "reframe" && <div className="opt-rows"><AspectSelect listed={listed} value={o.aspect} onChange={(v) => set({ aspect: v })} /></div>}
-        {kind === "captions" && <div className="opt-rows"><label>Caption style<select value={o.caption_style} disabled={busy} onChange={(e) => set({ caption_style: e.target.value })}>
-          {captionStyles(listed).map((s) => <option key={s} value={s}>{tidy(s)}</option>)}</select></label></div>}
-        {(kind === "clips" || kind === "find") && <button type="button" className="link small more-opts" disabled={!consent || busy} onClick={() => go(true)}
-          title={consent ? "Imports the video, then opens the full settings (nothing is charged until you start)" : "Tick the box below first"}>
+      {!refused && listed && langs && look && <section className="panel w-[min(100%,640px)] [&_label]:grid-cols-[9rem_minmax(0,1fr)] [&_label]:items-center [&_label]:text-[15px] [&_label]:text-text
+        narrow:[&_label]:grid-cols-1 [&_input]:w-full [&_select]:w-full" aria-label="Options">
+        <div className="grid gap-3">
+          {(kind === "clips" || kind === "transcripts" || kind === "summary") && <>
+            <label>Language spoken<select value={o.source_lang} disabled={busy} onChange={(e) => set({ source_lang: e.target.value })}>
+              {listed.source_lang?.nullable !== false && <option value="">Detect it for me</option>}
+              {(listed.source_lang?.values || langs.languages.filter((l) => l.transcribe).map((l) => l.code)).map((c: string) =>
+                <option key={c} value={c}>{langs.languages.find((l) => l.code === c)?.name || c}</option>)}</select></label>
+            {kind === "clips" && "duration" in listed && <label>Clip length<select value={o.duration} disabled={busy} onChange={(e) => set({ duration: e.target.value })}>
+              {[AUTO, ...(listed.duration.values || []).filter((b: string) => b !== AUTO)].filter((b) => allows(listed, "duration", b)).map((b) => (
+                <option key={b} value={b} disabled={!!duration && shortest(b) > duration}>{BUCKETS[b] || b}</option>))}</select></label>}
+            {kind === "summary" && langs.translation && <label>Write the summary in<select value={o.target_lang} disabled={busy} onChange={(e) => set({ target_lang: e.target.value })}>
+              <option value="">The language spoken</option>{langs.languages.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}</select></label>}
+          </>}
+          {kind === "find" && <>
+            <label>What are you looking for?<input value={o.query} maxLength={200} disabled={busy} placeholder="a police chase, or something that was said" onChange={(e) => set({ query: e.target.value })} /></label>
+            <label>Clip length<select value={o.clip_length} disabled={busy} onChange={(e) => set({ clip_length: +e.target.value })}>
+              {inside(listed.clip_length, [15, 20, 30, 40, 45, 60]).map((n) => <option key={n} value={n}>{n} seconds</option>)}</select></label>
+          </>}
+          {kind === "reframe" && <AspectSelect listed={listed} value={o.aspect} onChange={(v) => set({ aspect: v })} />}
+          {kind === "captions" && <label>Caption style<select value={o.caption_style} disabled={busy} onChange={(e) => set({ caption_style: e.target.value })}>
+            {captionStyles(listed).map((s) => <option key={s} value={s}>{tidy(s)}</option>)}</select></label>}
+        </div>
+        {(kind === "clips" || kind === "find") && <button type="button" className="link small justify-self-start disabled:cursor-default disabled:text-muted disabled:no-underline" disabled={!consent || busy} onClick={() => go(true)}
+          title={consent ? "Imports the video, then opens the full settings (nothing is charged until you start)" : "Tick the box at the bottom first"}>
           More options: import first, then open the full settings</button>}
       </section>}
 
-      {!refused && kind === "clips" && listed && look && <section id="chooser-templates" className="chooser-templates" aria-label="Template">
+      {!refused && kind === "clips" && listed && look && <section id="chooser-templates" aria-label="Template" className={TEMPLATES}>
+        <h2 className="mb-3 text-[16px]">Template</h2>
         <PreEdit listed={listed} on={pre} onToggle={setPre} look={look} onLook={(c) => setLook((x) => ({ ...x!, ...c }))}
           picked={picked} onPick={pick} templates={templates} saved={saved} onSavedChange={() => loadCustom().then(setSaved).catch(fail)} />
       </section>}
 
-      {!refused && <div className="chooser-go">
+      {!refused && <div className="sticky bottom-0 z-20 grid w-[min(100%,720px)] gap-[10px] rounded-t-16 border border-b-0 border-solid border-line bg-[rgba(13,15,18,.96)] px-[18px] pb-4 pt-[14px]
+        shadow-[0_-20px_40px_rgba(0,0,0,.45)] [backdrop-filter:blur(10px)] narrow:bottom-[calc(theme(spacing.tabbar)+env(safe-area-inset-bottom))] narrow:px-[14px] narrow:py-3">
         {confirm ? <>
           <p className="muted">The video is in: {clock(confirm.upload.duration_sec)} long. {perMinute(kind)
             ? `This uses ${confirm.upload.credits_required} credit${confirm.upload.credits_required === 1 ? "" : "s"} (one per minute of video).`
@@ -223,11 +255,11 @@ export function LinkChooser() {
           <div className="row"><button type="button" className="btn primary" onClick={() => runTool(confirm.upload)}>Start</button>
             <Link className="btn ghost" href={`/dashboard/project/?id=${confirm.upload.upload_id}`}>Not now, open the project</Link></div>
         </> : <>
-          <label className="check consent"><input type="checkbox" checked={consent} disabled={busy} onChange={(e) => setConsent(e.target.checked)} /><span>{CONSENT}</span></label>
+          <label className="check text-[14.5px] text-text"><input type="checkbox" checked={consent} disabled={busy} onChange={(e) => setConsent(e.target.checked)} /><span>{CONSENT}</span></label>
           {problem && <p className="error" role="alert">{problem}</p>}
           {step ? <div className="uploading" role="status"><p>{step.text}{typeof step.pct === "number" ? ` ${step.pct}%` : ""}</p>
               {typeof step.pct === "number" && <progress max={100} value={step.pct} aria-label="Import progress" />}</div>
-            : <div className="row start-row"><p className="muted">{priceText}</p>
+            : <div className="row start-row border-t-0 pt-0"><p className="muted">{priceText}</p>
               <button type="button" className="btn primary" disabled={!ready} onClick={() => go()}>{GO[kind]}</button></div>}
         </>}
       </div>}
