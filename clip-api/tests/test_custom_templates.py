@@ -1,5 +1,5 @@
 """Custom templates: an account's saved looks (docs/CONTRACTS.md). Scoped to the account, validated as clip
-options, capped at 20, and never part of what a job costs."""
+options, capped per plan (app/plans.py), and never part of what a job costs."""
 import uuid
 from typing import Literal
 
@@ -12,11 +12,24 @@ from app.db import new_session
 from app.models import Account, CreditLedger, CustomTemplate
 from app.render_options import LayoutOptions
 from app.routes_media import ClipOptions
-from app.routes_templates import EDIT_FIELDS, MAX_CUSTOM_TEMPLATES, PRICED_FIELDS, look_fields
+from app.routes_templates import EDIT_FIELDS, PRICED_FIELDS, look_fields
 from tests.test_api import balance, upload
 
 URL = "/v1/templates/custom"
 LOOK = {"layout": "split2", "aspect": "9:16", "captions": True, "caption_style": "bold", "punch_zoom": False}
+
+
+def set_plan(account_id: str, plan: str) -> None:
+    with new_session() as db:
+        db.get(Account, account_id).plan = plan
+        db.commit()
+
+
+@pytest.fixture
+def user(user):
+    """Most tests here save several looks: run them on Scale (10 looks). The per-plan caps have their own tests."""
+    set_plan(user[1]["id"], "scale_v2")
+    return user
 
 
 def save(client, headers, name="My look", options=None):
@@ -40,7 +53,7 @@ def ledger_rows(account_id=None) -> int:
 
 def test_save_list_rename_edit_and_delete(client, user):
     headers, _ = user
-    assert client.get(URL, headers=headers).json() == {"templates": [], "limit": 20}
+    assert client.get(URL, headers=headers).json() == {"templates": [], "limit": 10}
     first = save(client, headers, "  Split with captions  ")
     assert first["name"] == "Split with captions" and first["options"] == LOOK      # trimmed; options as sent
     assert first["id"].startswith("ctpl_") and first["created_at"].endswith("Z") and set(first) == {
@@ -185,21 +198,32 @@ def test_values_are_stored_the_way_the_clip_options_read_them(client, user):
 
 # --- limits and money -------------------------------------------------------------------------------------------
 
-@pytest.mark.parametrize("plan", ["free", "scale"])                           # one technical cap: no plan changes it
-def test_at_most_twenty_per_account_and_a_deleted_one_frees_a_place(client, user, plan):
+@pytest.mark.parametrize("plan, cap", [("free", 1), ("starter_v2", 1), ("pro_v2", 3), ("scale_v2", 10),
+                                       ("starter", 20), ("agency", 20)])          # legacy plans keep the 20 they had
+def test_each_plan_saves_up_to_its_cap_and_a_deleted_one_frees_a_place(client, user, plan, cap):
     headers, account = user
-    with new_session() as db:
-        db.get(Account, account["id"]).plan = plan
-        db.commit()
-    assert MAX_CUSTOM_TEMPLATES == 20 and client.get(URL, headers=headers).json()["limit"] == 20
-    ids = [save(client, headers, f"Look {i}")["id"] for i in range(20)]
+    set_plan(account["id"], plan)
+    assert client.get(URL, headers=headers).json()["limit"] == cap
+    ids = [save(client, headers, f"Look {i}")["id"] for i in range(cap)]
     full = client.post(URL, json={"name": "One too many", "options": LOOK}, headers=headers)
-    assert full.status_code == 409 and full.json()["error"]["code"] == "too_many_templates" and "20" in full.json()["error"]["message"]
-    assert len(client.get(URL, headers=headers).json()["templates"]) == 20
+    assert full.status_code == 409 and full.json()["error"]["code"] == "too_many_templates"
+    assert f"up to {cap} templates" in full.json()["error"]["message"]
+    assert len(client.get(URL, headers=headers).json()["templates"]) == cap
     assert client.patch(f"{URL}/{ids[0]}", json={"name": "Still editable"}, headers=headers).status_code == 200
     assert save(client, other_user(client))["name"] == "My look"               # the cap is per account
     assert client.delete(f"{URL}/{ids[0]}", headers=headers).status_code == 200
     assert save(client, headers, "Fits again")["name"] == "Fits again"
+
+
+def test_a_downgrade_keeps_saved_looks_editable_and_only_refuses_new_ones(client, user):
+    headers, account = user                                                   # on Scale: 10
+    ids = [save(client, headers, f"Look {i}")["id"] for i in range(3)]
+    set_plan(account["id"], "free")
+    listed = client.get(URL, headers=headers).json()
+    assert listed["limit"] == 1 and len(listed["templates"]) == 3            # nothing is deleted
+    assert client.patch(f"{URL}/{ids[1]}", json={"name": "Renamed"}, headers=headers).status_code == 200
+    r = client.post(URL, json={"name": "New", "options": LOOK}, headers=headers)
+    assert r.status_code == 409 and "Free plan saves up to 1" in r.json()["error"]["message"]
 
 
 def test_saving_editing_and_deleting_never_touch_the_ledger(client, user):

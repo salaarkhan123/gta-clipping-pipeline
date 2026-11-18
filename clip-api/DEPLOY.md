@@ -104,6 +104,55 @@ Default: one job at a time. Two ways to add capacity:
 After either change, run the 10-clip benchmark twice at the same time and compare with SPEC.md §10 B before
 relying on it.
 
+## Plans and Stripe Prices
+
+Plan prices, monthly credits and limits live in `app/plans.py` and nowhere else, so every pricing change is a
+reviewed PR. The `PLANS` environment variable is no longer read: delete its line from `.env`. Checkout charges a
+Stripe Price that you create; the API only needs its ID.
+
+1. In Stripe (test mode first, then live mode), create one product per plan, each with two recurring Prices in
+   USD, per unit, billed every 1 month or every 1 year:
+
+   | Plan | Monthly Price | Yearly Price |
+   |---|---|---|
+   | Starter | $15.99 per month | $66.96 per year |
+   | Pro | $26.99 per month | $114.96 per year |
+   | Scale | $139.99 per month | $839.88 per year |
+
+2. Put each Price ID (`price_...`) in `.env`:
+
+   ```
+   STRIPE_PRICE_STARTER_MONTH=
+   STRIPE_PRICE_STARTER_YEAR=
+   STRIPE_PRICE_PRO_MONTH=
+   STRIPE_PRICE_PRO_YEAR=
+   STRIPE_PRICE_SCALE_MONTH=
+   STRIPE_PRICE_SCALE_YEAR=
+   ```
+
+3. Restart: `docker compose up -d api worker`.
+
+A plan whose Price ID is blank answers `plan_unavailable`. Before each checkout the API reads the Price from Stripe
+and refuses it (`plan_unavailable`, and an error in the api log naming what differs) unless it is active, recurring,
+in `CURRENCY`, every 1 month or 1 year as configured, and exactly the amount in `app/plans.py`. A typo in Stripe
+therefore stops sales instead of charging the wrong amount.
+
+**Yearly plans grant credits monthly.** The first month comes with the paid yearly invoice; the worker grants each later month on the same day of the month (its sweep runs every minute and catches up after downtime). Grants stop at a refund, a dispute, a cancellation or the end of the paid year; credits already granted stay. Migration `0007` (additive: four nullable columns on `payments`) runs with the deploy.
+
+**Customer portal:** keep plan switching turned off for now (Settings, Billing, Customer portal: allow cancelling
+and updating the card only). Every paid invoice grants a full period of credits, so a mid-period upgrade with
+proration would grant a whole month of credits for a part payment. To change plan, a subscriber cancels and
+subscribes again once the old plan ends.
+
+**Subscribers from before 2026-11-17** keep their plan (`starter`, `pro`, `agency` or `scale` in `accounts.plan`),
+its credits on every renewal and its limits, at the price Stripe already charges them, until their subscription
+ends. To see how many there are:
+
+```bash
+docker compose exec -T db psql -U clip -d clip -c \
+  "select plan, subscription_status, count(*) from accounts where stripe_subscription_id is not null group by 1, 2"
+```
+
 ## Link import and takedowns
 
 Users can import a public video link (Twitch, Kick, direct https video links, Google Drive and Dropbox share

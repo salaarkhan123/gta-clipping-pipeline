@@ -23,6 +23,7 @@ from . import ledger
 from . import languages
 from .ai import default_ai
 from .config import get_settings
+from .plan_grants import sweep_yearly_grants
 from .plans import plan_of
 from .db import init_db, new_session
 from .models import Account, Clip, Job, Upload, WebhookDelivery, new_id, utcnow
@@ -553,9 +554,10 @@ def _slot(i: int, stop: threading.Event, transcriber, pipeline, indexer, embedde
         try:
             if i == 0 and time.monotonic() - last_sweep > 60:
                 last_sweep = time.monotonic()
-                stale, expired = sweep_stale_jobs(), sweep_expired()
-                if stale or expired:
-                    log.info("sweep: %s stale jobs refunded, %s expired files deleted", stale, expired)
+                stale, expired, months = sweep_stale_jobs(), sweep_expired(), sweep_yearly_grants()
+                if stale or expired or months:
+                    log.info("sweep: %s stale jobs refunded, %s expired files deleted, %s yearly-plan months granted",
+                             stale, expired, months)
             if run_once(transcriber, pipeline, indexer, embedder, ai or default_ai()) is None:
                 stop.wait(poll)
         except Exception:

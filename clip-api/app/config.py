@@ -78,7 +78,14 @@ class Settings(BaseSettings):
     # Stripe
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
-    plans: str = ""                   # JSON list overriding app/plans.py DEFAULT_PLANS
+    # Stripe Price IDs for the plans in app/plans.py (created by the owner in Stripe, see DEPLOY.md). Prices and
+    # credits themselves live in app/plans.py only; a plan whose Price ID is empty cannot be bought.
+    stripe_price_starter_month: str = ""
+    stripe_price_starter_year: str = ""
+    stripe_price_pro_month: str = ""
+    stripe_price_pro_year: str = ""
+    stripe_price_scale_month: str = ""
+    stripe_price_scale_year: str = ""
 
     # AI titles, hashtags and virality scores (optional; off when the key is empty)
     anthropic_api_key: str = ""

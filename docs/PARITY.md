@@ -93,7 +93,7 @@ Our ingestion rule stays (CLAUDE.md): public, non-DRM content only; no logins, c
 
 ## 5. Money (owner decides; nothing here is built without an OK in the PR)
 
-Their plans, credits and per-plan limits (export resolution, storage, upload size, bulk batch size, connected accounts, scheduled posts, custom templates, fonts, seats) are listed in the research notes. Owner's decision: we keep our own pricing. Tiers, credits and limits will be recommended from measured processing costs and need the owner's approval before anything changes.
+Their plans, credits and per-plan limits (export resolution, storage, upload size, bulk batch size, connected accounts, scheduled posts, custom templates, fonts, seats) are listed in the research notes. Owner's decision (2026-11-17, replacing "keep our own pricing"): copy their plans. Built in `clip-api/app/plans.py` (PR `feat/pricing-wayin-plans`, owner OK needed): Starter, Pro and Scale at their monthly and yearly prices and credits, with the limits we enforce (export resolution, bulk import batch, custom templates, plus our Reframe/Captions minutes per job). Their storage quota, social accounts, seats, bulk edit and export, scheduling, AI music, speech enhancement, B-roll and hook generation are not plan features until we build them. Subscribers from before the change are grandfathered.
 
 ## 6. Observed in the owner's screenshots (2026-11-16)
 
@@ -163,7 +163,7 @@ python scripts/eval_clips.py eval/wayin-zias-iceman.csv job.json     # found, an
 
 Run on 2026-11-16 without the AI judge (selection only): 7 of the 15 found, 8 missed. Details and causes in `docs/super-board/runs/2026-11-16-swarm.md`, "Moment benchmark". Clip #4 ends 1:13:31 (the screenshot; confirmed by the owner).
 
-### Their pricing (w11), for the cost model only
+### Their pricing (w11), copied for our plans on 2026-11-17
 
 | Plan | Monthly | Billed yearly, per month | Credits per month | Export | Bulk edit and export | Bulk import | Storage | Social accounts | Custom templates |
 |---|---|---|---|---|---|---|---|---|---|
@@ -181,7 +181,7 @@ Run on 2026-11-16 without the AI judge (selection only): 7 of the 15 found, 8 mi
 4. **Templates, caption styles, layouts:** keep building the documented layouts and per-game templates with our own branding and artwork. Gameplay A and Gameplay B stay **provisional** until compared with Wayin's real output. The owner will supply screenshots and recordings. **Nothing is marked verified until that comparison is done.**
 5. **Enterprise switches** (more results, express mode): wait. Not built. Consumer-facing platform first.
 6. **Paid services:** research and price, in this order: hosted transcription and translation; AI thumbnail generation; text-to-speech for hooks; AI-generated or stock B-roll; video enhancement and upscaling. Compare providers on price, speed, quality and estimated cost per video; prefer affordable and open-source options. **No paid service is integrated without the owner's approval.**
-7. **Plans and pricing:** keep our own structure. Before subscriptions are finalised, calculate real processing costs (transcription, AI analysis, rendering, storage, bandwidth) and recommend tiers, credit allocations and usage limits from them. **No pricing change is implemented without the owner's approval.**
+7. **Plans and pricing:** *Replaced on 2026-11-17: copy Wayin's plans (section 5).* Was: keep our own structure. Before subscriptions are finalised, calculate real processing costs (transcription, AI analysis, rendering, storage, bandwidth) and recommend tiers, credit allocations and usage limits from them. **No pricing change is implemented without the owner's approval.**
 
 ## Still open
 
