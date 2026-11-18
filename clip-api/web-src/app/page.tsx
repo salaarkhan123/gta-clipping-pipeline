@@ -1,183 +1,81 @@
 "use client";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+// The landing page: hero with the start input, the feature sections (components/landing/sections/), FAQ, closing call to
+// action, footer, and the start input again as a bar pinned to the bottom once the hero's has scrolled away.
+// Numbers that can change (sign-up credits, languages) come from the public API; nothing about a plan is written here.
 import Link from "next/link";
-import { AuthDialog } from "@/components/Auth";
 import { Footer, Nav } from "@/components/Chrome";
-import { DropZone } from "@/components/DropZone";
-import { getToken, setPendingFile } from "@/lib/api";
+import { Faq, FaqItem } from "@/components/Faq";
+import { Eyebrow } from "@/components/site/Section";
+import { StartBar, StartInput, useStart } from "@/components/StartInput";
+import { Languages, useLanguages } from "@/lib/languages";
 import { freeCredits, useSignupCredits } from "@/lib/plans";
+import { isBuilt, TOOLS } from "@/lib/tools";
 
-const TYPED = ["Find the clutch moments in a 5-hour VOD", "Stack your facecam over the gameplay", "Word-by-word captions, ready to post"];
+const list = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
-const SOURCES = ["Twitch VODs", "YouTube Gaming", "Kick", "OBS recordings", "Streamlabs", "Medal", "NVIDIA ShadowPlay", "Xbox captures", "PlayStation captures", "MP4", "MOV", "MKV"];
-
-const TOOLS: { ico: string; name: string; text: string; soon?: boolean }[] = [
-  { ico: "🎯", name: "AI Clip Finder", text: "Scores every second on reaction volume, chat speed and what gets said, then cuts the top moments on sentence boundaries." },
-  { ico: "🔥", name: "AI Rating", text: "Every clip gets an AI rating for hook, pacing and payoff, so you post the strongest one first." },
-  { ico: "💬", name: "Animated Captions", text: "Word-by-word captions in five styles. Download them as SRT or VTT too." },
-  { ico: "📐", name: "Auto Reframe", text: "Finds your facecam on its own and stacks it over the gameplay. 9:16, 4:5, 1:1 and 16:9." },
-  { ico: "🔎", name: "Find Any Moment", text: "Type what was said or shown (“police chase”, “no way”) and get a clip of every match." },
-  { ico: "🪝", name: "AI Titles & Hashtags", text: "Each clip comes with a title and hashtags written for TikTok, Shorts and Reels." },
-  { ico: "🔴", name: "Live Stream Clipper", text: "Clip a Twitch or Kick stream while it's still live.", soon: true },
-  { ico: "⚡", name: "Bulk Import", text: "Queue a whole week of VODs at once.", soon: true },
-  { ico: "📅", name: "Auto-Post & Schedule", text: "Post straight to TikTok, YouTube and Instagram on a schedule.", soon: true },
-];
-
-const faq = (signup: number | null): [string, string][] => [
-  ["How does ClutchClips work?", "Upload a stream recording. The AI listens for hype, reads the transcript, finds the strongest moments, cuts them into vertical clips with your facecam on top and captions on the seam, and rates each one."],
-  ["Can I paste a Twitch or YouTube link?", "Not yet. You upload the recording itself, from OBS or the VOD you downloaded from your own channel."],
-  ["How long does it take?", "On our servers a 2-hour VOD takes about 11 minutes to clip once it's uploaded. Upload time depends on your connection."],
-  ["What does a credit buy?", "One credit is one minute of video. A 2-hour stream uses 120 credits, however many clips you make from it. If a job fails, the credits come back automatically."],
-  ["Is it free to try?", `Yes. New accounts get ${signup === null ? "free credits" : `${signup} free credits`}. No card needed.`],
-  ["How long do you keep my files?", "Uploads and clips are deleted after 7 days. Download what you want to keep."],
-];
-
-function Typer() {
-  const [i, setI] = useState(0), [n, setN] = useState(0), [del, setDel] = useState(false);
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setN(TYPED[0].length); return; }
-    const s = TYPED[i];
-    const t = setTimeout(() => {
-      if (!del && n < s.length) setN(n + 1);
-      else if (!del) setDel(true);
-      else if (n > 0) setN(n - 1);
-      else { setDel(false); setI((i + 1) % TYPED.length); }
-    }, !del && n === s.length ? 1600 : del ? 22 : 45);
-    return () => clearTimeout(t);
-  }, [i, n, del]);
-  return <p className="typer" aria-label={TYPED.join(". ")}><span aria-hidden="true">{TYPED[i].slice(0, n)}</span><span className="caret" /></p>;
-}
-
-function Earnings() {
-  const [clips, setClips] = useState(10), [views, setViews] = useState(5000), [rate, setRate] = useState(1);
-  const total = Math.round(clips * 30 * views / 1000 * rate);
-  return (
-    <div className="calc">
-      <div>
-        <label>Clips posted per day <span>{clips}</span>
-          <input type="range" min={1} max={100} value={clips} onChange={(e) => setClips(+e.target.value)} /></label>
-        <label>Average views per clip <span>{views.toLocaleString()}</span>
-          <input type="range" min={500} max={100000} step={500} value={views} onChange={(e) => setViews(+e.target.value)} /></label>
-        <label>Campaign rate per 1K views <span>${rate.toFixed(2)}</span>
-          <input type="range" min={0.25} max={5} step={0.25} value={rate} onChange={(e) => setRate(+e.target.value)} /></label>
-      </div>
-      <div className="calc-out">
-        <p>Estimated monthly earnings</p>
-        <p className="calc-num grad">${total.toLocaleString()}</p>
-        <p className="small">An estimate only. Real payouts depend on the campaign and how your clips perform.</p>
-      </div>
-    </div>
-  );
+function faq(signup: number | null, langs: Languages | null): FaqItem[] {
+  const on = langs ? { translation: langs.translation, summaries: langs.summaries } : null;
+  const soon = [...TOOLS.filter((t) => !isBuilt(t, on)).map((t) => t.name), "Auto-post and scheduling"];
+  const spoken = langs?.languages.filter((l) => l.transcribe) || [];
+  return [
+    { q: "How does ClutchClips work?", a: <>
+      <p>Paste a public Twitch or Kick link, or upload the recording. ClutchClips reads the transcript, listens for the hype, finds the strongest moments and cuts them into vertical clips with your facecam stacked over the gameplay and captions on.</p>
+      <p>Every clip gets an AI rating, so you know which one to post first.</p></> },
+    { q: "What videos can I use?", a: <>
+      <p>Streams and VODs you own, or have permission to clip. Upload MP4, MOV, MKV or WebM files up to 8 GB and 6 hours long.</p>
+      <p>Links work for public Twitch and Kick videos. YouTube links are best effort and may fail; if one does, upload the file instead. Every link import asks you to confirm you own the video or have permission to clip it.</p></> },
+    { q: "Which languages are supported?", a: spoken.length
+      ? <p>Speech in {spoken.length} languages can be transcribed and captioned, including {list(spoken.slice(0, 6).map((l) => l.name))}. Pick the spoken language when you start, or let it be detected.{langs && !langs.translation ? " Translated captions are coming soon." : ""}</p>
+      : <p>Pick the spoken language when you start a job. The list in the app shows every language that can be transcribed.</p> },
+    { q: "Can I add captions?", a: <p>Yes. Clips come with word-by-word animated captions, and you can pick the style. The AI Captions tool burns captions into any part of a video, and you can download them as SRT or VTT.</p> },
+    { q: "Is ClutchClips free to use?", a: <>
+      <p>You can start free: new accounts get {signup === null ? "free credits" : `${signup.toLocaleString()} free credits`} once the email is confirmed. No card needed.</p>
+      <p>Clipping uses one credit per minute of source video; every other tool shows its price before you start. Credits don&apos;t expire, and if a job fails its credits come back automatically. <Link href="/pricing/">See pricing</Link>.</p></> },
+    { q: "What's coming soon?", a: <p>{list(soon)} are coming soon. They aren&apos;t in the app yet; everything else on this page works today.</p> },
+    { q: "How long do you keep my files?", a: <p>Uploads and clips are deleted after 7 days. Download the clips you want to keep.</p> },
+    { q: "I have more questions!", a: <p>Email <a href="mailto:support@clutchclips.io">support@clutchclips.io</a> or use the <Link href="/contact/">contact page</Link>. A person replies.</p> },
+  ];
 }
 
 export default function Home() {
-  const router = useRouter();
-  const [auth, setAuth] = useState(false);
-  const signup = useSignupCredits();
-
-  function start(file: File) {
-    setPendingFile(file);
-    if (getToken()) router.push("/dashboard/");
-    else setAuth(true);
-  }
-
+  const start = useStart();
+  const signup = useSignupCredits(), langs = useLanguages();
   return (
     <>
       <Nav />
       <main>
-        <header className="hero">
-          <div className="float-card left" aria-hidden="true">
-            <h5>✂️ AI Clipping</h5>
-            <div className="fake-video"><span className="tag">● DETECTING: CLUTCH PLAY</span><span className="scan" /><span className="time">3:42:15</span></div>
-            <div className="chip-row"><span className="chip">Hype spikes</span><span className="chip">Chat speed</span></div>
+        <header className="grid justify-items-center px-gutter pb-[clamp(32px,4vw,48px)] pt-[clamp(48px,7vw,96px)] text-center">
+          <Eyebrow bright>AI clipping for gaming streams</Eyebrow>
+          <h1 className="mt-[clamp(12px,1.6vw,24px)] max-w-site text-display text-fg">Stream for hours. Post clips in minutes.</h1>
+          <p className="mt-[clamp(12px,1.4vw,20px)] max-w-prose text-lead text-fg-2">
+            ClutchClips finds the clutch moments in your VOD, stacks your facecam over the gameplay, captions every word and gives each clip an AI rating.</p>
+          <div className="mt-[clamp(28px,3.5vw,48px)] flex w-full items-center justify-center gap-4 narrow:flex-col narrow:gap-3">
+            <StartInput start={start} id="start-hero" />
+            <span className="text-[16px] font-medium text-fg-2 narrow:hidden">or</span>
+            <Link href="/pricing/" className="btn btn-ghost h-16 px-6 narrow:hidden">See pricing</Link>
           </div>
-          <div className="float-card right" aria-hidden="true">
-            <h5>🔥 AI rating <small>example</small></h5>
-            {[["“He actually did it”", 98], ["Chat goes crazy", 91], ["Getaway fail", 84]].map(([t, s]) => (
-              <div key={t as string}><div className="moment"><span>{t}</span><b>{s}</b></div>
-                <div className="score-bar"><span style={{ width: `${s}%` }} /></div></div>))}
-          </div>
-
-          <div className="container hero-content">
-            <span className="pill"><span className="dot" />AI CLIPPING FOR GAMING STREAMS</span>
-            <h1>Clip. Caption. <span className="grad">Go Viral.</span></h1>
-            <Typer />
-            <DropZone onFile={start} />
-            <p className="hero-note">{freeCredits(signup)} · No credit card required</p>
-          </div>
+          <p className="mt-4 text-[14px] text-fg-2">{freeCredits(signup)} · No card needed</p>
         </header>
 
-        <p className="trusted">Works with recordings from</p>
-        <div className="marquee" aria-label={SOURCES.join(", ")}>
-          <div className="marquee-track" aria-hidden="true">{[...SOURCES, ...SOURCES].map((s, i) => <span key={i}>{s}</span>)}</div>
-        </div>
+        {/* Landing sections (agent B): begin. Carousel under the hero, then the feature sections, in the reference's order. */}
+        {/* Landing sections (agent B): end */}
 
-        <div className="container stats">
-          <div className="stat"><h3>~11 min</h3><p>To clip a 2-hour VOD</p></div>
-          <div className="stat"><h3>4</h3><p>Aspect ratios, from 9:16 to 16:9</p></div>
-          <div className="stat"><h3>5</h3><p>Animated caption styles</p></div>
-        </div>
-
-        <section>
-          <div className="container">
-            <h2 className="section-title">From 5-hour stream to <span className="grad">viral clips</span> in 3 steps</h2>
-            <p className="section-sub">No scrubbing timelines. No manual captions. Upload, pick and post.</p>
-            <ol className="steps">
-              <li className="step"><h3>Upload the recording</h3><p>Straight from OBS, or the VOD you downloaded from your channel. MP4, MOV, MKV or WebM up to 8 GB.</p></li>
-              <li className="step"><h3>AI finds the moments</h3><p>It listens for hype, reads the transcript, scores every moment and cuts ready-to-post clips.</p></li>
-              <li className="step"><h3>Download and post</h3><p>Vertical MP4s with your facecam on top, captions on, and a title and hashtags for each.</p></li>
-            </ol>
-          </div>
+        <section id="faq" className="px-gutter py-[clamp(64px,8vw,120px)]">
+          <h2 className="mb-[clamp(28px,4vw,56px)] text-center text-h2 text-fg">Got questions?</h2>
+          <Faq items={faq(signup, langs)} />
         </section>
 
-        <section id="tools" className="flush">
-          <div className="container">
-            <h2 className="section-title">Every tool a clipper needs</h2>
-            <p className="section-sub">One workspace for finding, reframing and captioning clips, built only for gaming streams.</p>
-            <div className="tools-grid">
-              {TOOLS.map((t) => (
-                <div key={t.name} className={`tool ${t.soon ? "soon" : ""}`}>
-                  <div className="ico" aria-hidden="true">{t.ico}</div>
-                  <h3>{t.name}{t.soon && <span className="badge">Coming soon</span>}</h3>
-                  <p>{t.text}</p>
-                </div>))}
-            </div>
-          </div>
-        </section>
-
-        <section id="earnings" className="flush">
-          <div className="container">
-            <h2 className="section-title">How much could you earn clipping?</h2>
-            <p className="section-sub">Clipping campaigns pay per 1,000 views. Estimate your month.</p>
-            <Earnings />
-          </div>
-        </section>
-
-        <section className="flush">
-          <div className="container">
-            <h2 className="section-title">Frequently asked questions</h2>
-            <p className="section-sub">Everything you need to know before you start clipping.</p>
-            <div className="faq">
-              {faq(signup).map(([q, a], i) => (<details key={q} open={i === 0}><summary>{q}</summary><p>{a}</p></details>))}
-            </div>
-          </div>
-        </section>
-
-        <section className="flush">
-          <div className="container">
-            <div className="cta-band">
-              <h2>Stop scrubbing. <span className="grad">Start clipping.</span></h2>
-              <p>Your last stream already has clips in it.</p>
-              <Link href="/login/?new=1" className="btn btn-primary btn-lg">Start Clipping Free</Link>
-              <p className="hero-note">{freeCredits(signup)} · No credit card required</p>
-            </div>
+        <section className="px-gutter pb-[clamp(64px,8vw,120px)] pt-0">
+          <div className="mx-auto grid max-w-site justify-items-center gap-6 rounded-stage bg-surface px-6 py-[clamp(48px,6vw,80px)] text-center">
+            <h2 className="text-[clamp(24px,2vw+8px,36px)] leading-[1.1] tracking-[-0.03em] text-fg">Your last stream already has clips in it</h2>
+            <Link href="/login/?new=1" className="btn btn-primary h-[52px]">Start clipping free</Link>
+            <p className="text-[14px] text-fg-2">{freeCredits(signup)} · No card needed</p>
           </div>
         </section>
       </main>
       <Footer />
-      <AuthDialog open={auth} onClose={() => setAuth(false)} onDone={() => router.push("/dashboard/")}
-        note="Create an account and your video starts uploading straight away." />
+      <StartBar start={start} after="start-hero" before="site-footer" />
+      {start.dialog}
     </>
   );
 }
