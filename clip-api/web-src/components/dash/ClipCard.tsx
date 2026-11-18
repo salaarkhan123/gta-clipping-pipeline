@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { API, api, ApiError, clock, getToken } from "@/lib/api";
-import { Icon, IconName, Soon } from "./Icon";
+import { Icon, IconName } from "./Icon";
 import { useDash } from "./Shell";
 
 export async function downloadSubtitles(clipId: string, format = "srt") {
@@ -27,13 +27,14 @@ export function numbering(clips: any[]): Map<string, number> {
   return new Map(made.map((c, i) => [c.id, i + 1]));
 }
 
-const SOON: [IconName, string][] = [["calendar", "Schedule"], ["scissors", "Trim"], ["reframe", "Reframe"]];
+const SOON: [IconName, string][] = [["calendar", "Schedule"]];
 
 // One clip as a card: tick box, rank and title, the preview with its time range, the score, and its actions.
 // `project` links back to where it came from (Library). `lit` marks the card the timeline just jumped to.
 // `onSelect` adds the tick box (the project page's bulk actions).
-export function ClipCard({ clip, onChange, project, lit, number, selected, onSelect }: { clip: any; onChange: (c: any) => void;
-  project?: { id: string; name: string }; lit?: boolean; number?: number; selected?: boolean; onSelect?: (id: string, on: boolean) => void }) {
+// `uploadId` (or `project`) gives the card its Edit action: the editor needs the source video.
+export function ClipCard({ clip, onChange, project, uploadId, lit, number, selected, onSelect }: { clip: any; onChange: (c: any) => void;
+  project?: { id: string; name: string }; uploadId?: string; lit?: boolean; number?: number; selected?: boolean; onSelect?: (id: string, on: boolean) => void }) {
   const { fail } = useDash();
   // A reply signs new links for the same files; the ones on the page stay, so a playing clip is not restarted.
   const merge = (r: any) => onChange({ ...clip, ...r, video_url: clip.video_url, thumb_url: clip.thumb_url || r.thumb_url, captions_url: clip.captions_url || r.captions_url });
@@ -45,6 +46,7 @@ export function ClipCard({ clip, onChange, project, lit, number, selected, onSel
   const titles: string[] = clip.titles?.length ? (clip.titles.includes(clip.title) ? clip.titles : [clip.title, ...clip.titles]) : [];
   const retitle = (title: string) => api(`/v1/clips/${clip.id}`, { method: "PATCH", body: { title } }).then(merge).catch(fail);
   const name = nameOf(clip, number), rank = rankOf(clip);
+  const source = uploadId || project?.id;
   return (
     <article id={`clip-${clip.id}`} tabIndex={-1} aria-label={name}
       className={`clip ${clip.kept === false ? "dropped" : ""} ${lit ? "lit" : ""} ${selected ? "picked" : ""}`}>
@@ -56,28 +58,24 @@ export function ClipCard({ clip, onChange, project, lit, number, selected, onSel
         <video controls preload="none" poster={clip.thumb_url || undefined} src={clip.video_url} />
         <span className="clip-time">{clock(clip.start_sec)} – {clock(clip.end_sec)}</span>
         {clip.edited === true && <span className="clip-edited">Edited</span>}
-      </div>
-      <div className="clip-row">
-        <ScoreBadge clip={clip} />
-        <div className="clip-icons" role="group" aria-label="Rate this clip">
+        <div className="clip-rate" role="group" aria-label="Rate this clip">
           <IconToggle icon="like" label="Like" on={clip.reaction === "like"} onClick={() => react("like")} />
           <IconToggle icon="dislike" label="Dislike" on={clip.reaction === "dislike"} onClick={() => react("dislike")} />
           <IconToggle icon="bookmark" label="Bookmark" on={!!clip.bookmarked} onClick={() => send({ bookmarked: !clip.bookmarked })} />
         </div>
       </div>
-      <p className="clip-desc" title={clip.description || undefined}>{clip.description || <span className="muted">No description for this clip.</span>}</p>
-      {project && <Link className="muted clip-from" href={`/dashboard/project/?id=${project.id}`}>From {project.name}</Link>}
-      <div className="clip-row">
+      <div className="clip-bar">
+        <ScoreBadge clip={clip} />
         <div className="clip-icons" role="group" aria-label="Clip actions">
           <a className="icon-btn go" href={clip.video_url} download aria-label={`Download ${name}`} title="Download"><Icon name="download" size={18} /></a>
           <button type="button" className="icon-btn" disabled={!clip.captions_url} aria-label={clip.captions_url ? `Download the captions file for ${name}` : "No captions file: this clip has no captions"}
             title={clip.captions_url ? "Captions file (SRT)" : "This clip has no captions"} onClick={() => downloadSubtitles(clip.id).catch(fail)}><Icon name="captions" size={18} /></button>
-        </div>
-        <div className="clip-icons soon-set" role="group" aria-label="Coming soon">
-          {SOON.map(([icon, label]) => <button key={label} type="button" className="icon-btn" disabled aria-label={`${label} (coming soon)`} title={`${label}: coming soon`}><Icon name={icon} size={18} /></button>)}
-          <Soon />
+          {source && <Link className="btn small ghost clip-edit" href={`/dashboard/edit/?project=${source}&clip=${clip.id}`} aria-label={`Edit ${name}`}
+            title="Trim, cut by transcript, captions and look"><Icon name="sliders" size={16} />Edit</Link>}
         </div>
       </div>
+      <p className="clip-desc" title={clip.description || undefined}>{clip.description || <span className="muted">No description for this clip.</span>}</p>
+      {project && <Link className="muted clip-from" href={`/dashboard/project/?id=${project.id}`}>From {project.name}</Link>}
       <details className="clip-more">
         <summary>More</summary>
         <div className="clip-more-body">
@@ -93,6 +91,7 @@ export function ClipCard({ clip, onChange, project, lit, number, selected, onSel
             <button className="btn small ghost" aria-pressed={clip.kept === true} onClick={() => keep(true)}>Keep</button>
             <button className="btn small ghost" aria-pressed={clip.kept === false} onClick={() => keep(false)}>Discard</button>
           </div>
+          <p className="muted small">Coming soon: {SOON.map(([, label]) => label.toLowerCase()).join(", ")}.</p>
           {clip.captions_url && <div className="clip-actions" role="group" aria-label="Captions file">
             <span className="muted">Captions file</span>
             {["srt", "vtt", "txt"].map((f) => <button key={f} className="btn small ghost" onClick={() => downloadSubtitles(clip.id, f).catch(fail)}>{f.toUpperCase()}</button>)}
