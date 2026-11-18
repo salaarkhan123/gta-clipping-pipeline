@@ -36,6 +36,11 @@ SCENE_STEP = 2.0                # seconds between the frames the scene signal co
 STILL = 1.0                     # mean grey-level change (0-255) between key frames below which nothing moved
 STANDBY_REJECT = 0.9            # share of a candidate's seconds that are standby at which it is never a clip
 THUMB_W, THUMB_H = 160, 90      # the size key frames are compared at
+# Decode key frames only. `-skip_frame` is enough for H.264 and AV1, but the VP9 decoder ignores it and decodes
+# every frame (2,700 frames for a 45 s window of a 60 fps VP9 upload: 14 s instead of 0.4 s). The input bitstream
+# filter drops the other packets before any decoder sees them (checked on H.264 in MKV, AV1 in MP4, VP9 in MP4 and
+# WebM). An ffmpeg too old for input bitstream filters gets the second form: `-discard` covers VP9 in MP4.
+KEY_ONLY = (["-skip_frame", "nokey", "-bsf:v", "noise=drop=not(key)"], ["-skip_frame", "nokey", "-discard", "nokey"])
 
 
 def _seek(start: float, length: float | None) -> list[str]:
@@ -165,16 +170,20 @@ def scene_changes(path: Path, deadline: Deadline | None = None, start: float = 0
 def keyframes(path: Path, start: float, length: float, deadline: Deadline | None = None) -> list[tuple[float, np.ndarray]]:
     """The key frames inside [start, start + length] as (source second, grey THUMB_W x THUMB_H array). Only key
     frames are decoded, so this costs a small part of decoding the span."""
-    cmd = ["ffmpeg", "-hide_banner", "-nostats", "-loglevel", "info", "-nostdin", "-skip_frame", "nokey",
-           *_seek(start, length), *SAFE_IN, "-i", str(path), "-an",
-           "-vf", f"scale={THUMB_W}:{THUMB_H},format=gray,showinfo", "-fps_mode", "passthrough",
-           "-f", "rawvideo", "pipe:1"]
-    timeout = deadline.remaining(120.0) if deadline else 120.0
-    try:
-        res = subprocess.run(cmd, capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL)
-    except subprocess.TimeoutExpired:
-        raise PipelineTimeout() from None
-    if res.returncode != 0:
+    res = None
+    for key_only in KEY_ONLY:
+        cmd = ["ffmpeg", "-hide_banner", "-nostats", "-loglevel", "info", "-nostdin", *key_only,
+               *_seek(start, length), *SAFE_IN, "-i", str(path), "-an",
+               "-vf", f"scale={THUMB_W}:{THUMB_H},format=gray,showinfo", "-fps_mode", "passthrough",
+               "-f", "rawvideo", "pipe:1"]
+        timeout = deadline.remaining(120.0) if deadline else 120.0
+        try:
+            res = subprocess.run(cmd, capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL)
+        except subprocess.TimeoutExpired:
+            raise PipelineTimeout() from None
+        if res.returncode == 0:
+            break
+    if res is None or res.returncode != 0:
         return []
     times = [float(t) for t in re.findall(rb"pts_time:\s*(-?[\d.]+)", res.stderr)]
     size = THUMB_W * THUMB_H

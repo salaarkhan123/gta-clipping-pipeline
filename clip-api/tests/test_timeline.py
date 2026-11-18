@@ -104,6 +104,15 @@ def test_key_frames_come_with_source_times(still_then_moving):
     assert standby_share(frames, 30.0, 50.0) == 0.0
 
 
+def test_only_key_frames_are_decoded_for_vp9_too(tmp_path):
+    """The VP9 decoder ignores -skip_frame: without -discard every frame came back (and was decoded)."""
+    out = tmp_path / "vp9.webm"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=15:duration=12",
+                    "-c:v", "libvpx-vp9", "-g", "30", "-deadline", "realtime", "-cpu-used", "8", str(out)], check=True)
+    frames = keyframes(out, 0.0, 12.0)
+    assert 4 <= len(frames) <= 8                                            # one every 2 s, not 180
+
+
 def test_a_standby_candidate_never_becomes_a_clip(still_then_moving, tmp_path):
     timer = Timer()
     moments = []
