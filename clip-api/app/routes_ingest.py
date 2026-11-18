@@ -1,9 +1,11 @@
 """Link import: `POST /v1/imports {url, consent: true}` turns a public video link into an upload.
+`POST /v1/imports/preview {url}` says what a link is before anything is imported (app/ingest/preview.py).
 
 An import is a Job row (id `imp_...`, tool `import`, no credits) on a hidden placeholder upload, so the existing
 queue and worker run it. The log row is written here, before anything is fetched. When the import succeeds its
 `upload_id` works exactly like the id of an uploaded file. See app/ingest/ for the rules and the downloaders.
 """
+import logging
 from datetime import timedelta
 from typing import Any
 
@@ -15,8 +17,9 @@ from sqlalchemy.orm import Session
 from . import ledger
 from .config import get_settings
 from .db import get_db
-from .deps import ApiError, Principal, current_principal
+from .deps import ApiError, Principal, current_principal, rate_limit
 from .ingest import UPLOAD_INSTEAD, Refused
+from .ingest import preview as link_preview
 from .ingest.fetch import check_hop
 from .ingest.runner import IMPORT_PREFIX
 from .ingest.sources import SOURCES, classify
@@ -24,6 +27,7 @@ from .models import Account, ImportLog, Job, Upload, new_id, utcnow
 from .plans import PLANS, plan_of
 from .routes_media import ACTIVE, ALLOWED_EXT, iso, upload_json
 
+log = logging.getLogger("clipapi.ingest")
 router = APIRouter()
 BULK_MAX = PLANS[0]["bulk_import_max"]   # links per bulk request on the free plan; paid plans allow more (app/plans.py)
 MAX_ACTIVE_IMPORTS = 10     # imports one account may have waiting or running at once (at least its plan's bulk size)
@@ -35,6 +39,11 @@ class ImportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")       # url and consent only: no option reaches a downloader
     url: str
     consent: Any = None
+
+
+class PreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    url: str
 
 
 class BulkImportRequest(BaseModel):
@@ -137,6 +146,30 @@ def create(body: ImportRequest, p: Principal = Depends(current_principal), db: S
         db.rollback()
         raise ApiError(422, e.code, e.message) from None
     return import_json(db, job)
+
+
+@router.post("/v1/imports/preview")
+def preview(body: PreviewRequest, p: Principal = Depends(current_principal)):
+    """What a link is (platform, title, channel, length, thumbnail) and whether it can be imported. Free, and
+    nothing is imported or stored, so no consent is needed. When `supported` is false, `refusal` says why and
+    what to do instead. Lookups that reach the site are limited to 10 a minute per account; answers are cached
+    for 5 minutes per link (1 minute when the site refused)."""
+    require_enabled(p)
+    cached = False
+    try:
+        source = classify(body.url)
+    except Refused as e:
+        result = link_preview.answer(body.url, None, refusal=e)
+    else:
+        hit = link_preview.cached(source.url)
+        cached = hit is not None
+        if hit is None:
+            rate_limit(f"preview:{p.account.id}", link_preview.LOOKUPS_PER_MINUTE, 60)
+        result = hit or link_preview.look(source)
+    refusal = result["refusal"]
+    log.info("import preview: account=%s platform=%s url=%r supported=%s refusal=%s cached=%s", p.account.id,
+             result["platform"], result["url"][:200], result["supported"], refusal and refusal["code"], cached)
+    return result
 
 
 @router.post("/v1/imports/bulk")
