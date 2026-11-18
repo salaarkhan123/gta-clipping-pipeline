@@ -205,6 +205,9 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
         deadline = Deadline(max(900.0, duration * s.job_timeout_factor))
         tool, result = options.pop("tool", "clips"), None
         charge_basis = options.pop("charge_basis", None)   # "rendered": settle on the seconds rendered (re-runs)
+        options.pop("link", None)                           # started from a link (app/url_clips.py)
+        fixed_charge = options.pop("charge", None)          # a link job's first run: priced on the stored video,
+                                                            # never above the quote it reserved
         render_mode = options.get("render", "full")         # (render, agent B) full | preview | none
         exported: list[tuple[str, str, str]] = []           # (render, agent B) export jobs: (export_id, clip_id, key)
         export_sec = 0.0                                    # (render, agent B) export jobs: quoted seconds rendered
@@ -392,7 +395,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             if tool in ("clips", "find") or (tool in ("transcript", "summary") and charge_basis != "rendered"):
                 db.get(Upload, job.upload_id).analyzed = True
             job.status, job.progress, job.stage, job.finished_at = "SUCCEEDED", 100, "done", utcnow()
-            charged = None                                  # None: the whole reservation, as for a first run
+            charged = fixed_charge                          # None: the whole reservation, as for a first run
             if tool == "export":                            # (render, agent B) the quoted seconds rendered
                 charged = credits_of(export_sec) if export_sec > 0 else 0
             elif charge_basis == "rendered":
@@ -473,8 +476,9 @@ def send_webhook(job_id: str) -> None:
 
 def sweep_stale_jobs() -> int:
     """RUNNING jobs whose worker died (no heartbeat) are failed and refunded."""
+    from . import url_clips
     cutoff = utcnow() - timedelta(minutes=get_settings().stale_job_minutes)
-    n = 0
+    n, ended = 0, []
     with new_session() as db:
         stale = db.execute(select(Job).where(Job.status == "RUNNING", Job.heartbeat_at < cutoff)
                            .with_for_update(skip_locked=True)).scalars().all()
@@ -483,6 +487,8 @@ def sweep_stale_jobs() -> int:
             job.status, job.finished_at = "FAILED", utcnow()
             job.error_code, job.error_message = "worker_lost", "Processing was interrupted. Your credits were refunded."
             ledger.settle(db, job, success=False)
+            if job.id.startswith("imp_"):
+                ended += url_clips.resolve(db, job)     # link clip jobs waiting for this import: refunded
             # Clips the dead worker had already stored: hide them and remove their files.
             for clip in db.execute(select(Clip).where(Clip.job_id == job.id, Clip.deleted_at.is_(None))).scalars():
                 orphans += [k for k in (clip.video_key, clip.thumb_key, clip.captions_key, clip.preview_key) if k]
@@ -495,6 +501,7 @@ def sweep_stale_jobs() -> int:
             storage.delete(key)
         except Exception:
             log.exception("could not remove %s", key)
+    url_clips.notify(ended)
     return n
 
 
@@ -502,7 +509,7 @@ def sweep_expired() -> int:
     """Delete stored files past their retention date."""
     storage, now, n = get_storage(), utcnow(), 0
     with new_session() as db:
-        active_uploads = select(Job.upload_id).where(Job.status.in_(("QUEUED", "RUNNING")))
+        active_uploads = select(Job.upload_id).where(Job.status.in_(("WAITING", "QUEUED", "RUNNING")))
         for up in db.execute(select(Upload).where(Upload.deleted_at.is_(None), Upload.expires_at <= now,
                                                   Upload.id.not_in(active_uploads)).limit(200)).scalars():
             storage.delete(up.storage_key)
@@ -554,10 +561,12 @@ def _slot(i: int, stop: threading.Event, transcriber, pipeline, indexer, embedde
         try:
             if i == 0 and time.monotonic() - last_sweep > 60:
                 last_sweep = time.monotonic()
+                from .url_clips import sweep_waiting
                 stale, expired, months = sweep_stale_jobs(), sweep_expired(), sweep_yearly_grants()
-                if stale or expired or months:
-                    log.info("sweep: %s stale jobs refunded, %s expired files deleted, %s yearly-plan months granted",
-                             stale, expired, months)
+                waiting = sweep_waiting()
+                if stale or expired or months or waiting:
+                    log.info("sweep: %s stale jobs refunded, %s expired files deleted, %s yearly-plan months granted, "
+                             "%s link clip jobs settled after their import", stale, expired, months, waiting)
             if run_once(transcriber, pipeline, indexer, embedder, ai or default_ai()) is None:
                 stop.wait(poll)
         except Exception:
