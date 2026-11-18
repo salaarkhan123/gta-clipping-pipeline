@@ -101,6 +101,10 @@ class Settings(BaseSettings):
     trust_reports_per_ip_per_hour: int = 5
     trust_reports_per_ip_per_day: int = 20
     trust_reports_per_email_per_day: int = 3
+    # Repeat infringers (owner, 2026-11-18: three strikes). Strikes expire after this many days; 0 = never.
+    # Both are owner decisions (app/trust_decisions.py).
+    repeat_infringer_strikes: int = 3
+    repeat_infringer_strike_days: int = 0
 
     # Stripe
     stripe_secret_key: str = ""
