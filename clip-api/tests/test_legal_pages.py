@@ -37,3 +37,13 @@ def test_signup_sends_accept_policies_and_links_the_terms():
     assert "accept_policies: true" in auth
     for path in ("/terms/", "/privacy/", "/acceptable-use/"):
         assert f'href="{path}"' in auth
+
+
+def test_the_deployed_site_shows_no_owner_placeholder():
+    """clip-api/web/ is what production serves: no page in it may show an [OWNER …] placeholder."""
+    web = WEB.parent / "web"
+    for p in legal.POLICIES.values():
+        html = (web / p.path.strip("/") / "index.html").read_text()
+        assert "data-owner-placeholder" not in html and "[OWNER" not in html, f"{p.path} shows a placeholder"
+    pkg = (WEB / "package.json").read_text()
+    assert '"build": "next build && node scripts/check-legal.mjs out"' in pkg

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Decision, Ext, LegalPage, Owner } from "@/components/LegalPage";
-import { OWNER, SUPPORT_EMAIL } from "@/lib/legal";
+import { Decision, Ext, LegalPage, Mail, Owner } from "@/components/LegalPage";
+import { CONTACT, OWNER } from "@/lib/legal";
 
 // Matches docs/trust/privacy-law-review.md section 7 (Copyright Act ss. 41.25-41.27, 17 U.S.C. 512) and
 // what runs today: notices by email, reviewed by the owner by hand, removal with `scripts/admin.py takedown`
@@ -34,10 +34,9 @@ const sections = [
   </> },
   { id: "agent", title: "Our designated agent", body: <>
     <p><Owner>{OWNER.dmcaAgent}</Owner></p>
-    <p>Email: <Owner>{OWNER.dmcaEmail}</Owner></p>
-    <p>The same agent is listed in the US Copyright Office&apos;s{" "}
-      <Ext href="https://www.copyright.gov/dmca-directory/">DMCA Designated Agent Directory</Ext>. <Owner>register the agent at
-      dmca.copyright.gov and renew every 3 years</Owner></p>
+    <p>Email: <Mail to={CONTACT.copyright} subject="Copyright notice" /></p>
+    <p>The agent is not yet registered in the US Copyright Office&apos;s{" "}
+      <Ext href="https://www.copyright.gov/dmca-directory/">DMCA Designated Agent Directory</Ext>. <Owner>{OWNER.dmcaRegistration}</Owner></p>
   </> },
   { id: "canada", title: "Canada: notice and notice", body: <>
     <p>Under Canada&apos;s Copyright Act (sections 41.25 to 41.27), when we receive a notice of claimed infringement that meets the Act&apos;s
@@ -95,7 +94,7 @@ const sections = [
   </> },
   { id: "likeness", title: "Your face, voice or name", body: <>
     <p>If a clip on ClutchClips shows you, uses your voice, or impersonates you without your consent, email{" "}
-      <a href={`mailto:${SUPPORT_EMAIL}?subject=Likeness%20report`}>{SUPPORT_EMAIL}</a> with the subject &ldquo;Likeness report&rdquo;.
+      <Mail to={CONTACT.copyright} subject="Likeness report" /> with the subject &ldquo;Likeness report&rdquo;.
       Include the clip or source link, who you are, and what is wrong. The owner reviews it by hand, the same way as a copyright notice.
       The <Link href="/acceptable-use/">Acceptable Use Policy</Link> bans deceptive impersonation and synthetic content of real people
       without their consent.</p>

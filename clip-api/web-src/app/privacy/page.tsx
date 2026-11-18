@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Decision, Ext, LegalPage, Outstanding, Owner, Table } from "@/components/LegalPage";
-import { OWNER } from "@/lib/legal";
+import { Decision, Ext, LegalPage, Mail, Outstanding, Owner, Table } from "@/components/LegalPage";
+import { CONTACT, OWNER } from "@/lib/legal";
 
 // Every statement here matches docs/trust/data-map.md (what the code collects, keeps and sends) and
 // docs/trust/privacy-law-review.md (laws, lawful bases, providers). Change those files and this page together.
@@ -12,7 +12,7 @@ const sections = [
     <p>ClutchClips is run by <Owner>{OWNER.entity}</Owner>, <Owner>{OWNER.address}</Owner>, in Edmonton, Alberta, Canada.
       We decide how the personal information on this service is used, so we are responsible for it (the &ldquo;organization&rdquo;
       under Canadian law and the &ldquo;controller&rdquo; under the GDPR). That includes the videos you upload.</p>
-    <p>Our privacy officer is <Owner>{OWNER.privacyOfficer}</Owner>. Write to <Owner>{OWNER.privacyEmail}</Owner> with any
+    <p>Our privacy officer is <Owner>{OWNER.privacyOfficer}</Owner>. Write to <Mail to={CONTACT.privacy} /> with any
       question, request or complaint about your personal information. For Quebec, this person is also the person in charge
       of the protection of personal information.</p>
   </> },
@@ -103,7 +103,8 @@ const sections = [
         "Your email, account id, card and payment details", "As long as it provides the service, longer where the law requires"],
       [<Ext key="se" href="https://docs.sentry.io/security-legal-pii/security/data-retention-periods/">Sentry</Ext>, "Error reports, when switched on",
         "Technical details of the error", "30 or 90 days, by plan"],
-      ["Email provider", "Sending account email", "Your email address and the message", <Owner key="em">{OWNER.emailProvider}</Owner>],
+      [<Ext key="rs" href="https://resend.com/docs/knowledge-base/account-quotas-and-limits">Resend</Ext>, "Sending account email",
+        "Your email address, the subject and the message text", "30 days"],
     ]} />
     <p>When you import a link, we contact the site it points to (for example Twitch, Kick, YouTube, Google Drive or Dropbox) to download the
       video. If you set a webhook, we send the job id and status to your own server. If you send us a copyright counter-notice, the owner forwards it by email,
@@ -115,7 +116,7 @@ const sections = [
       <li>Our server and database are in Toronto, Canada (DigitalOcean). Files are kept on that server or in DigitalOcean object storage
         (<Owner>{OWNER.spacesRegion}</Owner>).</li>
       <li>Anthropic and Stripe are in the United States, and Stripe also works in other regions. Sentry stores data in the US or the EU
-        (<Owner>{OWNER.sentryRegion}</Owner>).</li>
+        (<Owner>{OWNER.sentryRegion}</Owner>). Account email is sent through Resend (<Owner>{OWNER.resendRegion}</Owner>).</li>
     </ul>
     <p>So your information may be processed in the United States, where the law may let authorities access it. You can ask our privacy
       officer about how these service providers outside Canada handle it.</p>
@@ -148,7 +149,7 @@ const sections = [
       <li>stop or limit a use of it, or object to a use based on our legitimate interests;</li>
       <li>withdraw a consent you gave (this does not undo what was lawfully done before).</li>
     </ul>
-    <p>To use a right, email <Owner>{OWNER.privacyEmail}</Owner> from the address on your account. We may ask you to confirm who you are.
+    <p>To use a right, email <Mail to={CONTACT.privacy} /> from the address on your account. We may ask you to confirm who you are.
       We answer within 30 days (one month under the GDPR). Self-serve export and deletion in the dashboard are not available yet.</p>
     <p>Some records we must keep even after a deletion request, such as payment and credit records needed for tax, and the import log and the
       copyright and likeness reports we receive, needed to answer legal claims.</p>

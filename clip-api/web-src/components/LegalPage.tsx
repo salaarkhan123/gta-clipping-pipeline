@@ -2,7 +2,7 @@
 // GET /v1/legal/policies), the draft notice, a table of contents and the sections.
 import Link from "next/link";
 import { Footer, Nav } from "@/components/Chrome";
-import { POLICIES, policy } from "@/lib/legal";
+import { CONTACT, POLICIES, policy } from "@/lib/legal";
 
 export type Section = { id: string; title: string; body: React.ReactNode };
 
@@ -10,12 +10,12 @@ const MARK = "rounded-[4px] bg-[rgba(255,182,72,.16)] px-1 font-semibold text-wa
 
 // A fact only the owner knows. Visible on purpose: the page is not final while one is left.
 export function Owner({ children }: { children: React.ReactNode }) {
-  return <mark className={MARK}>[OWNER: {children}]</mark>;
+  return <mark className={MARK} data-owner-placeholder="">[OWNER: {children}]</mark>;
 }
 
 // A rule the owner has to decide. The text after it is the proposal.
 export function Decision({ children }: { children?: React.ReactNode }) {
-  return <mark className={MARK}>[OWNER DECISION{children ? <>: {children}</> : null}]</mark>;
+  return <mark className={MARK} data-owner-placeholder="">[OWNER DECISION{children ? <>: {children}</> : null}]</mark>;
 }
 
 // A rule the owner has set that a lawyer still has to check.
@@ -26,6 +26,11 @@ export function Review() {
 // A compliance step that is known and not done yet.
 export function Outstanding({ children }: { children: React.ReactNode }) {
   return <mark className={MARK}>[OUTSTANDING: {children}]</mark>;
+}
+
+// An email address from CONTACT, as a link.
+export function Mail({ to, subject }: { to: string; subject?: string }) {
+  return <a href={`mailto:${to}${subject ? `?subject=${encodeURIComponent(subject)}` : ""}`}>{to}</a>;
 }
 
 export const date = (iso: string) =>
@@ -57,8 +62,31 @@ export function Table({ head, rows }: { head: string[]; rows: React.ReactNode[][
   );
 }
 
+// The drafts render only in a preview build (LEGAL_PREVIEW=1, read at build time). A production build shows a short
+// stub instead, so a page with an [OWNER …] placeholder is never deployed; scripts/check-legal.mjs enforces it.
+export const PREVIEW = process.env.LEGAL_PREVIEW === "1";
+
+function Stub({ title }: { title: string }) {
+  return (
+    <>
+      <Nav />
+      <main>
+        <header className="page-head">
+          <div className="container">
+            <span className="pill"><span className="dot" />LEGAL</span>
+            <h1>{title}</h1>
+            <p>This policy is being finalised. Contact <a className="text-lime underline" href={`mailto:${CONTACT.privacy}`}>{CONTACT.privacy}</a>.</p>
+          </div>
+        </header>
+      </main>
+      <Footer />
+    </>
+  );
+}
+
 export function LegalPage({ id, intro, sections }: { id: string; intro: React.ReactNode; sections: Section[] }) {
   const p = policy(id);
+  if (!PREVIEW) return <Stub title={p.title} />;
   return (
     <>
       <Nav />

@@ -19,20 +19,25 @@ export const policy = (id: string): Policy => {
 };
 
 // Facts only the owner can give. Each renders as a visible [OWNER: …] marker (components/LegalPage.tsx `Owner`)
-// until the owner replaces the text here with the real value and removes the marker.
+// until the owner replaces the text here with the real value and removes the marker. A production build refuses
+// to ship a page that still shows one (scripts/check-legal.mjs); LEGAL_PREVIEW=1 builds the drafts.
 export const OWNER = {
   entity: "legal entity name (or your full name as a sole proprietor)",
   address: "postal address",
   privacyOfficer: "privacy officer's name and title",
-  privacyEmail: "privacy contact email",
-  dmcaAgent: "designated DMCA agent: name, postal address, email and phone, as registered with the US Copyright Office",
-  dmcaEmail: "DMCA agent email",
-  governingLaw: "governing law and courts (suggested: the Province of Alberta, courts in Edmonton)",
-  emailProvider: "email provider, its region and how long it keeps messages",
+  dmcaAgent: "designated DMCA agent: name and postal address",
+  dmcaRegistration: "register the agent at dmca.copyright.gov (US$6, renewed every 3 years); not done yet",
+  resendRegion: "Resend's sending region",
   spacesRegion: "confirm the object storage region (expected Toronto, TOR1)",
   sentryRegion: "confirm whether Sentry is used and its region (US or EU)",
-  dpas: "confirm each provider's data processing agreement is accepted in its dashboard",
+  dpas: "confirm each provider's data processing agreement is accepted (Resend, Anthropic, DigitalOcean, Stripe, Sentry)",
 } as const;
 
-// The site's existing support address (contact page, footer).
-export const SUPPORT_EMAIL = "support@clutchclips.io";
+// The site's email addresses (owner, 2026-11-18).
+export const CONTACT = {
+  privacy: "privacy@clutchclips.io",       // privacy requests; the privacy officer
+  copyright: "copyright@clutchclips.io",   // copyright and DMCA notices, likeness reports
+  support: "support@clutchclips.io",       // support and questions about the Terms
+  general: "contact@clutchclips.io",       // general contact
+} as const;
+export const SUPPORT_EMAIL = CONTACT.support;

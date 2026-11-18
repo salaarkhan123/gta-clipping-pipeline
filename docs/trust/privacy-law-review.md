@@ -181,7 +181,7 @@ non-DRM videos the user says they own or may clip, never evade a block, and log 
 
 ## 12. Outstanding compliance items
 
-Decided by the owner on 2026-11-18 as still open, not solved. The legal pages (#147) mark them.
+Decided by the owner on 2026-11-18 as still open, not solved. The legal pages (#147) mark them. Every step before launch, with owner and blocker, is in the [launch checklist](../launch-checklist.md).
 
 | Item | Status |
 |---|---|

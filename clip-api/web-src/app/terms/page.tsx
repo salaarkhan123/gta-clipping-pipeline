@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Decision, LegalPage, Owner, Review } from "@/components/LegalPage";
-import { OWNER, SUPPORT_EMAIL } from "@/lib/legal";
+import { CONTACT, OWNER, SUPPORT_EMAIL } from "@/lib/legal";
 
 // Credits and billing statements match app/ledger.py (reserve and settle once, refunds), app/routes_media.py and
 // app/routes_tools.py (what a job reserves), app/worker.py (refund on failure, timeout, cancel), app/plans.py and
@@ -121,7 +121,8 @@ const sections = [
       Nothing in these terms limits liability that the law does not allow to be limited, or your rights as a consumer under the law where you live.</p>
   </> },
   { id: "law", title: "Governing law", body: <>
-    <p>These terms are governed by <Owner>{OWNER.governingLaw}</Owner>. If you are a consumer, you also keep the protection of the
+    <p>These terms are governed by the laws of the Province of Alberta and the federal laws of Canada that apply there <Review />. The
+      courts of Alberta decide any dispute about them <Review />. If you are a consumer, you also keep the protection of the
       mandatory laws of the place where you live.</p>
   </> },
   { id: "changes", title: "Changes to these terms", body: <>
@@ -130,7 +131,10 @@ const sections = [
       change no right or duty keep the same version.</p>
   </> },
   { id: "contact", title: "Contact", body: <>
-    <p>Questions about these terms: <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>. Post: <Owner>{OWNER.address}</Owner>.</p>
+    <p>Questions about these terms: <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>. Privacy:{" "}
+      <a href={`mailto:${CONTACT.privacy}`}>{CONTACT.privacy}</a>. Copyright and likeness:{" "}
+      <a href={`mailto:${CONTACT.copyright}`}>{CONTACT.copyright}</a>. Anything else:{" "}
+      <a href={`mailto:${CONTACT.general}`}>{CONTACT.general}</a>. Post: <Owner>{OWNER.address}</Owner>.</p>
   </> },
 ];
 

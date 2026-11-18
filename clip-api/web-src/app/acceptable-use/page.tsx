@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { LegalPage, Owner } from "@/components/LegalPage";
-import { OWNER, SUPPORT_EMAIL } from "@/lib/legal";
+import { LegalPage, Mail } from "@/components/LegalPage";
+import { CONTACT } from "@/lib/legal";
 
 export const metadata: Metadata = { title: "Acceptable Use Policy · ClutchClips" };
 
@@ -37,8 +37,8 @@ const sections = [
     <ul>
       <li>Copyright: send a notice to our designated agent, as the <Link href="/copyright/">Copyright and DMCA Policy</Link> explains.</li>
       <li>Your face, voice or name used without consent, impersonation, or anything else in this policy: email{" "}
-        <a href={`mailto:${SUPPORT_EMAIL}?subject=Likeness%20report`}>{SUPPORT_EMAIL}</a> with the clip or source link and what is wrong.</li>
-      <li>Privacy: email our privacy contact, <Owner>{OWNER.privacyEmail}</Owner>.</li>
+        <Mail to={CONTACT.copyright} subject="Likeness report" /> with the clip or source link and what is wrong.</li>
+      <li>Privacy: email our privacy contact, <Mail to={CONTACT.privacy} />.</li>
     </ul>
     <p>The owner of ClutchClips reads and reviews every report by hand, and replies by email.</p>
   </> },
