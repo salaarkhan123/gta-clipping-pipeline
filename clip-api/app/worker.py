@@ -29,6 +29,7 @@ from .models import Account, Clip, Job, Upload, WebhookDelivery, new_id, utcnow
 from .pipeline import Deadline, PipelineError, PipelineOptions, Timer, run_pipeline
 from .pipeline.tools import RenderOptions, run_find, run_render
 from .pipeline.stt import provider_for
+from .pipeline.thumbs import canvas_of, thumb_text, write_thumbnail
 from .pipeline.transcribe import FasterWhisperTranscriber, Transcriber, Transcript, in_language
 from .pipeline.translate import detect_language, run_text_job, transcript_language, translate_captions
 from .pipeline.visual import FastembedClip
@@ -220,13 +221,28 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
         translation = {"status": None if not target or target == (language or "en")
                        else ("pending" if caption_translator else "not_configured")}
 
+        def titled(r, meta) -> None:
+            """The AI wrote this clip's hook and title after it was rendered: set them on its thumbnail now (the
+            frame was chosen already; only the text is drawn). A thumbnail without text is still a thumbnail."""
+            record = (getattr(r, "features", None) or {}).get("thumbnail") or {}
+            frame, canvas = getattr(r, "frame_path", None), canvas_of(record)
+            text = thumb_text(meta, bool(options.get("censor")))
+            if not text or record.get("text") or canvas is None or not (frame and frame.exists() and r.thumb_path):
+                return
+            try:
+                with timer.stage("thumbnail"):
+                    record["text"] = write_thumbnail(frame, r.thumb_path, text, canvas, options.get("caption_accent"))
+            except Exception:
+                log.exception("could not set the title on a thumbnail of %s", job_id)
+
         def save_clip(r, idx: int) -> None:
             """Store one finished clip and make it visible now, while the job is still running."""
             meta = getattr(r, "meta", None)             # the judge already rated it, or:
             if meta is None and ai is not None and tool in ("clips", "find"):
                 with timer.stage("titles"):
                     meta = ai.clip_meta(clip_text(r), {"length": r.end - r.start, "signals": r.signals, **lang_ctx},
-                                        r.thumb_path)
+                                        getattr(r, "frame_path", None) or r.thumb_path)
+                titled(r, meta)
             if caption_translator is not None and r.captions_path and r.captions_path.exists():
                 # (languages) the clip's subtitle lines in the target language, kept in its captions file. Like the
                 # AI's copy this is optional: a clip whose translation failed is still a finished clip.
