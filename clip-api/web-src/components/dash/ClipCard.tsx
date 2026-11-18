@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { API, api, ApiError, clock, getToken } from "@/lib/api";
 import { Icon, IconName } from "./Icon";
-import { BACKDROP, thumbVar } from "./ProjectCard";
+import { BACKDROP, CARD_ROW, MEDIA, Shape, thumbVar, useShape } from "./ProjectCard";
 import { useDash } from "./Shell";
 
 export async function downloadSubtitles(clipId: string, format = "srt") {
@@ -37,7 +37,10 @@ const SOON: [IconName, string][] = [["calendar", "Schedule"]];
 // `onSelect` adds the tick box (the project page's bulk actions).
 // `uploadId` (or `project`) gives the card its Edit action: the editor needs the source video.
 // The results grid: 16:9 cards, five across on a laptop, two on a phone.
-export const CLIP_GRID = "grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] items-start gap-[14px] narrow:grid-cols-2 narrow:gap-[10px]";
+// The results grid: cards shaped like their clip (see ProjectCard's `useShape`), same picture height, wrapping.
+export const CLIP_GRID = CARD_ROW;
+// The card has 10 px padding, so a wide card is 589 px: its 569 px picture is 320 px high, like a tall card's 180 px one.
+const CLIP_WIDTH: Record<Shape, string> = { tall: "w-[200px] flex-none narrow:w-[calc((100%-10px)/2)]", wide: "w-[589px] max-w-full flex-none narrow:w-full" };
 
 export function ClipCard({ clip, onChange, project, uploadId, lit, number, selected, onSelect }: { clip: any; onChange: (c: any) => void;
   project?: { id: string; name: string }; uploadId?: string; lit?: boolean; number?: number; selected?: boolean; onSelect?: (id: string, on: boolean) => void }) {
@@ -53,9 +56,10 @@ export function ClipCard({ clip, onChange, project, uploadId, lit, number, selec
   const retitle = (title: string) => api(`/v1/clips/${clip.id}`, { method: "PATCH", body: { title } }).then(merge).catch(fail);
   const name = nameOf(clip, number), rank = rankOf(clip);
   const source = uploadId || project?.id;
+  const shape = useShape(clip.thumb_url, "tall");
   return (
     <article id={`clip-${clip.id}`} tabIndex={-1} aria-label={name}
-      className={`clip grid min-w-0 scroll-mt-24 content-start gap-2 rounded-12 border border-solid bg-panel p-[10px] transition-[border-color] duration-200 ease-[ease] focus:outline-none narrow:p-2
+      className={`clip grid min-w-0 scroll-mt-24 content-start gap-2 ${CLIP_WIDTH[shape]} rounded-12 border border-solid bg-panel p-[10px] transition-[border-color] duration-200 ease-[ease] focus:outline-none narrow:p-2
         ${selected ? "border-lime" : "border-line-soft hover:border-line"} ${clip.kept === false ? "opacity-[.45]" : ""}
         ${lit ? "shadow-[0_0_40px_rgba(184,255,60,.25)] outline outline-2 outline-offset-[6px] outline-lime" : ""}`}>
       <header className="flex min-w-0 items-center gap-[10px]">
@@ -64,7 +68,7 @@ export function ClipCard({ clip, onChange, project, uploadId, lit, number, selec
         <h3 title={name} className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-body text-[13.5px] font-semibold leading-[1.3]">
           {rank && <b className="tabular-nums text-lime">#{rank}</b>} {name}</h3>
       </header>
-      <div style={clip.thumb_url ? thumbVar(clip.thumb_url) : undefined} className={`group/media relative aspect-video overflow-hidden rounded-8 bg-black ${clip.thumb_url ? BACKDROP : ""}`}>
+      <div style={clip.thumb_url ? thumbVar(clip.thumb_url) : undefined} className={`group/media relative ${MEDIA[shape]} overflow-hidden rounded-8 bg-black ${clip.thumb_url ? BACKDROP : ""}`}>
         <video controls preload="none" poster={clip.thumb_url || undefined} src={clip.video_url} className="relative block h-full w-full object-contain" />
         <span className={`${BADGE} right-2`}>{clock(clip.start_sec)} – {clock(clip.end_sec)}</span>
         {clip.edited === true && <span className={`${BADGE} left-2 text-cyan`}>Edited</span>}
@@ -75,7 +79,7 @@ export function ClipCard({ clip, onChange, project, uploadId, lit, number, selec
           <IconToggle icon="bookmark" label="Bookmark" on={!!clip.bookmarked} onClick={() => send({ bookmarked: !clip.bookmarked })} />
         </div>
       </div>
-      <div className="flex min-h-[36px] items-center justify-between gap-[6px] narrow:flex-wrap">
+      <div className="flex min-h-[36px] items-center justify-between gap-[6px] narrow:flex-wrap [&_.rank]:whitespace-nowrap">
         <ScoreBadge clip={clip} />
         <div className="flex flex-none items-center gap-[2px]" role="group" aria-label="Clip actions">
           <a className={`${ACTION} text-lime hover:bg-lime-wash`} href={clip.video_url} download aria-label={`Download ${name}`} title="Download"><Icon name="download" size={18} /></a>
@@ -83,7 +87,7 @@ export function ClipCard({ clip, onChange, project, uploadId, lit, number, selec
             aria-label={clip.captions_url ? `Download the captions file for ${name}` : "No captions file: this clip has no captions"}
             title={clip.captions_url ? "Captions file (SRT)" : "This clip has no captions"} onClick={() => downloadSubtitles(clip.id).catch(fail)}><Icon name="captions" size={18} /></button>
           {source && <Link className="btn small ghost ml-1 min-h-[30px] gap-[5px] rounded-8 px-[10px] py-1 text-[12.5px]" href={`/dashboard/edit/?project=${source}&clip=${clip.id}`} aria-label={`Edit ${name}`}
-            title="Trim, cut by transcript, captions and look"><Icon name="sliders" size={16} />Edit</Link>}
+            title="Trim, cut by transcript, captions and look"><Icon name="sliders" size={16} /><span className={shape === "tall" ? "sr-only" : ""}>Edit</span></Link>}
         </div>
       </div>
       <p className="line-clamp-2 min-h-[3em] text-[13px] leading-[1.5] text-soft" title={clip.description || undefined}>{clip.description || <span className="muted">No description for this clip.</span>}</p>
