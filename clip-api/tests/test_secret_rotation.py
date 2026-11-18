@@ -72,9 +72,8 @@ def test_api_keys_do_not_depend_on_the_secret_key(client, user, monkeypatch):
 
 
 def test_production_refuses_a_short_previous_key():
-    s = Settings(env="prod", secret_key=NEW, secret_key_previous="short", database_url="postgresql://x/y",
-                 auto_verify_email=False)
+    prod = dict(env="prod", secret_key=NEW, database_url="postgresql://x/y", auto_verify_email=False,
+                email_provider="smtp", smtp_host="smtp.example.invalid")
     with pytest.raises(RuntimeError, match="SECRET_KEY_PREVIOUS"):
-        s.check_production()
-    Settings(env="prod", secret_key=NEW, secret_key_previous=OLD, database_url="postgresql://x/y",
-             auto_verify_email=False).check_production()
+        Settings(**prod, secret_key_previous="short").check_production()
+    Settings(**prod, secret_key_previous=OLD).check_production()

@@ -7,7 +7,9 @@
   balance EMAIL                                 show balance and recent ledger rows
   suspend EMAIL / unsuspend EMAIL               block or unblock an account
   stuck                                         list QUEUED/RUNNING jobs
-  send-test-email --to ADDRESS                  send one email through the configured SMTP (exit 2: not configured, 1: failed)
+  send-test-email --to ADDRESS                  send one email through the configured provider, Resend or SMTP
+                                                (exit 2: not configured, 1: failed)
+  bump-token-epoch                              void every password-reset and email-verification link already sent
   selftest                                      load every model and tool once (run in the worker container)
   db-status                                     schema revision and differences from the models (read-only)
   stripe-check                                  Stripe key mode, key accepted, each plan's Price matches app/plans.py,
@@ -154,23 +156,27 @@ def stripe_check() -> int:
 
 
 def send_test_email(to: str) -> int:
-    """Sends one message through app/emailer.py. Never prints the SMTP password."""
+    """Sends one message through app/emailer.py (Resend or SMTP). Never prints a password or an API key."""
     from app.config import get_settings
-    from app.emailer import deliver, missing_smtp_keys
-    missing = missing_smtp_keys()
+    from app.emailer import deliver, mask, missing_keys, provider
+    missing = missing_keys()
     if missing:
-        print(f"SMTP is not configured. Missing: {', '.join(missing)}", file=sys.stderr)
+        print(f"Email is not configured. Missing: {', '.join(missing)}", file=sys.stderr)
         return 2
-    s = get_settings()
+    s, via = get_settings(), provider()
+    where = "Resend API" if via == "resend" else f"{s.smtp_host}:{s.smtp_port}"
     try:
-        deliver(to, "Clip API test email", "If you can read this, SMTP delivery works.")
+        msg_id = deliver(to, "ClutchClips test email", "If you can read this, email delivery works.",
+                         idempotency_key=f"test:{uuid.uuid4().hex}")
     except Exception as e:
         detail = f"{type(e).__name__}: {e}"
-        if s.smtp_password:
-            detail = detail.replace(s.smtp_password, "***")
-        print(f"Send failed via {s.smtp_host}:{s.smtp_port}: {detail}", file=sys.stderr)
+        for secret in (s.smtp_password, s.resend_api_key):
+            if secret:
+                detail = detail.replace(secret, "***")
+        print(f"Send failed via {where}: {detail}", file=sys.stderr)
         return 1
-    print(f"Sent one message to {to} from {s.email_from} via {s.smtp_host}:{s.smtp_port}. Check the inbox.")
+    print(f"Sent one message to {to} from {s.email_from} via {where}"
+          + (f" (id {msg_id})" if msg_id else "") + ". Check the inbox.")
     return 0
 
 
@@ -210,6 +216,7 @@ def main() -> None:
     sub.add_parser("stripe-check")
     sub.add_parser("migrate")
     c = sub.add_parser("send-test-email"); c.add_argument("--to", required=True)
+    sub.add_parser("bump-token-epoch")
     c = sub.add_parser("takedown")
     target = c.add_mutually_exclusive_group(required=True)
     target.add_argument("--url"); target.add_argument("--account")
@@ -220,10 +227,14 @@ def main() -> None:
         sys.exit(selftest())
     if args.cmd == "send-test-email":
         sys.exit(send_test_email(args.to))
-    if args.cmd == "db-status":
-        sys.exit(db_status())
+    if args.cmd == "bump-token-epoch":
+        from app import token_epoch
+        print(f"token epoch is now {token_epoch.bump()}: every reset and verification link sent before is void")
+        sys.exit(0)
     if args.cmd == "stripe-check":
         sys.exit(stripe_check())
+    if args.cmd == "db-status":
+        sys.exit(db_status())
     if args.cmd == "migrate":
         from app.db import get_engine
         from app.migrate import migrate

@@ -34,8 +34,8 @@ def test_the_scan_recognises_each_kind_of_secret():
 
 def test_request_logs_hide_the_tokens_in_download_and_verification_links():
     import logging
-    from app import log_safety
-    log_safety.install()
+    from app import log_redact
+    log_redact.install()
     token = "eyJ" + "hbGciOiJIUzI1NiJ9" + ".eyJ" + "zdWIiOiJhY2N0In0" + "." + "s" * 30
     record = logging.LogRecord("uvicorn.access", logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d',
                                ("1.2.3.4:5", "GET", f"/v1/auth/verify?token={token}", "1.1", 200), None)
@@ -46,13 +46,33 @@ def test_request_logs_hide_the_tokens_in_download_and_verification_links():
     assert record.getMessage() == "HTTP Request: GET /v1/files/[redacted]"
 
 
+def test_keys_and_bare_tokens_are_hidden_in_every_request_logger():
+    """Beyond the two URL shapes: Stripe, Anthropic and API keys, webhook secrets and signed tokens anywhere in the
+    line, on uvicorn's error log and httpx's outgoing-request log too."""
+    import logging
+    from app import log_redact
+    log_redact.install()
+    planted = ["sk_" + "live_" + "4eC39HqLyjWDarjtT1zdp7dc", "rk_" + "test_" + "abcdef123456", "whsec_" + "a1B2c3D4e5F6",
+               "sk-" + "ant-api03-" + "x" * 20, "gck_" + "Q" * 40,
+               "eyJ" + "hbGciOiJIUzI1NiJ9" + ".eyJ" + "zdWIiOiJhY2N0In0" + "." + "s" * 30]
+    for name in ("uvicorn.error", "httpx", "httpcore", "uvicorn.access"):
+        for value in planted:
+            record = logging.LogRecord(name, logging.INFO, __file__, 1, "call %s failed: %s",
+                                       ("https://example.invalid/hook", f"Authorization: Bearer {value}"), None)
+            logging.getLogger(name).filter(record)
+            assert value not in record.getMessage() and "Bearer [redacted]" in record.getMessage(), (name, value[:6])
+    record = logging.LogRecord("httpx", logging.INFO, __file__, 1, "plain message with " + planted[2], None, None)
+    logging.getLogger("httpx").filter(record)
+    assert record.getMessage() == "plain message with [redacted]"
+
+
 def test_sentry_never_gets_local_variables(monkeypatch):
     """A handler's locals hold the settings object, whose repr has SECRET_KEY and STRIPE_SECRET_KEY in it."""
     import sentry_sdk
-    from app import log_safety
+    from app import log_redact
     seen = {}
     monkeypatch.setattr(sentry_sdk, "init", lambda **kw: seen.update(kw))
-    log_safety.init_sentry("https://public@example.invalid/1")
+    log_redact.init_sentry("https://public@example.invalid/1")
     assert seen["include_local_variables"] is False and seen["send_default_pii"] is False
 
 

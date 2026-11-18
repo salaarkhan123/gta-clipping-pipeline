@@ -1,6 +1,6 @@
 """Records every log line the test run writes and finds secret-shaped strings in them (tests/test_secrets_in_logs.py).
 
-Kept apart from app/log_safety.py on purpose: this is the independent check that the redaction works."""
+Kept apart from app/log_redact.py on purpose: this is the independent check that the redaction works."""
 import logging
 import re
 

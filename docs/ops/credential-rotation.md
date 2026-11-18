@@ -24,7 +24,7 @@ no-overlap path where one is given.
   - `.claude/bin/super-board-env-check.sh` prints key names only.
   - `scripts/admin.py stripe-check` reports the Stripe settings without printing them.
 - Logs and error reports:
-  - Request logs replace tokens and keys in URLs with `[redacted]` (`app/log_safety.py`). Download and
+  - Request logs replace tokens and keys in URLs with `[redacted]` (`app/log_redact.py`). Download and
     email-verification links carry signed tokens.
   - Sentry gets no local variables. A handler's locals hold the settings object, whose repr includes
     `SECRET_KEY`, `STRIPE_SECRET_KEY` and the database password.
@@ -178,6 +178,9 @@ have `SECRET_KEY_PREVIOUS`; on those, only the no-overlap rotation is possible.
 Do not use the overlap. Anyone holding the old key can make a session token for any account. Set only the new
 `SECRET_KEY`, leave `SECRET_KEY_PREVIOUS` empty, and restart. Everyone is signed out, and pending verification
 and reset links stop working.
+
+To void only the emailed reset and verification links, without changing `SECRET_KEY` (for example after mail
+logs leaked), run `docker compose exec -T api python scripts/admin.py bump-token-epoch`. Sessions stay valid.
 
 **Rollback:** put the old value back as `SECRET_KEY`. If you want tokens issued in the meantime to keep working,
 set the new value as `SECRET_KEY_PREVIOUS`. Then restart.
