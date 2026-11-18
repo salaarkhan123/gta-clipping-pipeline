@@ -1,7 +1,8 @@
 "use client";
-// Home's one input: paste a public link or upload a file. A link opens the import box (ImportBox.tsx: consent,
-// progress, the API's own refusal messages) already filled in; Bulk import opens it on several links.
+// Home's one input: paste a public link or upload a file. A link goes to the chooser (/dashboard/start/): what to
+// make, the price, consent, one button. Bulk import opens the import box (ImportBox.tsx) on several links.
 // Styles: app/app-shell.css (`.source-bar`).
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { videoFileProblem } from "@/lib/api";
 import { Icon } from "./Icon";
@@ -14,6 +15,7 @@ const isLink = (v: string) => /^https?:\/\/\S+\.\S+/i.test(v.trim());
 // `pending` is a file picked on the public home page before signing up: it is uploaded as soon as this appears.
 export function SourceBar({ onUploaded, pending }: { onUploaded: (uploadId: string) => void; pending?: File | null }) {
   const { me } = useDash();
+  const router = useRouter();
   const sources = useImportSources();            // undefined while asking, null when this API has no link import
   const links = !!sources?.enabled;
   const [text, setText] = useState(""), [problem, setProblem] = useState(""), [over, setOver] = useState(false);
@@ -34,7 +36,7 @@ export function SourceBar({ onUploaded, pending }: { onUploaded: (uploadId: stri
     if (!text.trim()) { file.current?.click(); return; }
     if (!links) { setProblem("Link import is switched off right now. Upload the file instead."); return; }
     if (!isLink(text)) { setProblem("That doesn't look like a link. Paste the full address, starting with https://"); return; }
-    setBox((b) => ({ mode: "one", url: text.trim(), n: (b?.n || 0) + 1 }));
+    router.push(`/dashboard/start/?url=${encodeURIComponent(text.trim())}`);
   }
 
   const names = sources?.sources.map((s) => s.name) || [];
