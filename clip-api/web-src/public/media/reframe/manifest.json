@@ -1,0 +1,67 @@
+{
+ "section": "reframe",
+ "version": 1,
+ "permission": "owner-confirmed 2026-11-18",
+ "credits": [
+  {
+   "creator": "iiTzTimmy",
+   "url": "https://www.youtube.com/watch?v=ovyMOe_017I"
+  }
+ ],
+ "items": [
+  {
+   "id": "original",
+   "candidate": "original--timmy-m1",
+   "label": "Original 16:9",
+   "kind": "video",
+   "src": "original.mp4",
+   "poster": "original.webp",
+   "width": 960,
+   "height": 540,
+   "duration_sec": 8.0,
+   "game": "Valorant",
+   "aspect": "16:9",
+   "layout": "original",
+   "rank": 1,
+   "rating": 99,
+   "rating_source": "signals",
+   "credit": "Footage: iiTzTimmy",
+   "source": {
+    "id": "timmy",
+    "creator": "iiTzTimmy",
+    "title": "I Might Be Getting TOO Good at Valorant\u2026 (Lowest To Highest Rank Challenge)",
+    "url": "https://www.youtube.com/watch?v=ovyMOe_017I",
+    "start_sec": 2200.35,
+    "end_sec": 2208.35
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "full",
+   "candidate": "full--timmy-m1",
+   "label": "Fill",
+   "kind": "video",
+   "src": "full.mp4",
+   "poster": "full.webp",
+   "width": 540,
+   "height": 960,
+   "duration_sec": 8.0,
+   "game": "Valorant",
+   "aspect": "9:16",
+   "layout": "full",
+   "rank": 1,
+   "rating": 99,
+   "rating_source": "signals",
+   "credit": "Footage: iiTzTimmy",
+   "source": {
+    "id": "timmy",
+    "creator": "iiTzTimmy",
+    "title": "I Might Be Getting TOO Good at Valorant\u2026 (Lowest To Highest Rank Challenge)",
+    "url": "https://www.youtube.com/watch?v=ovyMOe_017I",
+    "start_sec": 2198.35,
+    "end_sec": 2206.35
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  }
+ ]
+}

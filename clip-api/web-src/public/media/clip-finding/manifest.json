@@ -1,0 +1,185 @@
+{
+ "section": "clip-finding",
+ "version": 1,
+ "permission": "owner-confirmed 2026-11-18",
+ "credits": [
+  {
+   "creator": "iiTzTimmy",
+   "url": "https://www.youtube.com/watch?v=ovyMOe_017I"
+  },
+  {
+   "creator": "TmarTn2",
+   "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
+  },
+  {
+   "creator": "Ninja",
+   "url": "https://www.youtube.com/watch?v=ogbIEh-4rYw"
+  }
+ ],
+ "items": [
+  {
+   "id": "find-1",
+   "candidate": "timmy-m2",
+   "label": "Found moment",
+   "kind": "video",
+   "src": "find-1.mp4",
+   "webm": "find-1.webm",
+   "poster": "find-1.webp",
+   "width": 960,
+   "height": 540,
+   "duration_sec": 10.0,
+   "game": "Valorant",
+   "aspect": "16:9",
+   "layout": "original",
+   "rank": 2,
+   "rating": 83,
+   "rating_source": "signals",
+   "credit": "Footage: iiTzTimmy",
+   "commercial_permission": "owner-confirmed 2026-11-18",
+   "source": {
+    "id": "timmy",
+    "creator": "iiTzTimmy",
+    "title": "I Might Be Getting TOO Good at Valorant\u2026 (Lowest To Highest Rank Challenge)",
+    "url": "https://www.youtube.com/watch?v=ovyMOe_017I",
+    "start_sec": 191.23,
+    "end_sec": 201.23
+   }
+  },
+  {
+   "id": "find-2",
+   "candidate": "forza-m2",
+   "label": "Found moment",
+   "kind": "video",
+   "src": "find-2.mp4",
+   "webm": "find-2.webm",
+   "poster": "find-2.webp",
+   "width": 960,
+   "height": 540,
+   "duration_sec": 10.0,
+   "game": "Forza Horizon 5",
+   "aspect": "16:9",
+   "layout": "original",
+   "rank": 2,
+   "rating": 70,
+   "rating_source": "signals",
+   "credit": "Footage: TmarTn2",
+   "source": {
+    "id": "forza",
+    "creator": "TmarTn2",
+    "title": "Forza Horizon 5 - Part 1 - The Beginning",
+    "url": "https://www.youtube.com/watch?v=78kntDlbjMI",
+    "start_sec": 2256.55,
+    "end_sec": 2266.55
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "find-3",
+   "candidate": "ninja-m2",
+   "label": "Found moment",
+   "kind": "video",
+   "src": "find-3.mp4",
+   "poster": "find-3.webp",
+   "width": 960,
+   "height": 540,
+   "duration_sec": 10.0,
+   "game": "Fortnite",
+   "aspect": "16:9",
+   "layout": "original",
+   "rank": 2,
+   "rating": 99,
+   "rating_source": "signals",
+   "credit": "Footage: Ninja",
+   "source": {
+    "id": "ninja",
+    "creator": "Ninja",
+    "title": "Ninja Live Stream 15/8/2018 - Game Fortnite",
+    "url": "https://www.youtube.com/watch?v=ogbIEh-4rYw",
+    "start_sec": 1321.33,
+    "end_sec": 1331.33
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "find-4",
+   "candidate": "timmy-m3",
+   "label": "Found moment",
+   "kind": "video",
+   "src": "find-4.mp4",
+   "poster": "find-4.webp",
+   "width": 960,
+   "height": 540,
+   "duration_sec": 10.0,
+   "game": "Valorant",
+   "aspect": "16:9",
+   "layout": "original",
+   "rank": 3,
+   "rating": 79,
+   "rating_source": "signals",
+   "credit": "Footage: iiTzTimmy",
+   "source": {
+    "id": "timmy",
+    "creator": "iiTzTimmy",
+    "title": "I Might Be Getting TOO Good at Valorant\u2026 (Lowest To Highest Rank Challenge)",
+    "url": "https://www.youtube.com/watch?v=ovyMOe_017I",
+    "start_sec": 2059.39,
+    "end_sec": 2069.39
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "find-5",
+   "candidate": "forza-m3",
+   "label": "Found moment",
+   "kind": "video",
+   "src": "find-5.mp4",
+   "poster": "find-5.webp",
+   "width": 960,
+   "height": 540,
+   "duration_sec": 10.0,
+   "game": "Forza Horizon 5",
+   "aspect": "16:9",
+   "layout": "original",
+   "rank": 3,
+   "rating": 65,
+   "rating_source": "signals",
+   "credit": "Footage: TmarTn2",
+   "commercial_permission": "owner-confirmed 2026-11-18",
+   "source": {
+    "id": "forza",
+    "creator": "TmarTn2",
+    "title": "Forza Horizon 5 - Part 1 - The Beginning",
+    "url": "https://www.youtube.com/watch?v=78kntDlbjMI",
+    "start_sec": 1555.85,
+    "end_sec": 1565.85
+   }
+  },
+  {
+   "id": "find-6",
+   "candidate": "ninja-m3",
+   "label": "Found moment",
+   "kind": "video",
+   "src": "find-6.mp4",
+   "poster": "find-6.webp",
+   "width": 960,
+   "height": 540,
+   "duration_sec": 10.0,
+   "game": "Fortnite",
+   "aspect": "16:9",
+   "layout": "original",
+   "rank": 3,
+   "rating": 65,
+   "rating_source": "signals",
+   "credit": "Footage: Ninja",
+   "source": {
+    "id": "ninja",
+    "creator": "Ninja",
+    "title": "Ninja Live Stream 15/8/2018 - Game Fortnite",
+    "url": "https://www.youtube.com/watch?v=ogbIEh-4rYw",
+    "start_sec": 1788.0,
+    "end_sec": 1798.0
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  }
+ ]
+}
