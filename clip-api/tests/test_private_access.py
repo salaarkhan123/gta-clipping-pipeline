@@ -25,7 +25,7 @@ from app.db import new_session
 from app.ingest import platforms
 from app.ingest.takedown import takedown
 from app.main import app
-from app.models import Job, Upload, utcnow
+from app.models import Export, Job, Upload, utcnow
 from app.security import make_token
 from tests.conftest import FakeTranscriber
 from tests.ingest_support import FakeYDL
@@ -70,14 +70,27 @@ PUBLIC_ID_ROUTES = {
     ("GET", "/v1/templates/{template_id}/poster"): "catalogue posters are public images, not anyone's content",
 }
 
-# Routes that take an id in the JSON body. B sending A's upload id must get 404 and start nothing.
-BODY_ROUTES: dict[tuple[str, str], dict] = {
-    ("POST", "/v1/clips"): {"options": {"max_clips": 1, "clip_length": 10}},
-    ("POST", "/v1/reframe"): {},
-    ("POST", "/v1/captions"): {},
-    ("POST", "/v1/find"): {"query": "god"},
-    ("POST", "/v1/transcripts"): {},
-    ("POST", "/v1/summaries"): {},
+# Routes that take an id in the JSON body: (the id field, the rest of the body, the 404 code, A's own answer on
+# a route that changes nothing). B sending A's id must get that 404 and start or reserve nothing.
+@dataclass
+class BodyCase:
+    id_field: str
+    rest: dict
+    denied: str
+    owner: int | None = None
+
+
+BODY_ROUTES: dict[tuple[str, str], BodyCase] = {
+    ("POST", "/v1/clips"): BodyCase("upload_id", {"options": {"max_clips": 1, "clip_length": 10}}, "upload_not_found"),
+    ("POST", "/v1/clips/quote"): BodyCase("upload_id", {"options": {"max_clips": 1, "clip_length": 10}},
+                                          "upload_not_found", owner=200),
+    ("POST", "/v1/reframe"): BodyCase("upload_id", {}, "upload_not_found"),
+    ("POST", "/v1/captions"): BodyCase("upload_id", {}, "upload_not_found"),
+    ("POST", "/v1/find"): BodyCase("upload_id", {"query": "god"}, "upload_not_found"),
+    ("POST", "/v1/transcripts"): BodyCase("upload_id", {}, "upload_not_found"),
+    ("POST", "/v1/summaries"): BodyCase("upload_id", {}, "upload_not_found"),
+    ("POST", "/v1/clips/export"): BodyCase("job_id", {"options": {"resolution": "480"}}, "not_found"),
+    ("POST", "/v1/clips/export/quote"): BodyCase("job_id", {"options": {"resolution": "480"}}, "not_found", owner=200),
 }
 PUBLIC_BODY_IDS = {
     ("POST", "/v1/billing/checkout", "pack_id"): "a server-side pack id, the same for every account",
@@ -181,6 +194,7 @@ class World:
     b_account: dict
     ids: dict[str, str]                       # path parameter name -> A's id
     secrets_of_a: set[str] = field(default_factory=set)   # every id of A's that must never reach B
+    export_job: str = ""
 
     def call(self, client, method: str, path: str, case: Case, headers: dict | None, ids: dict | None = None):
         url = path.format(**(ids or self.ids)) + case.query
@@ -192,9 +206,12 @@ def world(client, video) -> World:
     a, a_account = signup(client)
     a_key, a_key_id = api_key(client, a)
     up = upload(client, a, video)
-    clip_job = started(client.post("/v1/clips", json={"upload_id": up["upload_id"],
-                                                      "options": {"max_clips": 1, "clip_length": 10}}, headers=a))
+    clip_job = started(client.post("/v1/clips", json={"upload_id": up["upload_id"], "options": {
+        "max_clips": 1, "clip_length": 10, "render": "preview"}}, headers=a))
     assert finish(clip_job) == "SUCCEEDED"
+    export_job = started(client.post("/v1/clips/export", json={"job_id": clip_job, **BODY_ROUTES[
+        ("POST", "/v1/clips/export")].rest}, headers=a))
+    assert finish(export_job) == "SUCCEEDED"
     cap_job = started(client.post("/v1/captions", json={"upload_id": up["upload_id"],
                                                         "segments": [{"start": 0, "end": 10}]}, headers=a))
     assert finish(cap_job) == "SUCCEEDED"
@@ -210,8 +227,13 @@ def world(client, video) -> World:
     ids = {"key_id": a_key_id, "job_id": clip_job, "clip_id": clip["id"], "upload_id": up["upload_id"],
            "template_id": template.json()["id"], "import_id": imp["import_id"]}
     w = World(a, a_key, b, b_key, b_account, ids)
-    w.secrets_of_a = {*ids.values(), a_account["id"], cap_job, tr_job, imp["upload_id"],
-                      *(c["id"] for c in client.get(f"/v1/jobs/{clip_job}", headers=a).json()["clips"])}
+    exported = client.get(f"/v1/jobs/{clip_job}", headers=a).json()["clips"]
+    assert exported[0]["preview_url"] and exported[0]["export_url"], exported       # a preview and an export exist
+    with new_session() as db:
+        export_ids = db.execute(select(Export.id).where(Export.clip_id == exported[0]["id"])).scalars().all()
+    w.secrets_of_a = {*ids.values(), a_account["id"], cap_job, tr_job, export_job, imp["upload_id"], *export_ids,
+                      *(c["id"] for c in exported)}
+    w.export_job = export_job
     return w
 
 
@@ -230,9 +252,10 @@ def test_every_id_route_has_an_access_case():
     assert not missing, f"add an access case to ROUTES (or a reason to PUBLIC_ID_ROUTES) for: {sorted(missing)}"
     assert not (set(ROUTES) | set(PUBLIC_ID_ROUTES)) - in_path, "a case names a route that no longer exists"
     in_body = {(m, p, f) for m, p, op in operations() for f in body_id_fields(op)}
-    missing = {x for x in in_body if (x[0], x[1]) not in BODY_ROUTES and x not in PUBLIC_BODY_IDS}
+    cased = {(m, p, c.id_field) for (m, p), c in BODY_ROUTES.items()}
+    missing = in_body - cased - set(PUBLIC_BODY_IDS)
     assert not missing, f"add an access case to BODY_ROUTES (or PUBLIC_BODY_IDS) for: {sorted(missing)}"
-    assert {(m, p) for m, p, f in in_body if f == "upload_id"} == set(BODY_ROUTES)
+    assert not (cased | set(PUBLIC_BODY_IDS)) - in_body, "a body case names a route or field that no longer exists"
     gets = {p for m, p, _ in operations() if m == "GET" and not path_params(p)}
     assert gets == set(LISTINGS) | set(PUBLIC_GETS), "a GET route needs a place in LISTINGS or PUBLIC_GETS"
 
@@ -276,18 +299,68 @@ def test_the_owner_still_gets_in(client, world, route):
 
 
 @pytest.mark.parametrize("route", sorted(BODY_ROUTES), ids=lambda r: f"{r[0]} {r[1]}")
-def test_others_cannot_start_jobs_on_a_s_upload(client, world, route):
+def test_others_cannot_start_jobs_on_a_s_ids(client, world, route):
     method, path = route
+    case = BODY_ROUTES[route]
     before = balance(client, world.b)
-    for upload_id, expect in ((world.ids["upload_id"], 404), (guess(world.ids["upload_id"]), 404)):
-        body = {"upload_id": upload_id, **BODY_ROUTES[route]}
+    real = world.ids[case.id_field]
+    answers = []
+    for sent in (real, guess(real)):
+        body = {case.id_field: sent, **case.rest}
         assert_denied_and_silent(client.request(method, path, json=body), world, {401}, f"anonymous {path}")
         for who, headers in (("B", world.b), ("B's key", world.b_key)):
             r = client.request(method, path, json=body, headers=headers)
-            assert_denied_and_silent(r, world, {expect}, f"{who} {path}")
-            assert r.json()["error"]["code"] == "upload_not_found"
+            assert_denied_and_silent(r, world, {404}, f"{who} {path}")
+            assert r.json()["error"]["code"] == case.denied
+            answers.append(r.json())
+    assert answers[0] == answers[2]                 # A's real id and a guessed one read the same
     assert balance(client, world.b) == before
     assert client.get("/v1/jobs", headers=world.b).json()["jobs"] == []
+
+
+@pytest.mark.parametrize("route", sorted(r for r, c in BODY_ROUTES.items() if c.owner), ids=lambda r: f"{r[0]} {r[1]}")
+def test_the_owner_still_gets_a_quote(client, world, route):
+    method, path = route
+    case = BODY_ROUTES[route]
+    before = balance(client, world.a)
+    for headers in (world.a, world.a_key):
+        r = client.request(method, path, json={case.id_field: world.ids[case.id_field], **case.rest}, headers=headers)
+        assert r.status_code == case.owner, r.text
+    assert balance(client, world.a) == before
+
+
+def test_an_export_names_only_your_own_clips(client, world, video):
+    """Another account's own finished job, with A's clip id in `clips`: refused exactly like an id that does not
+    exist, and nothing is rendered or charged."""
+    e, _ = signup(client)
+    up = upload(client, e, video)["upload_id"]
+    job = started(client.post("/v1/clips", json={"upload_id": up, "options": {
+        "max_clips": 1, "clip_length": 10, "render": "none"}}, headers=e))
+    assert finish(job) == "SUCCEEDED"
+    before = balance(client, e)
+    a_clip_id, made_up = world.ids["clip_id"], guess(world.ids["clip_id"])
+    for path in ("/v1/clips/export/quote", "/v1/clips/export"):
+        got = {}
+        for clip_id in (a_clip_id, made_up):
+            r = client.post(path, json={"job_id": job, "clips": [clip_id]}, headers=e)
+            assert r.status_code == 404 and FILE_LINK not in r.text, r.text
+            got[clip_id] = r.json()["error"]["code"], r.json()["error"]["message"].replace(clip_id, "<id>")
+        assert got[a_clip_id] == got[made_up] == ("clip_not_found", "No such clip in this job: <id>.")
+    assert balance(client, e) == before
+    assert [j["job_id"] for j in client.get("/v1/jobs", headers=e).json()["jobs"]] == [job]
+
+
+def test_preview_and_export_links_go_only_to_the_owner(client, world):
+    clip = client.get(f"/v1/jobs/{world.ids['job_id']}", headers=world.a).json()["clips"][0]
+    export_key = payload_of(local(clip["export_url"]).rsplit("/", 1)[1])["k"]
+    assert export_key.startswith(f"exports/{world.export_job}/")
+    for url in (clip["preview_url"], clip["export_url"]):
+        assert client.get(local(url)).status_code == 200
+    for path in (f"/v1/jobs/{world.ids['job_id']}", f"/v1/jobs/{world.export_job}",
+                 f"/v1/projects/{world.ids['upload_id']}", "/v1/clips", "/v1/projects", "/v1/jobs"):
+        for headers in (None, world.b, world.b_key):
+            r = client.get(path, headers=headers or {})
+            assert_denied_and_silent(r, world, {200, 401, 404}, path)
 
 
 def test_others_changed_nothing(client, world):
@@ -417,25 +490,61 @@ def test_an_expired_upload_stops_issuing_links(client, video):
     assert client.get(source).status_code == 404                    # the file is gone with the upload
 
 
+
+
+def preview_and_export(client, headers, upload_id: str) -> tuple[str, str, dict]:
+    """A clip job that renders a preview, then an export of its clip: (job id, export job id, the clip)."""
+    job = started(client.post("/v1/clips", json={"upload_id": upload_id, "options": {
+        "max_clips": 1, "clip_length": 10, "render": "preview"}}, headers=headers))
+    assert finish(job) == "SUCCEEDED"
+    export = started(client.post("/v1/clips/export", json={"job_id": job, "options": {"resolution": "480"}},
+                                 headers=headers))
+    assert finish(export) == "SUCCEEDED"
+    clip = client.get(f"/v1/jobs/{job}", headers=headers).json()["clips"][0]
+    assert clip["preview_url"] and clip["export_url"], clip
+    return job, export, clip
+
+
+def no_links_for(client, headers, job: str, upload_id: str):
+    got = client.get(f"/v1/jobs/{job}", headers=headers)
+    assert got.status_code == 200 and got.json()["clips"] == [] and FILE_LINK not in got.text
+    for path in ("/v1/clips", "/v1/jobs"):
+        assert FILE_LINK not in client.get(path, headers=headers).text, path
+    project = client.get(f"/v1/projects/{upload_id}", headers=headers)
+    if project.status_code == 200:
+        assert project.json()["clips"] == [] and project.text.count(FILE_LINK) == 1     # the source video only
+
+
+def test_an_expired_job_stops_issuing_preview_and_export_links(client, video):
+    f, _ = signup(client)
+    up = upload(client, f, video)["upload_id"]
+    job, export, clip = preview_and_export(client, f, up)
+    assert all(client.get(local(clip[k])).status_code == 200 for k in ("preview_url", "export_url", "thumb_url"))
+    with new_session() as db:
+        db.execute(update(Job).where(Job.id.in_([job, export])).values(expires_at=utcnow() - timedelta(minutes=1)))
+        db.commit()
+    worker.sweep_expired()
+    no_links_for(client, f, job, up)
+    # Whether the preview and export files are gone after expiry is ticket #150 (retention sweep): not asserted.
+
+
 def test_a_taken_down_import_stops_issuing_links(client, video):
     d, account = signup(client)
     imp = import_link(client, d, video, twitch_url())
     up = imp["upload_id"]
-    job = started(client.post("/v1/clips", json={"upload_id": up, "options": {"max_clips": 1, "clip_length": 10}},
-                              headers=d))
-    assert finish(job) == "SUCCEEDED"
-    clip = client.get(f"/v1/jobs/{job}", headers=d).json()["clips"][0]
-    old = [local(u) for u in (clip["video_url"], clip["thumb_url"],
+    job, _export, clip = preview_and_export(client, d, up)
+    old = [local(u) for u in (clip["video_url"], clip["preview_url"], clip["export_url"], clip["thumb_url"],
                               client.get(f"/v1/projects/{up}", headers=d).json()["source_url"]) if u]
+    assert any(f"/{_export}/" in str(payload_of(u.rsplit("/", 1)[1])["k"]) for u in old)     # the export file
     assert all(client.get(u).status_code == 200 for u in old)
     report = takedown(account=account["id"])
     assert any(r.upload_removed and r.upload_id == up for r in report.removed)
-    got = client.get(f"/v1/jobs/{job}", headers=d)
-    assert got.status_code == 200 and got.json()["clips"] == [] and FILE_LINK not in got.text
+    no_links_for(client, d, job, up)
     assert client.get(f"/v1/projects/{up}", headers=d).status_code == 404
-    for path in ("/v1/clips", "/v1/projects", "/v1/uploads"):
+    for path in ("/v1/projects", "/v1/uploads"):
         assert FILE_LINK not in client.get(path, headers=d).text, path
     assert client.get(f"/v1/imports/{imp['import_id']}", headers=d).json()["upload_id"] is None
     assert all(client.get(u).status_code == 404 for u in old)        # files removed, links dead
     with new_session() as db:
         assert db.execute(select(Upload.deleted_at).where(Upload.id == up)).scalar_one() is not None
+        assert db.execute(select(Export.storage_key).where(Export.clip_id == clip["id"])).scalars().all() == [None]
