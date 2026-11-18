@@ -123,6 +123,8 @@ class Clip(Base):
     export_key: Mapped[str | None] = mapped_column(String(400), nullable=True)    # latest full-quality render
     export_res: Mapped[str | None] = mapped_column(String(8), nullable=True)
     edit: Mapped[dict | None] = mapped_column(JSON, nullable=True)                # edit decisions saved by the editor
+    frame_key: Mapped[str | None] = mapped_column(String(400), nullable=True)     # the thumbnail's frame, no text
+    thumb_id: Mapped[str | None] = mapped_column(String(40), nullable=True)       # the chosen ClipThumbnail; None: thumb_key
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -159,6 +161,39 @@ class ImportLog(Base):
     source_url: Mapped[str] = mapped_column(String(1000))
     platform: Mapped[str | None] = mapped_column(String(40), nullable=True)
     consent: Mapped[bool] = mapped_column(Boolean)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ClipThumbnail(Base):
+    """One thumbnail a clip can use besides the one its job made (`clips.thumb_key`, kept as it was): a premium AI
+    thumbnail, or the original with its text edited. `clean_key` is the picture without text; `image_key` is what
+    is shown (the text drawn on it by our renderer when `show_text`). Choosing one is free (`clips.thumb_id`)."""
+    __tablename__ = "clip_thumbnails"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    clip_id: Mapped[str] = mapped_column(ForeignKey("clips.id"), index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(12))                     # original | premium
+    job_id: Mapped[str | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)   # the paid job that made it
+    style: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    instruction: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    clean_key: Mapped[str] = mapped_column(String(400))
+    image_key: Mapped[str] = mapped_column(String(400))
+    text: Mapped[str | None] = mapped_column(String(200), nullable=True)   # the words; None: the clip's hook
+    show_text: Mapped[bool] = mapped_column(Boolean, default=True)
+    info: Mapped[dict | None] = mapped_column(JSON, nullable=True)    # provider, model, attempts, face check, cost
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class LikenessConsent(Base):
+    """Append-only: an account confirmed it is the streamer shown in a clip, or has their permission to have their
+    likeness edited by AI. Needed once per clip before its first premium thumbnail."""
+    __tablename__ = "likeness_consents"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    clip_id: Mapped[str] = mapped_column(ForeignKey("clips.id"), index=True)
+    consent: Mapped[bool] = mapped_column(Boolean)
+    wording: Mapped[str] = mapped_column(String(400))                 # the sentence the user agreed to
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

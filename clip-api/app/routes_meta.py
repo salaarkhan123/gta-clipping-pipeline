@@ -9,6 +9,7 @@ from fastapi import APIRouter
 from pydantic import ValidationError
 
 from .routes_media import ClipOptions
+from .thumbnail_jobs import listing as premium_thumbnail_listing
 
 router = APIRouter()
 BOUNDS = ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "minLength", "maxLength", "minItems", "maxItems", "pattern")
@@ -68,4 +69,5 @@ def clip_options() -> dict:
 def list_options():
     """Every option `POST /v1/clips` accepts, with its allowed values, default and limits. Public, no key needed.
     Send only options listed here: an unknown option is rejected with 422."""
-    return {"clips": clip_options()}
+    premium = premium_thumbnail_listing()      # (#140) listed only while PREMIUM_THUMBNAILS is on
+    return {"clips": clip_options(), **({"premium_thumbnail": premium} if premium else {})}

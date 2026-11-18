@@ -35,6 +35,7 @@ from .pipeline.translate import detect_language, run_text_job, transcript_langua
 from .pipeline.visual import FastembedClip
 from .security import is_public_https_url
 from .storage import get_storage, transcript_key, vindex_key
+from .thumbnail_jobs import PREFIX as THUMB_PREFIX, is_thumbnail_job, run_thumbnail_job, thumbnail_keys
 
 log = logging.getLogger("clipapi.worker")
 
@@ -51,13 +52,16 @@ def credits_of(seconds: float) -> int:
     """Credits for a number of seconds: one per started minute (the same rule as routes_media.credits_for)."""
     return max(1, math.ceil(seconds / 60))
 
-def claim_job() -> str | None:
+def claim_job(prefix: str | None = None) -> str | None:
     """Claim the oldest QUEUED job for this caller only. The conditional UPDATE decides the winner, so two
-    claimers never get the same job on any database (SKIP LOCKED only keeps Postgres claimers from waiting)."""
+    claimers never get the same job on any database (SKIP LOCKED only keeps Postgres claimers from waiting).
+    `prefix`: only jobs whose id starts with it (the premium thumbnail slot claims `thm_` jobs only)."""
     with new_session() as db:
         for _ in range(5):
-            job_id = db.execute(select(Job.id).where(Job.status == "QUEUED").order_by(Job.created_at)
-                                .limit(1).with_for_update(skip_locked=True)).scalar_one_or_none()
+            q = select(Job.id).where(Job.status == "QUEUED")
+            if prefix:
+                q = q.where(Job.id.startswith(prefix, autoescape=True))
+            job_id = db.execute(q.order_by(Job.created_at).limit(1).with_for_update(skip_locked=True)).scalar_one_or_none()
             if not job_id:
                 return None
             now = utcnow()
@@ -145,6 +149,8 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
     if job_id.startswith("imp_"):       # link import (agent E): no stored source yet; app/ingest runs it to the end
         from .ingest.runner import run_import
         return run_import(job_id)
+    if is_thumbnail_job(job_id):        # premium thumbnail (#140): no video work; app/thumbnail_jobs.py runs it
+        return run_thumbnail_job(job_id)
     s = get_settings()
     storage = get_storage()
     with new_session() as db:
@@ -259,7 +265,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             # No AI, no score: a number made from loudness alone would mislead.
             clip_id = new_id("clip")
             base = f"clips/{job_id}/{clip_id}"
-            thumb_key = caps_key = None
+            thumb_key = caps_key = frame_key = None
             with timer.stage("store"):
                 storage.put(f"{base}.mp4", r.video_path)
                 stored.append(f"{base}.mp4")
@@ -267,6 +273,11 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                     thumb_key = f"{base}.jpg"
                     storage.put(thumb_key, r.thumb_path)
                     stored.append(thumb_key)
+                frame = getattr(r, "frame_path", None)
+                if thumb_key and frame and frame.exists():     # the frame without text: premium thumbnails, text edits
+                    frame_key = f"{base}.frame.jpg"
+                    storage.put(frame_key, frame)
+                    stored.append(frame_key)
                 if r.captions_path and r.captions_path.exists():
                     caps_key = f"{base}.captions.json"
                     storage.put(caps_key, r.captions_path)
@@ -279,7 +290,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                     raise Canceled()
                 db.add(Clip(id=clip_id, job_id=job_id, idx=idx, start_sec=r.start, end_sec=r.end, score=r.score,
                             signals=r.signals, features=r.features, video_key=f"{base}.mp4",
-                            thumb_key=thumb_key, captions_key=caps_key, meta=meta))
+                            thumb_key=thumb_key, captions_key=caps_key, frame_key=frame_key, meta=meta))
                 db.commit()
             if not handed_over:
                 first_clip.append(time.monotonic() - t_start)
@@ -455,7 +466,7 @@ def sweep_stale_jobs() -> int:
             ledger.settle(db, job, success=False)
             # Clips the dead worker had already stored: hide them and remove their files.
             for clip in db.execute(select(Clip).where(Clip.job_id == job.id, Clip.deleted_at.is_(None))).scalars():
-                orphans += [k for k in (clip.video_key, clip.thumb_key, clip.captions_key) if k]
+                orphans += [k for k in (clip.video_key, clip.thumb_key, clip.captions_key, clip.frame_key) if k]
                 clip.deleted_at = utcnow()
             n += 1
         db.commit()
@@ -483,7 +494,8 @@ def sweep_expired() -> int:
         expired_jobs = select(Job.id).where(Job.expires_at <= now)
         for clip in db.execute(select(Clip).where(Clip.deleted_at.is_(None),
                                                   Clip.job_id.in_(expired_jobs)).limit(500)).scalars():
-            for key in (clip.video_key, clip.thumb_key, clip.captions_key):
+            for key in dict.fromkeys([clip.video_key, clip.thumb_key, clip.captions_key, clip.frame_key,
+                                      *thumbnail_keys(db, [clip.id])]):
                 if key:
                     storage.delete(key)
             clip.deleted_at = now
@@ -493,8 +505,8 @@ def sweep_expired() -> int:
 
 
 def run_once(transcriber: Transcriber | None = None, pipeline=run_pipeline,
-             indexer: Transcriber | None = None, embedder=None, ai=None) -> str | None:
-    job_id = claim_job()
+             indexer: Transcriber | None = None, embedder=None, ai=None, prefix: str | None = None) -> str | None:
+    job_id = claim_job(prefix)
     if not job_id:
         return None
     return process_job(job_id, transcriber, pipeline, indexer, embedder, ai)
@@ -534,11 +546,25 @@ def _slot(i: int, stop: threading.Event, transcriber, pipeline, indexer, embedde
             stop.wait(5)
 
 
+def _thumb_slot(stop: threading.Event) -> None:
+    """Premium thumbnail jobs only, one at a time, so a 20-second paid job never queues behind a 2-hour VOD."""
+    poll = get_settings().worker_poll_sec
+    while not stop.is_set():
+        try:
+            if run_once(prefix=THUMB_PREFIX + "_") is None:
+                stop.wait(poll)
+        except Exception:
+            log.exception("thumbnail slot error")
+            stop.wait(5)
+
+
 def serve(concurrency: int, stop: threading.Event, transcriber: Transcriber | None = None, pipeline=run_pipeline,
           indexer: Transcriber | None = None, embedder=None, ai=None) -> None:
     """Run `concurrency` job slots until stop is set; returns when every slot has finished its current job."""
     slots = [threading.Thread(target=_slot, args=(i, stop, transcriber, pipeline, indexer, embedder, ai),
                               name=f"slot-{i}") for i in range(concurrency)]
+    if get_settings().premium_thumbnails:        # premium thumbnails wait on a provider, not the CPU: their own slot,
+        slots.append(threading.Thread(target=_thumb_slot, args=(stop,), name="slot-thumbnails"))   # never behind a VOD
     for t in slots:
         t.start()
     for t in slots:

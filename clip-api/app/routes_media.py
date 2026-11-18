@@ -287,8 +287,8 @@ def submit_job(db: Session, p: Principal, upload_id: str, webhook_url: str | Non
     upload = own_upload(db, p, upload_id)
     options, processed_sec, cost = plan(upload)
 
-    active = db.execute(select(func.count()).select_from(Job).where(
-        Job.account_id == p.account.id, Job.status.in_(ACTIVE))).scalar_one()
+    active = db.execute(select(func.count()).select_from(Job).where(      # premium thumbnails (thm_) have their own cap
+        Job.account_id == p.account.id, Job.status.in_(ACTIVE), ~Job.id.startswith("thm_", autoescape=True))).scalar_one()
     if active >= s.max_concurrent_jobs_per_account:
         raise ApiError(429, "too_many_jobs", "Wait for a running job to finish before starting another.")
 
