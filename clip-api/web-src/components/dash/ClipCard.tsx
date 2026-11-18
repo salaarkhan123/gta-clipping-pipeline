@@ -27,12 +27,17 @@ export function numbering(clips: any[]): Map<string, number> {
   return new Map(made.map((c, i) => [c.id, i + 1]));
 }
 
+const BADGE = "pointer-events-none absolute top-2 z-[1] rounded-full bg-[rgba(7,8,10,.82)] px-2 py-[2px] font-body text-[12px] font-semibold leading-[normal] tabular-nums";
+const ACTION = "grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-8 border-0 bg-transparent disabled:cursor-default disabled:opacity-[.45] narrow:h-10 narrow:w-10";
 const SOON: [IconName, string][] = [["calendar", "Schedule"]];
 
 // One clip as a card: tick box, rank and title, the preview with its time range, the score, and its actions.
 // `project` links back to where it came from (Library). `lit` marks the card the timeline just jumped to.
 // `onSelect` adds the tick box (the project page's bulk actions).
 // `uploadId` (or `project`) gives the card its Edit action: the editor needs the source video.
+// The results grid: 16:9 cards, five across on a laptop, two on a phone.
+export const CLIP_GRID = "grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] items-start gap-[14px] narrow:grid-cols-2 narrow:gap-[10px]";
+
 export function ClipCard({ clip, onChange, project, uploadId, lit, number, selected, onSelect }: { clip: any; onChange: (c: any) => void;
   project?: { id: string; name: string }; uploadId?: string; lit?: boolean; number?: number; selected?: boolean; onSelect?: (id: string, on: boolean) => void }) {
   const { fail } = useDash();
@@ -49,33 +54,40 @@ export function ClipCard({ clip, onChange, project, uploadId, lit, number, selec
   const source = uploadId || project?.id;
   return (
     <article id={`clip-${clip.id}`} tabIndex={-1} aria-label={name}
-      className={`clip ${clip.kept === false ? "dropped" : ""} ${lit ? "lit" : ""} ${selected ? "picked" : ""}`}>
-      <header className="clip-top">
-        {onSelect && <input type="checkbox" checked={!!selected} aria-label={`Select ${name}`} onChange={(e) => onSelect(clip.id, e.target.checked)} />}
-        <h3 title={name}>{rank && <b>#{rank}</b>} {name}</h3>
+      className={`clip grid min-w-0 scroll-mt-24 content-start gap-2 rounded-12 border border-solid bg-panel p-[10px] transition-[border-color] duration-200 ease-[ease] focus:outline-none narrow:p-2
+        ${selected ? "border-lime" : "border-line-soft hover:border-line"} ${clip.kept === false ? "opacity-[.45]" : ""}
+        ${lit ? "shadow-[0_0_40px_rgba(184,255,60,.25)] outline outline-2 outline-offset-[6px] outline-lime" : ""}`}>
+      <header className="flex min-w-0 items-center gap-[10px]">
+        {onSelect && <input type="checkbox" checked={!!selected} aria-label={`Select ${name}`} onChange={(e) => onSelect(clip.id, e.target.checked)}
+          className="h-5 w-5 flex-none cursor-pointer p-0 accent-lime narrow:h-6 narrow:w-6" />}
+        <h3 title={name} className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-body text-[13.5px] font-semibold leading-[1.3]">
+          {rank && <b className="tabular-nums text-lime">#{rank}</b>} {name}</h3>
       </header>
-      <div className="clip-media">
-        <video controls preload="none" poster={clip.thumb_url || undefined} src={clip.video_url} />
-        <span className="clip-time">{clock(clip.start_sec)} – {clock(clip.end_sec)}</span>
-        {clip.edited === true && <span className="clip-edited">Edited</span>}
-        <div className="clip-rate" role="group" aria-label="Rate this clip">
+      <div className="group/media relative aspect-video overflow-hidden rounded-8 bg-black">
+        {clip.thumb_url && <img src={clip.thumb_url} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-[14px]" />}
+        <video controls preload="none" poster={clip.thumb_url || undefined} src={clip.video_url} className="relative block h-full w-full object-contain" />
+        <span className={`${BADGE} right-2`}>{clock(clip.start_sec)} – {clock(clip.end_sec)}</span>
+        {clip.edited === true && <span className={`${BADGE} left-2 text-cyan`}>Edited</span>}
+        <div className="absolute left-2 top-10 z-[2] grid gap-[6px] opacity-0 transition-opacity duration-150 group-hover/media:opacity-100 group-focus-within/media:opacity-100
+          has-[[aria-pressed=true]]:opacity-100 [@media(hover:none)]:opacity-100" role="group" aria-label="Rate this clip">
           <IconToggle icon="like" label="Like" on={clip.reaction === "like"} onClick={() => react("like")} />
           <IconToggle icon="dislike" label="Dislike" on={clip.reaction === "dislike"} onClick={() => react("dislike")} />
           <IconToggle icon="bookmark" label="Bookmark" on={!!clip.bookmarked} onClick={() => send({ bookmarked: !clip.bookmarked })} />
         </div>
       </div>
-      <div className="clip-bar">
+      <div className="flex min-h-[36px] items-center justify-between gap-[6px] narrow:flex-wrap">
         <ScoreBadge clip={clip} />
-        <div className="clip-icons" role="group" aria-label="Clip actions">
-          <a className="icon-btn go" href={clip.video_url} download aria-label={`Download ${name}`} title="Download"><Icon name="download" size={18} /></a>
-          <button type="button" className="icon-btn" disabled={!clip.captions_url} aria-label={clip.captions_url ? `Download the captions file for ${name}` : "No captions file: this clip has no captions"}
+        <div className="flex flex-none items-center gap-[2px]" role="group" aria-label="Clip actions">
+          <a className={`${ACTION} text-lime hover:bg-lime-wash`} href={clip.video_url} download aria-label={`Download ${name}`} title="Download"><Icon name="download" size={18} /></a>
+          <button type="button" className={`${ACTION} text-soft enabled:hover:bg-chip-hover enabled:hover:text-text`} disabled={!clip.captions_url}
+            aria-label={clip.captions_url ? `Download the captions file for ${name}` : "No captions file: this clip has no captions"}
             title={clip.captions_url ? "Captions file (SRT)" : "This clip has no captions"} onClick={() => downloadSubtitles(clip.id).catch(fail)}><Icon name="captions" size={18} /></button>
-          {source && <Link className="btn small ghost clip-edit" href={`/dashboard/edit/?project=${source}&clip=${clip.id}`} aria-label={`Edit ${name}`}
+          {source && <Link className="btn small ghost ml-1 min-h-[30px] gap-[5px] rounded-8 px-[10px] py-1 text-[12.5px]" href={`/dashboard/edit/?project=${source}&clip=${clip.id}`} aria-label={`Edit ${name}`}
             title="Trim, cut by transcript, captions and look"><Icon name="sliders" size={16} />Edit</Link>}
         </div>
       </div>
-      <p className="clip-desc" title={clip.description || undefined}>{clip.description || <span className="muted">No description for this clip.</span>}</p>
-      {project && <Link className="muted clip-from" href={`/dashboard/project/?id=${project.id}`}>From {project.name}</Link>}
+      <p className="line-clamp-2 min-h-[3em] text-[13px] leading-[1.5] text-soft" title={clip.description || undefined}>{clip.description || <span className="muted">No description for this clip.</span>}</p>
+      {project && <Link className="muted text-[13px] [overflow-wrap:anywhere]" href={`/dashboard/project/?id=${project.id}`}>From {project.name}</Link>}
       <details className="clip-more">
         <summary>More</summary>
         <div className="clip-more-body">
@@ -102,8 +114,10 @@ export function ClipCard({ clip, onChange, project, uploadId, lit, number, selec
   );
 }
 
+// Like, dislike, bookmark: round buttons over the preview.
 function IconToggle({ icon, label, on, onClick }: { icon: IconName; label: string; on: boolean; onClick: () => void }) {
-  return <button type="button" className="icon-btn" aria-pressed={on} aria-label={label} title={label} onClick={onClick}><Icon name={icon} size={18} /></button>;
+  return <button type="button" aria-pressed={on} aria-label={label} title={label} onClick={onClick}
+    className={`grid h-8 w-8 cursor-pointer place-items-center rounded-full border-0 ${on ? "bg-lime text-ink" : "bg-[rgba(7,8,10,.78)] text-[#e9edf1]"}`}><Icon name={icon} size={18} /></button>;
 }
 
 export type ClipSort = "score" | "time" | "newest";

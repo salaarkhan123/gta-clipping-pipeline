@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useDash } from "@/components/dash/Shell";
+import { BALANCE, PAGE_HEAD, PAGE_TITLE } from "@/components/dash/ui";
 import { api } from "@/lib/api";
 
 const KINDS: Record<string, string> = { grant: "Credits added", topup: "Credits bought", reserve: "Job started", release: "Refund", adjust: "Adjustment" };
@@ -19,15 +20,16 @@ export default function Billing() {
 
   return (
     <div className="stack">
-      <div className="page-head-row"><h1>Billing and credits</h1></div>
+      <div className={PAGE_HEAD}><h1 className={PAGE_TITLE}>Billing and credits</h1></div>
       {UNPAID.includes(me.subscription_status) && <div className="error bill-note" role="alert">
         <p><strong>Your last payment failed.</strong> Update your payment method to keep your {plan} plan.</p>
         <button className="btn small ghost" onClick={portal}>Manage billing</button>
       </div>}
       {ends && <p className="notice bill-note">Your {plan} plan ends on {ends.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}. You keep it until then.</p>}
-      <section className="balance-card" aria-label="Balance">
+      <section className={BALANCE} aria-label="Balance">
         <div>
-          <p className="big">{me.credits.toLocaleString()}<small>credits · {plan} plan</small></p>
+          <p className="flex items-baseline gap-2 font-display text-[34px] font-bold leading-[normal] tabular-nums text-lime">{me.credits.toLocaleString()}
+            <small className="font-body text-[14px] font-medium leading-[normal] text-muted">credits · {plan} plan</small></p>
           <p className="muted small">One credit is one minute of video. A failed or cancelled job is refunded in full.</p>
         </div>
         <div className="row">

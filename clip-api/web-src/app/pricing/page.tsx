@@ -79,7 +79,6 @@ export default function Pricing() {
                     <tr><td>Credits</td>{plans.map((p) => <td key={p.id}>{p.price_month_cents ? `${p.monthly_credits.toLocaleString()}/mo` : `${FREE_CREDITS} one-time`}</td>)}</tr>
                     <tr><td>Max export quality</td>{plans.map((p) => <td key={p.id}>{p.max_side >= 1080 ? "1080p" : "720p"}</td>)}</tr>
                     <tr><td>Reframe / Captions length per job</td>{plans.map((p) => <td key={p.id}>{p.max_render_min ? `${p.max_render_min} min` : "Unlimited"}</td>)}</tr>
-                    <tr><td>File storage</td>{plans.map((p) => <td key={p.id}>7 days</td>)}</tr>
                     <tr className="group"><td colSpan={plans.length + 1}>Tools</td></tr>
                     {INCLUDED.map((f) => <tr key={f}><td>{f}</td>{plans.map((p) => <td key={p.id} className="yes">✓</td>)}</tr>)}
                   </tbody>
