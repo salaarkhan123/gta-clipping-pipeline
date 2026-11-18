@@ -29,7 +29,7 @@ API + website that turns long gameplay/stream recordings into short, captioned, 
 
 - Python 3.12 in Docker (code runs on 3.10+), FastAPI, Pydantic v2, SQLAlchemy 2 (sync), Postgres 16; SQLite for local dev and tests.
 - **Job queue is the `jobs` table**: workers claim with `SELECT ... FOR UPDATE SKIP LOCKED`. No Redis, no Arq.
-- Tables are created with `create_all` at startup. **Alembic migrations are not set up yet**; add them before the first schema change after launch.
+- Schema: Alembic migrations (`app/migrations/`), run by `scripts/deploy.sh` before the restart and at every start (`init_db`). Revision `0001` is the baseline; the pre-migration production database is stamped at it.
 - ffmpeg (needs libass), faster-whisper (`small.en`, CPU int8, baked into the image), numpy.
 - Storage interface with local-disk and S3/R2 implementations. Stripe Checkout (one-time packs). argon2 password hashes, HS256 JWTs. Caddy for HTTPS.
 - Website (to build): Next.js App Router + Tailwind.
@@ -76,7 +76,7 @@ run_pipeline(input_path, options: PipelineOptions, out_dir, progress_cb=None, tr
 - Video Finder searches speech only. It does not understand visuals (no "find the car chase").
 - The facecam position is supplied by the user (`facecam_region` corner preset or `facecam_box`); there is no automatic facecam detection yet.
 - Captions skip low-confidence segments (music lyrics, background chatter). Captioning only the main speaker needs diarization (deferred).
-- Job results that are not clips (search matches) are returned in `job.result`. The `jobs.result` column is added at startup by a small forward-only migration in `app/db.py`.
+- Job results that are not clips (search matches) are returned in `job.result`. The `jobs.result` column is part of the baseline migration.
 
 ### Launch-tier additions (2026-11-14, second pass)
 
@@ -222,3 +222,35 @@ Work phase by phase; a phase starts after the owner merges the one before. PRs i
 | 3 AI editing | 3.1 noise reduction and crossfades · 3.2 AI hook, later TTS · 3.3 natural-language find · 3.4 montage (one-off royalty-free music license) · 3.5 B-roll |
 | 4 Publishing and ingestion | 4.0 platform approvals (owner) · 4.1 OAuth publishing · 4.2 calendar and scheduler · 4.3 bulk import · 4.4a–d link import, resumable uploads, Drive/Dropbox, failure alerts · 4.5a–d live clipping |
 | 5 Website | home, tool pages, gaming page, pricing from plan config, quality floor, DRAFT legal pages |
+
+## 14. North-star goal (approved 2026-11-16)
+
+A streamer finishes a 2–4 hour stream and, when they open ClutchClips, 30–50 candidate clips are already found, ranked by a 0–100 score, and playable as vertical previews with captions, framing and thumbnails, ready to review, edit and export. Speed and understanding come before everything else in section 13.
+
+**Targets**, end to end from "file or link available on the server" to "clips visible":
+
+| What | Target |
+|---|---|
+| 2-hour VOD: 30–50 ranked clips with playable previews | 10 minutes or less (stretch: 5) |
+| 4-hour VOD | 15 minutes or less |
+| 1080p export of one clip | 30 seconds or less |
+| Batch export of 40 clips | 3 minutes or less |
+
+Starting point (server, 2026-11-15): a 2-hour VOD gave 10 clips in 932.7 s (transcribing 257 s, rendering 578 s). Every speed PR reports before and after with `scripts/job_timings.py`; every selection PR reports precision@20, precision@40 and recall on the eval set.
+
+**Infrastructure: setup B.** The current droplet for the API, database and analysis; hosted transcription behind config; one 16-vCPU CPU-optimized render worker. The owner provisions and pays; nothing is signed up for or deployed by an agent. Hosted transcription sends users' audio to a third party, so the Terms and Privacy pages must say so.
+
+**Design decisions**
+- No full video proxy: decoding two hours costs more than rendering the preview windows from the source. Audio is extracted once (16 kHz mono); visual analysis runs on sparse frames.
+- Previews first (540×960, fast preset, all clips in parallel), 1080p only on export or download, cached. Preview renders are included in the credit price; export limits per plan are a money change for the owner.
+- Results are progressive: clips appear as they finish.
+- The 0–100 score goes on the clip card only after calibration against the eval set (until then: rank and tier, section 13 item 1.3).
+- Link import tries any URL and stays inside the ingestion rule (no logins, cookies, proxies or block evasion); the site lists only platforms verified to work.
+- Thumbnails: best frame with the hook text is free; AI-generated thumbnails are a paid option, priced in their own ticket.
+
+| Track | Tickets (build order: S0, S3, S1, S2, then S4; U6 alongside; U1 to U5; U7) |
+|---|---|
+| Speed | S0 stage timing and before/after script (#94) · S3 full audio once, transcription provider (#95) · S1 stage queue, progressive results (#96) · S2 previews first, export on demand (#97) · S4 worker roles for a render machine (#98) · S5 GPU / NVENC benchmark (#99) |
+| Understanding | U1 whole transcript with speakers (#100) · U2 per-second signal timeline (#101) · U3 LLM pass over transcript chunks (#102) · U4 judge v2 with sub-scores, 15–60 s story cuts (#103) · U5 score calibration (#104) · U6 eval set v2, about 100 moments over 3 VODs (#105) · U7 thumbnails (#106) |
+
+After these: the dashboard redesign and the editor (1.4), then link import and automation (4.x). Changes to section 13: per-quarter nomination (0.2e) is replaced by U3; 1.5 bulk export joins S2; 3.3 becomes Video Finder on the U1 transcript; 2.4 grows into a template gallery across games; 4.5 gains chat logging; auto-processing when a stream ends is new (4.6, with a credit cap: money).

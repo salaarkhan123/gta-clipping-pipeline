@@ -2,8 +2,11 @@
 
 Rules:
 - Balance = SUM(delta) for the account.
+- A refund or dispute takes back what the payment granted with one `adjust` row (key `stripe-refund:...` or
+  `stripe-dispute:...`), stopping at a zero balance.
 - A job is reserved once (key `reserve:<job>`) and settled once (key `settle:<job>`),
-  either as a commit (keep the charge) or a release (refund). The unique key makes a
+  either as a commit (keep the charge, or the part of it the job used: the rest goes back in that same row)
+  or a release (refund). The unique key makes a
   second settle a no-op, so a job can never be refunded twice or refunded after commit.
 """
 from sqlalchemy import func, select
@@ -50,6 +53,17 @@ def grant(db: Session, account_id: str, credits: int, kind: str, key: str, note:
     return _insert_once(db, account_id=account_id, delta=credits, kind=kind, note=note, idempotency_key=key)
 
 
+def claw_back(db: Session, account_id: str, credits: int, key: str, note: str | None = None) -> int | None:
+    """Take back credits that a refunded or disputed payment granted, never below a zero balance. Appends one
+    row, also when nothing is left to take, so the refund is on record. Returns the credits taken, or None when
+    this key was handled before. The caller holds the account lock and commits."""
+    if credits <= 0:
+        raise ValueError("claw back must be positive")
+    taken = min(credits, max(0, balance(db, account_id)))
+    done = _insert_once(db, account_id=account_id, delta=-taken, kind="adjust", note=note, idempotency_key=key)
+    return taken if done else None
+
+
 def reserve(db: Session, account_id: str, job_id: str, cost: int) -> None:
     """Hold credits for a job. Caller must commit. Raises InsufficientCredits."""
     if cost <= 0:
@@ -62,13 +76,16 @@ def reserve(db: Session, account_id: str, job_id: str, cost: int) -> None:
                  idempotency_key=f"reserve:{job_id}")
 
 
-def settle(db: Session, job: Job, success: bool) -> bool:
-    """Commit (success) or release (refund) a job's reservation exactly once. Caller must commit."""
+def settle(db: Session, job: Job, success: bool, charged: int | None = None) -> bool:
+    """Commit (success) or release (refund) a job's reservation exactly once. Caller must commit.
+    `charged` (success only) is what the job cost when that is less than was reserved: the difference goes back
+    in the same settle row. It can never be more than the reservation."""
     if success:
-        done = _insert_once(db, account_id=job.account_id, delta=0, kind="commit", job_id=job.id,
+        keep = job.credits_reserved if charged is None else max(0, min(int(charged), job.credits_reserved))
+        done = _insert_once(db, account_id=job.account_id, delta=job.credits_reserved - keep, kind="commit", job_id=job.id,
                             idempotency_key=f"settle:{job.id}")
         if done:
-            job.credits_charged = job.credits_reserved
+            job.credits_charged = keep
     else:
         done = _insert_once(db, account_id=job.account_id, delta=job.credits_reserved, kind="release",
                             job_id=job.id, idempotency_key=f"settle:{job.id}")

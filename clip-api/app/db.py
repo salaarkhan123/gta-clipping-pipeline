@@ -38,23 +38,6 @@ def get_db():
 
 
 def init_db() -> None:
-    from . import models  # noqa: F401  (register tables)
-    engine = get_engine()
-    Base.metadata.create_all(engine)
-    _add_missing_columns(engine)
-
-
-def _add_missing_columns(engine) -> None:
-    """Forward-only migration for columns added after the first deploy. Replace with Alembic when this grows."""
-    from sqlalchemy import inspect, text
-    wanted = {"jobs": {"result": "JSON"}, "uploads": {"analyzed": "BOOLEAN DEFAULT FALSE"},
-              "clips": {"meta": "JSON"},
-              "accounts": {"plan": "VARCHAR(20) DEFAULT 'free'", "stripe_customer_id": "VARCHAR(64)",
-                           "stripe_subscription_id": "VARCHAR(64)"}}
-    insp = inspect(engine)
-    for table, cols in wanted.items():
-        have = {c["name"] for c in insp.get_columns(table)}
-        for name, ddl in cols.items():
-            if name not in have:
-                with engine.begin() as conn:
-                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+    """Bring the schema to the latest migration (app/migrate.py). Safe to call from every process at start."""
+    from .migrate import migrate
+    migrate(get_engine())

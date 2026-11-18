@@ -3,6 +3,7 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_PACKS = json.dumps([
@@ -50,6 +51,13 @@ class Settings(BaseSettings):
     visual_search: bool = True        # Video Finder also searches what is on screen (CLIP)
     stale_job_minutes: int = 5        # RUNNING job with no heartbeat for this long is failed + refunded
 
+    # Link import (app/ingest, agent E). An import is free; the imported file then follows the upload limits
+    # above, so the lower of the two applies. The downloaders' own options are fixed in code, not settings.
+    imports_enabled: bool = True              # kill switch: false refuses new imports and stops queued ones
+    import_max_bytes: int = 8 * 1024 ** 3     # largest file an import may download
+    import_max_duration_sec: int = 6 * 3600   # longest video an import may bring in
+    import_timeout_sec: int = 1800            # the whole download; a slower one is stopped
+
     # Credits
     free_signup_credits: int = 30
     credit_packs: str = DEFAULT_PACKS
@@ -76,8 +84,30 @@ class Settings(BaseSettings):
     # Pipeline
     whisper_model: str = "small.en"   # captions. "none" disables transcription and captions
     whisper_index_model: str = "base.en"   # full-video search index: smaller and several times faster
+    # Whole-recording transcription. "local" runs the Whisper models above; hosted providers are added with
+    # their adapters. TRANSCRIBE_PARALLEL chunks run at once: leave it at 1 on a 4 vCPU server (one model already
+    # uses every core) and raise it on a machine with 8 or more (see DEPLOY.md, "Measuring speed").
+    transcription_provider: str = "local"
+    transcribe_parallel: int = Field(1, ge=1, le=8)
+    transcribe_chunk_sec: int = Field(300, ge=60, le=1800)
+    # Languages (agent F; app/languages.py). English always uses the two models above, exactly as before. Speech in
+    # any other language uses the multilingual model of the same size: empty = worked out from the model above
+    # (small.en -> small, base.en -> base). They are public models and are downloaded on first use unless the
+    # image already has them (see the PR's "Wiring needed").
+    whisper_multilingual_model: str = ""
+    whisper_index_multilingual_model: str = ""
+    language_detect: bool = True      # no source_lang sent: detect the spoken language. false: assume English, as before
+    # Translation (transcripts, subtitle downloads) and video summaries. "none" (default): the feature answers "not
+    # configured". "ai": the AI client above (needs ANTHROPIC_API_KEY; costs tokens per use, and nothing is charged
+    # for it yet: see the PR's money questions). "standin" marks text instead of translating: tests and demos only.
+    translation_provider: str = "none"
+    summary_provider: str = "none"
+    speaker_provider: str = "none"    # who is speaking, in transcripts. "none": `speaker` is null. No other provider yet
     caption_font: str = "DejaVu Sans"
     worker_poll_sec: float = 2.0
+    # Jobs one worker process runs at once. 2 is the most a 4 vCPU / 8 GB server holds (ffmpeg and Whisper
+    # both use every core); raise the limit only with a bigger server and a new benchmark.
+    worker_concurrency: int = Field(1, ge=1, le=2)
     sentry_dsn: str = ""
 
     @property

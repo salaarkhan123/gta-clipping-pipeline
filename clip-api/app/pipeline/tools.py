@@ -17,6 +17,7 @@ import logging
 from .censor import mask_words
 from .facecam import resolve_facecam
 from .render import CHAT_REGIONS, render_clip, render_thumb
+from .stt import LocalProvider, extract_audio
 from .transcribe import Transcriber, Transcript, extract_wav
 from .visual import build_visual_index, search_visual
 
@@ -34,9 +35,16 @@ class RenderOptions:
     chat_region: str = "none"
     zoom: float = 1.0
     captions: bool = False
-    caption_style: str = "pop"
+    caption_style: str = "pop"        # impact | pop | bold | neon | boxed | clean
     caption_font: str = "DejaVu Sans"
+    caption_position: str = "auto"    # impact only: auto | seam | lower | center
+    caption_accent: str | None = None # impact only: the keyword's colour, #RRGGBB; None = the brand lime
     censor: bool = False
+    resolution: str | None = None     # "480" | "720" | "1080" | "2k" | "4k"; None renders at the size it always did
+    preview: bool = False             # a fast, small render to look at (540 on the short side)
+    camera: str | None = None         # two-panel layouts: "top" | "bottom"; None = the layout's own
+    split_ratio: float | None = None  # two-panel layouts: the top panel's share of the height, 0.25 to 0.75
+    source_lang: str | None = None    # (languages, agent F) recorded; the worker hands the matching transcriber in
 
 
 def _layout(src, info, options, deadline=None) -> tuple[str, object]:
@@ -74,7 +82,9 @@ def _render_one(src, info, start, end, idx, words, options, layout, facecam, out
     render_clip(src, start, end, video, src_w=info.width, src_h=info.height, vertical=options.vertical,
                 zoom=options.zoom, chat=options.chat_region, words=words, font=options.caption_font,
                 layout=layout, facecam=facecam, style=options.caption_style, aspect=options.aspect,
-                max_side=options.max_side, deadline=deadline)
+                max_side=options.max_side, deadline=deadline, resolution=options.resolution, preview=options.preview,
+                position=options.caption_position, accent=options.caption_accent, camera=options.camera,
+                split_ratio=options.split_ratio)
     thumb = out_dir / f"clip-{idx}.jpg"
     try:
         render_thumb(video, thumb, deadline)
@@ -167,7 +177,8 @@ def search_transcript(transcript: dict, query: str, limit: int = 5) -> list[dict
 def run_find(src: Path, query: str, max_results: int, make_clips: bool, clip_length: int,
              options: RenderOptions, out_dir: Path, progress_cb=None, transcriber: Transcriber | None = None,
              deadline: Deadline | None = None, transcript: dict | None = None, mode: str = "auto",
-             embedder=None, vindex: dict | None = None, indexer: Transcriber | None = None):
+             embedder=None, vindex: dict | None = None, indexer: Transcriber | None = None,
+             provider=None):
     """Search an upload by what was said (transcript) and what is on screen (CLIP frame index).
 
     mode: "auto" uses whatever is available, "speech" or "visual" require that one.
@@ -186,8 +197,15 @@ def run_find(src: Path, query: str, max_results: int, make_clips: bool, clip_len
         tr = indexer or transcriber
         if info.has_audio and tr is not None:
             progress("transcribing", 5)
-            t = transcribe_range(src, 0.0, info.duration, tr, out_dir, deadline,
-                                 lambda k, m: progress("transcribing", 5 + int(35 * k / m)))
+            # Decode the audio once, then let the provider transcribe the whole file (chunks cut at quiet points,
+            # several at once where the machine allows). Default: the local model, one chunk at a time.
+            stt = provider or LocalProvider(tr)
+            audio = out_dir / "source-audio.wav"
+            try:
+                t = stt.transcribe_file(extract_audio(src, audio, deadline).path, out_dir, deadline,
+                                        lambda k, m: progress("transcribing", 5 + int(35 * k / m)))
+            finally:
+                audio.unlink(missing_ok=True)
             transcript = new_t = {"duration": round(info.duration, 3),
                                   "segments": [{"start": s, "end": e, "text": x} for s, e, x in t.segments],
                                   "words": [[s, e, w] for s, e, w in t.words]}

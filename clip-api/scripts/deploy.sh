@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Deploy this server from git: pull the deploy branch, rebuild api + worker, run the selftest.
+# Deploy this server from git: pull the deploy branch, rebuild api + worker, migrate the schema, restart,
+# run the selftest.
 #
 #   bash scripts/deploy.sh            # from clip-api/ (any directory works)
 #
@@ -7,6 +8,11 @@
 # inside the api container, once before the pull and again after the build, right before the restart).
 # If the job list cannot be read, it refuses too. Caddy and the database are never restarted; web/ is
 # served straight from the checkout, so a pull updates the site.
+#
+# Migrations run from the new image (`admin.py migrate`) after the build and before the restart, while the old
+# containers still serve. A failed migration stops the deploy with the old code running and, on Postgres, the
+# schema unchanged (each upgrade runs in one transaction). Migrations must be additive, so old code keeps
+# working on the new schema and a code rollback needs no schema rollback.
 #
 # Env: DEPLOY_BRANCH (default main).
 set -euo pipefail
@@ -52,6 +58,11 @@ echo "code: $before -> $after"
 
 docker compose build api worker
 require_idle "after build"
+if ! docker compose run --rm -T api python scripts/admin.py migrate; then
+  echo "migration FAILED on $after; nothing was restarted. Put the code back with:" >&2
+  echo "  git checkout --detach $before" >&2
+  exit 1
+fi
 docker compose up -d api worker
 
 for _ in $(seq 1 60); do

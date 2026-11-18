@@ -9,6 +9,11 @@
   stuck                                         list QUEUED/RUNNING jobs
   send-test-email --to ADDRESS                  send one email through the configured SMTP (exit 2: not configured, 1: failed)
   selftest                                      load every model and tool once (run in the worker container)
+  db-status                                     schema revision and differences from the models (read-only)
+  migrate                                       upgrade the schema to the latest revision (deploy.sh runs it)
+  takedown --url URL | --account ID_OR_EMAIL [--dry-run]
+                                                remove every upload, clip and file imported from a source URL, or all
+                                                of one account's link imports; cancels and refunds their jobs
 """
 import argparse
 import secrets
@@ -123,6 +128,27 @@ def send_test_email(to: str) -> int:
     return 0
 
 
+def db_status() -> int:
+    """Read-only: revision now, latest revision, and what differs from app/models.py. Exit 1 if not at head."""
+    from alembic.autogenerate import compare_metadata
+    from alembic.runtime.migration import MigrationContext
+    from sqlalchemy import inspect
+
+    from app.db import Base, get_engine
+    from app.migrate import current, head
+    engine = get_engine()
+    now, latest = current(engine), head()
+    with engine.connect() as conn:
+        legacy = now is None and "accounts" in inspect(conn).get_table_names()
+        diffs = compare_metadata(MigrationContext.configure(conn, opts={"compare_type": True}), Base.metadata)
+    print(f"revision {now or ('none (from before migrations)' if legacy else 'none (empty database)')} · latest {latest}")
+    for d in diffs:
+        print(f"  differs: {d}")
+    if legacy:
+        print("migrate will bring it to the baseline (add missing columns and indexes), then stamp it")
+    return 0 if now == latest else 1
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -134,14 +160,36 @@ def main() -> None:
     c = sub.add_parser("unsuspend"); c.add_argument("email")
     sub.add_parser("stuck")
     sub.add_parser("selftest")
+    sub.add_parser("db-status")
+    sub.add_parser("migrate")
     c = sub.add_parser("send-test-email"); c.add_argument("--to", required=True)
+    c = sub.add_parser("takedown")
+    target = c.add_mutually_exclusive_group(required=True)
+    target.add_argument("--url"); target.add_argument("--account")
+    c.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
 
     if args.cmd == "selftest":
         sys.exit(selftest())
     if args.cmd == "send-test-email":
         sys.exit(send_test_email(args.to))
+    if args.cmd == "db-status":
+        sys.exit(db_status())
+    if args.cmd == "migrate":
+        from app.db import get_engine
+        from app.migrate import migrate
+        before, after = migrate(get_engine())
+        print(f"schema {before or 'empty'} -> {after}" if before != after else f"schema already at {after}")
+        sys.exit(0)
     init_db()
+    if args.cmd == "takedown":
+        from app.ingest.takedown import takedown
+        try:
+            report = takedown(url=args.url, account=args.account, dry_run=args.dry_run)
+        except LookupError as e:
+            sys.exit(str(e))
+        print("\n".join(report.lines()))
+        sys.exit(0)
     with new_session() as db:
         if args.cmd == "create-account":
             if len(args.password) < 8:

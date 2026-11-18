@@ -11,10 +11,138 @@ cd /root/clip-api && bash scripts/deploy.sh
 
 `scripts/deploy.sh` refuses while a job is RUNNING (it checks `admin.py stuck` before the pull and again right
 before the restart), refuses if the job list cannot be read, if tracked files were edited on the server, or if
-the checkout is not on the deploy branch. It then fast-forwards, builds `api` and `worker`, restarts only those
-two, and runs `admin.py selftest`. On a selftest failure it prints the rollback command. Caddy and Postgres are
+the checkout is not on the deploy branch. It then fast-forwards, builds `api` and `worker`, runs the schema
+migrations from the new image (`admin.py migrate`), restarts only `api` and `worker`, and runs
+`admin.py selftest`. A failed migration stops before the restart, so the old code keeps serving on an unchanged
+schema. On a selftest failure it prints the rollback command. Caddy and Postgres are
 not restarted; `web/` is served straight from the checkout, so the site updates with the pull. A change to the
 `Caddyfile` needs `docker compose up -d caddy` as well.
+
+## Schema migrations
+
+Alembic, in `app/migrations/`. Migrations are additive only (new tables, new nullable or defaulted columns, new
+indexes), so the old code keeps working while it still serves and a code rollback needs no schema rollback.
+Anything that drops, renames or rewrites data needs its own PR and the owner's OK, with a backup first.
+
+- **See where the database is (read-only):** `docker compose exec -T api python scripts/admin.py db-status`.
+  Exit 0 means it is at the latest revision. It lists anything that differs from the models.
+- **First deploy with migrations:** the production database predates them. Before that deploy, run `db-status`
+  and back up the database (`pg_dump`, as in step 1 below). It should report "from before migrations" plus, at
+  most, a missing `ix_accounts_stripe_customer_id` index. `deploy.sh` then brings the database to the baseline
+  (adding the missing columns and indexes, and making `uploads.analyzed` NOT NULL, which changes no values) and
+  stamps it. After the deploy, `db-status` must report `revision 0001 · latest 0001`.
+
+## Measuring speed
+
+Every job records where its time went: `result.stages` (seconds per pipeline stage), `result.counts` (candidates,
+clips, seconds transcribed and rendered), `result.queue_sec` and `result.total_sec` (queue + run: what a customer
+waits). Failed and cancelled jobs record it too. The goal is a 2-hour video in 10 minutes and a 4-hour video in 15.
+
+```bash
+curl -s $API/v1/jobs/<job_id> -H "authorization: Bearer $KEY" > job.json
+python scripts/job_timings.py job.json                           # stage table and the target for that length
+python scripts/job_timings.py job.json --baseline before.json    # change against an earlier job
+python scripts/job_timings.py job.json --baseline before.json --md   # the same, as a table for a PR
+```
+
+A job from before stage timing existed has only the coarse stages shown in the dashboard; comparing with one
+uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-clips 10` runs the pipeline locally
+(no AI judge) and prints the same stages.
+
+## Transcription settings
+
+- `TRANSCRIPTION_PROVIDER=local` (the only provider so far): whole recordings are transcribed by the local Whisper
+  models, in chunks cut at quiet points. Hosted providers are added with their adapters; an unknown name stops the
+  worker at start with a clear message.
+- `TRANSCRIBE_PARALLEL` (default 1, up to 8): chunks transcribed at once, for whole-recording transcription (Video
+  Finder's index today). Leave it at 1 on the 4 vCPU droplet: one model already uses every core. On a machine
+  with 8 or more cores try 2 to 4 and compare with `scripts/job_timings.py`. Each extra one adds memory.
+- `TRANSCRIBE_CHUNK_SEC` (default 300): the chunk length.
+- A transcript that Video Finder made for an upload is reused by Clip Maker for its first, rough pass, so that
+  pass costs nothing on the second job. Captions are still made by the caption model.
+
+## Running more than one job at once
+
+Default: one job at a time. Two ways to add capacity:
+
+- **`WORKER_CONCURRENCY=2`** in the server's env file, then `docker compose up -d worker` (when no job is
+  RUNNING). One worker process runs two jobs at once and shares one copy of the Whisper and CLIP models, so it
+  costs little extra memory. 2 is the limit on the 4 vCPU / 8 GB droplet: each job's ffmpeg and Whisper already
+  use every core, so two jobs each run slower, but a second customer no longer waits for the first to finish.
+  Values above 2 are rejected at start.
+- **A second worker container** (only on a bigger server, or a second one): each container loads its own
+  models (check the extra memory with `docker stats` before relying on it) and claims from the same queue; a
+  job is claimed by exactly one worker.
+  ```bash
+  docker compose up -d --scale worker=2 --no-recreate worker
+  ```
+  `deploy.sh` restarts with `up -d api worker`, which goes back to one container: run the scale command again
+  after each deploy. Total jobs at once = containers × `WORKER_CONCURRENCY`.
+
+After either change, run the 10-clip benchmark twice at the same time and compare with SPEC.md §10 B before
+relying on it.
+
+## Link import and takedowns
+
+Users can import a public video link (Twitch, Kick, direct https video links, Google Drive and Dropbox share
+links, YouTube best effort) with `POST /v1/imports`. Every import is logged in `import_log` (account, link,
+platform, consent, time) before anything is fetched. Imports are free; the job run on the imported video is what
+costs credits.
+
+`POST /v1/imports/preview {url}` shows what a link is (title, channel, length, thumbnail) before an import. It
+reads metadata only, is free, and stores nothing except a log line (`clipapi.ingest`, "import preview"). Lookups
+are capped at 10 a minute per account and 15 seconds each; answers are cached in memory for 5 minutes per link.
+`IMPORTS_ENABLED=false` switches it off too.
+
+- **Switch imports off:** set `IMPORTS_ENABLED=false` and restart `api` and `worker`. New imports are refused
+  with "upload the file instead"; imports already queued fail the same way. Uploads keep working.
+- **Caps** (defaults in brackets): `IMPORT_MAX_BYTES` (8 GB), `IMPORT_MAX_DURATION_SEC` (6 hours),
+  `IMPORT_TIMEOUT_SEC` (1800, the whole download). The upload limits (`MAX_UPLOAD_BYTES`, `MAX_DURATION_SEC`,
+  `MIN_DURATION_SEC`) apply too; the lower value wins.
+- **yt-dlp** is pinned in `requirements.txt`. Upgrade it in its own PR: the test in
+  `tests/test_ingest_platforms.py` lists every option it is given and must still pass.
+
+**Takedown request** (a rights holder asks for a video to be removed):
+
+1. See what would be removed, without changing anything:
+   `docker compose exec -T api python scripts/admin.py takedown --url "<the link>" --dry-run`
+   (or `--account <account id or email>` for everything one account imported by link).
+2. Remove it: run the same command without `--dry-run`. It prints each upload, its clips and files, and the jobs
+   it cancelled with the credits returned.
+3. If it says a job "is still stopping", run the same command again a minute later. It is safe to run any number
+   of times; a second run prints "Nothing to remove."
+4. Keep the printed output with the request. The `import_log` rows are kept: they record who imported the link.
+
+The link may be given in any form the site uses (with or without `www.`, tracking parameters, `youtu.be`): it is
+matched by its canonical form. Ordinary uploads are never touched by a takedown.
+
+## Moving files to DigitalOcean Spaces
+
+Uploads and clips are stored on the droplet's disk by default (`STORAGE_BACKEND=local`). Spaces moves them to a
+private bucket; download links become signed URLs straight from the bucket, valid for `SIGNED_URL_TTL_SEC`.
+
+**Price** (docs.digitalocean.com/products/spaces/details/pricing, checked 2026-11-15): $5.00 per month, which
+includes 250 GiB stored and 1,024 GiB of downloads; beyond that $0.02 per GiB stored per month and $0.01 per
+GiB downloaded. Transfer from a Space to a Droplet in the same region group is free, so create the Space in the
+droplet's region.
+
+1. In the DigitalOcean panel: create a Space in the droplet's region with **file listing restricted**, and a
+   Spaces access key limited to that bucket.
+2. Add to the server's env file (keep `STORAGE_BACKEND=local` for now):
+   `S3_ENDPOINT_URL=https://<region>.digitaloceanspaces.com`, `S3_REGION=<region>` (for example `nyc3`),
+   `S3_BUCKET=<space name>`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`. Then `docker compose up -d api worker`
+   when no job is RUNNING.
+3. Check the bucket, then copy the existing files (safe to repeat; nothing local is deleted):
+   ```bash
+   docker compose exec -T -e STORAGE_BACKEND=s3 api python scripts/check_storage.py
+   docker compose exec -T api python scripts/migrate_storage.py --dry-run
+   docker compose exec -T api python scripts/migrate_storage.py
+   ```
+4. Switch: set `STORAGE_BACKEND=s3`, `docker compose up -d api worker` (when no job is RUNNING), then run
+   `migrate_storage.py` once more to pick up anything written in between. It must end with `failed 0`.
+5. Run one job and download a clip. Keep the local files for a week (`data/storage` in the `data` volume), then
+   delete them. **Roll back:** set `STORAGE_BACKEND=local` and restart; files created while on Spaces are only
+   in the bucket.
 
 ## One-time switch from tarballs to git
 

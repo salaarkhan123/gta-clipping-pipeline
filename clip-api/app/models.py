@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -26,6 +26,10 @@ class Account(Base):
     plan: Mapped[str | None] = mapped_column(String(20), default="free")
     stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # What Stripe last said about the subscription: active | trialing | past_due | unpaid | paused | canceled.
+    subscription_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    subscription_cancel_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)   # set to end on this date
+    subscription_event_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)    # newest Stripe event applied
     webhook_secret: Mapped[str] = mapped_column(String(80))
     signup_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -45,6 +49,7 @@ class ApiKey(Base):
 
 class Upload(Base):
     __tablename__ = "uploads"
+    __table_args__ = (Index("ix_uploads_account_hash", "account_id", "content_hash"),)
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
     account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
     filename: Mapped[str] = mapped_column(String(255))
@@ -55,6 +60,10 @@ class Upload(Base):
     height: Mapped[int] = mapped_column(Integer)
     has_audio: Mapped[bool] = mapped_column(Boolean)
     analyzed: Mapped[bool] = mapped_column(Boolean, default=False)   # a full-price job has succeeded on it
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)   # sha256 of the file's bytes
+    source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)   # where a link import came from
+    source_platform: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    language: Mapped[str | None] = mapped_column(String(8), nullable=True)        # spoken language, once detected
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -82,6 +91,7 @@ class Job(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     idempotency_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(120), nullable=True)          # the project name the user gave
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -105,8 +115,79 @@ class Clip(Base):
     captions_key: Mapped[str | None] = mapped_column(String(400), nullable=True)
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)   # title, description, hashtags, virality
     kept: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    reaction: Mapped[str | None] = mapped_column(String(8), nullable=True)   # like | dislike
+    bookmarked: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    rank: Mapped[int | None] = mapped_column(Integer, nullable=True)              # 0 = best in its run
+    kind: Mapped[str | None] = mapped_column(String(16), nullable=True)           # funny | argument | reaction | clutch | fail | story
+    preview_key: Mapped[str | None] = mapped_column(String(400), nullable=True)   # fast low-resolution render
+    export_key: Mapped[str | None] = mapped_column(String(400), nullable=True)    # latest full-quality render
+    export_res: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    edit: Mapped[dict | None] = mapped_column(JSON, nullable=True)                # edit decisions saved by the editor
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class ClipFeedback(Base):
+    """Append-only log of what users did with clips: training data for the future ranker. Current state is on Clip."""
+    __tablename__ = "clip_feedback"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clip_id: Mapped[str] = mapped_column(ForeignKey("clips.id"), index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(12))    # kept | reaction | bookmarked
+    value: Mapped[str | None] = mapped_column(String(8), nullable=True)   # true/false, like/dislike, or NULL = cleared
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Export(Base):
+    """One request to render a clip at full quality with given options."""
+    __tablename__ = "exports"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    clip_id: Mapped[str] = mapped_column(ForeignKey("clips.id"), index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    resolution: Mapped[str] = mapped_column(String(8))
+    options: Mapped[dict] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(12), default="QUEUED")
+    storage_key: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ImportLog(Base):
+    """Append-only record of every link import: who asked for which URL and that they confirmed their rights."""
+    __tablename__ = "import_log"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    source_url: Mapped[str] = mapped_column(String(1000))
+    platform: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    consent: Mapped[bool] = mapped_column(Boolean)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class CustomTemplate(Base):
+    """A look an account saved for reuse: a name and the clip options it sets. Never changes what a job costs."""
+    __tablename__ = "custom_templates"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    options: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class Payment(Base):
+    """One paid Stripe purchase that granted credits: a credit pack (Checkout Session) or a plan invoice.
+    Kept so a refund or dispute can take back exactly what that payment granted, once."""
+    __tablename__ = "payments"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(12))                       # pack | plan
+    stripe_ref: Mapped[str] = mapped_column(String(80), unique=True)    # Checkout Session id or invoice id
+    payment_intent: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    amount_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    credits: Mapped[int] = mapped_column(Integer)                       # granted by this payment
+    credits_removed: Mapped[int] = mapped_column(Integer, default=0)    # taken back (or written off) after refunds
+    status: Mapped[str] = mapped_column(String(12), default="paid")     # paid | partial | refunded | disputed
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class CreditLedger(Base):

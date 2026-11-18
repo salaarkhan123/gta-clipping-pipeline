@@ -1,0 +1,413 @@
+{
+ "source": [
+  1920,
+  1080
+ ],
+ "cams": {
+  "preset-top-right": "top-right",
+  "box-bottom-left": [
+   0.1719,
+   0.7861,
+   0.1859,
+   0.2111
+  ]
+ },
+ "face": [
+  0.26,
+  0.86,
+  0.07,
+  0.139
+ ],
+ "plans": {
+  "9:16/split/preset-top-right": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=546:324:1358:0,scale=1080:640,setsar=1[top];[b]crop=910:1080:394:0,scale=1080:1280,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 580,
+   "hook_top": 760,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "9:16/split/box-bottom-left": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=356:210:330:856,scale=1080:640,setsar=1[top];[b]crop=910:1080:724:0,scale=1080:1280,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 580,
+   "hook_top": 760,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "9:16/split/box-bottom-left+face": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=366:216:314:800,scale=1080:640,setsar=1[top];[b]crop=910:1080:724:0,scale=1080:1280,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 580,
+   "hook_top": 760,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "9:16/split2/preset-top-right": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=546:324:1358:0,scale=1080:640,setsar=1[top];[b]crop=910:1080:394:0,scale=1080:1280,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 580,
+   "hook_top": 760,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "9:16/split2/box-bottom-left": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=356:210:330:856,scale=1080:640,setsar=1[top];[b]crop=910:1080:724:0,scale=1080:1280,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 580,
+   "hook_top": 760,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "9:16/split2/box-bottom-left+face": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=366:216:314:800,scale=1080:640,setsar=1[top];[b]crop=910:1080:724:0,scale=1080:1280,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 580,
+   "hook_top": 760,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "9:16/gameplay_a/preset-top-right": {
+   "layout": "gameplay_a",
+   "graph": "[0:v]split=2[a][b];[a]crop=364:324:1448:0,scale=1080:960,setsar=1[top];[b]crop=1214:1080:90:0,scale=1080:960,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 900,
+   "hook_top": 1080,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "9:16/gameplay_a/box-bottom-left": {
+   "layout": "gameplay_a",
+   "graph": "[0:v]split=2[a][b];[a]crop=256:226:380:848,scale=1080:960,setsar=1[top];[b]crop=1156:1028:724:24,scale=1080:960,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 900,
+   "hook_top": 1080,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "9:16/gameplay_a/box-bottom-left+face": {
+   "layout": "gameplay_a",
+   "graph": "[0:v]split=2[a][b];[a]crop=256:226:380:800,scale=1080:960,setsar=1[top];[b]crop=1156:1028:724:24,scale=1080:960,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 900,
+   "hook_top": 1080,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "9:16/gameplay_b/preset-top-right": {
+   "layout": "gameplay_b",
+   "graph": "[0:v]split=2[a][b];[a]crop=1214:1080:90:0,scale=1080:960,setsar=1[top];[b]crop=364:324:1448:0,scale=1080:960,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 810,
+   "hook_top": 192,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "9:16/gameplay_b/box-bottom-left": {
+   "layout": "gameplay_b",
+   "graph": "[0:v]split=2[a][b];[a]crop=1156:1028:724:24,scale=1080:960,setsar=1[top];[b]crop=256:226:380:848,scale=1080:960,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 810,
+   "hook_top": 192,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "9:16/gameplay_b/box-bottom-left+face": {
+   "layout": "gameplay_b",
+   "graph": "[0:v]split=2[a][b];[a]crop=1156:1028:724:24,scale=1080:960,setsar=1[top];[b]crop=256:226:380:800,scale=1080:960,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 810,
+   "hook_top": 192,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "9:16/screen_first/preset-top-right": {
+   "layout": "screen_first",
+   "graph": "[0:v]split=2[a][b];[a]crop=866:1080:436:0,scale=1080:1344,setsar=1[top];[b]crop=576:306:1344:8,scale=1080:576,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 1194,
+   "hook_top": 192,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "9:16/screen_first/box-bottom-left": {
+   "layout": "screen_first",
+   "graph": "[0:v]split=2[a][b];[a]crop=866:1080:724:0,scale=1080:1344,setsar=1[top];[b]crop=356:190:330:866,scale=1080:576,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 1194,
+   "hook_top": 192,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "9:16/screen_first/box-bottom-left+face": {
+   "layout": "screen_first",
+   "graph": "[0:v]split=2[a][b];[a]crop=866:1080:724:0,scale=1080:1344,setsar=1[top];[b]crop=408:216:294:800,scale=1080:576,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 1194,
+   "hook_top": 192,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "4:5/split/preset-top-right": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=576:240:1344:42,scale=1080:450,setsar=1[top];[b]crop=1296:1080:8:0,scale=1080:900,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 390,
+   "hook_top": 570,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "4:5/split/box-bottom-left": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=356:148:330:888,scale=1080:450,setsar=1[top];[b]crop=1126:938:724:70,scale=1080:900,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 390,
+   "hook_top": 570,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "4:5/split/box-bottom-left+face": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=522:216:236:800,scale=1080:450,setsar=1[top];[b]crop=1126:938:724:70,scale=1080:900,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 390,
+   "hook_top": 570,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "4:5/split2/preset-top-right": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=576:240:1344:42,scale=1080:450,setsar=1[top];[b]crop=1296:1080:8:0,scale=1080:900,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 390,
+   "hook_top": 570,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "4:5/split2/box-bottom-left": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=356:148:330:888,scale=1080:450,setsar=1[top];[b]crop=1126:938:724:70,scale=1080:900,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 390,
+   "hook_top": 570,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "4:5/split2/box-bottom-left+face": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=522:216:236:800,scale=1080:450,setsar=1[top];[b]crop=1126:938:724:70,scale=1080:900,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 390,
+   "hook_top": 570,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "4:5/gameplay_a/preset-top-right": {
+   "layout": "gameplay_a",
+   "graph": "[0:v]split=2[a][b];[a]crop=518:324:1372:0,scale=1080:674,setsar=1[top];[b]crop=1278:800:26:140,scale=1080:676,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 614,
+   "hook_top": 794,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "4:5/gameplay_a/box-bottom-left": {
+   "layout": "gameplay_a",
+   "graph": "[0:v]split=2[a][b];[a]crop=356:222:330:850,scale=1080:674,setsar=1[top];[b]crop=1278:800:320:26,scale=1080:676,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 614,
+   "hook_top": 794,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "4:5/gameplay_a/box-bottom-left+face": {
+   "layout": "gameplay_a",
+   "graph": "[0:v]split=2[a][b];[a]crop=356:222:330:800,scale=1080:674,setsar=1[top];[b]crop=1278:800:320:0,scale=1080:676,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 614,
+   "hook_top": 794,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "4:5/gameplay_b/preset-top-right": {
+   "layout": "gameplay_b",
+   "graph": "[0:v]split=2[a][b];[a]crop=1278:800:26:140,scale=1080:676,setsar=1[top];[b]crop=518:324:1372:0,scale=1080:674,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 526,
+   "hook_top": 135,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "4:5/gameplay_b/box-bottom-left": {
+   "layout": "gameplay_b",
+   "graph": "[0:v]split=2[a][b];[a]crop=1278:800:320:26,scale=1080:676,setsar=1[top];[b]crop=356:222:330:850,scale=1080:674,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 526,
+   "hook_top": 135,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "4:5/gameplay_b/box-bottom-left+face": {
+   "layout": "gameplay_b",
+   "graph": "[0:v]split=2[a][b];[a]crop=1278:800:320:0,scale=1080:676,setsar=1[top];[b]crop=356:222:330:800,scale=1080:674,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 526,
+   "hook_top": 135,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "4:5/screen_first/preset-top-right": {
+   "layout": "screen_first",
+   "graph": "[0:v]split=2[a][b];[a]crop=1232:1080:72:0,scale=1080:946,setsar=1[top];[b]crop=576:214:1344:54,scale=1080:404,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 796,
+   "hook_top": 135,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "4:5/screen_first/box-bottom-left": {
+   "layout": "screen_first",
+   "graph": "[0:v]split=2[a][b];[a]crop=1120:980:724:48,scale=1080:946,setsar=1[top];[b]crop=356:132:330:896,scale=1080:404,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 796,
+   "hook_top": 135,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "4:5/screen_first/box-bottom-left+face": {
+   "layout": "screen_first",
+   "graph": "[0:v]split=2[a][b];[a]crop=1120:980:724:48,scale=1080:946,setsar=1[top];[b]crop=580:216:208:800,scale=1080:404,setsar=1[bot];[top][bot]vstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 796,
+   "hook_top": 135,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "16:9/split/preset-top-right": {
+   "layout": "full",
+   "graph": "[0:v]crop=1920:1080:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "16:9/split/box-bottom-left": {
+   "layout": "full",
+   "graph": "[0:v]crop=1920:1080:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "16:9/split/box-bottom-left+face": {
+   "layout": "full",
+   "graph": "[0:v]crop=1920:1080:0:0,scale=1920:1080,setsar=1,format=yuv420p[v]",
+   "caption_top": 671,
+   "hook_top": 194,
+   "text_span": [
+    0.0,
+    1.0
+   ]
+  },
+  "16:9/split2/preset-top-right": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=192:324:1536:0,scale=640:1080,setsar=1[left];[b]crop=1280:1080:24:0,scale=1280:1080,setsar=1[right];[left][right]hstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "text_span": [
+    0.3333333333333333,
+    1.0
+   ]
+  },
+  "16:9/split2/box-bottom-left": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=134:226:440:848,scale=640:1080,setsar=1[left];[b]crop=1162:980:724:48,scale=1280:1080,setsar=1[right];[left][right]hstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "text_span": [
+    0.3333333333333333,
+    1.0
+   ]
+  },
+  "16:9/split2/box-bottom-left+face": {
+   "layout": "split2",
+   "graph": "[0:v]split=2[a][b];[a]crop=174:294:410:762,scale=640:1080,setsar=1[left];[b]crop=1162:980:724:48,scale=1280:1080,setsar=1[right];[left][right]hstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "text_span": [
+    0.3333333333333333,
+    1.0
+   ]
+  },
+  "16:9/screen_first/preset-top-right": {
+   "layout": "screen_first",
+   "graph": "[0:v]split=2[a][b];[a]crop=1258:980:46:48,scale=1384:1080,setsar=1[left];[b]crop=160:324:1550:0,scale=536:1080,setsar=1[right];[left][right]hstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "text_span": [
+    0.0,
+    0.7208333333333333
+   ]
+  },
+  "16:9/screen_first/box-bottom-left": {
+   "layout": "screen_first",
+   "graph": "[0:v]split=2[a][b];[a]crop=1152:900:724:90,scale=1384:1080,setsar=1[left];[b]crop=112:226:450:848,scale=536:1080,setsar=1[right];[left][right]hstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "text_span": [
+    0.0,
+    0.7208333333333333
+   ]
+  },
+  "16:9/screen_first/box-bottom-left+face": {
+   "layout": "screen_first",
+   "graph": "[0:v]split=2[a][b];[a]crop=1152:900:724:90,scale=1384:1080,setsar=1[left];[b]crop=174:352:410:726,scale=536:1080,setsar=1[right];[left][right]hstack=inputs=2,format=yuv420p[v]",
+   "caption_top": 756,
+   "hook_top": 194,
+   "text_span": [
+    0.0,
+    0.7208333333333333
+   ]
+  }
+ }
+}

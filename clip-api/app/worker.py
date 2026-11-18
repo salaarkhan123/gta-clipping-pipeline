@@ -1,5 +1,6 @@
 """Job worker. Claims QUEUED jobs from Postgres (FOR UPDATE SKIP LOCKED), runs the pipeline,
-stores results and settles credits. Run several copies to process jobs in parallel.
+stores results and settles credits. WORKER_CONCURRENCY jobs run at once in one process (default 1);
+several worker processes can also share one queue: a job is claimed by exactly one of them.
 
     python -m app.worker
 """
@@ -7,6 +8,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import shutil
 import tempfile
 import threading
@@ -15,17 +17,20 @@ from datetime import timedelta
 from pathlib import Path
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from . import ledger
+from . import languages
 from .ai import default_ai
 from .config import get_settings
 from .plans import plan_of
 from .db import init_db, new_session
 from .models import Account, Clip, Job, Upload, WebhookDelivery, new_id, utcnow
-from .pipeline import Deadline, PipelineError, PipelineOptions, run_pipeline
+from .pipeline import Deadline, PipelineError, PipelineOptions, Timer, run_pipeline
 from .pipeline.tools import RenderOptions, run_find, run_render
-from .pipeline.transcribe import FasterWhisperTranscriber, Transcriber
+from .pipeline.stt import provider_for
+from .pipeline.transcribe import FasterWhisperTranscriber, Transcriber, Transcript, in_language
+from .pipeline.translate import detect_language, run_text_job, transcript_language, translate_captions
 from .pipeline.visual import FastembedClip
 from .security import is_public_https_url
 from .storage import get_storage, transcript_key, vindex_key
@@ -41,26 +46,69 @@ class Lost(Exception):
     """The job was finalised by someone else (e.g. the stale-job sweeper) while we were working."""
 
 
+def credits_of(seconds: float) -> int:
+    """Credits for a number of seconds: one per started minute (the same rule as routes_media.credits_for)."""
+    return max(1, math.ceil(seconds / 60))
+
 def claim_job() -> str | None:
+    """Claim the oldest QUEUED job for this caller only. The conditional UPDATE decides the winner, so two
+    claimers never get the same job on any database (SKIP LOCKED only keeps Postgres claimers from waiting)."""
     with new_session() as db:
-        job = db.execute(select(Job).where(Job.status == "QUEUED").order_by(Job.created_at)
-                         .limit(1).with_for_update(skip_locked=True)).scalar_one_or_none()
-        if not job:
-            return None
-        job.status, job.started_at, job.heartbeat_at, job.stage = "RUNNING", utcnow(), utcnow(), "starting"
-        db.commit()
-        return job.id
+        for _ in range(5):
+            job_id = db.execute(select(Job.id).where(Job.status == "QUEUED").order_by(Job.created_at)
+                                .limit(1).with_for_update(skip_locked=True)).scalar_one_or_none()
+            if not job_id:
+                return None
+            now = utcnow()
+            won = db.execute(update(Job).where(Job.id == job_id, Job.status == "QUEUED")
+                             .values(status="RUNNING", started_at=now, heartbeat_at=now, stage="starting")).rowcount
+            db.commit()
+            if won:
+                return job_id
+        return None
 
 
 def default_transcriber() -> Transcriber | None:
     model = get_settings().whisper_model
-    return None if model.lower() == "none" else FasterWhisperTranscriber(model)
+    if model.lower() == "none":
+        return None
+    other = languages.caption_model()          # (languages) for speech that is not English
+    return FasterWhisperTranscriber(model, multilingual=None if other.lower() in ("none", model) else other)
 
 
 def default_indexer() -> Transcriber | None:
     """Faster, smaller model used only to build the full-video search transcript."""
     model = get_settings().whisper_index_model
-    return None if model.lower() == "none" else FasterWhisperTranscriber(model, beam_size=1, words=False)
+    if model.lower() == "none":
+        return None
+    other = languages.index_model()            # (languages) for speech that is not English
+    return FasterWhisperTranscriber(model, beam_size=1, words=False,
+                                    multilingual=None if other.lower() in ("none", model) else other)
+
+
+def spoken_language(upload_id: str, asked: str | None, has_audio: bool, src: Path, duration: float, work: Path,
+                    deadline, detectors, starting=lambda: None) -> tuple[str | None, bool]:
+    """(languages, agent F) The language a job transcribes in, and whether it was detected just now.
+    The one asked for; else the one detected on this upload before; else, with detection on, the one detected now
+    (stored on the upload). None: unknown, and the English models are used as they always were."""
+    if asked:
+        return asked, False
+    with new_session() as db:
+        known = db.get(Upload, upload_id).language
+    if known:
+        return known, False
+    probe_with = next((d.language_probs for d in detectors
+                       if d is not None and getattr(d, "language_probs", None) is not None
+                       and getattr(d, "multilingual", True)), None)
+    if not (get_settings().language_detect and has_audio and probe_with is not None):
+        return None, False
+    starting()
+    found, _sure = detect_language(src, duration, probe_with, work, deadline)
+    if found:
+        with new_session() as db:
+            db.get(Upload, upload_id).language = found
+            db.commit()
+    return found, found is not None
 
 
 def default_embedder():
@@ -93,6 +141,9 @@ def clip_text(r) -> str:
 def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=run_pipeline,
                 indexer: Transcriber | None = None, embedder=None, ai=None) -> str:
     """Run one claimed job to a final state. Always settles credits. Returns the final status."""
+    if job_id.startswith("imp_"):       # link import (agent E): no stored source yet; app/ingest runs it to the end
+        from .ingest.runner import run_import
+        return run_import(job_id)
     s = get_settings()
     storage = get_storage()
     with new_session() as db:
@@ -101,16 +152,36 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
         options, duration = dict(job.options), job.duration_sec
         options["max_side"] = plan_of(db.get(Account, job.account_id)).get("max_side")
         src_key, ext, upload_id = upload.storage_key, Path(upload.storage_key).suffix, upload.id
+        has_audio, video_sec = upload.has_audio, upload.duration_sec
 
     work = Path(tempfile.mkdtemp(prefix="job_", dir=s.work_dir))
     stop = threading.Event()
     threading.Thread(target=_heartbeat, args=(job_id, stop), daemon=True).start()
     status, error = "FAILED", ("processing_failed", "Something went wrong while processing this video.")
     stored: list[str] = []   # storage keys written so far, removed again if the job does not succeed
+    # Two views of where the time went: `timings` follows the stage shown to the user; `timer` has the finer
+    # pipeline stages and work counts used for benchmarks (scripts/job_timings.py).
+    timings: dict[str, float] = {}
+    timer = Timer()
+    mark = [time.monotonic(), "starting"]
+    t_start = mark[0]
+
+    first_clip: list[float] = []      # seconds from the start of the run to the first clip being watchable
+
+    def measured() -> dict:
+        elapsed = time.monotonic() - t_start
+        coarse = dict(timings)
+        coarse[mark[1]] = coarse.get(mark[1], 0.0) + time.monotonic() - mark[0]
+        return {"elapsed_sec": round(elapsed, 1), "speed_x": round(duration / max(elapsed, 0.1), 1),
+                "timings": {k: round(v, 1) for k, v in coarse.items() if v >= 0.05}, **timer.as_dict(),
+                **({"first_clip_sec": round(first_clip[0], 1)} if first_clip else {})}
+
+    def waited(job: Job) -> dict:
+        """Queue time and the end-to-end time a customer sees: from submitting the job to its result."""
+        queue = max(0.0, (job.started_at - job.created_at).total_seconds()) if job.started_at else 0.0
+        return {"queue_sec": round(queue, 1), "total_sec": round(queue + time.monotonic() - t_start, 1)}
+
     try:
-        timings: dict[str, float] = {}
-        mark = [time.monotonic(), "starting"]
-        t_start = mark[0]
 
         def progress(stage: str, pct: int) -> None:
             if stage != mark[1]:
@@ -127,10 +198,92 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
 
         progress("downloading", 1)
         src = work / f"source{ext}"
-        storage.fetch(src_key, src)
+        with timer.stage("download"):
+            storage.fetch(src_key, src)
         deadline = Deadline(max(900.0, duration * s.job_timeout_factor))
         tool, result = options.pop("tool", "clips"), None
-        if tool == "render":
+        charge_basis = options.pop("charge_basis", None)   # "rendered": settle on the seconds rendered (re-runs)
+        handed_over: set[int] = set()      # clips already stored (by object), so none is stored twice
+        # (languages, agent F) The spoken language: asked for, known, or detected now. English or unknown leaves
+        # the transcribers exactly as they were; any other language hands over to the multilingual models.
+        asked = options.pop("source_lang", None)
+        target = options.pop("target_lang", None)
+        options.pop("caption_display", None)
+        language, detected = asked, False
+        if transcriber is not None or indexer is not None:
+            language, detected = spoken_language(upload_id, asked, has_audio, src, video_sec, work, deadline,
+                                                 (indexer, transcriber), lambda: progress("language", 2))
+        transcriber, indexer = in_language(transcriber, language), in_language(indexer, language)
+        copy_lang = target or language          # titles and hooks: asked for in this language when it is not English
+        lang_ctx = {"language": copy_lang} if copy_lang and copy_lang != "en" else {}
+        caption_translator = languages.translator(ai) if target and target != (language or "en") else None
+        translation = {"status": None if not target or target == (language or "en")
+                       else ("pending" if caption_translator else "not_configured")}
+
+        def save_clip(r, idx: int) -> None:
+            """Store one finished clip and make it visible now, while the job is still running."""
+            meta = getattr(r, "meta", None)             # the judge already rated it, or:
+            if meta is None and ai is not None and tool in ("clips", "find"):
+                with timer.stage("titles"):
+                    meta = ai.clip_meta(clip_text(r), {"length": r.end - r.start, "signals": r.signals, **lang_ctx},
+                                        r.thumb_path)
+            if caption_translator is not None and r.captions_path and r.captions_path.exists():
+                # (languages) the clip's subtitle lines in the target language, kept in its captions file. Like the
+                # AI's copy this is optional: a clip whose translation failed is still a finished clip.
+                try:
+                    with timer.stage("translate"):
+                        caps = translate_captions(json.loads(r.captions_path.read_text()), caption_translator,
+                                                  language or "en", target)
+                    r.captions_path.write_text(json.dumps(caps))
+                    if translation["status"] != "partial":
+                        translation["status"] = "done"
+                except Exception:
+                    log.exception("caption translation failed for a clip of %s", job_id)
+                    translation["status"] = "partial"
+            # No AI, no score: a number made from loudness alone would mislead.
+            clip_id = new_id("clip")
+            base = f"clips/{job_id}/{clip_id}"
+            thumb_key = caps_key = None
+            with timer.stage("store"):
+                storage.put(f"{base}.mp4", r.video_path)
+                stored.append(f"{base}.mp4")
+                if r.thumb_path and r.thumb_path.exists():
+                    thumb_key = f"{base}.jpg"
+                    storage.put(thumb_key, r.thumb_path)
+                    stored.append(thumb_key)
+                if r.captions_path and r.captions_path.exists():
+                    caps_key = f"{base}.captions.json"
+                    storage.put(caps_key, r.captions_path)
+                    stored.append(caps_key)
+            with new_session() as db:
+                job = db.execute(select(Job).where(Job.id == job_id).with_for_update()).scalar_one()
+                if job.status != "RUNNING":
+                    raise Lost()
+                if job.cancel_requested:
+                    raise Canceled()
+                db.add(Clip(id=clip_id, job_id=job_id, idx=idx, start_sec=r.start, end_sec=r.end, score=r.score,
+                            signals=r.signals, features=r.features, video_key=f"{base}.mp4",
+                            thumb_key=thumb_key, captions_key=caps_key, meta=meta))
+                db.commit()
+            if not handed_over:
+                first_clip.append(time.monotonic() - t_start)
+            handed_over.add(id(r))
+        if tool in ("transcript", "summary"):
+            # (languages, agent F) The whole video's transcript (stored once per upload, shared with Video Finder),
+            # its translation, or its summary.
+            tkey, cached = transcript_key(upload_id), None
+            if storage.exists(tkey):
+                storage.fetch(tkey, work / "transcript.json")
+                cached = json.loads((work / "transcript.json").read_text())
+            tr = indexer or transcriber
+            stt = provider_for(s.transcription_provider, tr, s.transcribe_chunk_sec, s.transcribe_parallel)
+            new_t, result = run_text_job(tool, src, video_sec, language, target, cached, stt, languages.translator(ai),
+                                         languages.summarizer(ai), work / "out", progress, deadline, detected)
+            if new_t is not None:
+                (work / "transcript.json").write_text(json.dumps(new_t))
+                storage.put(tkey, work / "transcript.json")
+            results = []
+        elif tool == "render":
             segments = options.pop("segments")
             results = run_render(src, segments, RenderOptions(caption_font=s.caption_font, **options),
                                  work / "out", progress, transcriber, deadline)
@@ -142,6 +295,8 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             if storage.exists(tkey):
                 storage.fetch(tkey, work / "transcript.json")
                 cached_t = json.loads((work / "transcript.json").read_text())
+                if transcript_language(cached_t) != (language or "en"):
+                    cached_t = None                 # (languages) made in another language: transcribe again
             if storage.exists(vkey):
                 import numpy as np
                 storage.fetch(vkey, work / "vindex.npz")
@@ -150,9 +305,12 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             results, result, new_t, new_v = run_find(
                 src, query, max_results, make_clips, clip_length,
                 RenderOptions(caption_font=s.caption_font, **options), work / "out", progress, transcriber,
-                deadline, cached_t, mode=mode, embedder=embedder, vindex=cached_v, indexer=indexer)
+                deadline, cached_t, mode=mode, embedder=embedder, vindex=cached_v, indexer=indexer,
+                provider=provider_for(s.transcription_provider, indexer or transcriber, s.transcribe_chunk_sec,
+                                      s.transcribe_parallel))
             # Keep both indexes so later searches on this upload skip the expensive part.
             if new_t is not None:
+                new_t.update(language=language or "en", language_detected=detected)
                 (work / "transcript.json").write_text(json.dumps(new_t))
                 storage.put(tkey, work / "transcript.json")
             if new_v is not None:
@@ -160,59 +318,47 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 np.savez(work / "vindex.npz", emb=new_v["emb"], step=new_v["step"])
                 storage.put(vkey, work / "vindex.npz")
         else:
-            opts = PipelineOptions(caption_font=s.caption_font, **options)
+            opts = PipelineOptions(caption_font=s.caption_font, source_lang=language, target_lang=target, **options)
             # The pipeline's judge takes (text, frame, context); the AI client takes (text, context, frame).
-            extra = ({"judge": lambda text, frame, ctx: ai.clip_meta(text, ctx, frame), "fast_transcriber": indexer}
-                     if ai is not None else {})
-            results = pipeline(src, opts, work / "out", progress, transcriber, deadline, **extra)
-
-        metas = [None] * len(results)
-        if tool in ("clips", "find"):
-            if ai is not None:
-                progress("writing_titles", 98)
-            for k, r in enumerate(results):
-                if getattr(r, "meta", None) is not None:   # the judge already rated this clip
-                    metas[k] = r.meta
-                    continue
-                meta = ai.clip_meta(clip_text(r), {"length": r.end - r.start, "signals": r.signals},
-                                    r.thumb_path) if ai is not None else None
-                metas[k] = meta   # no AI, no score: a number made from loudness alone would mislead
+            extra = ({"judge": lambda text, frame, ctx: ai.clip_meta(text, {**ctx, **lang_ctx}, frame),
+                      "fast_transcriber": indexer} if ai is not None else {})
+            # A transcript this upload already has (Video Finder made one) replaces the rough pass.
+            saved = None
+            if ai is not None and indexer is not None and storage.exists(transcript_key(upload_id)):
+                storage.fetch(transcript_key(upload_id), work / "transcript.json")
+                saved = json.loads((work / "transcript.json").read_text())
+                if transcript_language(saved) != (language or "en"):
+                    saved = None                    # (languages) made in another language: not reused
+            if saved is not None:
+                extra["transcript"] = Transcript(words=[tuple(w) for w in saved.get("words", [])],
+                                                 segments=[(x["start"], x["end"], x["text"]) for x in saved.get("segments", [])])
+            results = pipeline(src, opts, work / "out", progress, transcriber, deadline, timer=timer,
+                               on_clip=lambda r: save_clip(r, r.index), **extra)
 
         progress("uploading", 99)
-        rows = []
-        for i, r in enumerate(results, 1):
-            clip_id = new_id("clip")
-            base = f"clips/{job_id}/{clip_id}"
-            storage.put(f"{base}.mp4", r.video_path)
-            stored.append(f"{base}.mp4")
-            thumb_key = caps_key = None
-            if r.thumb_path and r.thumb_path.exists():
-                thumb_key = f"{base}.jpg"
-                storage.put(thumb_key, r.thumb_path)
-                stored.append(thumb_key)
-            if r.captions_path and r.captions_path.exists():
-                caps_key = f"{base}.captions.json"
-                storage.put(caps_key, r.captions_path)
-                stored.append(caps_key)
-            rows.append(Clip(id=clip_id, job_id=job_id, idx=i, start_sec=r.start, end_sec=r.end, score=r.score,
-                             signals=r.signals, features=r.features, video_key=f"{base}.mp4",
-                             thumb_key=thumb_key, captions_key=caps_key, meta=metas[i - 1]))
+        for i, r in enumerate(results, 1):          # tools that hand their clips over at the end
+            if id(r) not in handed_over:
+                save_clip(r, r.index or i)
         with new_session() as db:
             job = db.execute(select(Job).where(Job.id == job_id).with_for_update()).scalar_one()
             if job.status != "RUNNING":
                 raise Lost()
             if job.cancel_requested:
                 raise Canceled()
-            db.add_all(rows)
-            elapsed = time.monotonic() - t_start
-            timings[mark[1]] = timings.get(mark[1], 0.0) + time.monotonic() - mark[0]
-            job.result = {**(result or {}), "elapsed_sec": round(elapsed, 1),
-                          "speed_x": round(duration / max(elapsed, 0.1), 1),
-                          "timings": {k: round(v, 1) for k, v in timings.items() if v >= 0.05}}
-            if tool in ("clips", "find"):
+            if translation["status"] == "pending":
+                translation["status"] = "no_captions"        # nothing had captions to translate
+            spoken = {"language": language, "language_detected": detected}
+            job.result = {**spoken, **(result or {}), **measured(), **waited(job),
+                          **({"translation": translation["status"]} if tool not in ("transcript", "summary")
+                             and translation["status"] else {})}
+            if tool in ("clips", "find") or (tool in ("transcript", "summary") and charge_basis != "rendered"):
                 db.get(Upload, job.upload_id).analyzed = True
             job.status, job.progress, job.stage, job.finished_at = "SUCCEEDED", 100, "done", utcnow()
-            ledger.settle(db, job, success=True)
+            charged = None                                  # None: the whole reservation, as for a first run
+            if charge_basis == "rendered":
+                rendered = float(timer.as_dict()["counts"].get("rendered_sec") or 0)
+                charged = credits_of(rendered) if rendered > 0 else 0
+            ledger.settle(db, job, success=True, charged=charged)
             db.commit()
         status, error = "SUCCEEDED", None
     except Canceled:
@@ -236,14 +382,18 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 log.exception("could not remove %s", key)
         with new_session() as db:
             job = db.execute(select(Job).where(Job.id == job_id).with_for_update()).scalar_one()
+            # Clips stored while the job ran are gone with it: a job that did not succeed shows nothing.
+            db.execute(update(Clip).where(Clip.job_id == job_id, Clip.deleted_at.is_(None)).values(deleted_at=utcnow()))
             if job.status == "RUNNING":
                 job.status, job.finished_at = status, utcnow()
                 if error:
                     job.error_code, job.error_message = error
+                job.result = {**measured(), **waited(job)}   # where a failed or cancelled job spent its time
                 ledger.settle(db, job, success=False)   # refund
                 db.commit()
             else:
                 status = job.status   # already finalised and settled elsewhere; leave it alone
+                db.commit()           # (the clips above still go)
     send_webhook(job_id)
     return status
 
@@ -282,12 +432,23 @@ def sweep_stale_jobs() -> int:
     with new_session() as db:
         stale = db.execute(select(Job).where(Job.status == "RUNNING", Job.heartbeat_at < cutoff)
                            .with_for_update(skip_locked=True)).scalars().all()
+        orphans: list[str] = []
         for job in stale:
             job.status, job.finished_at = "FAILED", utcnow()
             job.error_code, job.error_message = "worker_lost", "Processing was interrupted. Your credits were refunded."
             ledger.settle(db, job, success=False)
+            # Clips the dead worker had already stored: hide them and remove their files.
+            for clip in db.execute(select(Clip).where(Clip.job_id == job.id, Clip.deleted_at.is_(None))).scalars():
+                orphans += [k for k in (clip.video_key, clip.thumb_key, clip.captions_key) if k]
+                clip.deleted_at = utcnow()
             n += 1
         db.commit()
+    storage = get_storage()
+    for key in orphans:
+        try:
+            storage.delete(key)
+        except Exception:
+            log.exception("could not remove %s", key)
     return n
 
 
@@ -331,22 +492,41 @@ def main() -> None:
         import sentry_sdk
         sentry_sdk.init(dsn=s.sentry_dsn, traces_sample_rate=0.0)
     init_db()
+    provider_for(s.transcription_provider, None)                 # an unknown provider stops the worker here, not mid-job
+    FasterWhisperTranscriber.workers = s.transcribe_parallel     # before the models load
     transcriber, indexer, embedder = default_transcriber(), default_indexer(), default_embedder()
     log.info("worker started (captions: %s, search index: %s, visual search: %s)",
              s.whisper_model, s.whisper_index_model, s.visual_search)
-    last_sweep = 0.0
-    while True:
+    log.info("running up to %s job(s) at once", s.worker_concurrency)
+    serve(s.worker_concurrency, threading.Event(), transcriber, indexer=indexer, embedder=embedder)
+
+
+def _slot(i: int, stop: threading.Event, transcriber, pipeline, indexer, embedder, ai) -> None:
+    """One job at a time until stop is set. Slot 0 also runs the sweeps."""
+    poll, last_sweep = get_settings().worker_poll_sec, 0.0
+    while not stop.is_set():
         try:
-            if time.monotonic() - last_sweep > 60:
+            if i == 0 and time.monotonic() - last_sweep > 60:
                 last_sweep = time.monotonic()
                 stale, expired = sweep_stale_jobs(), sweep_expired()
                 if stale or expired:
                     log.info("sweep: %s stale jobs refunded, %s expired files deleted", stale, expired)
-            if run_once(transcriber, indexer=indexer, embedder=embedder, ai=default_ai()) is None:
-                time.sleep(s.worker_poll_sec)
+            if run_once(transcriber, pipeline, indexer, embedder, ai or default_ai()) is None:
+                stop.wait(poll)
         except Exception:
             log.exception("worker loop error")
-            time.sleep(5)
+            stop.wait(5)
+
+
+def serve(concurrency: int, stop: threading.Event, transcriber: Transcriber | None = None, pipeline=run_pipeline,
+          indexer: Transcriber | None = None, embedder=None, ai=None) -> None:
+    """Run `concurrency` job slots until stop is set; returns when every slot has finished its current job."""
+    slots = [threading.Thread(target=_slot, args=(i, stop, transcriber, pipeline, indexer, embedder, ai),
+                              name=f"slot-{i}") for i in range(concurrency)]
+    for t in slots:
+        t.start()
+    for t in slots:
+        t.join()
 
 
 if __name__ == "__main__":

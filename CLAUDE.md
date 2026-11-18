@@ -10,7 +10,7 @@ Project: a public clip-generation API + website for GTA 6 clippers, with credit-
 - `code/`, `design-docs/`, `docs/` belong to a different, earlier design (multi-agent business automation). Leave them alone.
 
 ## Current phase
-Re-engineering plan (SPEC.md section 13), phase by phase: a phase starts only after the owner has merged the one before. Tickets live on the ClutchClips build board (phase:N labels). Build PRs directly into `staging`; the board is for tracking only.
+North-star goal first (SPEC.md section 14): a 2-hour VOD gives 30–50 ranked clips with previews in 10 minutes. Build the speed track (S0, S3, S1, S2, S4) and the understanding track (U1–U7) before anything else; every speed PR reports before/after with `scripts/job_timings.py`, every selection PR reports the eval set. The rest of the re-engineering plan (SPEC.md section 13) follows. Tickets live on the ClutchClips build board (`track:speed`, `track:understanding`, `phase:N` labels). Build PRs directly into `staging`; the board is for tracking only.
 
 ## Rules
 - Ingestion: uploads, Google Drive / Dropbox imports, and public-link import (Twitch and Kick first; YouTube best effort, "may fail, upload instead").
@@ -24,7 +24,7 @@ Re-engineering plan (SPEC.md section 13), phase by phase: a phase starts only af
 - Secrets only from environment variables. Never commit `.env`. API keys are stored hashed.
 - All file access goes through `app/storage.py`. All ffmpeg inputs use `-protocol_whitelist file,pipe` and a timeout.
 - The website calls the same public API as customers; no private endpoints.
-- There are no migrations yet: adding or changing a column needs Alembic first (tables are created with `create_all`).
+- Schema changes go through Alembic (`app/migrations/`, see `app/migrate.py`): one reviewed revision per change, additive only (anything that drops, renames or rewrites data needs the owner's OK). `deploy.sh` migrates before the restart.
 
 ## Commands (run inside `clip-api/`)
 - Tests: `pytest -q` (SQLite) or `TEST_DATABASE_URL=postgresql+psycopg://... pytest -q`
