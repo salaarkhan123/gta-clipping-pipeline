@@ -210,6 +210,45 @@ every admin account when it is empty. A report changes no content.
   send a counter-notice there; a copy goes to the claimant, and the admin decides on `restore` after 10 business
   days.
 
+## Premium AI thumbnails
+
+A paid option on top of the free thumbnail (#140). The free frame-based thumbnail is always made and stays free,
+and so are choosing between a clip's thumbnails and editing or hiding their text. A premium thumbnail restyles the
+clip's thumbnail frame with an image-edit model (Gemini Nano Banana 2.1, with one retry on Gemini); our
+own renderer then draws the hook, so the words are spelled exactly. Every attempt's provider, time and estimated
+cost is kept in the thumbnail's `info` and the job's `result`.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `PREMIUM_THUMBNAILS` | `false` | The feature flag. Off: the premium routes answer 404 `premium_thumbnails_off`, `/v1/options` does not list them and the website hides the panel. Leave it off until real provider tests and a quality check are done. |
+| `GEMINI_API_KEY` | empty | The only provider. It must be a key from a Google project **with billing on** (paid tier): on the free tier Google trains on what is sent and people may review it (see Data handling). Empty: the routes answer 503. |
+| `PREMIUM_THUMB_CREDITS` | `25` | The price of one premium thumbnail, in credits (owner OK 2026-11-17). The only price used: the quote, the confirm step and the reservation all read it. |
+| `GEMINI_IMAGE_MODEL` | `gemini-nano-banana-2.1` | The Gemini model id (the stable id in Google's model page). |
+| `GEMINI_IMAGE_SIZE` | `2K` | `1K`, `2K` or `4K`. 2K is $0.0504 an image. |
+| `PREMIUM_THUMB_TIMEOUT_SEC` | `60` | One provider attempt, end to end. |
+| `PREMIUM_THUMB_STYLES` | four presets | JSON list of `{id, name, prompt}`; each prompt describes a look only. |
+
+- The worker runs premium thumbnails in a slot of their own (started when the flag is on), so a 20-second paid
+  job never waits behind a 2-hour VOD. Restart the `worker` after turning the flag on.
+- Credits: reserved once at confirm, settled once. Any failure (provider error or timeout after the retry, safety
+  block, the face lost, cancel, crash, dead worker) is refunded in full.
+- Likeness consent: the first premium thumbnail of a clip needs the user's confirmation that they are the streamer
+  or have their permission; each one is a row in `likeness_consents` (account, clip, wording, time).
+
+**Data handling.** A premium thumbnail sends Gemini one frame of the clip and a close-up of the face in it, plus
+the prompt (the style and the user's custom styling). Nothing else: no video, no account details. Owner rule
+(2026-11-18): customer footage never goes to a provider that trains on API inputs without the user's explicit,
+informed authorization.
+
+| Provider | Trains on what we send? | Kept by the provider | What we do |
+|---|---|---|---|
+| Google Gemini, paid tier | No: "Google doesn't use your prompts … or responses to improve our products" (Gemini API Additional Terms, Paid Services, effective 2026-03-23) | 55 days for abuse monitoring only (Gemini API abuse-monitoring page); request logs for the project unless turned off | Every request sends `store: false`. Use a billing-enabled key only. Leave AI Studio's "Logs and datasets" sharing off. |
+| Google Gemini, free tier | **Yes**, and human reviewers may read inputs and outputs (Unpaid Services) | Not stated | Never use a free-tier key for this feature: the frames contain real faces. |
+| Black Forest Labs (removed) | **Yes, by default**: the privacy policy (section 2) says BFL may use inputs, tasks and outputs to train its models | "As long as reasonably necessary" (section 7) | Not used. There is no API flag or account setting to turn training off; the only routes are an email request to privacy@blackforestlabs.ai (subject "Training Opt Out") that we cannot verify, or an enterprise contract. Re-adding BFL needs a verifiable opt-out first. |
+
+- Benchmark with real calls (about $0.06 a thumbnail), from `clip-api/` with the keys in its settings file:
+  `python scripts/premium_thumb_bench.py <out_dir> --video <file> <moments.csv> --per-video 20`.
+
 ## Moving files to DigitalOcean Spaces
 
 Uploads and clips are stored on the droplet's disk by default (`STORAGE_BACKEND=local`). Spaces moves them to a

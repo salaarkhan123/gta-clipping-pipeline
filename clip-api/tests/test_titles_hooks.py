@@ -108,6 +108,8 @@ def test_clips_list_their_titles_and_the_owner_can_pick_one(client, user, video,
     assert own["title"] == "my own words" and own["titles"] == got["titles"]         # the options stay on offer
     project = client.get(f"/v1/projects/{up['upload_id']}", headers=headers).json()["clips"][0]
     assert project["title"] == "my own words" and project["virality"]["score"] == got["virality"]["score"]
-    for bad in ({"title": ""}, {"title": "   "}, {"title": "x" * 81}, {"hook": "nope"}, {}):
+    # The hook is editable too (U7: the thumbnail carries it); a field the route does not know still is not.
+    for bad in ({"title": ""}, {"title": "   "}, {"title": "x" * 81}, {"hook": ""}, {"hook": "x" * 49},
+                {"virality": 99}, {}):
         assert client.patch(f"/v1/clips/{clip_id}", json=bad, headers=headers).status_code == 422, bad
     assert client.patch(f"/v1/clips/{clip_id}", json={"title": "mine now"}, headers=new_user(client)).status_code == 404
