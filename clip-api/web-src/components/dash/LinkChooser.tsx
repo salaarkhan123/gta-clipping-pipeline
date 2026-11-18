@@ -178,7 +178,7 @@ export function LinkChooser() {
         <h1 className="px-10 text-center text-[26px] narrow:text-[20px]">What should we make from this video?</h1>
       </header>
 
-      <ul className="flex max-w-[900px] list-none flex-wrap justify-center gap-2" aria-label="What to make">
+      <ul className="flex max-w-[900px] list-none flex-wrap justify-center gap-2 narrow:w-full narrow:flex-nowrap narrow:justify-start narrow:overflow-x-auto narrow:pb-1 narrow:[&_li]:flex-none" aria-label="What to make">
         {chips.map((t) => {
           const k = kindOf(t), ok = isBuilt(t, on) && !!k;
           const sel = ok && k === kind && t.id !== "templates";
