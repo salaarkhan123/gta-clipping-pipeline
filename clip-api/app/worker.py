@@ -23,11 +23,13 @@ from . import ledger
 from . import languages
 from .ai import default_ai
 from .config import get_settings
+from .plan_grants import sweep_yearly_grants
 from .plans import plan_of
 from .db import init_db, new_session
 from .models import Account, Clip, Job, Upload, WebhookDelivery, new_id, utcnow
 from .pipeline import Deadline, PipelineError, PipelineOptions, Timer, run_pipeline
-from .pipeline.tools import RenderOptions, run_find, run_render
+from .pipeline.tools import RenderOptions, run_export, run_find, run_render
+from .exports import export_items, finish_export, new_export_id
 from .pipeline.heard import Heard
 from .pipeline.stt import complete, extract_audio, provider_for
 from .pipeline.transcribe import FasterWhisperTranscriber, Transcriber, in_language
@@ -257,6 +259,9 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
         deadline = Deadline(max(900.0, duration * s.job_timeout_factor))
         tool, result = options.pop("tool", "clips"), None
         charge_basis = options.pop("charge_basis", None)   # "rendered": settle on the seconds rendered (re-runs)
+        render_mode = options.get("render", "full")         # (render, agent B) full | preview | none
+        exported: list[tuple[str, str, str]] = []           # (render, agent B) export jobs: (export_id, clip_id, key)
+        export_sec = 0.0                                    # (render, agent B) export jobs: quoted seconds rendered
         handed_over: set[int] = set()      # clips already stored (by object), so none is stored twice
         # (languages, agent F) The spoken language: asked for, known, or detected now. English or unknown leaves
         # the transcribers exactly as they were; any other language hands over to the multilingual models.
@@ -298,9 +303,16 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             clip_id = new_id("clip")
             base = f"clips/{job_id}/{clip_id}"
             thumb_key = caps_key = None
+            # (render, agent B) render "preview": the video is the preview; "none": there is no video yet.
+            video_key, preview_key = "", None
             with timer.stage("store"):
-                storage.put(f"{base}.mp4", r.video_path)
-                stored.append(f"{base}.mp4")
+                if r.video_path is not None:
+                    if tool == "clips" and render_mode == "preview":
+                        preview_key = f"{base}.preview.mp4"
+                    else:
+                        video_key = f"{base}.mp4"
+                    storage.put(video_key or preview_key, r.video_path)
+                    stored.append(video_key or preview_key)
                 if r.thumb_path and r.thumb_path.exists():
                     thumb_key = f"{base}.jpg"
                     storage.put(thumb_key, r.thumb_path)
@@ -316,7 +328,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 if job.cancel_requested:
                     raise Canceled()
                 db.add(Clip(id=clip_id, job_id=job_id, idx=idx, start_sec=r.start, end_sec=r.end, score=r.score,
-                            signals=r.signals, features=r.features, video_key=f"{base}.mp4",
+                            signals=r.signals, features=r.features, video_key=video_key, preview_key=preview_key,
                             thumb_key=thumb_key, captions_key=caps_key, meta=meta))
                 db.commit()
             if not handed_over:
@@ -334,6 +346,31 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             if new_t is not None:
                 (work / "transcript.json").write_text(json.dumps(new_t))
                 storage.put(tkey, work / "transcript.json")
+            results = []
+        elif tool == "export":
+            # (render, agent B) stored clips rendered again with new options; the clips themselves change only
+            # in the success transaction below (exports.finish_export).
+            clip_ids = options.pop("clips")
+            options.pop("source_job", None)
+            edits = options.pop("edits", None)          # each clip's edit when it was priced
+            quoted = options.pop("seconds", None) or {}  # each clip's seconds as quoted
+            with new_session() as db:
+                items = export_items(db, clip_ids, storage, work, edits)
+            done = run_export(src, items, RenderOptions(caption_font=s.caption_font, moment_layout=s.provisional_layouts,
+                                                        **options), work / "out",
+                              progress, transcriber, deadline, timer)
+            # Charged on the quoted seconds of the clips rendered: the quote exactly when every clip rendered.
+            export_sec = round(sum(float(quoted.get(x.clip_id, x.seconds)) for x in done), 3)
+            for x in done:
+                export_id = new_export_id()
+                # One file per run: a second run of the same job (picked up twice) never overwrites the first's.
+                key = f"exports/{job_id}/{export_id}.mp4"
+                with timer.stage("store"):
+                    storage.put(key, x.video_path)
+                stored.append(key)
+                exported.append((export_id, x.clip_id, key))
+            result = {"exports": [{"export_id": e, "clip_id": c, "seconds": x.seconds}
+                                  for (e, c, _k), x in zip(exported, done)]}
             results = []
         elif tool == "render":
             segments = options.pop("segments")
@@ -368,7 +405,8 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 np.savez(work / "vindex.npz", emb=new_v["emb"], step=new_v["step"])
                 storage.put(vkey, work / "vindex.npz")
         else:
-            opts = PipelineOptions(caption_font=s.caption_font, source_lang=language, target_lang=target, **options)
+            opts = PipelineOptions(caption_font=s.caption_font, source_lang=language, target_lang=target,
+                                   moment_layout=s.provisional_layouts, **options)   # (render, agent B)
             # The pipeline's judge takes (text, frame, context); the AI client takes (text, context, frame).
             extra = ({"judge": lambda text, frame, ctx: ai.clip_meta(text, {**ctx, **lang_ctx}, frame),
                       "fast_transcriber": indexer} if ai is not None else {})
@@ -420,12 +458,20 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 db.get(Upload, job.upload_id).analyzed = True
             job.status, job.progress, job.stage, job.finished_at = "SUCCEEDED", 100, "done", utcnow()
             charged = None                                  # None: the whole reservation, as for a first run
-            if charge_basis == "rendered":
+            if tool == "export":                            # (render, agent B) the quoted seconds rendered
+                charged = credits_of(export_sec) if export_sec > 0 else 0
+            elif charge_basis == "rendered":
                 rendered = float(timer.as_dict()["counts"].get("rendered_sec") or 0)
                 charged = credits_of(rendered) if rendered > 0 else 0
+            replaced = finish_export(db, job, exported, options.get("resolution", "1080")) if tool == "export" else []
             ledger.settle(db, job, success=True, charged=charged)
             db.commit()
         status, error = "SUCCEEDED", None
+        for key in replaced:            # (render, agent B) the renders the new exports replaced
+            try:
+                storage.delete(key)
+            except Exception:
+                log.exception("could not remove %s", key)
     except Canceled:
         status, error = "CANCELED", None
     except Lost:
@@ -504,7 +550,7 @@ def sweep_stale_jobs() -> int:
             ledger.settle(db, job, success=False)
             # Clips the dead worker had already stored: hide them and remove their files.
             for clip in db.execute(select(Clip).where(Clip.job_id == job.id, Clip.deleted_at.is_(None))).scalars():
-                orphans += [k for k in (clip.video_key, clip.thumb_key, clip.captions_key) if k]
+                orphans += [k for k in (clip.video_key, clip.thumb_key, clip.captions_key, clip.preview_key) if k]
                 clip.deleted_at = utcnow()
             n += 1
         db.commit()
@@ -533,7 +579,7 @@ def sweep_expired() -> int:
         expired_jobs = select(Job.id).where(Job.expires_at <= now)
         for clip in db.execute(select(Clip).where(Clip.deleted_at.is_(None),
                                                   Clip.job_id.in_(expired_jobs)).limit(500)).scalars():
-            for key in (clip.video_key, clip.thumb_key, clip.captions_key):
+            for key in (clip.video_key, clip.thumb_key, clip.captions_key, clip.preview_key, clip.export_key):
                 if key:
                     storage.delete(key)
             clip.deleted_at = now
@@ -574,9 +620,10 @@ def _slot(i: int, stop: threading.Event, transcriber, pipeline, indexer, embedde
         try:
             if i == 0 and time.monotonic() - last_sweep > 60:
                 last_sweep = time.monotonic()
-                stale, expired = sweep_stale_jobs(), sweep_expired()
-                if stale or expired:
-                    log.info("sweep: %s stale jobs refunded, %s expired files deleted", stale, expired)
+                stale, expired, months = sweep_stale_jobs(), sweep_expired(), sweep_yearly_grants()
+                if stale or expired or months:
+                    log.info("sweep: %s stale jobs refunded, %s expired files deleted, %s yearly-plan months granted",
+                             stale, expired, months)
             if run_once(transcriber, pipeline, indexer, embedder, ai or default_ai()) is None:
                 stop.wait(poll)
         except Exception:

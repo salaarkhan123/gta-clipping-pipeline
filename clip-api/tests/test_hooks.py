@@ -147,3 +147,19 @@ def test_a_failed_rewrite_gives_none(monkeypatch):
     monkeypatch.setattr(ai_module.time, "sleep", lambda s: None)
     ai = ClaudeAI("k", "m", httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(503))))
     assert ai.rewrite_hook("x", [], {}) is None
+
+
+def test_the_rewrite_keeps_the_jobs_hook_style(three_bursts, tmp_path):  # noqa: F811
+    seen = []
+
+    def handler(request):
+        seen.append(json.loads(request.content))
+        return httpx.Response(200, json={"content": [{"type": "tool_use", "name": "clip_hook", "input": {"hook": "Fresh one"}}]})
+    ai = ClaudeAI("k", "m", httpx.Client(transport=httpx.MockTransport(handler)))
+    ai.rewrite_hook("x", [], {"hook_style": "humorous"})
+    ai.rewrite_hook("x", [], {"hook_style": "serious"})
+    assert "HOOK TONE" in seen[0]["system"] and "funny" in seen[0]["system"] and "HOOK TONE" not in seen[1]["system"]
+    styles = []
+    judged_run(three_bursts, tmp_path, hook_writer=lambda text, taken, ctx: styles.append(ctx["hook_style"]) or "Angle",
+               hook_style="humorous")
+    assert styles and set(styles) == {"humorous"}               # the pipeline hands the job's style to the writer

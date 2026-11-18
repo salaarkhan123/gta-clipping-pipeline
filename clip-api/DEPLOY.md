@@ -81,6 +81,28 @@ uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-cl
   show what happened: `llm_chunks`, `llm_chunks_failed`, `llm_tokens_in`, `llm_tokens_out`, `llm_pass_skipped`,
   `llm_pass_failed`. `false` turns it off.
 
+## Provisional layouts
+
+`PROVISIONAL_LAYOUTS` (default `false`) controls the layouts that are built but not yet checked on real gaming
+footage: `trio`, `grid4`, `ots`, and the `auto` layout that picks a layout for each moment.
+
+- Off (the default):
+  - `GET /v1/options` does not list `trio`, `grid4` or `ots`.
+  - A request that asks for one of them gets `400 layout_not_available`. This applies to clip jobs, quotes,
+    Reframe, Captions, exports and saved templates.
+  - `auto` picks one layout for the whole video, as it did before PR #136.
+- On: the three layouts are offered, and `auto` looks at each moment. When the camera is hidden, the moment
+  fills the frame with gameplay. When the face fills the frame, the moment is framed on the person.
+
+To turn it on:
+
+1. Render a few real VODs with each of the three layouts and with `auto`.
+2. Check the frames.
+3. Set `PROVISIONAL_LAYOUTS=true` in the server's env file.
+4. Run `docker compose up -d api worker`. The API and the worker both read the setting.
+
+Jobs that are already queued keep the layout they asked for.
+
 ## Running more than one job at once
 
 Default: one job at a time. Two ways to add capacity:
@@ -101,6 +123,55 @@ Default: one job at a time. Two ways to add capacity:
 
 After either change, run the 10-clip benchmark twice at the same time and compare with SPEC.md §10 B before
 relying on it.
+
+## Plans and Stripe Prices
+
+Plan prices, monthly credits and limits live in `app/plans.py` and nowhere else, so every pricing change is a
+reviewed PR. The `PLANS` environment variable is no longer read: delete its line from `.env`. Checkout charges a
+Stripe Price that you create; the API only needs its ID.
+
+1. In Stripe (test mode first, then live mode), create one product per plan, each with two recurring Prices in
+   USD, per unit, billed every 1 month or every 1 year:
+
+   | Plan | Monthly Price | Yearly Price |
+   |---|---|---|
+   | Starter | $15.99 per month | $66.96 per year |
+   | Pro | $26.99 per month | $114.96 per year |
+   | Scale | $139.99 per month | $839.88 per year |
+
+2. Put each Price ID (`price_...`) in `.env`:
+
+   ```
+   STRIPE_PRICE_STARTER_MONTH=
+   STRIPE_PRICE_STARTER_YEAR=
+   STRIPE_PRICE_PRO_MONTH=
+   STRIPE_PRICE_PRO_YEAR=
+   STRIPE_PRICE_SCALE_MONTH=
+   STRIPE_PRICE_SCALE_YEAR=
+   ```
+
+3. Restart: `docker compose up -d api worker`.
+
+A plan whose Price ID is blank answers `plan_unavailable`. Before each checkout the API reads the Price from Stripe
+and refuses it (`plan_unavailable`, and an error in the api log naming what differs) unless it is active, recurring,
+in `CURRENCY`, every 1 month or 1 year as configured, and exactly the amount in `app/plans.py`. A typo in Stripe
+therefore stops sales instead of charging the wrong amount.
+
+**Yearly plans grant credits monthly.** The first month comes with the paid yearly invoice; the worker grants each later month on the same day of the month (its sweep runs every minute and catches up after downtime). Grants stop at a refund, a dispute, a cancellation or the end of the paid year; credits already granted stay. Migration `0007` (additive: four nullable columns on `payments`) runs with the deploy.
+
+**Customer portal:** keep plan switching turned off for now (Settings, Billing, Customer portal: allow cancelling
+and updating the card only). Every paid invoice grants a full period of credits, so a mid-period upgrade with
+proration would grant a whole month of credits for a part payment. To change plan, a subscriber cancels and
+subscribes again once the old plan ends.
+
+**Subscribers from before 2026-11-17** keep their plan (`starter`, `pro`, `agency` or `scale` in `accounts.plan`),
+its credits on every renewal and its limits, at the price Stripe already charges them, until their subscription
+ends. To see how many there are:
+
+```bash
+docker compose exec -T db psql -U clip -d clip -c \
+  "select plan, subscription_status, count(*) from accounts where stripe_subscription_id is not null group by 1, 2"
+```
 
 ## Link import and takedowns
 

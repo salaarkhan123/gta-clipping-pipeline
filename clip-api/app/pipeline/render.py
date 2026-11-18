@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 
 from . import layouts
-from .captions import FONT_DIR, IMPACT_FILE, IMPACT_FILL, build_ass, impact_size
+from .captions import FONT_DIR, HOOK_SECONDS, IMPACT_FILE, IMPACT_FILL, build_ass, impact_size
 from .ff import SAFE_IN, Deadline, PipelineError, PipelineTimeout, run
 # The geometry lives in layouts.py; these names are re-exported because callers and tests import them from here.
 from .layouts import (ASPECTS, EDGE, FACECAM_PAD, FACECAM_REGIONS, FULL_FRAME, MAX_DODGE, LayoutPlan,  # noqa: F401
@@ -261,6 +261,22 @@ def impact_rows(plan: LayoutPlan | None, oh: int, position: str, under: int, bel
     return center, under
 
 
+HOOK_POSITIONS = ("beginning", "end")
+HOOK_MS = (500, 10000)      # the shortest and longest a hook may stay on screen, in milliseconds
+
+
+def hook_window(length: float, position: str = "beginning", ms: int | None = None) -> tuple[float, float] | None:
+    """When the hook is on screen, (from, to) seconds on a clip `length` long: the first HOOK_SECONDS (or `ms`),
+    or the last ones for position "end". Never longer than the clip. None for the default (the caption files
+    are then written exactly as before these options existed)."""
+    if position == "beginning" and ms is None:
+        return None
+    if position not in HOOK_POSITIONS:
+        raise PipelineError("bad_options", f"Unknown hook position. Use one of: {', '.join(HOOK_POSITIONS)}.")
+    show = min(length, (ms if ms is not None else HOOK_SECONDS * 1000) / 1000)
+    return (0.0, round(show, 3)) if position == "beginning" else (round(max(0.0, length - show), 3), round(length, 3))
+
+
 def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, src_h: int,
                 vertical: bool, zoom: float, chat: str, words, font: str,
                 layout: str = "fill", facecam=None, style: str = "pop", aspect: str = "9:16",
@@ -269,7 +285,8 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
                 hook: str | None = None, flash: bool = False, loudness: bool = True,
                 plan: LayoutPlan | None = None, resolution: str | None = None, preview: bool = False,
                 position: str = "auto", accent: str | None = None, camera: str | None = None,
-                split_ratio: float | None = None) -> None:
+                split_ratio: float | None = None, hook_position: str = "beginning",
+                hook_ms: int | None = None) -> None:
     """Cut [start, end] from src and render it. `words` are clip-relative (start, end, text) or empty.
 
     `style` is a caption style from captions.CAPTION_STYLES. For "impact", `position` ("auto", "seam", "lower",
@@ -279,7 +296,8 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
 
     With `segments` (source seconds, in playing order) those pieces are played back to back instead, and `words`
     are on that rendered timeline. `punch` is a zoom expression over rendered time for the gameplay picture.
-    `hook` is a line of on-screen text for the first 2.5 s. `flash` marks the first segment as a flash-forward.
+    `hook` is a line of on-screen text for the first 2.5 s, or for `hook_ms` milliseconds at the "beginning" or
+    the "end" (`hook_position`) of the rendered clip. `flash` marks the first segment as a flash-forward.
     `loudness` normalises the audio to -14 LUFS with peaks under -2 dB before encoding, -1 dB after (on by default).
 
     When reframing (`vertical`), what is drawn is a layout plan: `plan` if one is given (layouts.plan_layout),
@@ -313,8 +331,10 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
                 center, under = impact_rows(plan, oh, position, under if vertical else int(oh * 0.1),
                                             top if vertical and plan is None else None, k)
             # Always written for the 1080 canvas: the subtitle renderer scales it to whatever size the clip is.
+            length = sum(e - s for s, e in segments) if segments else end - start
             build_ass(words, tmp / "cap.ass", vertical, top, font, style, play=(ow, oh), hook=hook, hook_top=under,
-                      span=span, center=center, accent=accent)
+                      span=span, center=center, accent=accent,
+                      hook_at=hook_window(length, hook_position, hook_ms) if hook else None)
             cap_filter = f"ass=filename={tmp / 'cap.ass'}"
             if style == "impact":
                 # The renderer is handed our own font file, so the text never depends on what the machine has

@@ -239,6 +239,24 @@ LANGUAGE_RULE = (
     "kind labels do not change."
 )
 
+# (render, agent B) The `hook_style` clip option: the tone of the on-screen hook. "serious" is the judge's own tone
+# and adds nothing, so a request without the option is byte for byte what it was before.
+HOOK_TONES = {
+    "casual": "relaxed and everyday, like talking to a friend",
+    "informative": "a plain fact about what happens, no hype",
+    "conversational": "a direct line to the viewer, like a question or an aside",
+    "humorous": "funny, with a light joke about the moment",
+    "parody": "playful exaggeration that mocks the moment affectionately",
+    "inspirational": "uplifting, about effort, skill or a comeback",
+    "dramatic": "suspense and stakes, as if something big is about to happen",
+    "empathetic": "warm, sharing what the person on screen feels",
+    "persuasive": "a reason the viewer must keep watching",
+    "neutral": "flat and descriptive, no emotion",
+    "excited": "high energy, hyped, with an exclamation",
+    "calm": "quiet and understated",
+}
+HOOK_STYLE_RULE = "\n\nHOOK TONE. Write the hook in this tone: {tone}. The 6-word limit and the facts stay the same."
+
 
 # (U3) The transcript pass: one call per 5-minute chunk of the whole transcript (app/pipeline/llm_pass.py). The
 # transcript is what people said on stream: user content. It is sent inside a <transcript> tag with & < > escaped,
@@ -381,6 +399,9 @@ class ClaudeAI:
         language = name_of(context.get("language")) if isinstance(context.get("language"), str) else None
         if language:
             body["system"] += LANGUAGE_RULE.format(name=language)
+        tone = HOOK_TONES.get(context.get("hook_style")) if isinstance(context.get("hook_style"), str) else None
+        if tone:
+            body["system"] += HOOK_STYLE_RULE.format(tone=tone)
         headers = {"x-api-key": self.api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
         for attempt in (1, 2):
             try:
@@ -467,11 +488,12 @@ class ClaudeAI:
         """(U4) A hook for this clip unlike the `taken` ones, or None (the pipeline then uses a title or a line)."""
         context = context if isinstance(context, dict) else {}
         language = name_of(context.get("language")) if isinstance(context.get("language"), str) else None
+        tone = HOOK_TONES.get(context.get("hook_style")) if isinstance(context.get("hook_style"), str) else None
         text = ((f"What the clip is about: {_escape(str(context.get('title') or '')[:120])}\n" if context.get("title") else "")
                 + "<taken>\n" + "\n".join(_escape(t) for t in taken[-50:]) + "\n</taken>\n"
                 + f"<transcript>\n{_escape(' '.join(str(transcript or '').split())[:1500])}\n</transcript>")
         body = {"model": self.model, "max_tokens": 256,
-                "system": HOOK_SYSTEM + (f" Write it in {language}." if language else ""),
+                "system": HOOK_SYSTEM + (f" Write it in {language}." if language else "") + (HOOK_STYLE_RULE.format(tone=tone) if tone else ""),
                 "tools": [HOOK_TOOL], "tool_choice": {"type": "tool", "name": HOOK_TOOL["name"]},
                 "messages": [{"role": "user", "content": [{"type": "text", "text": text}]}]}
         data = self._post_retrying(body)
