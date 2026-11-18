@@ -199,13 +199,14 @@ def export_items(db: Session, clip_ids: list[str], storage, work: Path, edits: d
     return items
 
 
-def finish_export(db: Session, job: Job, done: list[tuple[str, str, str]], resolution: str) -> list[str]:
+def finish_export(db: Session, job: Job, done: list[tuple[str, str, str, str]]) -> list[str]:
     """Inside the export job's success transaction: each clip's `export_key` becomes its new render and an
-    Export row records it. `done` is (export_id, clip_id, storage_key). Returns the storage keys of the renders
-    these replace, for the caller to delete once the transaction is committed."""
-    new_keys = {key for _e, _c, key in done}
+    Export row records it. `done` is (export_id, clip_id, storage_key, resolution), the resolution being the
+    rendered file's own (render.resolution_name). Returns the storage keys of the renders these replace, for the
+    caller to delete once the transaction is committed."""
+    new_keys = {key for _e, _c, key, _r in done}
     replaced = []
-    for export_id, clip_id, key in done:
+    for export_id, clip_id, key, resolution in done:
         clip = db.get(Clip, clip_id)
         if clip is None:
             continue

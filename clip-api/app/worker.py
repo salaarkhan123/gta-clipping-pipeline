@@ -206,7 +206,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
         tool, result = options.pop("tool", "clips"), None
         charge_basis = options.pop("charge_basis", None)   # "rendered": settle on the seconds rendered (re-runs)
         render_mode = options.get("render", "full")         # (render, agent B) full | preview | none
-        exported: list[tuple[str, str, str]] = []           # (render, agent B) export jobs: (export_id, clip_id, key)
+        exported: list[tuple[str, str, str, str]] = []      # (render, agent B) export jobs: (export_id, clip_id, key, resolution)
         export_sec = 0.0                                    # (render, agent B) export jobs: quoted seconds rendered
         handed_over: set[int] = set()      # clips already stored (by object), so none is stored twice
         # (languages, agent F) The spoken language: asked for, known, or detected now. English or unknown leaves
@@ -316,9 +316,9 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 with timer.stage("store"):
                     storage.put(key, x.video_path)
                 stored.append(key)
-                exported.append((export_id, x.clip_id, key))
-            result = {"exports": [{"export_id": e, "clip_id": c, "seconds": x.seconds}
-                                  for (e, c, _k), x in zip(exported, done)]}
+                exported.append((export_id, x.clip_id, key, x.resolution))
+            result = {"exports": [{"export_id": e, "clip_id": c, "seconds": x.seconds, "resolution": r}
+                                  for (e, c, _k, r), x in zip(exported, done)]}
             results = []
         elif tool == "render":
             segments = options.pop("segments")
@@ -398,7 +398,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             elif charge_basis == "rendered":
                 rendered = float(timer.as_dict()["counts"].get("rendered_sec") or 0)
                 charged = credits_of(rendered) if rendered > 0 else 0
-            replaced = finish_export(db, job, exported, options.get("resolution", "1080")) if tool == "export" else []
+            replaced = finish_export(db, job, exported) if tool == "export" else []
             ledger.settle(db, job, success=True, charged=charged)
             db.commit()
         status, error = "SUCCEEDED", None

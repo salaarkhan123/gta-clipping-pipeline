@@ -17,7 +17,7 @@ import logging
 from .censor import mask, mask_words
 from .edit import remap_words
 from .facecam import resolve_facecam
-from .render import CHAT_REGIONS, render_clip, render_thumb
+from .render import CHAT_REGIONS, render_clip, render_thumb, resolution_name
 from .stt import LocalProvider, extract_audio
 from .transcribe import Transcriber, Transcript, extract_wav
 from .visual import build_visual_index, search_visual
@@ -72,6 +72,7 @@ class ExportResult:
     clip_id: str
     video_path: Path
     seconds: float                    # the rendered length
+    resolution: str = ""              # the file's own short side (render.resolution_name): what an export reports
 
 
 def planned_seconds(segments: list) -> float:
@@ -132,7 +133,8 @@ def run_export(src: Path, items: list[ExportItem], options: RenderOptions, out_d
         if timer is not None:
             timer.count("clips")
             timer.count("rendered_sec", round(seconds, 1))
-        results.append(ExportResult(item.clip_id, video, seconds))
+        made = probe(video, deadline)
+        results.append(ExportResult(item.clip_id, video, seconds, resolution_name(made.width, made.height)))
     progress("done", 100)
     return results
 

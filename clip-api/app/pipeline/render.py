@@ -130,6 +130,12 @@ def output_size(src_w: int, src_h: int, vertical: bool, aspect: str = "9:16", re
     return even(ref[0] * k), even(ref[1] * k)
 
 
+def resolution_name(width: int, height: int) -> str:
+    """What a rendered size is called: its short side by its RESOLUTIONS name ("720", "2k"), else in pixels ("360")."""
+    side = min(width, height)
+    return next((name for name, px in RESOLUTIONS.items() if px == side), str(side))
+
+
 def vertical_filter(src_w: int, src_h: int, zoom: float, chat: str) -> str:
     """1080x1920: blurred background, enlarged chat on top (optional), video below."""
     cw = even(src_w / zoom)
