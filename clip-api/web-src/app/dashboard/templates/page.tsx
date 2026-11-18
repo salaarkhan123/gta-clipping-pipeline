@@ -68,10 +68,9 @@ export default function Templates() {
   }
 
   return (
-    <>
-      <p className="crumb"><Link href="/dashboard/">Home</Link> / Game templates</p>
-      <h1 className="dash-title">Game templates</h1>
-      <p className="muted">A template tunes what we look for in a game and sets the clip length, caption style and editing. You can still change every setting before you start.</p>
+    <div className="wide stack">
+      <div className="back-title"><Link href="/dashboard/" aria-label="Back to Home"><Icon name="back" size={20} /></Link><h1>Game templates</h1></div>
+      <p className="muted small">A template tunes what we look for in a game and sets the clip length, caption style and editing. You can still change every setting before you start.</p>
       {templates === null ? <p className="muted">Loading templates…</p> : !templates.length ? <p className="muted">No templates to show right now.</p> : <>
         <Tabs label="Game" panel="template-list" value={shownGame} onChange={pick}
           tabs={[["all", "All"], ...games.map((g): [string, string] => [g, groupName(g)])]} />
@@ -98,6 +97,6 @@ export default function Templates() {
         </div>
       </>}
       {chooser.element}
-    </>
+    </div>
   );
 }
