@@ -61,6 +61,7 @@ STILL_BYTES = 60_000
 VERTICAL, WIDE = (540, 960), (960, 540)
 CAP = 900                       # seconds any one ffmpeg or download may take
 FORMAT = "bv*[height<=1080][vcodec^=avc1]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]/b"
+FORMAT_RETRY = "bv*[height<=1080][vcodec^=avc1]+139/bv*[height<=1080]+wa/b"
 AUDIO_FORMAT = "ba[abr<=80]/wa/ba"
 
 
@@ -185,24 +186,38 @@ def fetch(sources: dict, shots: list, work: Path) -> None:
         wanted[name] = (shot["source"], a, b)
     for name, (sid, a, b) in sorted(wanted.items()):
         out = seg / f"{name}.mp4"
-        if (seg / f"{name}.json").exists():      # written only once the segment is complete
+        if (seg / f"{name}.json").exists() and _complete(out, b - a):
             continue
         src = sources[sid]
         print(f"fetch {name} {_hms(a)}-{_hms(b)}", flush=True)
-        for attempt in (1, 2):          # one retry: a section download sometimes drops mid-way
+        # Two tries. The second asks for the small AAC audio: on some live-stream VODs ffmpeg cannot open
+        # YouTube's other audio stream at a seek point, and a section download now and then drops mid-way.
+        for fmt in (FORMAT, FORMAT_RETRY):
             try:
                 if src.get("file"):
                     ffmpeg("-ss", f"{a:.3f}", "-t", f"{b - a:.3f}", *SAFE_IN, "-i", Path(src["file"]).expanduser(),
                            "-c", "copy", "-avoid_negative_ts", "make_zero", out)
                 else:
-                    ytdlp("-f", FORMAT, "--merge-output-format", "mp4", "--download-sections", f"*{a:.2f}-{b:.2f}",
+                    out.unlink(missing_ok=True)
+                    ytdlp("-f", fmt, "--merge-output-format", "mp4", "--download-sections", f"*{a:.2f}-{b:.2f}",
                           "-o", str(out), src["url"])
+                if not _complete(out, b - a):
+                    raise PipelineError("short_segment", "the downloaded piece is much shorter than asked for")
                 (seg / f"{name}.json").write_text(json.dumps({"source": sid, "start": a, "end": b}))
                 break
             except PipelineError as e:
-                out.unlink(missing_ok=True)
-                if attempt == 2:      # the shots that need it fail at render; the rest go on
+                (seg / f"{name}.json").unlink(missing_ok=True)
+                if fmt is FORMAT_RETRY:      # the shots that need it fail at render; the rest go on
                     print(f"  FAILED fetch {name}: {e.message}", file=sys.stderr)
+
+
+def _complete(path: Path, seconds: float) -> bool:
+    """The segment exists, has audio, and is at least 70% of the length asked for."""
+    try:
+        info = probe(path)
+    except PipelineError:
+        return False
+    return info.has_audio and info.duration >= 0.7 * seconds
 
 
 # ---------------------------------------------------------------- render
@@ -337,8 +352,19 @@ def read_candidates(path: Path, section: str) -> dict:
     return {c["cid"]: c for c in data["candidates"]}
 
 
-def write_candidates(path: Path, section: str, by_cid: dict, permission: str) -> None:
-    path.write_text(json.dumps({"section": section, "version": 1, "permission": permission,
+CONFIRMED = "owner-confirmed"
+
+
+def write_candidates(path: Path, section: str, by_cid: dict, permission: str, sources: dict) -> None:
+    """Several runs (each with its own sources file) share one candidates.json, so permission is per candidate
+    (`commercial_permission`, stamped from the run that rendered it). The file-level `permission`, which the
+    picker warns on, is a confirmed one only when every candidate is confirmed."""
+    for c in by_cid.values():
+        if "commercial_permission" not in c and c.get("source", {}).get("id") in sources:
+            c["commercial_permission"] = sources[c["source"]["id"]].get("permission", permission)
+    unconfirmed = [cid for cid, c in by_cid.items() if not str(c.get("commercial_permission", "")).startswith(CONFIRMED)]
+    level = f"NOT CONFIRMED for: {', '.join(unconfirmed)}" if unconfirmed else permission
+    path.write_text(json.dumps({"section": section, "version": 1, "permission": level,
                                 "candidates": list(by_cid.values())}, indent=1) + "\n")
 
 
@@ -348,7 +374,7 @@ def render(sources: dict, shots: list, work: Path, out: Path, only: set | None, 
     scouts = {sid: load(work / "scout" / f"{sid}.json") for sid in sources if (work / "scout" / f"{sid}.json").exists()}
     for shot in shots:
         section, sid, cid = shot["section"], shot["source"], shot["cid"]
-        if only and not only & {section, cid, shot.get("variant")}:
+        if only and not only & {section, cid, shot.get("variant"), sid}:
             continue
         src = sources[sid]
         name, a, b = piece(shot, work)
@@ -415,6 +441,7 @@ def render(sources: dict, shots: list, work: Path, out: Path, only: set | None, 
                 "rating": scouted["rating"] if scouted else None,
                 "rating_source": scouts.get(sid, {}).get("rating_source") if scouted else None,
                 "credit": src["credit"],
+                "commercial_permission": src.get("permission", permission),
                 "source": {"id": sid, "creator": src["creator"], "title": src.get("title"), "url": src.get("url"),
                            "start_sec": round(seg["start"] + inner, 2),
                            "end_sec": round(seg["start"] + inner + seconds, 2)},
@@ -425,7 +452,7 @@ def render(sources: dict, shots: list, work: Path, out: Path, only: set | None, 
             path = dest / "candidates.json"
             by_cid = read_candidates(path, section)
             by_cid[cid] = item
-            write_candidates(path, section, by_cid, permission)
+            write_candidates(path, section, by_cid, permission, sources)
         except PipelineError as e:
             failed += 1
             print(f"  FAILED {section}/{cid}: {e.message}", file=sys.stderr)
@@ -468,6 +495,8 @@ def requests(sources: dict, raw_shots: list, work: Path, out: Path, featured: Pa
         return 0
     code = 0
     for req in load(featured).get("requests", []):
+        if req["cid"].rpartition("--")[2].rsplit("-m", 1)[0] not in sources:
+            continue          # another sources file (another media run) serves this one
         answered = read_candidates(out / req["section"] / "candidates.json", req["section"])
         if any(c.get("request") == req["id"] for c in answered.values()):
             continue
@@ -477,19 +506,26 @@ def requests(sources: dict, raw_shots: list, work: Path, out: Path, featured: Pa
     return code
 
 
-def publish(sources_conf: dict, featured: Path, out: Path, public: Path) -> int:
+def publish(featured: Path, out: Path, public: Path) -> int:
     """Copy only the featured candidates (each section's `clips[:show]`, in the owner's order) into
     public/<section>/ under the ids the site reads, and write that section's manifest.json. A section the picker
-    left out is not touched; a featured cid with no candidate is skipped with a warning."""
-    chosen = load(featured).get("sections", {})
-    for section, pick in chosen.items():
+    left out is not touched; a featured cid with no candidate is skipped with a warning. Nothing is written when
+    any featured candidate lacks the owner's confirmed permission to publish its footage."""
+    plan = {}
+    for section, pick in load(featured).get("sections", {}).items():
         have = read_candidates(out / section / "candidates.json", section)
         cids = pick.get("clips", [])
         for c in cids:
             if c not in have:
                 print(f"warning: {section}/{c} is featured but not rendered; skipped", file=sys.stderr)
         cids = [c for c in cids if c in have]          # a missing pick does not use up one of the `show` slots
-        cids = cids[:pick["show"]] if pick.get("show") is not None else cids
+        plan[section] = (have, cids[:pick["show"]] if pick.get("show") is not None else cids)
+    refused = [f"{s}/{c}" for s, (have, cids) in plan.items() for c in cids
+               if not str(have[c].get("commercial_permission", "")).startswith(CONFIRMED)]
+    if refused:
+        print(f"refused, nothing published: no confirmed permission for {', '.join(refused)}", file=sys.stderr)
+        return 1
+    for section, (have, cids) in plan.items():
         dest = public / section
         if dest.exists():
             shutil.rmtree(dest)       # the folder is this step's output: what is not featured any more goes
@@ -519,7 +555,8 @@ def publish(sources_conf: dict, featured: Path, out: Path, public: Path) -> int:
         for i in items:
             credits.setdefault(i["source"]["creator"], i["source"].get("url"))
         (dest / "manifest.json").write_text(json.dumps(
-            {"section": section, "version": 1, "permission": sources_conf.get("permission", "unconfirmed"),
+            {"section": section, "version": 1,
+             "permission": sorted({i["commercial_permission"] for i in items})[0] if items else CONFIRMED,
              "credits": [{"creator": k, "url": v} for k, v in credits.items()], "items": items}, indent=1) + "\n")
         print(f"published {section}: {', '.join(i['id'] for i in items)}")
     return 0
@@ -569,7 +606,7 @@ def main(argv=None) -> int:
     if a.step == "publish":
         if not (a.featured and a.public):
             p.error("publish needs --featured and --public")
-        return publish(conf, a.featured.expanduser(), out, a.public.expanduser())
+        return publish(a.featured.expanduser(), out, a.public.expanduser())
     raw = load(a.shots)["shots"]
     if a.step == "more":
         if not (a.section and a.like):

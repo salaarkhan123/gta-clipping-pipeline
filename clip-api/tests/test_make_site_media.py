@@ -23,11 +23,13 @@ def test_expand_gives_one_candidate_per_moment_with_its_cid():
     assert shots[2]["words_from"] == "impact--xqc-m2"
 
 
-def _candidate(out: Path, section: str, cid: str, creator: str, words: str | None = None) -> dict:
+def _candidate(out: Path, section: str, cid: str, creator: str, words: str | None = None,
+               permission: str = "owner-confirmed 2026-11-18") -> dict:
     for ext in ("mp4", "webm", "webp"):
         (out / section / f"{cid}.{ext}").write_bytes(cid.encode())
     c = {"cid": cid, "kind": "video", "src": f"{cid}.mp4", "webm": f"{cid}.webm", "poster": f"{cid}.webp",
-         "credit": f"Footage: {creator}", "source": {"id": "s", "creator": creator, "url": f"https://x/{creator}"}}
+         "credit": f"Footage: {creator}", "commercial_permission": permission,
+         "source": {"id": "s", "creator": creator, "url": f"https://x/{creator}"}}
     if words:
         c["words"] = words
     return c
@@ -53,7 +55,7 @@ def test_publish_copies_only_featured_in_order_with_public_ids_and_credits(tmp_p
         "hero-vertical-clips": {"show": 2, "clips": ["ninja-m2", "missing-m9", "tgg-m1", "xqc-m1"]},
         "captions": {"clips": ["plain--xqc-m2", "impact--tgg-m1", "impact--xqc-m2"]}}}))
 
-    assert m.publish({"permission": "owner-confirmed 2026-11-18"}, featured, out, public) == 0
+    assert m.publish(featured, out, public) == 0
 
     hero_m = json.loads((public / "hero-vertical-clips" / "manifest.json").read_text())
     assert hero_m["permission"] == "owner-confirmed 2026-11-18"
@@ -76,5 +78,32 @@ def test_publish_leaves_sections_the_owner_did_not_pick(tmp_path):
     (tmp_path / "public" / "reframe" / "manifest.json").write_text("{}")
     featured = tmp_path / "featured.json"
     featured.write_text(json.dumps({"version": 1, "sections": {}}))
-    assert m.publish({}, featured, tmp_path / "cand", tmp_path / "public") == 0
+    assert m.publish(featured, tmp_path / "cand", tmp_path / "public") == 0
     assert (tmp_path / "public" / "reframe" / "manifest.json").read_text() == "{}"
+
+
+def test_publish_refuses_everything_when_a_pick_lacks_confirmed_permission(tmp_path):
+    m = _script()
+    out, public = tmp_path / "cand", tmp_path / "public"
+    (out / "hook").mkdir(parents=True)
+    cands = [_candidate(out, "hook", "tgg-m1", "TGG"),
+             _candidate(out, "hook", "cod-m1", "Someone", permission="NOT CONFIRMED")]
+    (out / "hook" / "candidates.json").write_text(json.dumps({"section": "hook", "candidates": cands}))
+    featured = tmp_path / "featured.json"
+    featured.write_text(json.dumps({"version": 1, "sections": {"hook": {"clips": ["tgg-m1", "cod-m1"]}}}))
+    assert m.publish(featured, out, public) == 1
+    assert not public.exists()
+
+
+def test_candidates_file_is_confirmed_only_when_every_candidate_is(tmp_path):
+    m = _script()
+    path = tmp_path / "candidates.json"
+    mine = {"tgg": {"permission": "owner-confirmed 2026-11-18"}}
+    by_cid = {"tgg-m1": {"cid": "tgg-m1", "source": {"id": "tgg"}}}          # rendered before the stamp existed
+    m.write_candidates(path, "hook", by_cid, "owner-confirmed 2026-11-18", mine)
+    assert json.loads(path.read_text())["permission"] == "owner-confirmed 2026-11-18"
+    by_cid["cod-m1"] = {"cid": "cod-m1", "source": {"id": "cod"}, "commercial_permission": "NOT CONFIRMED"}
+    m.write_candidates(path, "hook", by_cid, "owner-confirmed 2026-11-18", mine)
+    data = json.loads(path.read_text())
+    assert data["permission"] == "NOT CONFIRMED for: cod-m1"
+    assert data["candidates"][0]["commercial_permission"] == "owner-confirmed 2026-11-18"
