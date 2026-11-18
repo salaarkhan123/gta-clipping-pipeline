@@ -103,6 +103,7 @@ class PipelineOptions:
     hook_style: str = "serious"           # the tone the judge writes the hook in (render_options.HookStyle)
     hook_position: str = "beginning"      # beginning | end: where the burned hook shows
     hook_duration_ms: int | None = None   # how long it shows; None = 2.5 s
+    moment_layout: bool = False           # auto: draw each moment for what it shows (PROVISIONAL; off: one layout)
 
 
 @dataclass
@@ -391,7 +392,7 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         c.features["edit"] = {"segments": segments, "flash_forward": flash, "zoom_at": zooms, "hook": hook,
                               "removed_sec": round((c.end - c.start) - kept_duration(body), 2)}
         # (render, agent B) render "none" stores no video (POST /v1/clips/export makes one later), "preview" a
-        # fast small one. With the auto layout each moment is drawn for what it shows (facecam.moment_facecam).
+        # fast small one. With moment_layout on, auto draws each moment for what it shows (facecam.moment_facecam).
         video = out_dir / f"clip-{i}.mp4" if options.render != "none" else None
         thumb = out_dir / f"clip-{i}.jpg"
         timer.count("clips")
@@ -400,7 +401,7 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                 thumb = _frame(input_path, (c.peak if c.peak is not None else c.start + 1.0), thumb, deadline)
         else:
             lay, cam = layout, facecam
-            if options.layout == "auto" and options.vertical and layout != "classic":
+            if options.moment_layout and options.layout == "auto" and options.vertical and layout != "classic":
                 with timer.stage("moment_scene"):
                     lay, cam = moment_facecam(input_path, info, c.start, c.end, layout, facecam, deadline)
             t0 = time.monotonic()

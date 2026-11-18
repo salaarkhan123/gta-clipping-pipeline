@@ -206,6 +206,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
         charge_basis = options.pop("charge_basis", None)   # "rendered": settle on the seconds rendered (re-runs)
         render_mode = options.get("render", "full")         # (render, agent B) full | preview | none
         exported: list[tuple[str, str, str]] = []           # (render, agent B) export jobs: (export_id, clip_id, key)
+        export_sec = 0.0                                    # (render, agent B) export jobs: quoted seconds rendered
         handed_over: set[int] = set()      # clips already stored (by object), so none is stored twice
         # (languages, agent F) The spoken language: asked for, known, or detected now. English or unknown leaves
         # the transcribers exactly as they were; any other language hands over to the multilingual models.
@@ -298,13 +299,19 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             # in the success transaction below (exports.finish_export).
             clip_ids = options.pop("clips")
             options.pop("source_job", None)
+            edits = options.pop("edits", None)          # each clip's edit when it was priced
+            quoted = options.pop("seconds", None) or {}  # each clip's seconds as quoted
             with new_session() as db:
-                items = export_items(db, clip_ids, storage, work)
-            done = run_export(src, items, RenderOptions(caption_font=s.caption_font, **options), work / "out",
+                items = export_items(db, clip_ids, storage, work, edits)
+            done = run_export(src, items, RenderOptions(caption_font=s.caption_font, moment_layout=s.provisional_layouts,
+                                                        **options), work / "out",
                               progress, transcriber, deadline, timer)
+            # Charged on the quoted seconds of the clips rendered: the quote exactly when every clip rendered.
+            export_sec = round(sum(float(quoted.get(x.clip_id, x.seconds)) for x in done), 3)
             for x in done:
                 export_id = new_export_id()
-                key = f"exports/{job_id}/{x.clip_id}.mp4"
+                # One file per run: a second run of the same job (picked up twice) never overwrites the first's.
+                key = f"exports/{job_id}/{export_id}.mp4"
                 with timer.stage("store"):
                     storage.put(key, x.video_path)
                 stored.append(key)
@@ -347,7 +354,8 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 np.savez(work / "vindex.npz", emb=new_v["emb"], step=new_v["step"])
                 storage.put(vkey, work / "vindex.npz")
         else:
-            opts = PipelineOptions(caption_font=s.caption_font, source_lang=language, target_lang=target, **options)
+            opts = PipelineOptions(caption_font=s.caption_font, source_lang=language, target_lang=target,
+                                   moment_layout=s.provisional_layouts, **options)   # (render, agent B)
             # The pipeline's judge takes (text, frame, context); the AI client takes (text, context, frame).
             extra = ({"judge": lambda text, frame, ctx: ai.clip_meta(text, {**ctx, **lang_ctx}, frame),
                       "fast_transcriber": indexer} if ai is not None else {})
@@ -384,7 +392,9 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 db.get(Upload, job.upload_id).analyzed = True
             job.status, job.progress, job.stage, job.finished_at = "SUCCEEDED", 100, "done", utcnow()
             charged = None                                  # None: the whole reservation, as for a first run
-            if charge_basis == "rendered":
+            if tool == "export":                            # (render, agent B) the quoted seconds rendered
+                charged = credits_of(export_sec) if export_sec > 0 else 0
+            elif charge_basis == "rendered":
                 rendered = float(timer.as_dict()["counts"].get("rendered_sec") or 0)
                 charged = credits_of(rendered) if rendered > 0 else 0
             replaced = finish_export(db, job, exported, options.get("resolution", "1080")) if tool == "export" else []

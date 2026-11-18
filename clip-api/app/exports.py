@@ -41,9 +41,10 @@ class ClipEditDoc(BaseModel):
     the same thing however the clip was rendered before (the format of web-src/lib/edit.ts).
 
     - `trim`: where the clip starts and ends in the source (it may reach outside the clip's first cut).
-    - `cuts`: parts inside the trim to leave out. The clip is rendered from the trim minus the cuts, exactly: the
-      dead air its job cut and its flash-forward are not kept (the clip object's `segments` are the parts the job
-      rendered, for an editor that wants to start from them).
+    - `cuts`: parts inside the trim to leave out. The clip is rendered from the trim minus the cuts, exactly; its
+      flash-forward is not kept. Left out, the cuts are the dead air its job removed inside the trim (the gaps
+      between the clip's `segments`, `complete_edit`), so an edit keeps them unless it says otherwise; `[]` keeps
+      every second of the trim.
     - `caption_lines`: the caption lines in the user's words; each line's time is shared evenly between its words.
       Empty: the clip's own words, moved onto the new cut.
     - `hook_text`: the on-screen hook in the user's words; null keeps the AI's.
@@ -113,6 +114,39 @@ def edit_of(clip: Clip) -> ClipEditDoc | None:
     return ClipEditDoc.model_validate(clip.edit) if clip.edit else None
 
 
+def dead_air(clip: Clip, start: float, end: float) -> list[list[float]]:
+    """The parts between start and end that the clip's job cut out as dead air: the gaps between the source
+    parts it rendered (its flash-forward left aside), in source seconds."""
+    segments, flash, _z = rendered_cut(clip)
+    body = sorted(segments[1:] if flash and len(segments) > 1 else segments)
+    gaps = []
+    for (_s0, e0), (s1, _e1) in zip(body, body[1:]):
+        a, b = max(float(e0), start), min(float(s1), end)
+        if b - a > 0.05:
+            gaps.append([round(a, 3), round(b, 3)])
+    return gaps
+
+
+def complete_edit(clip: Clip, edit: ClipEditDoc) -> ClipEditDoc:
+    """The edit as it is stored and rendered: without `cuts`, the clip's dead air inside the trim is cut, as its
+    job cut it. Raises ValidationError when what is left is too short or too long."""
+    if "cuts" in edit.model_fields_set:
+        return edit
+    return ClipEditDoc.model_validate({**edit.model_dump(), "cuts": dead_air(clip, edit.trim.start, edit.trim.end)})
+
+
+# Keys of an export job's options that say what it is, not how it looks (export_spec leaves them out).
+JOB_KEYS = ("tool", "charge_basis", "source_job", "clips", "edits", "seconds")
+
+
+def export_spec(render: dict, edit: dict | None) -> dict:
+    """What a full render of a clip looks like, to tell whether one exists already: its render options and its
+    edit, as JSON (stored on its Export row as `options`)."""
+    options = {k: v for k, v in render.items() if k not in JOB_KEYS}
+    options.setdefault("resolution", "1080")
+    return json.loads(json.dumps({"render": options, "edit": edit}, sort_keys=True))
+
+
 def rendered_cut(clip: Clip) -> tuple[list, bool, list]:
     """(segments, flash, zoom_at) the clip's own job rendered it from: source seconds, in playing order."""
     rendered = (clip.features or {}).get("edit") or {}
@@ -133,14 +167,19 @@ def planned(clip: Clip, edit: ClipEditDoc | None = None) -> float:
     return planned_seconds(clip_cut(clip, edit)[0])
 
 
-def export_items(db: Session, clip_ids: list[str], storage, work: Path) -> list[ExportItem]:
-    """What the worker renders for an export job: one ExportItem per clip, in the order asked for."""
+def export_items(db: Session, clip_ids: list[str], storage, work: Path, edits: dict | None = None) -> list[ExportItem]:
+    """What the worker renders for an export job: one ExportItem per clip, in the order asked for. `edits` holds
+    each clip's edit as it was when the export was asked for (what it was priced on); a clip missing from it
+    renders its saved edit."""
     items = []
     for clip_id in clip_ids:
         clip = db.get(Clip, clip_id)
         if clip is None or clip.deleted_at is not None:
             continue                    # deleted after the export was asked for: not rendered, not charged
-        edit = edit_of(clip)
+        if edits is not None and clip_id in edits:
+            edit = ClipEditDoc.model_validate(edits[clip_id]) if edits[clip_id] else None
+        else:
+            edit = edit_of(clip)
         segments, flash, zooms = clip_cut(clip, edit)
         words = None
         if edit is not None and edit.caption_lines:
@@ -176,8 +215,9 @@ def finish_export(db: Session, job: Job, done: list[tuple[str, str, str]], resol
         if clip.export_key:
             replaced.append(clip.export_key)
         clip.export_key, clip.export_res = key, resolution
+        edits = (job.options or {}).get("edits") or {}
         db.add(Export(id=export_id, clip_id=clip_id, account_id=job.account_id, resolution=resolution,
-                      options={k: v for k, v in (job.options or {}).items() if k != "clips"},
+                      options=export_spec(job.options or {}, edits.get(clip_id, clip.edit)),
                       status="SUCCEEDED", storage_key=key))
     return list(dict.fromkeys(k for k in replaced if k not in new_keys))
 

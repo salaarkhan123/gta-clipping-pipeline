@@ -277,6 +277,16 @@ def own_upload(db: Session, p: Principal, upload_id: str) -> Upload:
     return upload
 
 
+def replayed(db: Session, p: Principal, idempotency_key: str | None) -> dict | None:
+    """The job an earlier request with this Idempotency-Key started, as that request returned it, else None.
+    The caller holds the account lock (ledger.lock_account)."""
+    if not idempotency_key:
+        return None
+    existing = db.execute(select(Job).where(Job.account_id == p.account.id,
+                                            Job.idempotency_key == idempotency_key)).scalar_one_or_none()
+    return job_json(db, existing, with_clips=False) if existing else None
+
+
 def submit_job(db: Session, p: Principal, upload_id: str, webhook_url: str | None, idempotency_key: str | None,
                plan: Callable[[Upload], tuple[dict, float, int]]) -> dict:
     """Shared by every tool. `plan(upload)` returns (options, seconds_processed, credit_cost) or raises ApiError."""
@@ -289,11 +299,9 @@ def submit_job(db: Session, p: Principal, upload_id: str, webhook_url: str | Non
         raise ApiError(422, "bad_webhook_url", "webhook_url must be a public https URL.")
 
     ledger.lock_account(db, p.account.id)  # serialise this account's submits (Postgres row lock)
-    if idempotency_key:
-        existing = db.execute(select(Job).where(Job.account_id == p.account.id,
-                                                Job.idempotency_key == idempotency_key)).scalar_one_or_none()
-        if existing:
-            return job_json(db, existing, with_clips=False)
+    existing = replayed(db, p, idempotency_key)
+    if existing:
+        return existing
 
     upload = own_upload(db, p, upload_id)
     options, processed_sec, cost = plan(upload)
@@ -500,10 +508,11 @@ def edit_clip(clip_id: str, body: ClipEdit, p: Principal = Depends(current_princ
         raise ApiError(404, "not_found", "No such clip.")
     own_job(db, p, clip.job_id)
     if "edit" in body.model_fields_set:
+        stored = None
         if body.edit is not None:
             from .routes_export import check_edit
-            check_edit(db, clip, body.edit)
-        clip.edit = body.edit.model_dump() if body.edit is not None else None
+            stored = check_edit(db, clip, body.edit).model_dump()     # without cuts: the job's dead air is cut
+        clip.edit = stored
     if body.title is None:
         db.commit()
         return with_display_scores(db, with_ranks(db, [clip_json(clip, get_storage())]))[0]

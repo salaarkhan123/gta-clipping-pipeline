@@ -6,8 +6,10 @@ the clip routes in routes_media.py.
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+from pydantic_core import PydanticCustomError
 
-from .pipeline.layouts import NEEDS_CAMERA, layout_problem
+from .config import get_settings
+from .pipeline.layouts import ALLOWED, NEEDS_CAMERA, layout_problem
 
 # The reframe layouts (app/pipeline/layouts.py LAYOUTS), then the three names from before them, which keep working.
 Layout = Literal["auto", "full", "fit", "split2", "trio", "grid4", "pip", "ots", "screen_first", "gameplay_a",
@@ -26,6 +28,22 @@ RenderMode = Literal["none", "preview", "full"]
 # Stored with a job only when the request sent them: a job without them renders exactly as before, and the option
 # dicts the worker hands to the pipeline do not grow keys it does not know.
 ONLY_WHEN_SENT = ("resolution", "render", "hook_style", "hook_position", "hook_duration_ms")
+# Built but not yet checked on real gaming footage: offered only with PROVISIONAL_LAYOUTS on (DEPLOY.md). The
+# same setting turns on the auto layout chosen per moment (facecam.moment_facecam).
+PROVISIONAL = ("trio", "grid4", "ots")
+NOT_AVAILABLE = "layout_not_available"
+
+
+def provisional_on() -> bool:
+    return get_settings().provisional_layouts
+
+
+def refused_layout(errors: list[dict]) -> tuple[str, str] | None:
+    """(code, message) when a validation error is a provisional layout asked for while they are off: a 400."""
+    for e in errors:
+        if e.get("type") == NOT_AVAILABLE:
+            return NOT_AVAILABLE, e.get("msg", "This layout is not available.")
+    return None
 
 
 class LayoutOptions(BaseModel):
@@ -47,8 +65,8 @@ class LayoutOptions(BaseModel):
     caption_position: Literal["auto", "seam", "lower", "center"] = "auto"
     caption_accent: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")     # null: the brand lime
     censor: bool = False          # mask swears in burned captions and subtitle downloads (f***ing)
-    # Which layouts an aspect offers is in layouts.ALLOWED. auto picks per moment: a moment with the camera hidden
-    # fills the frame with gameplay. trio, grid4 and ots are provisional (our own reading of the names).
+    # Which layouts an aspect offers is in layouts.ALLOWED. trio, grid4 and ots are provisional (our own reading of the
+    # names), offered only with PROVISIONAL_LAYOUTS on; with it on, auto also picks per moment.
     layout: Layout = "auto"
     # The two-panel layouts (split2 and the old split, screen_first, gameplay_a, gameplay_b, and auto when it
     # draws one): which panel the camera is, and the top panel's share of the height. Null keeps the layout's
@@ -77,6 +95,10 @@ class LayoutOptions(BaseModel):
         problem = layout_problem(self.layout, self.aspect)
         if problem:
             raise ValueError(problem[1])
+        if self.layout in PROVISIONAL and not provisional_on():
+            usable = ", ".join(x for x in ALLOWED[self.aspect] if x not in PROVISIONAL)
+            raise PydanticCustomError(NOT_AVAILABLE, "The {layout} layout is not available yet. Use one of: {usable}.",
+                                      {"layout": self.layout, "usable": usable})
         if self.layout in NEEDS_CAMERA and not (self.facecam_box or self.facecam_region):
             raise ValueError(f"layout '{self.layout}' needs facecam_region or facecam_box")
         return self

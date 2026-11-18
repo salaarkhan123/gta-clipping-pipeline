@@ -51,6 +51,7 @@ class RenderOptions:
     hook_position: str = "beginning"  # exports: "beginning" | "end" of the clip
     hook_duration_ms: int | None = None   # exports: how long the hook shows; None = 2.5 s
     hook_overlay: bool = True         # exports: burn the clip's hook text in
+    moment_layout: bool = False       # exports, auto: each moment drawn for what it shows (PROVISIONAL)
 
 
 @dataclass
@@ -83,8 +84,8 @@ def run_export(src: Path, items: list[ExportItem], options: RenderOptions, out_d
                timer=None) -> list[ExportResult]:
     """Render stored clips again with new options (POST /v1/clips/export): the same moments, cuts and words,
     at `options.resolution`, in the layout, caption style and hook placement asked for. Captions are the clip's
-    own words when it has them; a clip made without captions is transcribed now (needs `transcriber`). With the
-    auto layout each moment gets its own (facecam.moment_facecam). Counts `rendered_sec` on `timer`."""
+    own words when it has them; a clip made without captions is transcribed now (needs `transcriber`). With
+    moment_layout on, an auto layout gives each moment its own (facecam.moment_facecam). Counts `rendered_sec` on `timer`."""
     from .edit import zoom_expr
     from .facecam import moment_facecam
     progress = progress_cb or (lambda stage, pct: None)
@@ -116,7 +117,7 @@ def run_export(src: Path, items: list[ExportItem], options: RenderOptions, out_d
         if hook and options.censor:
             hook = " ".join(mask(w) for w in hook.split())
         lay, cam = layout, facecam
-        if options.layout == "auto" and options.vertical:
+        if options.moment_layout and options.layout == "auto" and options.vertical and layout != "classic":
             lay, cam = moment_facecam(src, info, lo, hi, layout, facecam, deadline)
         video = out_dir / f"export-{i}.mp4"
         render_clip(src, item.start, item.end, video, src_w=info.width, src_h=info.height, vertical=options.vertical,

@@ -161,7 +161,9 @@ def test_the_new_options_change_no_default_and_no_stored_job():
     assert RenderOptions().resolution is None and RenderOptions().preview is False
 
 
-def test_layout_and_resolution_are_validated_with_the_reason():
+def test_layout_and_resolution_are_validated_with_the_reason(monkeypatch):
+    from app.config import get_settings
+    monkeypatch.setattr(get_settings(), "provisional_layouts", True)       # every built layout, trio, grid4, ots too
     for aspect in L.ALLOWED:
         for name in L.ALLOWED[aspect]:
             if name in L.BUILT:

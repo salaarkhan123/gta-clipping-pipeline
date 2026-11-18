@@ -16,7 +16,7 @@ from .db import get_db
 from .deps import ApiError, Principal, current_principal
 from .ledger import lock_account
 from .models import CustomTemplate, new_id, utcnow
-from .render_options import LayoutOptions
+from .render_options import LayoutOptions, refused_layout
 from .routes_media import ClipOptions, iso
 from .templates import GAMES, KINDS, TEMPLATES, games, listing, poster_file
 
@@ -61,6 +61,9 @@ def check_look(options: dict[str, Any]) -> dict[str, Any]:
     try:
         read = ClipOptions(**options)
     except ValidationError as e:
+        refused = refused_layout(e.errors())
+        if refused:
+            raise ApiError(400, *refused) from None
         first = e.errors()[0]
         where = ".".join(str(x) for x in first.get("loc", ()))
         raise ApiError(422, "bad_options", f"{where}: {first['msg']}".strip(": ")) from None

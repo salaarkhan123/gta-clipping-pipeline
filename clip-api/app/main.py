@@ -11,6 +11,7 @@ from . import routes_auth, routes_billing, routes_export, routes_ingest, routes_
 from .config import get_settings
 from .db import get_engine, init_db
 from .deps import ApiError
+from .render_options import refused_layout
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
@@ -49,6 +50,9 @@ async def api_error(_request: Request, exc: ApiError):
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(_request: Request, exc: RequestValidationError):
+    refused = refused_layout(exc.errors())          # a provisional layout while PROVISIONAL_LAYOUTS is off
+    if refused:
+        return JSONResponse(status_code=400, content={"error": {"code": refused[0], "message": refused[1]}})
     first = exc.errors()[0] if exc.errors() else {}
     where = ".".join(str(x) for x in first.get("loc", []) if x != "body")
     return JSONResponse(status_code=422, content={"error": {
