@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, clock, uploadFile, VIDEO_TYPES, videoFileProblem } from "@/lib/api";
 import { Icon } from "./Icon";
+import { ImportBox, useImportSources } from "./ImportBox";
 import { useDash } from "./Shell";
 
 export const ACCEPT = VIDEO_TYPES + ",video/*";
@@ -73,6 +74,7 @@ function VideoPicker({ title, projects, file, onPick, onClose }: { title: string
   const dialog = useRef<HTMLDialogElement>(null), input = useRef<HTMLInputElement>(null);
   const [problem, setProblem] = useState("");
   const { up, start, cancel } = useUpload((u) => onPick(u.upload_id));
+  const sources = useImportSources();
 
   function take(f: File | null | undefined) {
     if (!f) return;
@@ -99,6 +101,7 @@ function VideoPicker({ title, projects, file, onPick, onClose }: { title: string
           <input ref={input} type="file" accept={ACCEPT} hidden onChange={(e) => { take(e.target.files?.[0]); e.target.value = ""; }} />
           <div><button className="btn primary" onClick={() => input.current?.click()}><Icon name="upload" />Upload a video</button></div>
           {problem && <p className="error" role="alert">{problem}</p>}
+          {sources && <ImportBox sources={sources} compact onReady={(u) => onPick(u.upload_id)} />}
           {projects === null ? <p className="muted">Loading your videos…</p> : projects.length > 0 && (
             <ul className="picker-list" aria-label="Your videos">
               {projects.map((p) => (

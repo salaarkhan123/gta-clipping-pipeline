@@ -1,7 +1,9 @@
 "use client";
 import { useCallback, useEffect, useId, useState } from "react";
 import { api, clock } from "@/lib/api";
+import { useQuote } from "@/lib/exporting";
 import { allows, inside, Listed, onlyListed } from "@/lib/options";
+import { QUOTE, useRoutes } from "@/lib/routes";
 import { AS_IT_IS, extrasFrom, loadCustom, loadTemplates, Look, lookFrom, Saved, startLook } from "@/lib/templates";
 import { Icon } from "./Icon";
 import { Picked, PreEdit, Templates } from "./PreEdit";
@@ -58,16 +60,22 @@ export function JobForm({ upload, listed, onStarted, template }: { upload: any; 
     reloadSaved();
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function start() {
-    // Every setting is stated, including the ones this form has no control for, so a change to the API's defaults
-    // can never change what the dashboard makes. Then only the names the API lists are sent.
+  // Every setting is stated, including the ones this form has no control for, so a change to the API's defaults
+  // can never change what the dashboard makes. Then only the names the API lists are sent.
+  function body() {
     const options: Record<string, unknown> = { facecam_region: "auto", zoom: 1, resolution: RESOLUTION, chat_region: f.chat_region,
       ...look, ...(pre ? {} : AS_IT_IS), template: pre && chosen ? chosen.id : null, ...(pre && chosen ? extrasFrom(chosen, listed) : {}),
       prompt: f.prompt.trim() || null, range: f.range, source_lang: f.source_lang || null };
     if (has("duration")) options.duration = f.duration; else options.clip_length = f.clip_length;
     if (has("limit")) options.limit = f.limit; else options.max_clips = f.max_clips;
+    return { upload_id: upload.upload_id, options: onlyListed(listed, options) };
+  }
+  // The exact price, asked again as the options change, once the API has POST /v1/clips/quote.
+  const known = useRoutes();
+  const quote = useQuote(known?.quote ? QUOTE : null, known?.quote ? body() : null);
+  async function start() {
     setStarting(true);
-    try { onStarted(await api("/v1/clips", { body: { upload_id: upload.upload_id, options: onlyListed(listed, options) } })); await reloadMe(); }
+    try { onStarted(await api("/v1/clips", { body: body() })); await reloadMe(); }
     catch (e) { fail(e); } finally { setStarting(false); }
   }
 
@@ -128,7 +136,7 @@ export function JobForm({ upload, listed, onStarted, template }: { upload: any; 
       {(has("vertical") || has("captions")) && <PreEdit listed={listed} on={pre} onToggle={setPre} look={look} onLook={(change) => setLook((x) => ({ ...x, ...change }))}
         picked={picked} onPick={pick} templates={templates} saved={saved} onSavedChange={reloadSaved} />}
 
-      <StartRow upload={upload} label="Make clips" busy={starting} perMinute onStart={start} />
+      <StartRow upload={upload} label="Make clips" busy={starting} perMinute onStart={start} quote={quote} />
     </>
   );
 }

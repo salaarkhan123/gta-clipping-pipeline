@@ -36,6 +36,8 @@ const PATHS = {
   dislike: <><path d="M16.5 13.5 13 20a2.2 2.2 0 0 1-2.6-2.6l.8-3.4h-5a2 2 0 0 1-2-2.4l1.1-5.5a2 2 0 0 1 2-1.6H16.5v9Z" /><path d="M16.5 13.5h3v-9h-3" /></>,
   bookmark: <path d="M7 4.5h10a1 1 0 0 1 1 1V20l-6-4-6 4V5.5a1 1 0 0 1 1-1Z" />,
   send: <path d="M20 4 10.5 13.5M20 4l-6 16-3.5-6.5L4 10l16-6Z" />,
+  play: <path d="M7.5 5v14l11-7-11-7Z" />,
+  pause: <path d="M8 5v14M16 5v14" />,
 } as const;
 
 export type IconName = keyof typeof PATHS;
