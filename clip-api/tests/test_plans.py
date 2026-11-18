@@ -259,3 +259,11 @@ def test_import_sources_refuses_a_bad_token_instead_of_answering_for_free(client
                                           ("pro_v2", (2160, 3840)), ("scale_v2", (2160, 3840)), ("agency", (1080, 1920))])
 def test_a_4k_export_is_capped_at_the_plans_resolution(plan_id, size):
     assert output_size(3840, 2160, True, "9:16", "4k", max_side=get_plan(plan_id)["max_side"]) == size
+
+
+def test_the_free_plan_says_how_many_credits_sign_up_gives(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "free_signup_credits", 100)
+    plans = {p["id"]: p for p in client.get("/v1/billing/plans").json()["plans"]}
+    assert plans["free"]["signup_credits"] == 100                               # the setting, never a number in the site
+    assert all("signup_credits" not in p for pid, p in plans.items() if pid != "free")
+    assert "signup_credits" not in get_plan("free")                            # the config itself is unchanged

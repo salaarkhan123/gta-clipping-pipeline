@@ -1,13 +1,14 @@
 "use client";
 // Plan cards, shared by the public pricing page and the in-app one. Prices, credits, limits and any listed
 // features come from the server's plan config (GET /v1/billing/plans); nothing about a plan is set here.
-import { FREE_CREDITS, money } from "@/lib/api";
+import { money } from "@/lib/api";
+import { freeCredits } from "@/lib/plans";
 import { Icon } from "./dash/Icon";
 
 // `description` and `features` are optional fields of a plan in the config; when they are missing the card
 // shows only what the numbers say.
 export type Plan = { id: string; name: string; price_month_cents: number; price_year_cents: number; monthly_credits: number;
-  max_side: number; max_render_min: number | null; description?: string; features?: string[] };
+  max_side: number; max_render_min: number | null; description?: string; features?: string[]; signup_credits?: number };
 
 // What every plan can use: the product's tools, the same on every plan.
 export const INCLUDED = ["AI clip finder and virality score", "Find any moment by speech or what's on screen", "Automatic facecam detection",
@@ -63,10 +64,10 @@ export function PlanCards({ plans, currency, yearly, current, busy, onPick, free
               : <a className={button} href={freeHref}>Start free</a>}
             <p className="grid grid-cols-[auto_1fr] gap-x-[10px] gap-y-[2px] border-0 border-b border-solid border-line pb-[14px]">
               <Icon name="bolt" size={18} className="row-span-2 mt-[2px] text-lime" />
-              <b className="text-[15px]">{!isPaid ? `${FREE_CREDITS} credits` : `${p.monthly_credits.toLocaleString()} credits every month${yearly ? ", billed yearly" : ""}`}</b>
+              <b className="text-[15px]">{!isPaid ? freeCredits(p.signup_credits ?? null) : `${p.monthly_credits.toLocaleString()} credits every month${yearly ? ", billed yearly" : ""}`}</b>
               <span className="text-[13px] text-muted">1 credit processes 1 minute of source video</span></p>
             <ul className="grid list-none gap-[10px] text-[14px]">
-              {!isPaid && <li className="flex items-start gap-[10px] text-lime"><Check hi />{FREE_CREDITS} credits when you sign up</li>}
+              {!isPaid && <li className="flex items-start gap-[10px] text-lime"><Check hi />{freeCredits(p.signup_credits ?? null)} when you confirm your email</li>}
               <li className="flex items-start gap-[10px] text-label"><Check />{exportName(p.max_side)} exports</li>
               <li className="flex items-start gap-[10px] text-label"><Check />Reframe and caption {perJob(p.max_render_min)} per job</li>
               {(p.features || []).map((f) => <li key={f} className="flex items-start gap-[10px] text-label"><Check />{f}</li>)}

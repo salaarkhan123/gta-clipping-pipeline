@@ -56,8 +56,11 @@ def packs():
 
 @router.get("/v1/billing/plans")
 def plans():
+    """The plans on sale. The free plan also says how many credits a new account gets once its email is confirmed
+    (`signup_credits`, the FREE_SIGNUP_CREDITS setting), so the site never has to hardcode it."""
     s = get_settings()
-    return {"currency": s.currency, "billing_enabled": bool(s.stripe_secret_key), "plans": all_plans()}
+    listed = [{**p, "signup_credits": s.free_signup_credits} if p["id"] == "free" else p for p in all_plans()]
+    return {"currency": s.currency, "billing_enabled": bool(s.stripe_secret_key), "plans": listed}
 
 
 @router.post("/v1/billing/checkout")
