@@ -288,7 +288,7 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
       </div>
 
       {/* On a phone the total and the button stay in reach. */}
-      <div className="sticky bottom-[calc(theme(spacing.tabbar)+env(safe-area-inset-bottom))] z-30 hidden items-center justify-between gap-3 rounded-16 border border-solid border-line bg-[rgba(20,20,20,.96)] p-3 shadow-bar [backdrop-filter:blur(10px)] narrow:flex">
+      <div className="sticky bottom-[calc(var(--app-bottom-bar,theme(spacing.tabbar))+env(safe-area-inset-bottom))] z-30 hidden items-center justify-between gap-3 rounded-16 border border-solid border-line bg-[rgba(20,20,20,.96)] p-3 shadow-bar [backdrop-filter:blur(10px)] narrow:flex">
         <span className="inline-flex items-center gap-1 text-[15px] font-semibold tabular-nums"><Icon name="bolt" size={16} className="text-lime" />{total}</span>
         <div className="w-[150px]">{step ? <span className="text-[13px] text-muted">{step.text}</span> : create}</div>
       </div>

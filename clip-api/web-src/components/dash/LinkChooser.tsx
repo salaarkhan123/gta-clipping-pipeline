@@ -317,7 +317,7 @@ export function LinkChooser() {
       </section>}
 
       {!refused && <div className="sticky bottom-0 z-20 grid w-[min(100%,720px)] gap-[10px] rounded-t-16 border border-b-0 border-solid border-line bg-[rgba(13,15,18,.96)] px-[18px] pb-4 pt-[14px]
-        shadow-[0_-20px_40px_rgba(0,0,0,.45)] [backdrop-filter:blur(10px)] narrow:bottom-[calc(theme(spacing.tabbar)+env(safe-area-inset-bottom))] narrow:px-[14px] narrow:py-3">
+        shadow-[0_-20px_40px_rgba(0,0,0,.45)] [backdrop-filter:blur(10px)] narrow:bottom-[calc(var(--app-bottom-bar,theme(spacing.tabbar))+env(safe-area-inset-bottom))] narrow:px-[14px] narrow:py-3">
         {confirm ? <>
           <p className="muted">The video is in: {clock(confirm.upload.duration_sec)} long. {perMinute(kind)
             ? `This uses ${confirm.upload.credits_required} credit${confirm.upload.credits_required === 1 ? "" : "s"} (one per minute of video).`
