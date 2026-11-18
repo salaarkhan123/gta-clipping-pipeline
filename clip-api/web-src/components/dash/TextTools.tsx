@@ -102,7 +102,7 @@ export function TextTool({ kind }: { kind: Kind }) {
   const wide = kind === "transcript" && result;
 
   return (
-    <div className={wide ? "wide stack" : "form-col"}>
+    <div className={`text-tool ${wide ? "wide stack" : "form-col"}`}>
       <div className="page-head-row">{head}
         <Link className="btn small ghost" href={`/dashboard/project/?id=${project.upload_id}`}>Open the project</Link></div>
       <div className="src-card">

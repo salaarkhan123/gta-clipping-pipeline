@@ -310,3 +310,5 @@ a.tool-tile:hover .tool-ico, button.tool-tile:hover .tool-ico { border-color: va
 .dash .summary h2 { font-size: 20px; margin: 0; }
 .dash .summary h3 { font-size: 15px; margin-top: 4px; }
 .summary .chip-row { list-style: none; margin: 0; }
+.text-tool .src-card { flex-direction: row; align-items: center; width: 100%; margin: 0; }
+.text-tool .src-thumb { width: 112px; }
