@@ -134,3 +134,16 @@ def test_an_old_database_missing_a_table_is_refused_not_patched(db):
     with pytest.raises(RuntimeError, match="webhook_deliveries"):
         migrate(e)
     assert current(e) is None
+
+
+def test_a_database_ahead_of_this_code_starts_without_migrating(db, caplog):
+    """A code rollback after a newer release migrated the database: the older code must still start. It leaves the
+    newer revision alone (migrations are additive, so the old code runs on the newer schema) and says so in the log."""
+    engine = db("ahead")
+    migrate(engine)
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE alembic_version SET version_num = '9999'"))
+    caplog.set_level("WARNING", logger="clipapi.migrate")
+    assert migrate(engine) == ("9999", "9999")
+    assert current(engine) == "9999"
+    assert any("newer" in r.getMessage() and "9999" in r.getMessage() for r in caplog.records)
