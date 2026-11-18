@@ -94,6 +94,9 @@ class Settings(BaseSettings):
     # proposes moments for the judge (app/pipeline/llm_pass.py). Costs tokens per job (measured in the U3 PR);
     # false: candidates are nominated from the signals only, as before.
     llm_pass: bool = True
+    # (U4) Automatic discovery (a clip-length bucket and no clip count): the AI rating (0-100) a moment needs to become
+    # a clip. No quota: a video gets as many clips as it has moments this good, never filler. Tune on tuning videos.
+    clip_quality_floor: int = Field(40, ge=0, le=100)
 
     # Pipeline
     whisper_model: str = "small.en"   # captions. "none" disables transcription and captions

@@ -24,6 +24,7 @@ log = logging.getLogger("clipapi.ai")
 API_URL = "https://api.anthropic.com/v1/messages"
 # (U4) Judge v2: five sub-scores, each 0-100; the clip's score is their plain mean until U5 calibrates the weights.
 SCORES = ("hook", "payoff", "clarity", "emotion", "pacing")
+SCORING_VERSION = "judge-v2-equal"   # five sub-scores, equal weights; U5 recalibrates under a new version id
 PARTS = ("hook", "flow", "value", "trend")         # judge v1's four, still read from a reply in the older shape
 MAX_TOKENS = 1024
 CUT_RULE = "the best {lo} to {hi} second clip"      # the clip lengths the judge may cut; 15 to 60 unless a bucket is set
@@ -65,8 +66,10 @@ SYSTEM = (
     "CUT. When the transcript lines carry time marks like [12.4], also choose the cut, in seconds on those marks: "
     "cut.start and cut.end are " + CUT_RULE.format(lo=15, hi=60) + " of this moment. Start right where the action or the "
     "reaction begins, not on the build-up before it, and end just after the payoff, not on a trailing silence. "
-    "Start and end on whole sentences: never cut into the middle of what someone is saying. A story, an argument "
-    "or a scene may take up to the longest cut to land; a quick reaction, clutch or fail is usually 15 to 30 s. "
+    "Cut it as a story: begin on the setup a viewer needs, keep the payoff, and end just after the reaction to "
+    "it, never at a fixed number of seconds. Start and end on whole sentences or where the scene changes: never "
+    "cut into the middle of what someone is saying. A story, an argument or a scene may take up to the longest "
+    "cut to land; a quick reaction, clutch or fail is usually 15 to 30 s. "
     "cut.peak is the second where the most striking 1 to 2 seconds begin (the loudest reaction or the punchline). "
     "Stay within the marks you were given."
 )
@@ -167,7 +170,7 @@ def parse_meta(text) -> dict | None:
            "hashtags": [t for t in tags if t][:5],
            "virality": {"score": round(sum(parts.values()) / len(parts)), **parts},
            "reason": str(raw.get("reason") or "").strip()[:240], "kind": kind_of(raw.get("kind")), "source": "ai",
-           **({"scores": dict(parts)} if v2 else {})}
+           **({"scores": dict(parts), "scoring_version": SCORING_VERSION} if v2 else {})}
     tip = raw.get("tip")
     if isinstance(tip, dict) and str(tip.get("text") or "").strip():
         action = tip.get("action") if tip.get("action") in ("trim_start", "trim_end") else "none"

@@ -212,6 +212,7 @@ def clip_json(c: Clip, storage) -> dict:
             "titles": (c.meta or {}).get("titles") or ([c.meta["title"]] if (c.meta or {}).get("title") else []),
             "hook": (c.meta or {}).get("hook"),
             "scores": (c.meta or {}).get("scores"),       # (U4) judge v2's five sub-scores; None for older clips
+            "scoring_version": (c.meta or {}).get("scoring_version"),     # which judge and weights made them
             "hook_on_screen": bool(((c.features or {}).get("edit") or {}).get("hook")),   # burned into the video
             "suggestion": (c.meta or {}).get("suggestion"),
             # (render, agent B) the best render there is: the latest export, else the job's own, else its preview.

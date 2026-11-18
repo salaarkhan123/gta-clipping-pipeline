@@ -66,9 +66,11 @@ JUDGE_FLOOR = 20                              # judge scores below this are junk
 JUDGE_THREADS = 4
 STANDBY = "standby"                           # (U2) per-second signal, 1 = a BRB / starting-soon / empty-chair screen
 STANDBY_SHARE = 0.5                           # a span at least this much on standby is a standby span
-LONG_VIDEO_SEC = 3600.0                       # (U4) an analysed part this long is a long video: it aims at 30-50 clips
-LONG_MIN_CLIPS = 30                           # ... when every moment is asked for: at least this many when it has them
-FILL_FLOOR = 15                               # ... topping up from below JUDGE_FLOOR, never below this (menus, ads)
+# (U4) Automatic discovery (a `duration` and no `limit`): a moment becomes a clip only when the judge rates it at
+# least this; there is no quota, so a long video gets as many clips as it has moments this good (at most MAX_CLIPS).
+# The prompt anchors an ordinary clip at 50, so 40 keeps ordinary-or-better moments. Not tuned yet: tune it on the
+# tuning videos only (never the held-out one). The worker sets it from CLIP_QUALITY_FLOOR.
+QUALITY_FLOOR = 40
 PEAKS = 3                                     # per signal, the strongest seconds the judge is told about
 
 # judge(transcript_text, frame_path, context) -> {"virality": {"score": 0-100, ...}, ...} or None
@@ -119,6 +121,7 @@ class PipelineOptions:
     hook_style: str = "serious"           # the tone the judge writes the hook in (render_options.HookStyle)
     hook_position: str = "beginning"      # beginning | end: where the burned hook shows
     hook_duration_ms: int | None = None   # how long it shows; None = 2.5 s
+    quality_floor: int = QUALITY_FLOOR    # (U4) automatic discovery: the judge rating a moment needs to become a clip
     moment_layout: bool = False           # auto: draw each moment for what it shows (PROVISIONAL; off: one layout)
 
 
@@ -396,7 +399,7 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         every = options.duration is not None and options.limit is None
         ranked = _judge(candidates, judge, input_path, out_dir, progress, deadline, t1, options.judge_focus,
                         timer, limits=cut_limits, floor=t0, every=every,
-                        fill=LONG_MIN_CLIPS if every and t1 - t0 >= LONG_VIDEO_SEC else 0,
+                        quality_floor=options.quality_floor,
                         timeline=lambda c: _timeline(series, c.offset, c.end + JUDGE_PAD, base))
     # Without the new options this is max_clips over the whole video, as before. A long list is spread by how
     # many moments there really are, and "same topic" only counts between clips near each other (variety.py).
@@ -736,13 +739,14 @@ def _apply_trim(c: _Candidate, trim: dict | None, duration: float,
 
 def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path, progress, deadline,
            duration: float = float("inf"), focus: str | None = None, timer: Timer | None = None,
-           limits: tuple[float, float] | None = None, floor: float = 0.0, every: bool = False, fill: int = 0,
+           limits: tuple[float, float] | None = None, floor: float = 0.0, every: bool = False,
+           quality_floor: int = QUALITY_FLOOR,
            timeline=None) -> list[_Candidate]:
     """Rate every candidate, drop the junk, and return them best first. The judge may also choose each clip's cut:
     15-60 s, or inside `limits` (told to the judge as `cut_range`, whole seconds).
     `every`: the caller returns all of them, not a top N, so only moments the judge rated at or above its floor
-    count; moments it failed to rate are used only when it rated none at all. `fill` (a long video): when fewer
-    than `fill` pass the floor, the best of the rest rated at least FILL_FLOOR top it up to `fill`.
+    count, and with it the clip count is not a quota: only moments rated at least `quality_floor` are kept;
+    moments it failed to rate are used only when it rated none at all.
     `timeline(c)`: the signal peaks inside the candidate's transcript, sent to the judge (see _timeline)."""
     timer = timer or Timer()
     progress("judging", 60)
@@ -787,12 +791,11 @@ def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path,
         c.final = JUDGE_WEIGHT * score / 100 + (1 - JUDGE_WEIGHT) * min(1.0, c.final / top)
         rated.append(c)
     rated.sort(key=lambda c: c.final, reverse=True)
-    keep = [c for c in rated if c.features["judge_score"] >= JUDGE_FLOOR]
-    junk = [c for c in rated if c.features["judge_score"] < JUDGE_FLOOR]
+    bar = max(JUDGE_FLOOR, quality_floor) if every else JUDGE_FLOOR
+    keep = [c for c in rated if c.features["judge_score"] >= bar]
+    junk = [c for c in rated if c.features["judge_score"] < bar]
     # If the judge failed for some, rank them by signals after the good ones; junk only fills an otherwise empty result.
     unrated.sort(key=lambda c: c.final, reverse=True)
-    if every and len(keep) < fill:          # a long video short of moments: the best of the weaker ones, not junk
-        keep += [c for c in junk if c.features["judge_score"] >= FILL_FLOOR][:fill - len(keep)]
     out = (keep if rated else unrated) if every else keep + unrated
     return out if out else junk[:1]
 
