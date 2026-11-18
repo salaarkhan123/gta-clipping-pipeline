@@ -1,6 +1,7 @@
 "use client";
 import { useRef } from "react";
 import { Caption } from "../demos/Caption";
+import { Footage, useItem, useWords } from "../demos/Footage";
 import { SplitClip } from "../demos/Frames";
 import { useInView, useReducedMotion, useTicker } from "../demos/motion";
 import s from "../demos/demos.module.css";
@@ -12,8 +13,7 @@ import { EyebrowIcon } from "./EyebrowIcon";
 const WORDS = ["Okay", "we", "go", "left,", "wait", "wait", "wait,", "um,", "no,", "right", "side,", "chat", "watch", "this", "jump.", "If",
   "I", "land", "this", "it's", "over.", "NO", "WAY!", "He", "actually", "did", "it."];
 const CUT = [4, 5, 6, 7, 8];                       // "wait wait wait, um, no," cut from the transcript
-const SPOKEN = WORDS.map((_, i) => i).filter((i) => !CUT.includes(i));
-const CAPS = WORDS.map((w) => w.replace(/[^\w']/g, "").toUpperCase());
+const FILLER = /^(um+|uh+|erm|hmm+)[,.!?]*$/i;         // with real words, the fillers are shown cut
 
 function Icon({ d }: { d: React.ReactNode }) {
   return <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>;
@@ -27,7 +27,13 @@ const TABS = [
 export function EditorSection() {
   const box = useRef<HTMLDivElement>(null), seen = useInView(box, "0px"), reduced = useReducedMotion();
   const tick = useTicker(seen && !reduced, 360);
-  const now = SPOKEN[tick % SPOKEN.length];
+  // Real footage: the media pipeline's editor clip and its own words; the sample sentence until then.
+  const clip = useItem("editor", "editor-1"), said = useWords("editor", clip);
+  const words = said.length >= 8 ? said.slice(0, 40).map((w) => w.text.trim()) : WORDS;
+  const cut = said.length >= 8 ? words.flatMap((w, i) => (FILLER.test(w) ? [i] : [])) : CUT;
+  const spoken = words.map((_, i) => i).filter((i) => !cut.includes(i));
+  const now = spoken[tick % spoken.length];
+  const caps = words.map((w) => w.replace(/[^\p{L}\p{N}'!?]/gu, "").toUpperCase());
 
   return (
     <Section id="editor" eyebrow="Editor" icon={<EyebrowIcon name="edit" />} title={<>Let the AI cut it,<br className="narrow:hidden" /> then make it yours</>}
@@ -49,14 +55,14 @@ export function EditorSection() {
           <div className="flex flex-col gap-3 border-r border-white/[.07] p-5 narrow:order-3 narrow:border-r-0 narrow:border-t narrow:p-4">
             <p className="text-[12px] text-white/50">Click a word to jump to it. Shift-click another to select everything between, then cut it.</p>
             <div className="flex items-center gap-2 text-[12px]">
-              <span className="text-white/70">5 words cut</span>
+              <span className="text-white/70">{cut.length} word{cut.length === 1 ? "" : "s"} cut</span>
               <span className="rounded-full bg-white/10 px-2.5 py-1 text-white/60 ring-1 ring-white/10">Cut</span>
               <span className="rounded-full bg-white/10 px-2.5 py-1 text-white/80 ring-1 ring-white/10">Restore</span>
             </div>
             <p className="text-[17px] leading-[1.9] narrow:text-[15px]">
-              {WORDS.map((w, i) => {
-                const cut = CUT.includes(i);
-                return <span key={i} className={`mr-[.22em] inline-block rounded-[4px] px-[1px] ${cut ? "bg-white/[.04] text-white/35 line-through" : i === now ? "bg-lime text-ink" : "text-white/90"}`}>{w}</span>;
+              {words.map((w, i) => {
+                const out = cut.includes(i);
+                return <span key={i} className={`mr-[.22em] inline-block rounded-[4px] px-[1px] ${out ? "bg-white/[.04] text-white/35 line-through" : i === now ? "bg-lime text-ink" : "text-white/90"}`}>{w}</span>;
               })}
             </p>
           </div>
@@ -64,11 +70,13 @@ export function EditorSection() {
           {/* preview */}
           <div className="flex items-center justify-center px-8 py-6 narrow:order-1 narrow:py-4">
             <div className="relative aspect-[9/16] h-[400px] overflow-hidden rounded-[14px] ring-1 ring-white/10 narrow:h-[300px]">
-              <SplitClip game="gta" />
-              <span className="absolute inset-x-[8%] top-[6%] rounded-[7px] bg-lime px-2 py-1 text-center text-[13px] font-extrabold leading-tight text-ink">He actually landed it</span>
-              <span className="absolute inset-x-2 top-[33%] -translate-y-1/2 text-center text-[20px]">
-                <Caption style="impact" words={CAPS} keys={[22]} at={now} />
-              </span>
+              {clip ? <Footage section="editor" item={clip} play={seen} /> : <>
+                <SplitClip game="gta" />
+                <span className="absolute inset-x-[8%] top-[6%] rounded-[7px] bg-lime px-2 py-1 text-center text-[13px] font-extrabold leading-tight text-ink">He actually landed it</span>
+                <span className="absolute inset-x-2 top-[33%] -translate-y-1/2 text-center text-[20px]">
+                  <Caption style="impact" words={caps} keys={[22]} at={now} />
+                </span>
+              </>}
             </div>
           </div>
 

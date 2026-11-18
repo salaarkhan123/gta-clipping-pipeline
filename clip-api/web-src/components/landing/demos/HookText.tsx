@@ -1,5 +1,6 @@
 "use client";
 import { Caption } from "./Caption";
+import { Footage, useItem } from "./Footage";
 import { Gameplay } from "./Frames";
 import { useReducedMotion, useTicker } from "./motion";
 import s from "./demos.module.css";
@@ -11,13 +12,15 @@ const TONES = ["Serious", "Casual", "Humorous", "Dramatic", "Excited", "Calm"]; 
 
 export function HookText({ play }: { play: boolean }) {
   const reduced = useReducedMotion(), tick = useTicker(play && !reduced, 420);
+  // Real footage has its hook burned in by the engine; the panel then shows that clip's own hook line.
+  const real = useItem("hook", "hook-1"), hook = real?.hook || HOOK;
   return (
     <div className={`${s.demo} flex h-full items-center justify-center gap-10 narrow:flex-col-reverse narrow:gap-4`} data-play={play}>
       <div className="flex w-[340px] flex-col gap-4 rounded-[16px] bg-black/35 p-5 ring-1 ring-white/10 narrow:w-full narrow:gap-3 narrow:p-4" aria-hidden="true">
         <p className="text-[14px] font-semibold">Hook</p>
         <div className="grid gap-1.5">
           <span className="text-[12px] text-white/55">Hook text <span className="text-white/40">· written by the AI</span></span>
-          <span className="rounded-[10px] bg-white/5 px-3 py-2.5 text-[14px] text-white ring-1 ring-white/10">{HOOK}<span className={s.caret} /></span>
+          <span className="rounded-[10px] bg-white/5 px-3 py-2.5 text-[14px] text-white ring-1 ring-white/10">{hook}<span className={s.caret} /></span>
         </div>
         <div className="grid gap-1.5">
           <span className="text-[12px] text-white/55">Hook style</span>
@@ -36,11 +39,13 @@ export function HookText({ play }: { play: boolean }) {
 
       <figure className="flex flex-col items-center gap-3">
         <div className="relative aspect-[9/16] h-[420px] overflow-hidden rounded-[16px] ring-1 ring-white/10 narrow:h-[230px]">
-          <Gameplay game="gta" media="hook" play={play} label={false} />
-          <span className={`${s.hook} absolute inset-x-[8%] top-[11%] rounded-[8px] bg-lime px-2.5 py-1.5 text-center text-[17px] font-extrabold leading-tight text-ink narrow:text-[12px]`}>{HOOK}</span>
-          <span className="absolute inset-x-2 top-[74%] text-center text-[22px] narrow:text-[16px]">
-            <Caption style="impact" words={["WATCH", "THIS", "ONE", "MORE", "TIME"]} keys={[4]} at={reduced ? 0 : tick} />
-          </span>
+          {real ? <Footage section="hook" item={real} play={play} /> : <>
+            <Gameplay game="gta" label={false} />
+            <span className={`${s.hook} absolute inset-x-[8%] top-[11%] rounded-[8px] bg-lime px-2.5 py-1.5 text-center text-[17px] font-extrabold leading-tight text-ink narrow:text-[12px]`}>{HOOK}</span>
+            <span className="absolute inset-x-2 top-[74%] text-center text-[22px] narrow:text-[16px]">
+              <Caption style="impact" words={["WATCH", "THIS", "ONE", "MORE", "TIME"]} keys={[4]} at={reduced ? 0 : tick} />
+            </span>
+          </>}
         </div>
         <figcaption className="relative h-1.5 w-full overflow-hidden rounded-full bg-white/10" aria-hidden="true">
           <span className="absolute inset-y-0 left-0 w-1/2 rounded-full bg-lime/60" />

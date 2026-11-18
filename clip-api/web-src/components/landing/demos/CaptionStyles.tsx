@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { CAPTION_STYLES, Caption, CaptionStyle, styleName } from "./Caption";
+import { Footage, useItem, useWords } from "./Footage";
 import { SplitClip } from "./Frames";
 import { useReducedMotion, useTicker } from "./motion";
 import s from "./demos.module.css";
@@ -14,6 +15,12 @@ export function CaptionStyles({ play }: { play: boolean }) {
   const [picked, setPicked] = useState<CaptionStyle | null>(null);
   const style = picked ?? CAPTION_STYLES[Math.floor(tick / PER_STYLE) % CAPTION_STYLES.length].id;
   const list = useRef<HTMLUListElement>(null);
+  // Real footage: the engine's own render of this style when there is one; otherwise the clip without captions,
+  // with the style drawn over it from the clip's own words.
+  const rendered = useItem("captions", style), plain = useItem("captions", "plain"), said = useWords("captions", plain);
+  const real = said.length >= 4;
+  const words = real ? said.slice(0, 16).map((w) => w.text.replace(/[^\p{L}\p{N}'!?]/gu, "").toUpperCase()).filter(Boolean) : WORDS;
+  const keys = real ? [] : KEYS;
 
   // Keep the style being shown in the middle of the list, scrolling the list only (never the page).
   useEffect(() => {
@@ -27,10 +34,12 @@ export function CaptionStyles({ play }: { play: boolean }) {
   return (
     <div className={`${s.demo} flex h-full items-center justify-center gap-10 narrow:flex-col narrow:gap-4`} data-play={play}>
       <div className="relative aspect-[9/16] h-[440px] shrink-0 overflow-hidden rounded-[16px] ring-1 ring-white/10 narrow:h-[300px]">
-        <SplitClip game="gta" />
-        <span className="absolute inset-x-2 top-[33%] -translate-y-1/2 text-center text-[22px] narrow:text-[16px]">
-          <Caption style={style} words={WORDS} keys={KEYS} at={reduced ? 1 : tick} />
-        </span>
+        {rendered ? <Footage key={rendered.id} section="captions" item={rendered} play={play} /> : <>
+          {plain ? <Footage section="captions" item={plain} play={play} /> : <SplitClip game="gta" />}
+          <span className="absolute inset-x-2 top-[33%] z-10 -translate-y-1/2 text-center text-[22px] narrow:text-[16px]">
+            <Caption style={style} words={words} keys={keys} at={reduced ? 1 : tick} />
+          </span>
+        </>}
       </div>
 
       <div className="flex h-[440px] w-[300px] flex-col overflow-hidden rounded-[16px] bg-black/35 ring-1 ring-white/10 narrow:h-auto narrow:w-full">

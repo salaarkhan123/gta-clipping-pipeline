@@ -1,10 +1,7 @@
 "use client";
-import { useRef } from "react";
-import { MEDIA, MediaKey } from "./media";
-import { useInView, useReducedMotion } from "./motion";
 
-// Stand-ins for footage. Until the owner's own gameplay arrives (MEDIA in ./media.ts) every frame is a dark
-// gradient with a label: never a real video, never anyone else's footage.
+// Stand-ins for footage, drawn until the media pipeline delivers a section (./Footage.tsx): a dark gradient with a
+// label, never a real video.
 
 export type Game = "gta" | "valorant" | "fortnite" | "apex" | "lol" | "cs2" | "minecraft" | "rust";
 const SKY: Record<Game, [string, string, string]> = {
@@ -20,26 +17,10 @@ const SKY: Record<Game, [string, string, string]> = {
 export const GAME_LABEL: Record<Game, string> = { gta: "GTA 5", valorant: "Valorant", fortnite: "Fortnite", apex: "Apex Legends",
   lol: "League of Legends", cs2: "Counter-Strike 2", minecraft: "Minecraft", rust: "Rust" };
 
-// A looping clip of real footage, loaded only when it is near the screen and playing; the poster otherwise.
-// Always muted: nothing on the landing page plays sound.
-function Loop({ k, play }: { k: MediaKey; play: boolean }) {
-  const box = useRef<HTMLSpanElement>(null), seen = useInView(box), reduced = useReducedMotion();
-  const m = MEDIA[k]!;
-  return (
-    <span ref={box} className="absolute inset-0">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={m.poster} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
-      {m.video && seen && play && !reduced &&
-        <video src={m.video} poster={m.poster} muted loop playsInline autoPlay preload="none" className="absolute inset-0 h-full w-full object-cover" />}
-    </span>
-  );
-}
-
 // Gameplay: sky, horizon and ground in the game's colours, a minimap and a health bar so it reads as a game.
-export function Gameplay({ game = "gta", label = true, hud = true, media, play = true, className = "" }: {
-  game?: Game; label?: boolean | string; hud?: boolean; media?: MediaKey; play?: boolean; className?: string }) {
+export function Gameplay({ game = "gta", label = true, hud = true, className = "" }: {
+  game?: Game; label?: boolean | string; hud?: boolean; className?: string }) {
   const [sky, glow, ground] = SKY[game];
-  if (media && MEDIA[media]) return <span className={`absolute inset-0 overflow-hidden ${className}`}><Loop k={media} play={play} /></span>;
   return (
     <span className={`absolute inset-0 overflow-hidden ${className}`} aria-hidden="true"
       style={{ background: `radial-gradient(60% 40% at 62% 52%, ${glow}88, transparent 70%), linear-gradient(180deg, ${sky} 0%, ${glow}55 50%, ${ground} 51%, #0b0c0f 100%)` }}>
