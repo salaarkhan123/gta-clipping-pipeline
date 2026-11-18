@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { AuthForm } from "@/components/Auth";
 import { Nav } from "@/components/Chrome";
 import { Icon } from "@/components/dash/Icon";
-import { FREE_CREDITS } from "@/lib/api";
+import { freeCredits, useSignupCredits } from "@/lib/plans";
 
 export default function Login() {
   const router = useRouter();
   const [q, setQ] = useState<{ isNew: boolean; verified: boolean } | null>(null);
+  const signup = useSignupCredits();
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     setQ({ isNew: p.has("new"), verified: p.has("verified") });
@@ -21,7 +22,7 @@ export default function Login() {
           {q && <AuthForm initial={q.isNew ? "signup" : "login"} onDone={() => router.push("/dashboard/")}
             note={q.verified ? "Email confirmed. Log in to pick up where you left off." : undefined} />}
           <ul className="mt-[18px] grid list-none gap-2 border-0 border-t border-solid border-line pt-4 text-[13.5px] text-muted [&_.ico]:text-lime [&_li]:flex [&_li]:items-center [&_li]:gap-2">
-            <li><Icon name="bolt" size={16} />{FREE_CREDITS} free credits when you confirm your email</li>
+            <li><Icon name="bolt" size={16} />{freeCredits(signup)} when you confirm your email</li>
             <li><Icon name="check" size={16} />No card needed to start</li>
             <li><Icon name="check" size={16} />Clips ranked by score, with your facecam and captions</li>
           </ul>

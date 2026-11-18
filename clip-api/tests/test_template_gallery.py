@@ -239,7 +239,8 @@ def test_every_template_has_its_poster_and_it_is_what_the_script_draws():
     script = load_script()
     for tid, t in TEMPLATES.items():
         path = ASSETS / tid / "poster.svg"
-        assert path.is_file() and catalogue.poster_file(tid) == (path, "image/svg+xml"), tid
+        assert path.is_file(), tid                                             # the drawing, kept as the fallback
+        assert catalogue.poster_file(tid) == (ASSETS / tid / "poster.webp", "image/webp"), tid   # the footage frame is served
         text = path.read_text(encoding="utf-8")
         assert text == script.poster_svg(t), f"{tid}: run scripts/make_template_previews.py --posters"
         xml.dom.minidom.parseString(text)                                      # well-formed
@@ -253,8 +254,11 @@ def test_every_template_has_its_poster_and_it_is_what_the_script_draws():
 def test_no_footage_is_committed_unless_it_is_listed():
     committed = {p.parent.name for p in ASSETS.glob("*/preview.mp4")}
     assert committed == set(PREVIEW_VIDEOS)                                    # today: none of either
-    media = [p for p in ASSETS.rglob("*") if p.is_file() and p.suffix.lower() not in (".svg", ".md") and p.name != "preview.mp4"]
+    media = [p for p in ASSETS.rglob("*") if p.is_file() and p.suffix.lower() not in (".svg", ".md")
+             and p.name not in ("preview.mp4", "poster.webp")]
     assert media == []                                                         # no screenshots or other artwork
+    # The only other images: one poster frame per template, rendered by the script from the owner's own footage.
+    assert {p.parent.name for p in ASSETS.glob("*/poster.webp")} == set(TEMPLATES)
 
 
 def test_the_script_writes_posters_and_refuses_footage_without_the_rights_flag(tmp_path, video, capsys):
@@ -281,3 +285,15 @@ def test_the_script_renders_a_preview_clip_per_template(tmp_path, video):
         assert 2.5 <= float(data["format"]["duration"]) <= 3.6, tid
     assert sizes == {"cs2-frag-highlight": (540, 960), "dota2-teamfight": (960, 540)}   # each in its template's shape
     assert sorted(p.parent.name for p in tmp_path.glob("*/preview.mp4")) == ["cs2-frag-highlight", "dota2-teamfight"]
+
+
+def test_the_script_writes_a_poster_frame_per_template_in_its_shape(tmp_path, video):
+    from PIL import Image
+    script = load_script()
+    assert script.main([str(video), "--poster-frames", "--out", str(tmp_path)]) == 2      # no --i-have-rights
+    code = script.main([str(video), "--i-have-rights", "--poster-frames", "--start", "19", "--out", str(tmp_path),
+                        "--only", "cs2-frag-highlight,dota2-teamfight"])
+    assert code == 0
+    sizes = {tid: Image.open(tmp_path / tid / "poster.webp").size for tid in ("cs2-frag-highlight", "dota2-teamfight")}
+    assert sizes == {"cs2-frag-highlight": (360, 640), "dota2-teamfight": (640, 360)}     # each in its template's shape
+    assert all((tmp_path / tid / "poster.webp").stat().st_size < 150_000 for tid in sizes)

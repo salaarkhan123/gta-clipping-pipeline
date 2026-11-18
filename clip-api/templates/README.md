@@ -5,13 +5,16 @@ One folder per template id from `app/templates.py`: the game templates and the g
 | File | What it is | Where it comes from |
 |---|---|---|
 | `<id>/poster.svg` | A schematic of the template's layout in the ClutchClips colours, with its name and shape. A game template's shows its length, caption style and hook; a preset's shows its panel sizes and one caption word where captions sit. It says "layout schematic, not game footage" on it. | `python scripts/make_template_previews.py --posters` |
+| `<id>/poster.webp` | One frame of the template's real look: the owner's own GTA footage rendered with the template's layout, panel sizes, caption style and position and hook, 360x640 WebP (640x360 for a 16:9 template), about 25 to 40 KB. Served before `poster.svg`. Templates for other games show the GTA footage in their layout until the owner supplies footage from those games. | `python scripts/make_template_previews.py "<owner's video>" --i-have-rights --poster-frames [--start 3300]` |
 | `<id>/preview.mp4` | A short real clip in the template's look. None are committed yet. | `python scripts/make_template_previews.py <video> --i-have-rights` |
 
 In the public list (`GET /v1/templates`), `preview.poster` is the path of the API route that serves the poster, `/v1/templates/<id>/poster`. `preview.video` is `templates/<id>/preview.mp4`, relative to the site root, and `null` until a clip is committed and listed (below).
 
 ## Posters
 
-Run from `clip-api/`:
+The site shows `poster.webp` (a frame of real footage) when it is there, and the drawing otherwise. The committed frames come from `GTA_Benchmark_2Hours.mkv` at 3300 s (street action with the facecam in shot), the owner's own footage. Re-run the `--poster-frames` command after changing a template's look.
+
+The drawings: run from `clip-api/`:
 
 ```
 python scripts/make_template_previews.py --posters

@@ -63,10 +63,10 @@ export function Footer() {
   );
 }
 
-// Virality score as a bar, like the reference design.
+// The AI rating as a bar.
 export function Stars({ score }: { score: number }) {
   return (
-    <span className="vscore" role="img" aria-label={`Virality ${score} out of 100`}>
+    <span className="vscore" role="img" aria-label={`AI rating ${score} out of 100`}>
       <span className="score-bar"><span style={{ width: `${score}%` }} /></span><b>{score}</b>
     </span>
   );

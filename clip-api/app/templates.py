@@ -78,9 +78,11 @@ TUNING_FIELDS = ("weights", "transcript_bonus", "judge_focus")
 # (rendered by scripts/make_template_previews.py). Empty until the owner supplies footage.
 PREVIEW_VIDEOS: frozenset[str] = frozenset()
 ASSETS = Path(__file__).resolve().parent.parent / "templates"       # clip-api/templates: one folder per id
-# The poster file names looked for in a template's folder, in this order, and what each is served as.
-POSTER_TYPES = {"poster.svg": "image/svg+xml", "poster.webp": "image/webp", "poster.png": "image/png",
-                "poster.jpg": "image/jpeg"}
+# The poster file names looked for in a template's folder, in this order, and what each is served as. A frame
+# rendered from footage (poster.webp, scripts/make_template_previews.py --poster-frames) comes before the
+# schematic drawing (poster.svg), which stays as the fallback.
+POSTER_TYPES = {"poster.webp": "image/webp", "poster.png": "image/png", "poster.jpg": "image/jpeg",
+                "poster.svg": "image/svg+xml"}
 # Path segments that follow /v1/templates/ in a route of their own: never a template id.
 RESERVED_IDS = ("custom", "games")
 ID_FORMAT = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*", re.ASCII)
