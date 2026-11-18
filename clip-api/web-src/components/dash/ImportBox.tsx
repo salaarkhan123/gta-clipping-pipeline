@@ -33,10 +33,12 @@ export function useImportSources(): Sources | null | undefined {
 
 // The box. `onReady` gets the new upload when a single import finishes (Home opens the project). `recent` adds the
 // list of the account's last imports.
-export function ImportBox({ sources, onReady, recent, compact }: { sources: Sources; onReady: (upload: any) => void; recent?: boolean; compact?: boolean }) {
+// `start` opens the box on a tab, with a link already filled in (Home's big input hands it over).
+export function ImportBox({ sources, onReady, recent, compact, start }: { sources: Sources; onReady: (upload: any) => void; recent?: boolean; compact?: boolean;
+  start?: { mode: "one" | "many"; url?: string } }) {
   const ids = useId();
-  const [mode, setMode] = useState<"one" | "many">("one");
-  const [url, setUrl] = useState(""), [urls, setUrls] = useState(""), [consent, setConsent] = useState(false);
+  const [mode, setMode] = useState<"one" | "many">(start?.mode || "one");
+  const [url, setUrl] = useState(start?.url || ""), [urls, setUrls] = useState(""), [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false), [problem, setProblem] = useState("");
   const [single, setSingle] = useState<any>(null);                                  // the import being followed
   const [batch, setBatch] = useState<{ url: string; import: any; error: any }[] | null>(null);
@@ -139,7 +141,7 @@ function ImportCard({ item, onReady }: { item: any; onReady?: (upload: any) => v
   );
 }
 
-function RecentImports({ reload }: { reload: number }) {
+export function RecentImports({ reload }: { reload: number }) {
   const [list, setList] = useState<any[] | null>(null);
   useEffect(() => { api("/v1/imports?limit=5").then((r) => setList(r.imports)).catch(() => setList(null)); }, [reload]);
   const anyActive = !!list?.some(active);

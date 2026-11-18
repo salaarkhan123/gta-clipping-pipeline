@@ -2,20 +2,8 @@
 import { useEffect, useState } from "react";
 import { AuthDialog } from "@/components/Auth";
 import { Footer, Nav } from "@/components/Chrome";
+import { INCLUDED, PeriodToggle, Plan, PlanCards, yearlySaving } from "@/components/PricingPlans";
 import { api, ApiError, FREE_CREDITS, getToken, money } from "@/lib/api";
-
-type Plan = { id: string; name: string; price_month_cents: number; price_year_cents: number; monthly_credits: number;
-  max_side: number; max_render_min: number | null };
-
-const BLURB: Record<string, string> = {
-  free: "Try AI clipping with no commitment.",
-  starter: "For new clippers building their first accounts.",
-  pro: "For serious clippers running campaigns.",
-};
-const blurb = (p: Plan) => BLURB[p.id] || "For clipping agencies and teams.";
-
-const INCLUDED = ["AI clip finder and virality score", "Find any moment by speech or what's on screen", "Automatic facecam detection",
-  "9:16, 4:5, 1:1 and 16:9", "Five caption styles, SRT and VTT export", "AI titles and hashtags", "API access and the agent skill"];
 
 const FAQ: [string, string][] = [
   ["Can I use ClutchClips for free?", `Yes. Sign up and get ${FREE_CREDITS} free credits, enough for about ${FREE_CREDITS} minutes of video. No credit card required.`],
@@ -54,11 +42,7 @@ export default function Pricing() {
     }
   }
 
-  // The real yearly discount, worked out from the plans the server returns.
-  const paidPlans = (plans || []).filter((p) => p.price_month_cents > 0);
-  const save = paidPlans.length ? Math.round(100 * (1 - Math.min(...paidPlans.map((p) => p.price_year_cents / (p.price_month_cents * 12))))) : 0;
-  const popular = paidPlans.length >= 2 ? paidPlans[1].id : paidPlans[0]?.id;
-  const fmt = (c: number) => money(c, currency).replace(/\.00$/, "");
+  const save = yearlySaving(plans || []);
 
   return (
     <>
@@ -74,44 +58,11 @@ export default function Pricing() {
 
         <section className="flush">
           <div className="container center">
-            <div className="toggle" role="group" aria-label="Billing period">
-              <button className={!yearly ? "active" : ""} onClick={() => setYearly(false)}>Monthly</button>
-              <button className={yearly ? "active" : ""} onClick={() => setYearly(true)}>Yearly {save > 0 && <span className="save">-{save}%</span>}</button>
-            </div>
+            <PeriodToggle yearly={yearly} onChange={setYearly} save={save} />
             {msg && <p className="notice" role="status">{msg}</p>}
-            {!plans ? <p className="muted">Loading plans…</p> : (
-              <div className="price-grid">
-                {plans.map((p) => {
-                  const paid = p.price_month_cents > 0;
-                  const perMonth = yearly ? p.price_year_cents / 12 : p.price_month_cents;
-                  const pop = p.id === popular;
-                  return (
-                    <article key={p.id} className={`plan ${pop ? "popular" : ""}`}>
-                      {pop && <span className="ribbon">Most Popular</span>}
-                      <h3>{p.name}</h3>
-                      <p className="desc">{blurb(p)}</p>
-                      <div className="old">{paid && yearly && perMonth < p.price_month_cents ? fmt(p.price_month_cents) : ""}</div>
-                      <div className="price">{fmt(Math.round(perMonth))}<small> / month</small></div>
-                      <div className="billed">{!paid ? "Free forever" : yearly ? `Billed ${fmt(p.price_year_cents)} yearly` : "Billed monthly"}</div>
-                      {current === p.id ? <button className="btn btn-ghost" disabled>Your plan</button>
-                        : paid ? <button className={`btn ${pop ? "btn-primary" : "btn-ghost"}`} disabled={busy === p.id}
-                            onClick={() => go("/v1/billing/subscribe", { plan_id: p.id, interval: yearly ? "year" : "month" }, p.id)}>
-                            {busy === p.id ? "Opening checkout…" : `Get ${p.name}`}</button>
-                        : <a className="btn btn-ghost" href={getToken() ? "/dashboard/" : "/login/?new=1"}>Start Free</a>}
-                      <p className="sub">{!paid ? `${FREE_CREDITS} credits when you sign up`
-                        : yearly ? `${(p.monthly_credits * 12).toLocaleString()} credits up front` : `${p.monthly_credits.toLocaleString()} credits / month`}</p>
-                      <ul>
-                        <li>{p.max_side >= 1080 ? "1080p" : "720p"} exports</li>
-                        <li>Reframe and caption {p.max_render_min ? `up to ${p.max_render_min >= 60 ? `${p.max_render_min / 60} hr` : `${p.max_render_min} min`}` : "any length"} per job</li>
-                        <li>All caption styles</li>
-                        {paid && <li>Unused credits roll over</li>}
-                        {paid && <li>Priority support</li>}
-                      </ul>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
+            {!plans ? <p className="muted">Loading plans…</p>
+              : <PlanCards plans={plans} currency={currency} yearly={yearly} current={current} busy={busy} freeHref={getToken() ? "/dashboard/" : "/login/?new=1"}
+                  onPick={(p) => go("/v1/billing/subscribe", { plan_id: p.id, interval: yearly ? "year" : "month" }, p.id)} />}
           </div>
         </section>
 

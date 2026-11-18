@@ -19,13 +19,15 @@ export default function Library() {
     window.history.replaceState(null, "", v === "clips" ? "?view=clips" : window.location.pathname);
   }
   return (
-    <>
-      <h1 className="dash-title">Library</h1>
-      <Tabs label="Library view" panel="library-view" value={view} onChange={show} tabs={[["projects", "Projects"], ["clips", "Clips"]]} />
+    <div className="wide stack">
+      <div className="page-head-row">
+        <h1>Library</h1>
+        <Tabs seg label="Library view" panel="library-view" value={view} onChange={show} tabs={[["projects", "Projects"], ["clips", "Clips"]]} />
+      </div>
       <div id="library-view" role="tabpanel" aria-label={view === "projects" ? "Projects" : "Clips"} className="stack">
         {view === "projects" ? <AllProjects /> : <AllClips />}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -48,10 +50,10 @@ function AllProjects() {
   useEffect(() => { if (!anyActive) return; const id = setInterval(() => load(0, true), 4000); return () => clearInterval(id); }, [anyActive, load]);
 
   if (projects === null) return <p className="muted">Loading your projects…</p>;
-  if (!projects.length) return <p className="muted">No projects yet. <Link href="/dashboard/">Upload a stream recording</Link> to start one.</p>;
+  if (!projects.length) return <p className="empty-note">No projects yet. <Link href="/dashboard/">Paste a link or upload a recording</Link> to start one.</p>;
   return (
     <>
-      <p className="muted">Each video you upload is a project. Videos and clips are kept for 7 days.</p>
+      <p className="muted small">Each video is a project. Videos and their clips are kept for 7 days.</p>
       <ProjectGrid projects={projects} />
       {more && <div><button className="btn ghost" disabled={busy} onClick={() => load(projects.length)}>{busy ? "Loading…" : "Show more"}</button></div>}
     </>
@@ -76,11 +78,13 @@ function AllClips() {
 
   return (
     <>
-      <ClipToolbar sort={sort} filter={filter} sorts={["newest", "score", "time"]} onSort={setSort} onFilter={setFilter} />
+      <div className="results-head">
+        <p className="muted small">{clips?.length ? `${total} clip${total === 1 ? "" : "s"}. Clips are kept for 7 days.` : ""}</p>
+        <ClipToolbar sort={sort} filter={filter} sorts={["newest", "score", "time"]} onSort={setSort} onFilter={setFilter} />
+      </div>
       {clips === null ? <p className="muted">Loading your clips…</p>
-        : !clips.length ? <p className="muted">{filter === "all" ? "No clips yet. Open a project and make some." : "No clips match this filter."}</p>
+        : !clips.length ? <p className="empty-note">{filter === "all" ? "No clips yet. Open a project and make some." : "No clips match this filter."}</p>
         : <>
-            <p className="muted">{total} clip{total === 1 ? "" : "s"}. Clips are kept for 7 days.</p>
             <div className="clips">
               {clips.map((c) => <ClipCard key={c.id} clip={c} project={{ id: c.upload_id, name: c.filename }}
                 onChange={(n) => setClips((list) => list!.map((x) => (x.id === n.id ? n : x)))} />)}
