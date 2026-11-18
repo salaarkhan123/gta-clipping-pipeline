@@ -119,3 +119,27 @@ def test_refuses_edited_tracked_files_and_wrong_branch(server):
     r = deploy(work, env, DEPLOY_BRANCH="staging")
     assert r.returncode == 1 and "deploy branch is 'staging'" in r.stderr
     assert "build" not in calls(log)
+
+
+def test_deploy_sha_fast_forwards_to_that_commit_only(server):
+    work, env, _ = server
+    other = work.parent / "dev"
+    git(work.parent, "clone", "-q", str(work.parent / "origin.git"), str(other))
+    for k, v in (("user.email", "t@t"), ("user.name", "t")):
+        git(other, "config", k, v)
+    shas = []
+    for name in ("a.txt", "b.txt"):
+        (other / name).write_text("x")
+        git(other, "add", "-A"); git(other, "commit", "-qm", name); git(other, "push", "-q", "origin", "main")
+        shas.append(subprocess.run(["git", "rev-parse", "HEAD"], cwd=other, capture_output=True, text=True).stdout.strip())
+    r = deploy(work, env, DEPLOY_SHA=shas[0])
+    assert r.returncode == 0, r.stderr
+    assert (work / "a.txt").exists() and not (work / "b.txt").exists()
+
+
+@pytest.mark.parametrize("sha", ["f" * 40, "abc", "A" * 40])
+def test_deploy_sha_must_be_a_full_sha_on_main(server, sha):
+    work, env, log = server
+    r = deploy(work, env, DEPLOY_SHA=sha)
+    assert r.returncode == 1 and "refusing" in r.stderr
+    assert "build" not in calls(log)
