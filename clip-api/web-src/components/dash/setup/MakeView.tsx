@@ -6,6 +6,7 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { useQuote } from "@/lib/exporting";
 import { useClipOptions } from "@/lib/options";
+import { polishLook } from "@/lib/polish";
 import { QUOTE, useRoutes } from "@/lib/routes";
 import { useDash } from "../Shell";
 import { Tabs } from "../Tabs";
@@ -20,6 +21,7 @@ export function MakeView({ upload, tool, template, onStarted, onBack, back }: { 
   const { reloadMe, fail } = useDash();
   const listed = useClipOptions(), known = useRoutes();
   const [make, setMake] = useState<Make>(tool === "reframe" || tool === "captions" ? tool : "clips");
+  const [preset] = useState(() => (typeof window === "undefined" ? {} : polishLook(window.location.search)));     // Home's polish chips
   const [options, setOptions] = useState<Record<string, unknown> | null>(null), [busy, setBusy] = useState(false);
   const body = options ? { upload_id: upload.upload_id, options } : null;
   const quote = useQuote(known?.quote ? QUOTE : null, known?.quote ? body : null);
@@ -38,7 +40,7 @@ export function MakeView({ upload, tool, template, onStarted, onBack, back }: { 
   if (!listed) return <p className="muted">Loading the options…</p>;
   if (make === "clips") return (
     <div id="make-panel" role="tabpanel" aria-label="Clip Maker">
-      <JobSetup listed={listed} template={template} busy={busy} price={price} onOptions={setOptions} onCreate={create} onRemove={onBack} header={tabs}
+      <JobSetup listed={listed} template={template} preset={preset} busy={busy} price={price} onOptions={setOptions} onCreate={create} onRemove={onBack} header={tabs}
         source={{ title: upload.filename, duration: upload.duration_sec, height: upload.height, video: upload.source_url,
           thumb: upload.thumb_url || upload.clips?.find((c: any) => c.thumb_url)?.thumb_url }} />
     </div>

@@ -35,14 +35,15 @@ const QUICK = ["Funny reactions", "Clutch plays", "Epic fails", "Chases and cras
 const DISPLAY: Record<string, string> = { translation: "Translated only", both: "Both languages" };
 const languageName = (code: string) => { try { return new Intl.DisplayNames(["en"], { type: "language" }).of(code) || code; } catch { return code; } };
 
-export function JobSetup({ source, listed, template, price, onOptions, onCreate, onRemove, consent, step, problem, header, busy }: {
-  source: SetupSource; listed: Listed; template?: string; price: Price; onOptions: (o: Record<string, unknown>) => void; onCreate: (o: Record<string, unknown>) => void;
+export function JobSetup({ source, listed, template, preset, price, onOptions, onCreate, onRemove, consent, step, problem, header, busy }: {
+  source: SetupSource; listed: Listed; template?: string; preset?: Partial<Look>; price: Price; onOptions: (o: Record<string, unknown>) => void; onCreate: (o: Record<string, unknown>) => void;
   onRemove: () => void; consent?: { checked: boolean; onChange: (on: boolean) => void; text: string }; step?: { text: string; pct?: number } | null;
   problem?: string; header?: React.ReactNode; busy?: boolean }) {
   const { me } = useDash();
   const langs = useLanguages();
   const has = (k: string) => k in listed;
-  const [look, setLook] = useState<Look>(() => ({ ...startLook(listed), ...(has("caption_emoji") ? {} : { caption_emoji: false }) }));
+  // Home's polish chips arrive as `preset` (captions, speech cleanup, hook); anything else starts from our defaults.
+  const [look, setLook] = useState<Look>(() => ({ ...startLook(listed), ...preset, ...(has("caption_emoji") && preset?.captions !== false ? {} : { caption_emoji: false }) }));
   const onLook = (c: Partial<Look>) => setLook((x) => ({ ...x, ...c }));
   const [f, setF] = useState({ limit: null as number | null, duration: allows(listed, "duration", AUTO) ? AUTO : String(listed.duration?.values?.[0] || AUTO),
     prompt: "", range: null as Span | null, source_lang: "", chat_region: "none", hook_style: String(listed.hook_style?.default || "serious"),
@@ -287,7 +288,7 @@ export function JobSetup({ source, listed, template, price, onOptions, onCreate,
       </div>
 
       {/* On a phone the total and the button stay in reach. */}
-      <div className="sticky bottom-[calc(theme(spacing.tabbar)+env(safe-area-inset-bottom))] z-30 hidden items-center justify-between gap-3 rounded-16 border border-solid border-line bg-[rgba(20,20,20,.96)] p-3 shadow-bar [backdrop-filter:blur(10px)] narrow:flex">
+      <div className="sticky bottom-[calc(var(--app-bottom-bar,theme(spacing.tabbar))+env(safe-area-inset-bottom))] z-30 hidden items-center justify-between gap-3 rounded-16 border border-solid border-line bg-[rgba(20,20,20,.96)] p-3 shadow-bar [backdrop-filter:blur(10px)] narrow:flex">
         <span className="inline-flex items-center gap-1 text-[15px] font-semibold tabular-nums"><Icon name="bolt" size={16} className="text-lime" />{total}</span>
         <div className="w-[150px]">{step ? <span className="text-[13px] text-muted">{step.text}</span> : create}</div>
       </div>

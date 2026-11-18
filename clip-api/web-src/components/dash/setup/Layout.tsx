@@ -44,8 +44,8 @@ export function LayoutPicker({ listed, look, onLook, setAspect, chat, onChat }: 
       <section className="grid gap-3" aria-label="Shape">
         <h3 className={`m-0 ${LABEL}`}>Shape</h3>
         <div className="flex flex-wrap items-end gap-3">
-          {aspects.map((a) => <Tile key={a} name={a} on={look.aspect === a} onClick={() => setAspect(a)} className="h-[76px]" >
-            <span className="block h-[64px] rounded-[6px] border-2 border-solid border-[rgba(255,255,255,.5)]" style={{ aspectRatio: ratio(a) }} /></Tile>)}
+          {aspects.map((a) => <div key={a} className="w-[72px]"><Tile name={a} on={look.aspect === a} onClick={() => setAspect(a)} className="h-[76px] w-full">
+            <span className="block max-w-[60px] rounded-[6px] border-2 border-solid border-[rgba(255,255,255,.5)]" style={{ aspectRatio: ratio(a), height: ratio(a) > 1 ? "auto" : 60, width: ratio(a) > 1 ? 60 : "auto" }} /></Tile></div>)}
         </div>
       </section>
       <section className="grid gap-3" aria-label="Layout">
@@ -66,7 +66,7 @@ export function LayoutPicker({ listed, look, onLook, setAspect, chat, onChat }: 
           {CHAT.filter(([v]) => allows(listed, "chat_region", v)).map(([v, name]) => <option key={v} value={v}>{name}</option>)}</select></label>}
       <section className="grid gap-3" aria-label="Fit crop">
         <h3 className={`m-0 flex items-center gap-2 ${LABEL}`}>Fit layout crop <ComingSoonBadge short /></h3>
-        <div className="flex gap-3">{CROPS.map((c) => <Tile key={c} name={c} soon className="h-[64px] w-[48px]"><span className="block h-[60%] w-[80%] rounded-[4px] bg-[rgba(255,255,255,.2)]" /></Tile>)}</div>
+        <div className="flex gap-3">{CROPS.map((c) => <div key={c} className="w-[56px]"><Tile name={c} soon className="h-[64px] w-full"><span className="block h-[60%] w-[80%] rounded-[4px] bg-[rgba(255,255,255,.2)]" /></Tile></div>)}</div>
       </section>
     </Popover>
   );
