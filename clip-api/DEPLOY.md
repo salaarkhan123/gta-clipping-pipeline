@@ -58,8 +58,21 @@ uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-cl
   Finder's index today). Leave it at 1 on the 4 vCPU droplet: one model already uses every core. On a machine
   with 8 or more cores try 2 to 4 and compare with `scripts/job_timings.py`. Each extra one adds memory.
 - `TRANSCRIBE_CHUNK_SEC` (default 300): the chunk length.
-- A transcript that Video Finder made for an upload is reused by Clip Maker for its first, rough pass, so that
-  pass costs nothing on the second job. Captions are still made by the caption model.
+- **One transcript per upload (U1).** Every job on an upload reads what earlier jobs transcribed and keeps what
+  it transcribes, so nothing is transcribed twice:
+  - `transcripts/<upload>.json` is the whole transcript (Video Finder, Transcripts, Summaries, whole mode below):
+    segments, words with start and end, the model that made it. Speakers appear only when the provider identified
+    them; the local Whisper models do not, so there are none (never guessed).
+  - `transcripts/<upload>.parts.json` keeps the pieces a Clip Maker job transcribed (its candidate windows).
+    A re-run on the same upload reads them instead of transcribing again; Video Finder or a transcript job later
+    transcribes only the rest. A whole transcript only exists once all of it was transcribed, so Video Finder's
+    pricing (which checks for one) is unchanged.
+  - A rough pass (what the judge reads) takes text from any model; captions only from the caption model's own
+    text. Both files go with the upload at retention and takedown.
+- `TRANSCRIBE_WHOLE` (default `false`): Clip Maker transcribes the whole recording first, with word timings, and
+  every candidate reads it. Off by default because the local model makes a 2-hour job slower on the droplet
+  (numbers in the U1 PR); turn it on with a hosted provider or a bigger machine. It helps only with the AI judge
+  (without one, candidates are transcribed by the caption model anyway).
 
 ## Running more than one job at once
 

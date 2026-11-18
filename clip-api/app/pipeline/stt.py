@@ -111,6 +111,12 @@ class LocalProvider:
     def __init__(self, transcriber: Transcriber, chunk_sec: float = 300.0, parallel: int = 1):
         self.transcriber, self.chunk_sec, self.parallel = transcriber, chunk_sec, max(1, parallel)
 
+    @property
+    def model(self) -> str:
+        """The name what it transcribes is kept under (heard.model_of)."""
+        from .heard import model_of
+        return model_of(self.transcriber)
+
     def transcribe_file(self, wav: Path, work_dir: Path, deadline: Deadline | None = None,
                         on_progress: Callable[[int, int], None] | None = None) -> Transcript:
         bounds = chunk_bounds(wav, self.chunk_sec)
@@ -129,16 +135,58 @@ class LocalProvider:
             done[0] += 1
             if on_progress:
                 on_progress(done[0], len(bounds))
-            return Transcript(words=[(round(s + a, 3), round(e + a, 3), w) for s, e, w in part.words],
-                              segments=[(round(s + a, 3), round(e + a, 3), x) for s, e, x in part.segments])
+            return shifted(part, a)
 
         with ThreadPoolExecutor(self.parallel) as pool:
             parts = list(pool.map(one, enumerate(bounds)))  # map keeps the chunks in order
-        out = Transcript()
-        for p in parts:
-            out.words += p.words
-            out.segments += p.segments
-        return out
+        return joined(parts)
+
+
+def shifted(t: Transcript, by: float) -> Transcript:
+    """`t` with every time moved `by` seconds later."""
+    return Transcript(words=[(round(s + by, 3), round(e + by, 3), w) for s, e, w in t.words],
+                      segments=[(round(s + by, 3), round(e + by, 3), x) for s, e, x in t.segments],
+                      turns=None if t.turns is None else [(round(s + by, 3), round(e + by, 3), x) for s, e, x in t.turns])
+
+
+def joined(parts: list[Transcript]) -> Transcript:
+    """Consecutive pieces as one transcript. Speakers only when every piece has them."""
+    out = Transcript(turns=[] if parts and all(p.turns is not None for p in parts) else None)
+    for p in parts:
+        out.words += p.words
+        out.segments += p.segments
+        if out.turns is not None:
+            out.turns += p.turns
+    return out
+
+
+def complete(heard, wav: Path, duration: float, stt, work_dir: Path, deadline: Deadline | None = None,
+             on_progress: Callable[[int, int], None] | None = None) -> dict:
+    """The whole recording's transcript (heard.doc_of shape), transcribing only what `heard` (heard.Heard) does not
+    know yet with word timings; what is transcribed now is added to `heard`. With nothing known this is one
+    `stt.transcribe_file` over the whole WAV, as before U1."""
+    from .heard import doc_of
+    known = heard.timed()
+    if not known.pieces:
+        t = stt.transcribe_file(wav, work_dir, deadline, on_progress)
+        heard.add(0.0, duration + 1.0, stt.model, t)
+        return doc_of(t, duration, stt.model)
+    spans = known.gaps(0.0, duration, min_len=1.0)
+    total, done = sum(b - a for a, b in spans) or 1.0, 0.0
+    for i, (a, b) in enumerate(spans):
+        piece = work_dir / f"gap{i}.wav"
+        slice_wav(wav, a, b - a, piece)
+        try:
+            t = shifted(stt.transcribe_file(piece, work_dir, deadline), a)
+        finally:
+            piece.unlink(missing_ok=True)
+        heard.add(a, b, stt.model, t)
+        known.add(a, b, stt.model, t)
+        done += b - a
+        if on_progress:
+            on_progress(int(1000 * done / total), 1000)
+    models = {p.model for p in known.pieces}
+    return doc_of(known.text(0.0, duration + 1.0), duration, models.pop() if len(models) == 1 else "mixed")
 
 
 PROVIDERS = ("local",)      # hosted providers are added here with their adapters
@@ -150,10 +198,3 @@ def provider_for(name: str, transcriber: Transcriber | None, chunk_sec: float = 
         raise PipelineError("transcription_unavailable",
                             f"Transcription provider '{name}' is not available on this server (available: {', '.join(PROVIDERS)}).")
     return LocalProvider(transcriber, chunk_sec, parallel) if transcriber is not None else None
-
-
-def window(full: Transcript, start: float, end: float) -> tuple[Transcript, float]:
-    """The part of a whole-file transcript inside [start, end], with times relative to `start`.
-    Returns (transcript, offset) in the shape the pipeline keeps per candidate."""
-    return (Transcript(words=[(s - start, e - start, w) for s, e, w in full.words if start <= s < end],
-                       segments=[(s - start, e - start, x) for s, e, x in full.segments if start <= s < end]), start)

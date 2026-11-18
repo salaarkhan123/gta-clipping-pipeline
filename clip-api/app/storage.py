@@ -97,6 +97,11 @@ def transcript_key(upload_id: str) -> str:
     return f"transcripts/{upload_id}.json"
 
 
+def transcript_parts_key(upload_id: str) -> str:
+    """The pieces of the upload's transcript that jobs transcribed before there was a whole one (pipeline/heard.py)."""
+    return f"transcripts/{upload_id}.parts.json"
+
+
 def vindex_key(upload_id: str) -> str:
     return f"index/{upload_id}.npz"
 

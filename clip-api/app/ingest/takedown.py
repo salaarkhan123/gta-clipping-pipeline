@@ -17,7 +17,7 @@ from sqlalchemy import select
 from .. import ledger
 from ..db import new_session
 from ..models import Account, Clip, Export, ImportLog, Job, Upload, utcnow
-from ..storage import get_storage, transcript_key, vindex_key
+from ..storage import get_storage, transcript_key, transcript_parts_key, vindex_key
 from .sources import canonical
 
 TAKEN_DOWN = ("taken_down", "This video was removed after a takedown request. Any credits held for this job "
@@ -127,7 +127,8 @@ def _take_down(db, storage, upload: Upload, dry_run: bool) -> Removed:
             export.storage_key = None               # the file is gone; the row has no deleted mark of its own
     if upload.deleted_at is None:
         out.upload_removed = True
-        out.files += [k for k in (upload.storage_key, transcript_key(upload.id), vindex_key(upload.id))
+        out.files += [k for k in (upload.storage_key, transcript_key(upload.id), transcript_parts_key(upload.id),
+                                   vindex_key(upload.id))
                       if k and storage.exists(k)]
         if not dry_run:
             upload.deleted_at = now

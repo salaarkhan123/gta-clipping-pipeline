@@ -90,6 +90,11 @@ class Settings(BaseSettings):
     transcription_provider: str = "local"
     transcribe_parallel: int = Field(1, ge=1, le=8)
     transcribe_chunk_sec: int = Field(300, ge=60, le=1800)
+    # Clip Maker transcribes the whole recording first (with word timings) and keeps it for every later job on the
+    # upload, instead of transcribing candidate windows only. Off by default: on the 4 vCPU droplet the local model
+    # makes a 2-hour job slower (see DEPLOY.md, "Transcription settings"); turn it on with a hosted provider or a
+    # bigger machine.
+    transcribe_whole: bool = False
     # Languages (agent F; app/languages.py). English always uses the two models above, exactly as before. Speech in
     # any other language uses the multilingual model of the same size: empty = worked out from the model above
     # (small.en -> small, base.en -> base). They are public models and are downloaded on first use unless the
