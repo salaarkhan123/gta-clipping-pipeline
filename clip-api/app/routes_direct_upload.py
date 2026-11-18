@@ -37,7 +37,7 @@ router = APIRouter()
 MiB = 1024 ** 2
 MIN_PART = 16 * MiB              # R2 and S3: 5 MiB at least, every part but the last the same size
 MAX_PARTS = 10_000
-PARTS_PER_CALL = 100
+PARTS_PER_CALL = 16              # signed per call: few, so a slow connection sends them before the links expire
 TOKEN_TTL = timedelta(hours=24)
 
 
@@ -100,7 +100,7 @@ def start_upload(body: StartUpload, p: Principal = Depends(current_principal)):
 
 @router.post("/v1/uploads/multipart/parts")
 def part_urls(body: UploadToken, p: Principal = Depends(current_principal)):
-    """Signed URLs for up to 100 parts that are not stored yet; call again for the next ones."""
+    """Signed URLs for the next 16 parts that are not stored yet; call again for the ones after."""
     t, store = pending(p, body.upload_token), bucket()
     want = sizes(t)
     stored = {n for n, (size, _) in stored_parts(store, t).items() if size == want[n - 1]}

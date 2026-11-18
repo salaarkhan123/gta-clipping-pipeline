@@ -40,8 +40,7 @@ function fakeServer({ partSize = 5 * MiB, drop = {} } = {}) {
       abort = () => reject(new Error("aborted"));
       if (drop[n] > 0) { drop[n]--; reject(new Error("network")); return; }
       onProgress(blob.size / 2);
-      s.stored.set(n, blob.size);
-      setTimeout(resolve, 1);
+      setTimeout(() => { s.stored.set(n, blob.size); resolve(); }, 2);      // stored when the request ends
     });
     return { promise, abort: () => abort() };
   };
@@ -68,6 +67,15 @@ test("a failed part is retried", async () => {
   const s = fakeServer({ drop: { 2: 2 } });
   await directUpload(file(11 * MiB), () => {}, deps(s, memory())).promise;
   assert.equal(s.puts.filter((n) => n === 2).length, 3);
+});
+
+test("when one part fails for good, the parts still on their way are kept for the resume", async () => {
+  const s = fakeServer({ drop: { 1: 3 } }), saved = memory();          // parts 1 and 2 go out together
+  await assert.rejects(directUpload(file(11 * MiB), () => {}, deps(s, saved)).promise, { code: "network" });
+  assert.deepEqual([...s.stored.keys()], [2]);                          // part 2 finished before the error surfaced
+  s.puts.length = 0;
+  await directUpload(file(11 * MiB), () => {}, deps(s, saved)).promise;
+  assert.deepEqual(s.puts.sort(), [1, 3]);                              // part 2 is not sent twice
 });
 
 test("after a dropped connection the same file resumes where it stopped", async () => {

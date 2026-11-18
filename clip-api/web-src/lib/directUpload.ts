@@ -86,9 +86,13 @@ export function directUpload(file: FileLike, onProgress: (fraction: number) => v
     while (batch.parts.length) {
       check();
       const queue = [...batch.parts], size = batch.part_size;
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
-        for (let p = queue.shift(); p && !halted; p = queue.shift()) await send(p, size);
+      // Every lane runs to its end before a failure is reported: a part still on its way when another one
+      // fails is stored, so the resume does not send it twice.
+      const lanes = await Promise.allSettled(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+        for (let p = queue.shift(); p && !halted && !stopped; p = queue.shift()) await send(p, size);
       }));
+      const failed = lanes.find((l): l is PromiseRejectedResult => l.status === "rejected");
+      if (failed) throw failed.reason;
       batch = await next();
     }
     check();

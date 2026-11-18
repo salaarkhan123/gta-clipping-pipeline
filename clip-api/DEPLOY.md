@@ -286,7 +286,8 @@ retried; after a dropped connection, picking the same file again resumes from th
 lasts 24 hours). Each part URL signs its exact size, so the bucket refuses anything else. The upload is recorded
 only after every part is stored at the agreed size; then the API downloads the file once (free from R2) to check
 the size, hash it for re-upload detection, and read it as a video within the limits. A file that fails is
-deleted. Unfinished uploads are aborted by R2 after 7 days. On local storage the site keeps using
+deleted. Unfinished uploads are aborted by R2 after 7 days (bucket Settings, Object lifecycle rules; 2 days is
+enough, since an upload can be resumed for 24 hours). On local storage the site keeps using
 `POST /v1/uploads`.
 
 **Roll back:** set `STORAGE_BACKEND=local` and `docker compose up -d api worker`. Files created while on R2 are
