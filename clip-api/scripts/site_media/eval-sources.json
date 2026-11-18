@@ -1,0 +1,10 @@
+{
+ "permission": "eval footage: not for publication",
+ "sources": {
+  "tgg":   {"file": "~/ClutchClips-eval/gta6.mp4", "creator": "eval", "credit": "Eval footage", "game": "GTA VI"},
+  "xqc":   {"file": "~/ClutchClips-eval/gta-online.mp4", "creator": "eval", "credit": "Eval footage", "game": "GTA Online"},
+  "ninja": {"file": "~/ClutchClips-eval/fortnite.mp4", "creator": "eval", "credit": "Eval footage", "game": "Fortnite"},
+  "timmy": {"file": "~/ClutchClips-eval/valorant.mp4", "creator": "eval", "credit": "Eval footage", "game": "Valorant"},
+  "forza": {"file": "~/ClutchClips-eval/forza.mp4", "creator": "eval", "credit": "Eval footage", "game": "Forza Horizon 5"}
+ }
+}
