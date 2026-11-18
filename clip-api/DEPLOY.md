@@ -187,6 +187,16 @@ are capped at 10 a minute per account and 15 seconds each; answers are cached in
 The link may be given in any form the site uses (with or without `www.`, tracking parameters, `youtu.be`): it is
 matched by its canonical form. Ordinary uploads are never touched by a takedown.
 
+**Copyright and likeness reports** arrive through `POST /v1/trust/reports` (no login). Each one becomes a case
+with a reference (`CC-XXXX-XXXX`) that is emailed to the claimant. A notice goes to `TRUST_ADMIN_EMAIL`, or to
+every admin account when it is empty. A report changes no content.
+
+- Make an account an admin (its website login can then read `/v1/admin/trust/cases`):
+  `docker compose exec -T api python scripts/admin.py make-admin you@yourdomain.com` (`revoke-admin` undoes it).
+  API keys never reach admin routes, even an admin's.
+- Limits: `TRUST_REPORTS_PER_IP_PER_HOUR` (5), `TRUST_REPORTS_PER_IP_PER_DAY` (20),
+  `TRUST_REPORTS_PER_EMAIL_PER_DAY` (3); 32 KB per report.
+
 ## Moving files to DigitalOcean Spaces
 
 Uploads and clips are stored on the droplet's disk by default (`STORAGE_BACKEND=local`). Spaces moves them to a
