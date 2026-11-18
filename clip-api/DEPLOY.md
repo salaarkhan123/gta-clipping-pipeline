@@ -5,9 +5,18 @@ branch (`main`). Code reaches `main` only through reviewed PRs (`staging` → `m
 
 ## Every deploy
 
+From GitHub Actions, once `docs/devops/setup.md` is done: `deploy.yml` (with an approval, a backup that is
+verified first, and an automatic code rollback), `rollback.yml`, and `monitor.yml` every 15 minutes. They reach the
+server only through `scripts/ops.sh`, which wraps `deploy.sh`. By hand on the server:
+
 ```bash
 cd /root/clip-api && bash scripts/deploy.sh
 ```
+
+`DEPLOY_SHA=<full sha>` deploys that commit of `main` instead of its head.
+
+**Env changes:** after editing `.env`, run `docker compose up -d api worker` (when no job is RUNNING).
+`docker compose restart` does not re-read `.env`.
 
 `scripts/deploy.sh` refuses while a job is RUNNING (it checks `admin.py stuck` before the pull and again right
 before the restart), refuses if the job list cannot be read, if tracked files were edited on the server, or if

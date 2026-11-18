@@ -114,6 +114,7 @@ clip-api 2/
 /docs/*
 !/docs/agents/
 !/docs/super-board/
+!/docs/devops/
 !/docs/PARITY.md
 !/docs/CONTRACTS.md
 /gta-clipping-pipeline.pdf
