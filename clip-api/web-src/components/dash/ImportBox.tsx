@@ -80,7 +80,8 @@ export function ImportBox({ sources, onReady, recent, compact, start }: { source
                 aria-describedby={`${ids}count`} onChange={(e) => setUrls(e.target.value)} />
               <span id={`${ids}count`} className={`small ${tooMany ? "warn" : "muted"}`}>{lines.length} of {sources.bulk_max} links{tooMany ? `: remove ${lines.length - sources.bulk_max} to import` : ""}</span></label>}
         <label className="check consent"><input type="checkbox" checked={consent} required disabled={off} onChange={(e) => setConsent(e.target.checked)} />
-          <span>{CONSENT}</span></label>
+          <span>{CONSENT} (<a href="/terms/#import" target="_blank" rel="noopener" className="text-lime underline">Terms</a>,{" "}
+            <a href="/copyright/" target="_blank" rel="noopener" className="text-lime underline">Copyright policy</a>)</span></label>
         <div className="import-go">
           <button className="btn primary" disabled={!ready}><Icon name="link" />{busy ? "Starting…" : mode === "one" ? "Import" : `Import ${lines.length || ""} link${lines.length === 1 ? "" : "s"}`.replace("  ", " ")}</button>
           <span className="muted small">Free. Public videos only: nothing that needs a login.</span>

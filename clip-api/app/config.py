@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     email_from: str = "no-reply@example.com"
+    # Signup without accept_policies=true is refused (422 terms_required). Off by default so API clients written
+    # before consent records keep working; the website always sends it. Owner decision (app/legal.py).
+    require_terms_acceptance: bool = False
 
     # Stripe
     stripe_secret_key: str = ""
