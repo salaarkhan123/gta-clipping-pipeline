@@ -13,13 +13,14 @@ const files = (dir) => readdirSync(join(root, dir)).flatMap((n) => {
 });
 
 test("no clip cap unless the user sets one; lengths stop at 60 s plus Auto", () => {
-  const form = source("components/dash/JobForm.tsx"), chooser = source("components/dash/LinkChooser.tsx");
-  assert.match(form, /max_clips: null as number \| null/);
-  assert.match(form, /else if \(f\.max_clips !== null\) options\.max_clips = f\.max_clips;/);
+  const form = source("components/dash/setup/JobSetup.tsx"), chooser = source("components/dash/LinkChooser.tsx");
+  assert.match(form, /limit: null as number \| null/);
+  assert.match(form, /if \(!has\("limit"\) && f\.limit !== null\) o\.max_clips =/);
   assert.match(chooser, /else if \(o\.cap !== null\) options\.max_clips = o\.cap;/);
   assert.doesNotMatch(form + chooser, /max_clips = 3|max_clips: 3/);
   for (const text of [form, chooser]) assert.match(text, /allows\(listed, "duration", b\) && offeredBucket\(b\)/);
-  const offered = (b) => b === "0-90" || +b.split("-")[1] <= 60;                     // the rule in JobForm.tsx
+  assert.match(source("lib/options.ts"), /export const offeredBucket = \(b: string\) => b === "0-90" \|\| \+b\.split\("-"\)\[1\] <= 60;/);
+  const offered = (b) => b === "0-90" || +b.split("-")[1] <= 60;                     // the rule in lib/options.ts
   assert.deepEqual(["0-90", "0-30", "30-60", "60-90", "90-180", "180-300"].filter(offered), ["0-90", "0-30", "30-60"]);
 });
 

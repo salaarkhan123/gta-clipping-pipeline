@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BulkEdit } from "@/components/dash/BulkEdit";
 import { CLIP_GRID, ClipCard, ClipFilter, ClipSort, ClipToolbar, numbering, useSteadyOrder } from "@/components/dash/ClipCard";
@@ -9,7 +10,8 @@ import { isActive, JobNote } from "@/components/dash/JobNote";
 import { useDash } from "@/components/dash/Shell";
 import { BackTitle, PAGE_HEAD, SECTION_HEAD, STRIP } from "@/components/dash/ui";
 import { Timeline } from "@/components/dash/Timeline";
-import { isTool, Tool, ToolPanel } from "@/components/dash/ToolPanel";
+import { MakeView } from "@/components/dash/setup/MakeView";
+import { isTool, Tool } from "@/components/dash/ToolPanel";
 import { api, ApiError, clock } from "@/lib/api";
 import { useClipOptions } from "@/lib/options";
 import { useRoutes } from "@/lib/routes";
@@ -17,8 +19,8 @@ import { useRoutes } from "@/lib/routes";
 const TOOL_OF_JOB: Record<string, string> = { clips: "Clip Maker", render: "Reframe / Captions", find: "Video Finder" };
 const BULK_SOON: [IconName, string][] = [["send", "Bulk schedule"], ["sparkle", "Create montage"]];
 type View = "clips" | "find";
-const TAB = "relative inline-flex cursor-pointer items-center gap-2 rounded-t-8 border-0 bg-transparent px-[14px] py-[10px] font-body text-[14px] font-medium leading-[normal] text-muted "
-  + "aria-selected:bg-panel aria-selected:text-text aria-selected:after:absolute aria-selected:after:inset-x-[10px] aria-selected:after:-bottom-px aria-selected:after:h-[2px] aria-selected:after:bg-lime aria-selected:after:content-['']";
+const TAB = "relative inline-flex min-h-[38px] cursor-pointer items-center gap-2 rounded-full border-0 bg-transparent px-4 py-2 font-body text-[14px] font-medium leading-[normal] text-muted hover:text-text "
+  + "aria-selected:bg-chip-hover aria-selected:text-text";
 
 // Every read signs new links for the same files. A refresh keeps the links already on the page, so polling a
 // running job does not restart the source video or a clip that is playing. Links are valid for an hour, so
@@ -49,6 +51,7 @@ async function downloadEach(urls: string[], onStep: (n: number) => void) {
 // One project: the source video and where its clips came from, the tools, what is running, and every clip made from it.
 export default function Project() {
   const { fail, reloadMe, say } = useDash();
+  const router = useRouter();
   const [id, setId] = useState<string | null>(null);
   const [open, setOpen] = useState<{ tool?: Tool; template?: string }>({});   // handed over by Home or the template gallery
   const [project, setProject] = useState<any>(null), [gone, setGone] = useState(false);
@@ -117,7 +120,7 @@ export default function Project() {
   if (gone) return <><h1 className="dash-title">Project not found</h1>
     <p className="muted">This video isn't here any more. Videos are kept for 7 days. <Link href="/dashboard/">Back to Home</Link></p></>;
   if (!project || making === null) return <p className="muted">Loading…</p>;
-  const title = <BackTitle title={project.filename} />;
+  const title = <div className="grid min-w-0 gap-[2px]"><BackTitle title={project.filename} /><p className="muted m-0 pl-[46px] text-[13px] tabular-nums">{clock(project.duration_sec)} · {clips.length} clip{clips.length === 1 ? "" : "s"} · kept until {new Date(project.expires_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p></div>;
   const started = () => { setMaking(false); setView("clips"); load(project.upload_id); };
 
   const cancel = (jobId: string) => api(`/v1/jobs/${jobId}/cancel`, { body: {} }).then(() => load(project.upload_id)).catch(fail);
@@ -144,11 +147,11 @@ export default function Project() {
   }
 
   if (making) return (
-    <div className="form-col">
-      <div className={PAGE_HEAD}>{title}
-        {(clips.length > 0 || anyActive) && <button type="button" className="btn small ghost" onClick={() => setMaking(false)}>
-          {clips.length ? `Back to the clips (${clips.length})` : "Back to the results"}</button>}</div>
-      <ToolPanel upload={project} open={open} onStarted={started} />
+    <div className="wide">
+      <MakeView upload={project} tool={open.tool} template={open.template} onStarted={started}
+        onBack={() => (clips.length > 0 || anyActive ? setMaking(false) : router.push("/dashboard/"))}
+        back={(clips.length > 0 || anyActive) && <button type="button" className="btn small ghost" onClick={() => setMaking(false)}>
+          {clips.length ? `Back to the clips (${clips.length})` : "Back to the results"}</button>} />
     </div>
   );
 
@@ -191,9 +194,9 @@ export default function Project() {
               onClick={exportChosen}><Icon name="download" size={16} />{exporting ? `Downloading ${Math.min(exporting, chosen.length)} of ${chosen.length}…` : "Bulk export"}</button>
           </div>
         </div>}
-        <div className="flex items-center gap-1 border-0 border-b border-solid border-line-soft" role="tablist" aria-label="Results">
+        <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Results">
           <button type="button" role="tab" className={TAB} aria-selected={view === "clips"} aria-controls="results-panel" onClick={() => setView("clips")}>
-            Clips {clips.length > 0 && <span className="tabular-nums text-lime">{chosen.length}/{shown.length} selected</span>}</button>
+            Clips {clips.length > 0 && <span className="tabular-nums text-muted">{shown.length}</span>}</button>
           <button type="button" role="tab" className={TAB} aria-selected={view === "find"} aria-controls="results-panel" onClick={() => setView("find")}><Icon name="plus" size={16} />Find moments</button>
         </div>
         <div id="results-panel" role="tabpanel" aria-label={view === "clips" ? "Clips" : "Find moments"} className="results">

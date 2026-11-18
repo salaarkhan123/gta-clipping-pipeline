@@ -7,7 +7,7 @@ import { Logo } from "@/components/Chrome";
 import { API } from "@/lib/api";
 import { useLanguageSwitches } from "@/lib/languages";
 import { isBuilt, toolHref, TOOLS } from "@/lib/tools";
-import { Icon, IconName } from "./Icon";
+import { Icon, IconName, Soon } from "./Icon";
 
 // Sections that are not built yet are listed but never linked. `under` lists the routes that light an item up.
 const SECTIONS: { href?: string; label: string; icon: IconName; under?: string[] }[] = [
@@ -44,11 +44,11 @@ function Rail({ path }: { path: string }) {
           <li key={s.label} className={s.href ? "" : "narrow:hidden"}>
             {s.href
               ? <Link href={s.href} aria-current={isHere(path, s.href, s.under) ? "page" : undefined}
-                  className={`group ${RAIL_ITEM} text-muted hover:bg-card hover:text-text aria-[current=page]:bg-chip aria-[current=page]:text-text`}>
-                  <Icon name={s.icon} size={20} className="group-aria-[current=page]:text-lime" /><span>{s.label}</span></Link>
+                  className={`group ${RAIL_ITEM} text-muted hover:bg-chip hover:text-text aria-[current=page]:bg-chip-hover aria-[current=page]:text-text`}>
+                  <Icon name={s.icon} size={21} /><span>{s.label}</span></Link>
               : <span aria-disabled="true" title={`${s.label}: coming soon`} className={`${RAIL_ITEM} cursor-default text-muted`}>
                   <Icon name={s.icon} size={20} /><span>{s.label}</span>
-                  <small className="font-body text-[9px] font-semibold uppercase leading-[normal] tracking-[.04em] text-dim">Soon</small></span>}
+                  <Soon short /></span>}
           </li>))}
       </ul>
     </nav>
@@ -83,7 +83,7 @@ export function TopBar({ me, onLogout }: { me: any; onLogout: () => void }) {
   const on = useLanguageSwitches();
   const plan = me.plan[0].toUpperCase() + me.plan.slice(1);
   return (
-    <header className="sticky top-0 z-50 flex h-topbar items-center justify-between gap-4 border-0 border-b border-solid border-line-soft bg-[rgba(7,8,10,.92)] pl-[18px] pr-4 [backdrop-filter:blur(12px)]
+    <header className="sticky top-0 z-50 flex h-topbar items-center justify-between gap-4 border-0 border-b border-solid border-line-soft bg-[rgba(0,0,0,.85)] pl-[18px] pr-4 [backdrop-filter:blur(12px)]
       narrow:gap-2 narrow:pl-[14px] narrow:pr-[10px]">
       <Logo small />
       <nav className="flex items-center gap-[6px] narrow:gap-1" aria-label="Account">
@@ -97,11 +97,11 @@ export function TopBar({ me, onLogout }: { me: any; onLogout: () => void }) {
               <li key={t.id}>{isBuilt(t, on)
                 ? <Link className={`${MENU_ITEM} hover:bg-chip-hover`} href={toolHref(t)}><Icon name={t.icon} size={18} className="text-muted" />{t.name}</Link>
                 : <span className={`${MENU_ITEM} cursor-default text-muted`} aria-disabled="true"><Icon name={t.icon} size={18} className="text-muted" />{t.name}
-                    <small className="soon-tag ml-auto">Soon</small></span>}</li>))}
+                    <span className="ml-auto"><Soon short /></span></span>}</li>))}
           </ul>
         </Menu>
         <a className={`${BAR_BUTTON} px-[10px] narrow:hidden`} href={`${API}/docs`} target="_blank" rel="noreferrer">API</a>
-        <Link className="ml-[6px] inline-flex h-8 items-center gap-[5px] rounded-full bg-chip px-3 tabular-nums text-lime hover:bg-chip-hover narrow:ml-0" href="/dashboard/billing/"
+        <Link className="ml-[6px] inline-flex h-8 items-center gap-[5px] rounded-full border border-solid border-line-soft bg-transparent px-3 tabular-nums text-lime hover:bg-chip narrow:ml-0" href="/dashboard/billing/"
           title="Your credits. One credit is one minute of video.">
           <Icon name="bolt" size={16} /><b className="font-body text-[14px] font-semibold leading-[normal] text-text">{me.credits.toLocaleString()}</b><span className="sr-only"> credits</span></Link>
         <Link href="/dashboard/pricing/" className="btn small primary px-[14px] py-[7px] shadow-none narrow:min-h-[40px]">{me.plan === "free" ? "Upgrade" : "Add credits"}</Link>
