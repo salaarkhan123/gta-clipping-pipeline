@@ -15,7 +15,7 @@ const sections = [
       credit goes back to your account automatically. You do not need to ask.</p>
     <p>A job that finishes keeps only the credits it used. When a run is charged for the minutes it renders, it gives back whatever it
       reserved and did not use. Each job is settled exactly once, so credits are never charged or refunded twice.</p>
-    <p>If content is removed after a copyright takedown, credits held for its unfinished jobs go back too.</p>
+    <p>If an imported video is removed after a takedown request, jobs still waiting or running on it are stopped and their credits go back too.</p>
   </> },
   { id: "stripe", title: "When a payment is refunded or disputed", body: <>
     <ul>

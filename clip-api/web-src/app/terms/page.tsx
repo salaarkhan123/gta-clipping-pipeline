@@ -54,8 +54,8 @@ const sections = [
       <li>Every import asks you to confirm that you own the video or have permission to clip it. We log your account, the link, your
         confirmation and the time.</li>
       <li>The site you import from has its own terms, and they apply to you. Our import does not give you rights the site&apos;s terms do not.</li>
-      <li>Anything imported can be removed through a takedown: we can remove all clips and files that came from one link, or from all of
-        one account&apos;s imports, and any credits held for their jobs go back.</li>
+      <li>Anything imported can be removed after a takedown request. The owner reviews each request by hand; removal deletes the imported
+        upload, its clips and their files, from one link or from all of one account&apos;s imports, and refunds jobs still waiting or running on it.</li>
     </ul>
   </> },
   { id: "credits", title: "Credits", body: <>
@@ -67,8 +67,8 @@ const sections = [
         and tools that render part of a video (such as Reframe and Captions) use 1 credit per started minute they render.</li>
       <li>After a video&apos;s first full-price run, later runs on the same upload charge only for the minutes they render. They reserve up to
         the full amount and give back what they did not use.</li>
-      <li>Credits do not expire.</li>
-      <li>New accounts get a one-time grant of free credits once the email address is confirmed. The amount is on the{" "}
+      <li>Credits don&apos;t expire while your account exists.</li>
+      <li>New accounts get a one-time grant of free credits once the email address is confirmed. The amount is shown on the{" "}
         <Link href="/pricing/">pricing page</Link>.</li>
       <li>Credits have no cash value, cannot be transferred to another account and are not refunded when unused, except as the{" "}
         <Link href="/refunds/">Refund Policy</Link> says <Decision>proposed</Decision>.</li>
@@ -92,7 +92,7 @@ const sections = [
   </> },
   { id: "copyright", title: "Copyright complaints and repeat infringers", body: <>
     <p>We respond to copyright notices as the <Link href="/copyright/">Copyright and DMCA Policy</Link> describes. An account that receives
-      3 verified copyright strikes within 365 days is suspended <Decision>3 verified strikes in 365 days is proposed</Decision>.</p>
+      In appropriate circumstances we terminate the accounts of repeat infringers (17 U.S.C. 512(i)). <Decision>the threshold; 3 verified notices in 365 days is proposed</Decision>.</p>
   </> },
   { id: "suspension", title: "Suspension and ending the agreement", body: <>
     <ul>

@@ -40,11 +40,11 @@ const sections = [
         <a href={`mailto:${SUPPORT_EMAIL}?subject=Likeness%20report`}>{SUPPORT_EMAIL}</a> with the clip or source link and what is wrong.</li>
       <li>Privacy: email our privacy contact, <Owner>{OWNER.privacyEmail}</Owner>.</li>
     </ul>
-    <p>An administrator reviews every report.</p>
+    <p>The owner of ClutchClips reads and reviews every report by hand, and replies by email.</p>
   </> },
   { id: "enforcement", title: "What we do", body: <>
     <p>Depending on how serious it is, we may remove content, suspend or close the account, and report illegal content to
-      the authorities. Accounts with 3 verified copyright strikes in 365 days are suspended <Decision>3 strikes in 365 days is proposed</Decision>.
+      the authorities. In appropriate circumstances we terminate the accounts of repeat infringers (17 U.S.C. 512(i)). <Decision>the threshold; 3 verified notices in 365 days is proposed</Decision>.
       Where we can, we tell you what we did and why, and you can reply to the same email to ask us to look again.</p>
   </> },
 ];

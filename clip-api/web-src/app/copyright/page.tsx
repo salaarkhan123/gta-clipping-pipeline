@@ -4,16 +4,17 @@ import { Decision, Ext, LegalPage, Owner } from "@/components/LegalPage";
 import { OWNER, SUPPORT_EMAIL } from "@/lib/legal";
 
 // Matches docs/trust/privacy-law-review.md section 7 (Copyright Act ss. 41.25-41.27, 17 U.S.C. 512) and
-// app/ingest/takedown.py (removal of everything from a source link or account). The online form is #148.
+// what runs today: notices by email, reviewed by the owner by hand, removal with `scripts/admin.py takedown`
+// (app/ingest/takedown.py, DEPLOY.md "Link import and takedowns"). The form, cases and strikes are #145, #146, #148.
 export const metadata: Metadata = { title: "Copyright and DMCA Policy · ClutchClips" };
 
 const sections = [
   { id: "summary", title: "In short", body: <>
     <ul>
       <li>Only upload or import videos you own or have permission to clip.</li>
-      <li>If you own the copyright in something on ClutchClips and did not allow it, send a notice by email. A person reviews every notice.</li>
-      <li>Nothing is removed automatically on a complaint that has not been checked. Content can be disabled while we review it.</li>
-      <li>If your content was removed by mistake, you can send a counter-notice.</li>
+      <li>If you own the copyright in something on ClutchClips and did not allow it, send a notice by email to the contact below.</li>
+      <li>The owner of ClutchClips reads and reviews every notice by hand. Nothing is removed automatically.</li>
+      <li>If your content was removed by mistake, you can send a counter-notice by email.</li>
     </ul>
   </> },
   { id: "notice", title: "How to send a copyright notice", body: <>
@@ -42,21 +43,22 @@ const sections = [
     <p>Under Canada&apos;s Copyright Act (sections 41.25 to 41.27), when we receive a notice of claimed infringement that meets the Act&apos;s
       requirements, we:</p>
     <ul>
-      <li>forward the notice by email to the account holder it concerns, and tell the person who sent it that we did, or why we could not;</li>
+      <li>forward the notice by email, by hand, to the account holder it concerns, and tell the person who sent it that we did, or why we could not;</li>
       <li>keep records that identify that account holder for 6 months, or for 1 year if the claimant starts court proceedings and tells us
         within those 6 months.</li>
     </ul>
     <p>A notice that includes an offer to settle or a demand for payment does not have to be forwarded. Forwarding a notice does not mean
-      the account holder infringed, and the law does not require us to remove the content. We still review it under this policy.</p>
+      the account holder infringed, and the law does not require us to remove the content. The owner still reviews it as described below.</p>
   </> },
   { id: "process", title: "What we do with a notice", body: <>
     <ul>
-      <li>An administrator reviews every notice. We may ask for missing details.</li>
-      <li>While we review, we may disable access to the content.</li>
-      <li>Nothing is removed automatically on a notice we have not verified. The administrator decides.</li>
-      <li>If the notice is valid, we remove the content. For imported videos we can remove everything that came from that link, or all of
-        one account&apos;s imports: the uploads, every clip and every file. Credits held for their unfinished jobs go back to the account.</li>
-      <li>We tell the account holder what was removed and why, and how to send a counter-notice.</li>
+      <li>The owner of ClutchClips reads every notice and reviews it by hand. We may ask for missing details. Nothing is removed until the
+        owner has decided.</li>
+      <li>If the notice is valid, the owner removes the content with an admin command. For a video imported from a link, it deletes the
+        imported upload, every clip made from it and all their files, from that link or from all of one account&apos;s imports. Jobs still
+        waiting or running on it are stopped and their credits go back to the account. Removed files are deleted, not hidden.</li>
+      <li>A video uploaded as a file is removed by hand. All videos are deleted 7 days after upload in any case.</li>
+      <li>The owner tells the account holder by email what was removed and why, and how to send a counter-notice.</li>
     </ul>
   </> },
   { id: "counter", title: "Counter-notice", body: <>
@@ -71,13 +73,15 @@ const sections = [
         judicial district of your address (or, if you are outside the United States, any judicial district in which we may be found), and
         that you will accept service of process from the person who sent the notice or their agent.</li>
     </ol>
-    <p>We forward a valid counter-notice, including your name and address, to the person who sent the notice. We restore the content in 10
-      to 14 business days after we receive it, unless that person tells us they have filed a court action to stop the infringement.</p>
-    <p>Files are deleted 7 days after upload or after the job, so content that has already expired cannot be restored.</p>
+    <p>The owner reviews a counter-notice by hand and forwards a valid one, including your name and address, to the person who sent the
+      notice. Under the DMCA, removed material may be put back 10 to 14 business days after a valid counter-notice unless that person
+      tells us they have filed a court action.</p>
+    <p>Removal deletes the files, so we cannot restore them ourselves. Once that period passes without a court action, you may upload the
+      video again. <Decision>how a valid counter-notice is handled, given that removal deletes the files</Decision></p>
   </> },
   { id: "repeat", title: "Repeat infringers", body: <>
-    <p>We suspend the account of a repeat infringer. An account that receives 3 verified copyright strikes within 365 days is suspended
-      <Decision>3 verified strikes in 365 days is proposed</Decision>. A strike is a notice we verified and acted on.</p>
+    <p>In appropriate circumstances we terminate the accounts of repeat infringers (17 U.S.C. 512(i)). The owner decides each case by
+      hand. <Decision>the threshold; 3 verified notices in 365 days is proposed</Decision></p>
   </> },
   { id: "misrepresentation", title: "False notices", body: <>
     <p>Under 17 U.S.C. 512(f), a person who knowingly and materially misrepresents that material infringes, or that it was removed by
@@ -87,7 +91,7 @@ const sections = [
   { id: "likeness", title: "Your face, voice or name", body: <>
     <p>If a clip on ClutchClips shows you, uses your voice, or impersonates you without your consent, email{" "}
       <a href={`mailto:${SUPPORT_EMAIL}?subject=Likeness%20report`}>{SUPPORT_EMAIL}</a> with the subject &ldquo;Likeness report&rdquo;.
-      Include the clip or source link, who you are, and what is wrong. An administrator reviews it the same way as a copyright notice.
+      Include the clip or source link, who you are, and what is wrong. The owner reviews it by hand, the same way as a copyright notice.
       The <Link href="/acceptable-use/">Acceptable Use Policy</Link> bans deceptive impersonation and synthetic content of real people
       without their consent.</p>
   </> },

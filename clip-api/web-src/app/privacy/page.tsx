@@ -68,7 +68,7 @@ const sections = [
       ["Your account and login, running jobs, storing videos and clips, emails about your account", "Contract (Art. 6(1)(b))"],
       ["Payments, invoices and the credit ledger", "Contract; legal obligation (Art. 6(1)(c)) for tax records"],
       ["AI clip judging, titles and transcripts", "Contract: it is the service you ask for"],
-      ["Sign-up IP, rate limits, abuse and fraud checks, the import log, takedown records", "Legitimate interests (Art. 6(1)(f)): security, defending legal claims, our copyright duties"],
+      ["Sign-up IP, rate limits, abuse and fraud checks, the import log, copyright and likeness reports", "Legitimate interests (Art. 6(1)(f)): security, defending legal claims, our copyright duties"],
       ["Error monitoring", "Legitimate interests: keeping the service working"],
       ["Records of which policies you accepted", "Legal obligation and legitimate interests: proof of what you agreed to"],
     ]} />
@@ -106,7 +106,7 @@ const sections = [
       ["Email provider", "Sending account email", "Your email address and the message", <Owner key="em">{OWNER.emailProvider}</Owner>],
     ]} />
     <p>When you import a link, we contact the site it points to (for example Twitch, Kick, YouTube, Google Drive or Dropbox) to download the
-      video. If you set a webhook, we send the job id and status to your own server. If you send us a copyright counter-notice, we forward it,
+      video. If you set a webhook, we send the job id and status to your own server. If you send us a copyright counter-notice, the owner forwards it by email,
       with the name and address in it, to the person who complained (see the <Link href="/copyright/">Copyright and DMCA Policy</Link>).
       Otherwise we disclose information only when the law requires it or to defend legal claims.</p>
   </> },
@@ -150,8 +150,8 @@ const sections = [
     </ul>
     <p>To use a right, email <Owner>{OWNER.privacyEmail}</Owner> from the address on your account. We may ask you to confirm who you are.
       We answer within 30 days (one month under the GDPR). Self-serve export and deletion in the dashboard are not available yet.</p>
-    <p>Some records we must keep even after a deletion request, such as payment and credit records needed for tax, and the import and
-      takedown records needed to answer legal claims.</p>
+    <p>Some records we must keep even after a deletion request, such as payment and credit records needed for tax, and the import log and the
+      copyright and likeness reports we receive, needed to answer legal claims.</p>
     <p>You can complain to a privacy regulator at any time:</p>
     <ul>
       <li><Ext href="https://www.priv.gc.ca/">Office of the Privacy Commissioner of Canada</Ext></li>
