@@ -390,7 +390,7 @@ class ClaudeAI:
         content.append({"type": "text", "text": (
             focus +
             f"Clip length: {context.get('length', 0):.0f} s\n"
-            f"Why it was picked (signal shares): {json.dumps(context.get('signals', {}))}\n"
+            f"Why it was picked (signal shares): {json.dumps(context.get('signals', {}))}\n" + _standby_line(context)
             + _timeline_text(context.get("timeline")) + body_text)})
         # The forced tool call means Haiku 5.5 skips thinking, so max_tokens only has to hold the tool input
         # (~150-300 tokens). 1024 leaves room for a long reason; only the tokens produced are billed.
@@ -542,3 +542,13 @@ class ClaudeAI:
 def default_ai():
     s = get_settings()
     return ClaudeAI(s.anthropic_api_key, s.ai_model) if s.anthropic_api_key else None
+
+
+def _standby_line(context: dict) -> str:
+    """(U2) How much of the clip is standby footage, for the judge; nothing when none of it is (the prompt is then
+    exactly as before)."""
+    share = context.get("standby")
+    if not isinstance(share, (int, float)) or share <= 0:
+        return ""
+    return (f"Standby share: {share:.0%} of this clip shows a still picture with nobody talking (starting-soon or BRB "
+            "screens, an empty chair, a menu). Standby is not a highlight.\n")

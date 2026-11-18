@@ -168,6 +168,22 @@ def test_the_worker_hands_over_the_configured_floor(monkeypatch):
     assert PipelineOptions().quality_floor == P.QUALITY_FLOOR
 
 
+def test_auto_clip_length_never_passes_60_s_and_chosen_ranges_keep_theirs(three_bursts, tmp_path):  # noqa: F811
+    assert P._limits("0-90", 7200.0) == (10.0, 60.0)              # the website's Auto
+    assert P._limits("0-30", 7200.0) == (10.0, 30.0) and P._limits("30-60", 7200.0) == (30.0, 60.0)
+    assert P._limits("60-90", 7200.0) == (60.0, 90.0)             # a range picked on purpose
+    seen = []
+
+    def judge(text, frame, ctx):
+        seen.append(ctx["cut_range"])
+        a, _b = ctx["window"]
+        return {"title": "t", "virality": {"score": 80}, "trim": {"start": a, "end": a + 80, "peak": a + 5}}
+    clips = run_pipeline(three_bursts, PipelineOptions(duration="0-90", tighten=False), tmp_path / "o",
+                         transcriber=Talker(), judge=judge)
+    assert seen and all(hi <= 60 for _lo, hi in seen)               # the judge is told 60 at most
+    assert clips and all(c.end - c.start <= 60.0 for c in clips)   # an 80 s cut is not taken
+
+
 def test_the_clip_object_carries_the_five_scores():
     from app.routes_media import clip_json
     from app.models import Clip
