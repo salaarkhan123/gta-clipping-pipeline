@@ -1,7 +1,7 @@
 """Premium AI thumbnails (#140): a clip's thumbnails besides its first one, the one it uses, and likeness consent.
 
-Revision ID: 0008
-Revises: 0007
+Revision ID: 0009
+Revises: 0008
 Create Date: 2026-11-17
 
 Additive: two nullable columns on clips and two new tables. The frame without text is already kept in
@@ -10,8 +10,8 @@ features.thumbnail.frame_key (#138), so no column for it.
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0008"
-down_revision = "0007"
+revision = "0009"
+down_revision = "0008"      # 0008_policy_acceptances (#158)
 branch_labels = None
 depends_on = None
 

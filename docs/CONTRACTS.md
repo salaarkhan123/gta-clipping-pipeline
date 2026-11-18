@@ -152,7 +152,7 @@ Panel sizes are a public template field, `panels: {"camera": "top" | "bottom" | 
 - `POST /v1/clips/{id}/thumbnails/premium/quote` `{style, instruction?}`: `{credits_reserved, credits, likeness_consent_required, consent, note}`. Reserves nothing.
 - `POST /v1/clips/{id}/thumbnails/premium` `{style, instruction?, confirm: true, credits?, likeness_consent}` with optional `Idempotency-Key`: a job `thm_…` (tool `premium_thumbnail`) to poll. 422 `confirm_required`, `likeness_consent_required`, `instruction_not_allowed`, `unknown_style`; 409 `price_changed`, `no_clean_frame`; 402; 404 `premium_thumbnails_off`. An identical request while one is queued or running returns that job.
 - The model never draws text; our renderer draws the hook on the result. A result is never chosen for the user.
-- Schema revision 0008 (additive, after 0007): `clips.thumb_id`, `clips.thumb_chosen_key`; tables `clip_thumbnails` and `likeness_consents` (append-only). The frame comes from `features.thumbnail.frame_key`.
+- Schema revision 0009 (additive, after #158's 0008): `clips.thumb_id`, `clips.thumb_chosen_key`; tables `clip_thumbnails` and `likeness_consents` (append-only). The frame comes from `features.thumbnail.frame_key`.
 
 ## Score calibration (A)
 

@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, false
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, event, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -241,6 +241,25 @@ class CreditLedger(Base):
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
     idempotency_key: Mapped[str] = mapped_column(String(200), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class PolicyAcceptance(Base):
+    """Append-only: which version of which legal policy an account accepted, when and how (app/legal.py).
+    Rows are never updated or deleted by the app; the mapper events below refuse it."""
+    __tablename__ = "policy_acceptances"
+    __table_args__ = (UniqueConstraint("account_id", "policy", "version", name="uq_policy_acceptance"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    policy: Mapped[str] = mapped_column(String(32))
+    version: Mapped[str] = mapped_column(String(32))
+    source: Mapped[str] = mapped_column(String(16))        # signup | reaccept
+    accepted_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+@event.listens_for(PolicyAcceptance, "before_update")
+@event.listens_for(PolicyAcceptance, "before_delete")
+def _append_only(_mapper, _conn, _target):
+    raise RuntimeError("policy_acceptances is append-only: add a new row instead")
 
 
 class WebhookDelivery(Base):
