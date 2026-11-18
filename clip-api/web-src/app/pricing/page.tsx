@@ -63,6 +63,8 @@ export default function Pricing() {
             {!plans ? <p className="muted">Loading plans…</p>
               : <PlanCards plans={plans} currency={currency} yearly={yearly} current={current} busy={busy} freeHref={getToken() ? "/dashboard/" : "/login/?new=1"}
                   onPick={(p) => go("/v1/billing/subscribe", { plan_id: p.id, interval: yearly ? "year" : "month" }, p.id)} />}
+            <p className="muted small mt-5 text-center">Plans renew until you cancel. By subscribing or buying credits you agree to the{" "}
+              <a href="/terms/#credits" className="text-lime underline">Terms of Service</a> and the <a href="/refunds/" className="text-lime underline">Refund Policy</a>.</p>
           </div>
         </section>
 
