@@ -8,6 +8,7 @@ from functools import lru_cache
 from fastapi import APIRouter
 from pydantic import ValidationError
 
+from .render_options import provisional_on
 from .routes_media import ClipOptions
 
 router = APIRouter()
@@ -47,10 +48,15 @@ def accepted(name: str, value, **others) -> bool:
         return False
 
 
-@lru_cache
 def clip_options() -> dict:
     """Only values a request can actually send: a value the model names but refuses (a layout that is not built
-    yet) is left out. Layouts depend on the aspect, so `layout.by_aspect` lists them per aspect."""
+    yet, or a provisional one while PROVISIONAL_LAYOUTS is off) is left out. Layouts depend on the aspect, so
+    `layout.by_aspect` lists them per aspect."""
+    return _clip_options(provisional_on())
+
+
+@lru_cache
+def _clip_options(_provisional: bool) -> dict:
     schema = ClipOptions.model_json_schema()
     defs = schema.get("$defs", {})
     out = {name: describe(prop, defs) for name, prop in schema.get("properties", {}).items()}

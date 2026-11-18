@@ -3,11 +3,12 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getToken } from "@/lib/api";
 
-export function Logo() {
+// `small`: the app's top bar size; the name hides on a phone.
+export function Logo({ small }: { small?: boolean }) {
   return (
-    <Link href="/" className="logo" aria-label="ClutchClips home">
-      <span className="logo-mark" aria-hidden="true">CC</span>
-      <span>ClutchClips</span>
+    <Link href="/" className={small ? "logo gap-2 text-[17px]" : "logo"} aria-label="ClutchClips home">
+      <span className={small ? "logo-mark h-7 w-7 rounded-8 text-[12px]" : "logo-mark"} aria-hidden="true">CC</span>
+      <span className={small ? "narrow:hidden" : undefined}>ClutchClips</span>
     </Link>
   );
 }

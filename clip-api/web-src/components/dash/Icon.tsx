@@ -47,9 +47,10 @@ const PATHS = {
 
 export type IconName = keyof typeof PATHS;
 
-export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
+// `className` adds utility classes (a colour, say) next to `ico`.
+export function Icon({ name, size = 20, className }: { name: IconName; size?: number; className?: string }) {
   return (
-    <svg className="ico" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+    <svg className={className ? `ico ${className}` : "ico"} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">{PATHS[name]}</svg>
   );
 }

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api, ApiError, getToken, setToken } from "@/lib/api";
-import { Rail, TopBar } from "./AppChrome";
+import { AppBody, TopBar } from "./AppChrome";
 
 type Problem = { text: string; upgrade?: boolean } | null;
 type Dash = { me: any; reloadMe: () => Promise<void>; fail: (e: unknown) => void; say: (text: string) => void };
@@ -33,9 +33,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <Ctx.Provider value={{ me, reloadMe, fail, say: setNotice }}>
       <a className="skip" href="#dash-main">Skip to content</a>
       <TopBar me={me} onLogout={() => { setToken(null); router.push("/"); }} />
-      <div className="app-body">
-        <Rail path={path} />
-        <main className="dash" id="dash-main" tabIndex={-1}>
+      <AppBody path={path}>
+        <main className="dash px-7 pb-[72px] pt-7 narrow:px-4 narrow:pb-10 narrow:pt-[18px]" id="dash-main" tabIndex={-1}>
           {!me.email_verified && <p className="notice">Confirm your email to start making clips. We sent a link to {me.email}.{" "}
             <button className="link" onClick={() => api("/v1/auth/resend-verification", { body: {} }).then(() => setNotice("We sent the link again.")).catch(fail)}>Send it again</button></p>}
           {notice && <p className="notice" role="status">{notice} <button className="link" onClick={() => setNotice("")}>Dismiss</button></p>}
@@ -43,7 +42,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <button className="link" onClick={() => setError(null)}>Dismiss</button></p>}
           {children}
         </main>
-      </div>
+      </AppBody>
     </Ctx.Provider>
   );
 }

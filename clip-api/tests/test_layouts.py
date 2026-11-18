@@ -135,7 +135,7 @@ def test_the_layout_names_and_the_allowed_set_per_aspect_are_the_contract():
         "9:16": {"auto", "full", "fit", "grid4", "split2", "trio", "pip", "screen_first", "gameplay_a", "gameplay_b"},
         "1:1": {"auto", "full", "fit", "grid4", "trio"},
         "4:5": {"auto", "full", "fit", "grid4", "split2", "trio", "pip", "screen_first", "gameplay_a", "gameplay_b"}}
-    assert all(set(v) <= set(L.LAYOUTS) for v in L.ALLOWED.values()) and set(L.NOT_BUILT) == {"trio", "grid4", "ots"}
+    assert all(set(v) <= set(L.LAYOUTS) for v in L.ALLOWED.values()) and set(L.NOT_BUILT) == set()
 
 
 BUILT_PAIRS = [(a, name) for a in L.ALLOWED for name in L.ALLOWED[a] if name in L.BUILT]

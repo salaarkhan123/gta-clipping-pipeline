@@ -7,10 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from . import routes_auth, routes_billing, routes_ingest, routes_media, routes_meta, routes_projects, routes_templates, routes_text, routes_tools
+from . import routes_auth, routes_billing, routes_export, routes_ingest, routes_media, routes_meta, routes_projects, routes_templates, routes_text, routes_tools
 from .config import get_settings
 from .db import get_engine, init_db
 from .deps import ApiError
+from .render_options import refused_layout
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
@@ -31,6 +32,7 @@ app = FastAPI(title="Clip API", version="1.0.0", lifespan=lifespan,
 app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in get_settings().cors_origins.split(",") if o.strip()],
                    allow_methods=["*"], allow_headers=["*"])
 app.include_router(routes_auth.router, tags=["auth"])
+app.include_router(routes_export.router, tags=["clips"])      # re-export and clip edits (render, agent B)
 app.include_router(routes_media.router, tags=["clips"])
 app.include_router(routes_tools.router, tags=["tools"])
 app.include_router(routes_text.router, tags=["languages"])      # (languages, agent F)
@@ -48,6 +50,9 @@ async def api_error(_request: Request, exc: ApiError):
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(_request: Request, exc: RequestValidationError):
+    refused = refused_layout(exc.errors())          # a provisional layout while PROVISIONAL_LAYOUTS is off
+    if refused:
+        return JSONResponse(status_code=400, content={"error": {"code": refused[0], "message": refused[1]}})
     first = exc.errors()[0] if exc.errors() else {}
     where = ".".join(str(x) for x in first.get("loc", []) if x != "body")
     return JSONResponse(status_code=422, content={"error": {
