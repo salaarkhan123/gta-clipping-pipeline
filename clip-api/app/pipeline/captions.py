@@ -113,7 +113,9 @@ IMPACT_OUTLINE = 0.08            # the dark outline, as a share of the font's em
 IMPACT_SPACING = 0.03            # extra room between letters (em): the outlines of a heavy face would touch without it
 IMPACT_FILL = 0.92               # the widest a caption gets, as a share of the width it is centred in
 IMPACT_SHORT = 12                # three words share a caption only when they have this many characters between them
-IMPACT_POP = (0.88, 90)          # each caption grows from this share of its size, over this many milliseconds
+ACTIVE_POP = (0.92, 1.08, 90)    # the word being said grows from this share of the line's size to this one, in ms
+UPCOMING = "&H8C&"               # a word not said yet: its letters this transparent (ASS alpha), outline kept
+CAPTION_HOLD = 0.3               # a caption stays this long after its last word, unless the next one starts first
 WORD_GAP = "  "                  # two spaces: the outline eats most of one
 ACCENT = "#B8FF3C"               # the brand lime, the colour of the hook box
 LOWER_THIRD = 0.70               # where the caption sits when the caller names no row
@@ -169,14 +171,57 @@ def impact_width(texts: list[str], em: float) -> float:
     return letters * em + 2 * max(2, round(IMPACT_OUTLINE * em))
 
 
-def keyword(texts: list[str]) -> int | None:
-    """Which word of a caption is the keyword: the longest one that is not a stop word (the first of equals)."""
-    best, length = None, 0
-    for i, text in enumerate(texts):
-        bare = re.sub(r"[^a-z0-9']", "", text.lower().replace("’", "'")).strip("'")
-        if bare and bare not in STOP_WORDS and len(bare) > length:
-            best, length = i, len(bare)
-    return best
+def _bare_key(text: str) -> str:
+    return re.sub(r"[^a-z0-9']", "", text.lower().replace("’", "'")).strip("'")
+
+
+# Words a gaming viewer's eye should land on. Every game shares GAME_TERMS; a game adds its own.
+NUMBER_WORDS = frozenset("""one two three four five six seven eight nine ten eleven twelve fifteen twenty thirty forty
+fifty hundred thousand million first last double triple quad quadra penta""".split())
+GAME_TERMS = frozenset("""clutch ace aced headshot headshots snipe sniped sniper noscope kill kills killed knocked
+downed eliminated wipe wiped wipeout victory win won lost dead died revive loot crash crashed drift drifted nitro
+overtake chase heist cops police wanted busted wasted escape escaped explode exploded explosion boom gg ez nerf
+cheater hacker hacks rank ranked boss raid spawn respawn camping camper rage noob bot bots""".split())
+GAME_EXTRA = {
+    "valorant": frozenset("spike defuse defused plant planted ult operator vandal phantom sheriff flash flashed "
+                          "smoke entry retake eco".split()),
+    "fortnite": frozenset("storm zone build builds box boxed pump shotgun royale crown edit".split()),
+    "gta5": frozenset("stars heist bank robbery getaway lamar franklin trevor michael lester pursuit".split()),
+    "cs2": frozenset("bomb defuse planted awp deagle eco retake entry".split()),
+    "apex": frozenset("ring squad wipe kraber third".split()),
+}
+
+
+def _is_number(bare: str) -> bool:
+    return bool(re.search(r"\d", bare)) or bare in NUMBER_WORDS
+
+
+def keyword(texts: list[str], names: list[bool] | None = None, game: str | None = None) -> int | None:
+    """Which word of a caption is the keyword (at most one): the first number, else the first name (`names[i]`:
+    the transcript has it capitalised inside a sentence), else the first game term (GAME_TERMS, plus the game's
+    own), else the first word said with an exclamation mark, else the longest word that is not a stop word (the
+    first of equals). A stop word or a masked swear (f***) never is."""
+    terms = GAME_TERMS | GAME_EXTRA.get(game or "", frozenset())
+    bares = [_bare_key(t) for t in texts]
+    usable = [i for i, b in enumerate(bares) if b and b not in STOP_WORDS and "*" not in texts[i]]
+    for rule in (lambda i: _is_number(bares[i]), lambda i: bool(names and names[i]),
+                 lambda i: bares[i] in terms, lambda i: texts[i].rstrip().endswith("!")):
+        hit = next((i for i in usable if rule(i)), None)
+        if hit is not None:
+            return hit
+    return max(usable, key=lambda i: (len(bares[i]), -i), default=None)
+
+
+def proper_names(words) -> list[bool]:
+    """For each (start, end, text) word: is it a name? Capitalised in the transcript, not the first word of a
+    sentence, not "I" or a stop word."""
+    out, prev = [], None
+    for _s, _e, text in words:
+        core = text.strip().strip(_TRIM + "!?")
+        initial = prev is None or prev.rstrip()[-1:] in ".!?"
+        out.append(bool(core[:1].isupper() and not initial and _bare_key(core) not in STOP_WORDS))
+        prev = text
+    return out
 
 
 def group_impact(words, fits=lambda texts: True) -> list[list]:
@@ -213,8 +258,11 @@ def _hook_style(font: str, size: int, left: int, right: int, hook_top: int, k: f
 
 def build_impact(words, path: Path, vertical: bool, font: str, play: tuple[int, int], hook: str | None, hook_top: int,
                  span: tuple[float, float], center: int | None, accent: str | None,
-                 hook_at: tuple[float, float] | None = None) -> int:
-    """The impact style: see build_ass. One event pair per caption: a soft shadow, and the words over it."""
+                 hook_at: tuple[float, float] | None = None, game: str | None = None) -> int:
+    """The impact style: see build_ass. Each caption is one event pair per word in it (a soft shadow, and the
+    words over it), from the moment that word is said: the word being said grows in (ACTIVE_POP), the words not
+    said yet are see-through (UPCOMING), the keyword is in the accent colour. A Cap event is named w<i>, the
+    index in `words` of the word it marks as being said (scripts/caption_checks.py times them)."""
     play_w, play_h = play
     m = impact_size(play_h)
     room = (span[1] - span[0]) * play_w * IMPACT_FILL
@@ -234,29 +282,45 @@ def build_impact(words, path: Path, vertical: bool, font: str, play: tuple[int, 
         + _hook_style(font, round((78 if vertical and play_h >= play_w else 64) * k), int(span[0] * play_w),
                       int((1 - span[1]) * play_w), hook_top, k)
         + "\n[Events]\n" + EVENT_FORMAT)
-    shown = [w for w in words if impact_text(w[2])]
-    chunks = group_impact(shown, lambda texts: impact_width(texts, m.em) <= room)
-    on, off = "{\\c" + ass_colour(accent or ACCENT) + "}", "{\\c&HFFFFFF&}"
+    names = proper_names(words)
+    shown = [(i, w) for i, w in enumerate(words) if impact_text(w[2])]
+    grow = ACTIVE_POP[1]
+    # Room for the word being said at its grown size, wherever it is in the line.
+    chunks = group_impact([w for _, w in shown], lambda texts: impact_width(texts, m.em) * grow <= room)
+    index = iter(i for i, _ in shown)
+    accent_on, white = "\\c" + ass_colour(accent or ACCENT), "\\c&HFFFFFF&"
     lines = []
     if hook:
         a, b = hook_at or (0, HOOK_SECONDS)
         lines.append(f"Dialogue: 2,{ass_time(a)},{ass_time(b)},Hook,,0,0,0,,{{\\fad(120,220)}}{_clean(hook, True)}")
     for ci, chunk in enumerate(chunks):
-        start, end = chunk[0][0], chunk[-1][1]
+        ids = [next(index) for _ in chunk]
+        end = chunk[-1][1] + CAPTION_HOLD
         if ci + 1 < len(chunks):
-            end = min(end + 0.3, chunks[ci + 1][0][0])
+            end = min(end, chunks[ci + 1][0][0])
         texts = [impact_text(t) for _, _, t in chunk]
         # A word too long for the line at full size is drawn smaller, never wrapped and never off the frame.
-        pct = min(100, int(100 * (room - 2 * m.outline) / max(1.0, impact_width(texts, m.em) - 2 * m.outline)))
+        pct = min(100, int(100 * (room - 2 * m.outline) / max(1.0, impact_width(texts, m.em) * grow - 2 * m.outline)))
         # \an5 hangs the line by the middle of the font's whole line; the capitals sit a little under that.
         row = y - (ANTON_ASCENT - ANTON_DESCENT - ANTON_CAP) / 2 * m.em * pct / 100
-        small, ms = round(pct * IMPACT_POP[0]), IMPACT_POP[1]
-        place = (f"\\pos({x},{row:.0f})\\q2\\fscx{small}\\fscy{small}\\t(0,{ms},\\fscx{pct}\\fscy{pct})")
-        key = keyword(texts)
-        text = WORD_GAP.join(on + t + off if i == key else t for i, t in enumerate(texts))
-        when = f"{ass_time(start)},{ass_time(max(end, start + 0.05))}"
-        lines.append(f"Dialogue: 0,{when},CapShadow,,0,0,0,,{{{place}\\blur{m.blur}}}{WORD_GAP.join(texts)}")
-        lines.append(f"Dialogue: 1,{when},Cap,,0,0,0,,{{{place}}}{text}")
+        place = f"\\pos({x},{row:.0f})\\q2\\fscx{pct}\\fscy{pct}"
+        key = keyword([w[2] for w in chunk], [names[i] for i in ids], game)
+        small, big, ms = round(pct * ACTIVE_POP[0]), round(pct * grow), ACTIVE_POP[2]
+        pop = f"\\fscx{small}\\fscy{small}\\t(0,{ms},\\fscx{big}\\fscy{big})"
+        back = f"\\fscx{pct}\\fscy{pct}"
+        for j, i in enumerate(ids):
+            a = chunk[0][0] if j == 0 else chunk[j][0]
+            b = chunk[j + 1][0] if j + 1 < len(chunk) else end
+            drawn, shadow = [], []
+            for n, t in enumerate(texts):
+                colour = accent_on if n == key else white
+                alpha = "\\1a" + (UPCOMING if n > j else "&H00&")
+                size = pop if n == j else back
+                drawn.append(f"{{{colour}{alpha}{size}}}{t}")
+                shadow.append(f"{{{size}}}{t}")
+            when = f"{ass_time(a)},{ass_time(max(b, a + 0.05))}"
+            lines.append(f"Dialogue: 0,{when},CapShadow,,0,0,0,,{{{place}\\blur{m.blur}}}{WORD_GAP.join(shadow)}")
+            lines.append(f"Dialogue: 1,{when},Cap,w{i},0,0,0,,{{{place}}}{WORD_GAP.join(drawn)}")
     path.write_text(head + "\n".join(lines) + "\n", encoding="utf-8")
     return len(chunks)
 
@@ -264,7 +328,7 @@ def build_impact(words, path: Path, vertical: bool, font: str, play: tuple[int, 
 def build_ass(words, path: Path, vertical: bool, caption_top: int, font: str, style: str = "pop",
               play: tuple[int, int] = (1080, 1920), hook: str | None = None, hook_top: int = 0,
               span: tuple[float, float] = (0.0, 1.0), *, center: int | None = None, accent: str | None = None,
-              hook_at: tuple[float, float] | None = None) -> int:
+              hook_at: tuple[float, float] | None = None, game: str | None = None) -> int:
     """A few words at a time. Returns the number of captions.
     `hook` is one line of text shown in a box for the first HOOK_SECONDS, `hook_top` pixels from the top.
     `span` is the part of the frame's width (fractions, left and right) the text is centred in: the gameplay
@@ -281,7 +345,7 @@ def build_ass(words, path: Path, vertical: bool, caption_top: int, font: str, st
     The STYLED styles (bounce, karaoke, reveal, outline, subtitle, tag) sit where the word-highlight ones do.
     `hook_at` is when the hook is on screen, (from, to) seconds on the clip's timeline; None: the first HOOK_SECONDS."""
     if style == "impact":
-        return build_impact(words, path, vertical, font, play, hook, hook_top, span, center, accent, hook_at)
+        return build_impact(words, path, vertical, font, play, hook, hook_top, span, center, accent, hook_at, game)
     if style in STYLED:
         return build_styled(words, path, vertical, caption_top, font, STYLED[style], play, hook, hook_top, span,
                             hook_at)

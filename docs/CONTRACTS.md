@@ -129,7 +129,8 @@ Panel sizes are a public template field, `panels: {"camera": "top" | "bottom" | 
 
 - One or two words at a time; a third only when all three are short (12 characters in total).
 - Upper case, our own heavy font (bundled, open licence), size about 9% of the frame height, dark outline about 8% of the font size, soft shadow.
-- One keyword per caption in the accent colour: the longest word that is not a stop word. Default accent: our lime.
+- One keyword per caption in the accent colour. Default accent: our lime. The keyword is (2026-11-18, captions agent) the first number, else the first name (capitalised inside a sentence in the transcript), else the first game term (`captions.GAME_TERMS` plus the template game's own), else the first word said with "!", else the longest word that is not a stop word. A masked swear never is.
+- The word being said is marked (2026-11-18): from its start it grows from 92% to 108% of the line's size over 90 ms; words of the caption not said yet are see-through, said ones solid. A caption appears at its first word's start and stays at most 0.3 s after its last word, never into the next caption.
 - Position `auto`: centred on the line between the panels in split layouts, in the lower third (about 70% down) otherwise.
 - It is the default `caption_style`. The five existing styles stay.
 

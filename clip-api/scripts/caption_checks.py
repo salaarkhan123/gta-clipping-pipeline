@@ -198,7 +198,7 @@ def text_rect(e: Event, styles: dict, play: tuple[int, int]) -> tuple[float, flo
     outline = float(st["Outline"])
     if st["Fontname"] == C.IMPACT_FONT:
         em = size / (C.ANTON_ASCENT + C.ANTON_DESCENT)
-        scale = float((_tags(e.text, "fscx") or ["100"])[-1]) / 100
+        scale = max(float(v) for v in _tags(e.text, "fscx") or ["100"]) / 100     # the largest word: conservative
         width = C.impact_width([C.impact_text(w) for w in words], em) * scale
         half = (C.ANTON_CAP * em / 2 + outline) * scale
         pos = _tags(e.text, "pos")
