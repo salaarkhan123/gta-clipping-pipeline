@@ -33,9 +33,14 @@ def sheet(path, rows):
     return path
 
 
-def job(path, clips):
-    path.write_text(json.dumps({"clips": [{"start_sec": s, "end_sec": e, **extra} for s, e, extra in clips]}))
+def job(path, clips, system=None):
+    run = {"clips": [{"start_sec": s, "end_sec": e, **extra} for s, e, extra in clips]}
+    path.write_text(json.dumps({**run, **({"system": system} if system else {})}))
     return path
+
+
+def counts(d):
+    return {k: d[k] for k in ("n", "hits", "misses", "repeats", "unrated")}
 
 
 def row(vod, start, end, rating, **kw):
@@ -120,18 +125,46 @@ def test_precision_counts_the_best_ranked_clips_and_a_moment_once():
              {"start": 9000, "end": 9040, "rank": 4},     # on nothing: unrated
              {"start": 2000, "end": 2040, "rank": 5}]     # on a 2: hit
     s = ev.score_vod(rows, list(reversed(clips)))         # listed order does not matter: rank does
-    assert (s["hits@20"], s["precision@20"], s["precision@40"], s["unrated@20"]) == (2, 0.1, 0.05, 1)
+    assert counts(s["@20"]) == {"n": 5, "hits": 2, "misses": 1, "repeats": 1, "unrated": 1}
+    assert [c["verdict"] for c in s["per_clip"]] == ["hit", "repeat", "miss", "unrated", "hit"]
     assert (s["great"], s["great_found"], s["recall"]) == (2, 1, 0.5)
     assert [m["id"] for m in s["missed"]] == ["4"]
     assert [c["rank"] for c in s["per_clip"]] == [1, 2, 3, 4, 5] and s["per_clip"][0]["rating"] == 3
 
 
-def test_only_the_top_k_count():
-    rows = [{"id": str(i), "start": 100.0 * i, "end": 100.0 * i + 30, "label": 2} for i in range(50)]
-    clips = [{"start": 100.0 * i, "end": 100.0 * i + 30, "score": 1 - i / 100} for i in range(45)]
-    s = ev.score_vod(rows, clips)
-    assert (s["hits@20"], s["hits@40"], s["precision@20"], s["precision@40"]) == (20, 40, 1.0, 1.0)
-    assert ev.score_vod(rows, clips[:10])["precision@20"] == 0.5         # 10 clips cannot fill 20 places
+def test_unrated_clips_are_not_misses_precision_is_a_range():
+    rows = [{"id": str(i), "start": 100.0 * i, "end": 100.0 * i + 30, "label": 2 if i < 10 else 1} for i in range(14)]
+    clips = [{"start": 100.0 * i, "end": 100.0 * i + 30, "rank": i + 1} for i in range(20)]   # 10 hits, 4 misses, 6 unrated
+    a = ev.score_vod(rows, clips)["@20"]
+    assert counts(a) == {"n": 20, "hits": 10, "misses": 4, "repeats": 0, "unrated": 6} and not a["short"]
+    assert (a["precision_rated"], a["precision_low"], a["precision_high"]) == (0.714, 0.5, 0.8)
+    line = ev.fmt_at(a)
+    assert line == ("@20: 20 clips · hits 10 · misses 4 · repeats 0 · unrated 6 · precision 71% of rated, "
+                    "50% to 80% (unrated as misses / as hits)")
+    nothing_rated = ev.score_vod([], clips)["@20"]
+    assert nothing_rated["precision_rated"] is None and "precision - of rated, 0% to 100%" in ev.fmt_at(nothing_rated)
+
+
+def test_a_run_with_fewer_than_k_clips_prints_both_over_k_and_over_n(tmp_path, capsys):
+    rows = [{"id": str(i), "start": 100.0 * i, "end": 100.0 * i + 30, "label": 3, "reason": "x"} for i in range(50)]
+    full = [{"start": 100.0 * i, "end": 100.0 * i + 30, "rank": i + 1} for i in range(45)]
+    s = ev.score_vod(rows, full)
+    assert (s["@40"]["n"], s["@40"]["hits"], s["@40"]["short"], s["@40"]["precision_low"]) == (40, 40, False, 1.0)
+    assert "run returned only" not in ev.fmt_at(s["@40"])                    # 45 clips fill 40 places
+    short = ev.score_vod(rows, full[:12])                                    # 12 clips, all hits
+    for k, strict in ((20, 0.6), (40, 0.3)):
+        a = short[f"@{k}"]
+        assert (a["n"], a["hits"], a["short"], a["precision_low"], a["strict_low"], a["strict_high"]) == (
+            12, 12, True, 1.0, strict, strict)
+    assert ev.fmt_at(short["@20"]).endswith(
+        "100% to 100% (unrated as misses / as hits) · run returned only 12 clips: 60% to 60% of 20 (strict)")
+    labels = sheet(tmp_path / "s.csv", [row("v", ev.hms(100 * i), ev.hms(100 * i + 30), "3") for i in range(50)])
+    run = job(tmp_path / "r.json", [(100.0 * i, 100.0 * i + 30, {"rank": i + 1}) for i in range(12)])
+    assert ev.main([str(labels), f"v={run}", "--json"]) == 0
+    a = json.loads(capsys.readouterr().out)["systems"]["clutchclips"]["per_vod"]["v"]["@20"]
+    assert (a["n"], a["k"], a["short"], a["strict_low"], a["precision_low"]) == (12, 20, True, 0.6, 1.0)
+    assert ev.main([str(labels), f"v={run}"]) == 0
+    assert "only 12 of 20: 60% to 60%" in capsys.readouterr().out
 
 
 def test_ranking_falls_back_to_score_then_listed_order():
@@ -155,32 +188,52 @@ def two_vods(tmp_path):
 def test_numbers_per_video_tuning_and_held_out(tmp_path):
     labels, online, rp = two_vods(tmp_path)
     rows, _ = ev.parse_v2(labels)
-    s = ev.score_v2(rows, {"online": ev.load_clips(online), "rp": ev.load_clips(rp)})
-    on, held = s["per_vod"]["online"], s["per_vod"]["rp"]
-    assert (on["hits@20"], on["unrated@20"], on["recall"]) == (2, 1, 1.0)          # the unrated row takes no part
-    assert (held["hits@20"], held["recall"], held["held_out"]) == (1, 0.5, True)
-    assert s["tuning"] == {"vods": 1, "great": 1, "great_found": 1, "recall": 1.0, "hits@20": 2, "precision@20": 0.1,
-                           "unrated@20": 1, "hits@40": 2, "precision@40": 0.05, "unrated@40": 1}
-    assert (s["held_out"]["precision@20"], s["held_out"]["recall"]) == (0.05, 0.5)
-    assert (s["all"]["hits@20"], s["all"]["precision@20"], s["all"]["recall"]) == (3, 0.075, 0.667)
-    assert s["unscored"] == ["other"]
+    s = ev.score_v2(rows, {"clutchclips": {"online": ev.load_clips(online), "rp": ev.load_clips(rp)}})
+    ours = s["systems"]["clutchclips"]
+    on, held = ours["per_vod"]["online"], ours["per_vod"]["rp"]
+    assert counts(on["@20"]) == {"n": 3, "hits": 2, "misses": 0, "repeats": 0, "unrated": 1}   # unrated row: no part
+    assert on["recall"] == 1.0
+    assert (held["@20"]["hits"], held["recall"], held["held_out"]) == (1, 0.5, True)
+    t = ours["tuning"]
+    assert (t["vods"], t["great"], t["great_found"], t["recall"]) == (1, 1, 1, 1.0)
+    assert (t["@20"]["k"], t["@20"]["n"], t["@20"]["precision_rated"], t["@20"]["strict_low"]) == (20, 3, 1.0, 0.1)
+    a = ours["all"]["@20"]                                                    # pooled: counts add up, k too
+    assert (a["k"], a["n"], a["hits"], a["unrated"], a["precision_low"], a["precision_high"]) == (40, 5, 3, 2, 0.6, 1.0)
+    assert ours["all"]["recall"] == 0.667 and s["unscored"] == {"clutchclips": ["other"]}
     with pytest.raises(ValueError, match="no rows for vod gta-x"):
-        ev.score_v2(rows, {"gta-x": []})
+        ev.score_v2(rows, {"clutchclips": {"gta-x": []}})
+
+
+def test_two_systems_are_compared_in_one_table(tmp_path, capsys):
+    labels, online, rp = two_vods(tmp_path)
+    wayin_online = job(tmp_path / "w-online.json", [(1200, 1240, {"rank": 1}), (600, 640, {"rank": 2})], "wayin")
+    wayin_rp = job(tmp_path / "w-rp.json", [(1800, 1840, {"rank": 1})], "wayin")
+    assert ev.main([str(labels), f"online={online}", f"rp={rp}", f"online={wayin_online}", f"rp={wayin_rp}"]) == 0
+    out = capsys.readouterr().out.splitlines()
+    head = out[0].split()
+    assert head[:3] == ["system", "recall", "of"] and "unrated" in head
+    t = [i for i, line in enumerate(out) if line.startswith("tuning (1 vod)")][0]
+    assert out[t].split()[3:5] == ["clutchclips", "1"] and out[t + 2].split()[0] == "wayin"     # side by side
+    held = [line for line in out if line.startswith("held_out (1 vod)")][0]
+    assert "1 of 2 (50%)" in held
+    assert any(line.startswith("rp (held out)") for line in out)
+    assert "wayin on rp: held out, clips and misses hidden (--show-held-out)" in out
+    assert "no clutchclips run given for: other" in out and "no wayin run given for: other" in out
+    assert ev.main([str(labels), f"online={online}", f"online={online}"]) == 2          # one run per system and video
 
 
 def test_the_report_hides_the_held_out_clips_unless_asked(tmp_path, capsys):
     labels, online, rp = two_vods(tmp_path)
     assert ev.main([str(labels), f"online={online}", f"rp={rp}"]) == 0
     out = capsys.readouterr().out
-    assert "tuning (1 vod): precision@20 10% · precision@40 5% · recall 100% (1 of 1 3s)" in out
-    assert "held_out (1 vod): precision@20 5%" in out and "rp (held out), 2 clips: " in out
-    assert "#1   0:01:00  rating 3" in out and "0:02:00" not in out and "missed" not in out
-    assert "no run given for: other" in out
+    assert "clutchclips on online, 3 clips:" in out and "#1   0:01:00  hit      rating 3" in out
+    assert "clutchclips on rp: held out, clips and misses hidden (--show-held-out)" in out
+    assert "0:02:00" not in out and "missed" not in out
     assert ev.main([str(labels), f"online={online}", f"rp={rp}", "--show-held-out"]) == 0
     out = capsys.readouterr().out
-    assert "#1   0:02:00  rating 3" in out and "missed line6  0:30:00 to 0:30:40  big moment" in out
+    assert "#1   0:02:00  hit      rating 3" in out and "missed 3 line6  0:30:00 to 0:30:40  big moment" in out
     assert ev.main([str(labels), f"rp={rp}", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out)["per_vod"]["rp"]["per_clip"] == []
+    assert json.loads(capsys.readouterr().out)["systems"]["clutchclips"]["per_vod"]["rp"]["per_clip"] == []
 
 
 def test_the_cli_checks_a_sheet_and_refuses_bad_input(tmp_path, capsys):
@@ -205,26 +258,70 @@ def test_add_fills_a_sheet_once_and_carries_v1_labels(tmp_path, capsys):
     assert lm.main(args + ["--top", "2"]) == 0
     rows, errors = ev.parse_v2(labels)
     assert errors == [] and [(r["id"], r["start"], r["source"]) for r in rows] == [
-        ("gta-rp-1-1", 60.0, "run1#1"), ("gta-rp-1-2", 600.0, "run1#2")]          # the best two, by rank
+        ("gta-rp-1-1", 60.0, "clutchclips:run1#1"), ("gta-rp-1-2", 600.0, "clutchclips:run1#2")]   # best two, by rank
     assert lm.main(args + ["--top", "2"]) == 0 and "added 0 moments" in capsys.readouterr().out.splitlines()[-1]
     v1 = tmp_path / "v1.csv"
     v1.write_text("id,start,end,label,what_happens,notes,source\n7,0:01:20,0:02:00,3,,,top\n8,0:20:00,0:20:30,0,,,q2\n"
                   "9,0:30:00,0:30:30,,,,q3\n")
-    second = job(tmp_path / "run2.json", [(3010, 3055, {"rank": 1})])            # covers run1's #3, never added
-    assert lm.main(args + ["--job", str(second), "--sheet", str(v1)]) == 0
+    assert lm.main(args + ["--sheet", str(v1)]) == 0
     rows, _ = ev.parse_v2(labels)
     assert [(r["start"], r["label"], r["source"]) for r in rows] == [
-        (60.0, None, "run1#1"), (600.0, None, "run1#2"), (1200.0, 1, "v1:v1#8"), (1800.0, None, "v1:v1#9"),
-        (3000.0, None, "run1#3")]                     # v1 row 7 overlaps run1#1 by 25 of 40 s: covered; a 0 is a 1
+        (60.0, None, "clutchclips:run1#1+v1:v1#7"), (600.0, None, "clutchclips:run1#2"), (1200.0, 1, "v1:v1#8"),
+        (1800.0, None, "v1:v1#9"), (3000.0, None, "clutchclips:run1#3")]   # v1 row 7 covered by run1#1; a 0 is a 1
     other = ["add", str(labels), "--vod", "gta-rp-1", "--game", "gta-online", "--held-out", "yes", "--sheet", str(v1)]
     assert lm.main(other) == 1                                                    # one game per video
+
+
+def test_add_pools_a_wayin_run_whole_and_tags_shared_moments(tmp_path):
+    labels = tmp_path / "labels-v2.csv"
+    ours = job(tmp_path / "ours.json", [(100.0 * i, 100.0 * i + 45, {"rank": i}) for i in range(1, 41)])
+    theirs = job(tmp_path / "w.json", [(110, 150, {"rank": 2}), (5000, 5060, {"rank": 1})]
+                 + [(6000.0 + 100 * i, 6000.0 + 100 * i + 50, {"rank": i + 3}) for i in range(35)], "wayin")
+    base = ["add", str(labels), "--vod", "v", "--game", "gta-rp", "--held-out", "no"]
+    assert lm.main(base + ["--job", str(ours), "--job", str(theirs)]) == 0
+    rows = lm.read_sheet(labels)
+    assert len(rows) == 30 + 36                                     # our best 30; all 37 of theirs, one covered by ours
+    first = rows[0]
+    assert (first["start"], first["source"]) == ("0:01:40", "clutchclips:ours#1+wayin:w#2")    # offered by both
+    assert any(r["source"] == "wayin:w#1" and r["start"] == "1:23:20" for r in rows)
+    assert [lm.seconds(r["start"]) for r in rows] == sorted(lm.seconds(r["start"]) for r in rows)   # by time
+    assert lm.main(base + ["--job", str(ours), "--job", str(theirs)]) == 0 and len(lm.read_sheet(labels)) == 66
+
+
+def test_wayin_ranks_come_from_the_file_names_or_a_csv(tmp_path):
+    names = [tmp_path / n for n in ("02_chase.mp4", "01_crash.mp4", "10_end.mp4")]
+    assert lm.wayin_ranks(names, None) == {"01_crash.mp4": 1, "02_chase.mp4": 2, "10_end.mp4": 3}
+    plain = [tmp_path / n for n in ("chase.mp4", "crash.mp4")]
+    with pytest.raises(ValueError, match="start each file name with its place in Wayin's list"):
+        lm.wayin_ranks(plain, None)
+    with pytest.raises(ValueError, match="same leading number"):
+        lm.wayin_ranks([tmp_path / "1_a.mp4", tmp_path / "01_b.mp4"], None)
+    (tmp_path / "r.csv").write_text("filename,rank\nchase.mp4,2\ncrash.mp4,1\n")
+    assert lm.wayin_ranks(plain, tmp_path / "r.csv") == {"crash.mp4": 1, "chase.mp4": 2}
+    (tmp_path / "s.csv").write_text("filename,score\nchase.mp4,97\ncrash.mp4,99\n")
+    assert lm.wayin_ranks(plain, tmp_path / "s.csv") == {"crash.mp4": 1, "chase.mp4": 2}       # higher score first
+    (tmp_path / "bad.csv").write_text("filename,score\nchase.mp4,97\n")
+    with pytest.raises(ValueError, match="has no score for crash.mp4"):
+        lm.wayin_ranks(plain, tmp_path / "bad.csv")
+    (tmp_path / "head.csv").write_text("name,place\nchase.mp4,1\n")
+    with pytest.raises(ValueError, match="header must be filename,rank or filename,score"):
+        lm.wayin_ranks(plain, tmp_path / "head.csv")
+
+
+def test_the_labeller_is_blind_to_which_system_offered_a_row():
+    page = (ROOT / "eval" / "labeller.html").read_text()
+    script = page.split("<script>")[1]
+    uses = re.findall(r"\.source\b.{0,12}", script)
+    assert uses and all(re.match(r'\.source [!=]== "owner"', u) for u in uses), uses   # only "you added it"
+    assert not re.search(r"\$\{\s*\w+\.id\s*\}", script)                    # ids are numbered per system: never shown
+    assert "mine = () => rows.filter((r) => r.vod === vod).sort((a, b) => a.start - b.start)" in script   # by time
 
 
 def test_select_writes_a_ranked_job_file_from_a_local_video(video, tmp_path):
     out = tmp_path / "sel.json"
     assert lm.main(["select", str(video), str(out)]) == 0
-    clips = ev.load_clips(out)
-    assert clips and [c["rank"] for c in clips] == list(range(1, len(clips) + 1))
+    system, clips = ev.load_run(out)
+    assert system == "clutchclips" and clips and [c["rank"] for c in clips] == list(range(1, len(clips) + 1))
     assert all(0 <= c["start"] < c["end"] <= 41 for c in clips)
     assert not list(tmp_path.glob("**/*.mp4"))                                     # nothing rendered
 
