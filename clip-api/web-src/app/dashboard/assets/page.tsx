@@ -123,7 +123,7 @@ export default function Assets() {
 
       <section className="grid gap-4" aria-labelledby="media-title">
         <h2 id="media-title" className={H2}>Media</h2>
-        <Tabs seg label="Media type" panel="media" value={kind} onChange={setKind} tabs={[["all", "All"], ["images", "Images"], ["videos", "Videos"], ["audio", "Audio"]]} />
+        <div className="justify-self-start"><Tabs seg label="Media type" panel="media" value={kind} onChange={setKind} tabs={[["all", "All"], ["images", "Images"], ["videos", "Videos"], ["audio", "Audio"]]} /></div>
         <div id="media" role="tabpanel">
           {kind === "images" ? <SoonMedia icon="image" what="Logos, overlays and stickers" />
             : kind === "audio" ? <SoonMedia icon="music" what="Music and sound effects" />

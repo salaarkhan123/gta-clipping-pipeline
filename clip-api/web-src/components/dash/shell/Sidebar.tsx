@@ -37,8 +37,9 @@ export function Sidebar({ me, path, compact, onToggle, onClose, onLogout }: { me
   onToggle?: () => void; onClose?: () => void; onLogout: () => void }) {
   return (
     <div className={`flex h-full flex-col gap-4 ${compact ? "px-[10px]" : "px-3"} pb-4 pt-[14px]`}>
-      <div className={`flex min-h-[40px] items-center ${compact ? "justify-center" : "justify-between pl-1"}`}>
-        {!compact && <Logo small />}
+      <div className={`flex min-h-[40px] items-center ${compact ? "flex-col gap-3" : "justify-between pl-1"}`}>
+        {compact ? <Link href="/dashboard/" aria-label="ClutchClips home" className="grid h-9 w-9 place-items-center"><img src="/icon.svg" alt="" width={28} height={28} className="block" /></Link>
+          : onClose ? <Logo /> : <Logo small />}
         {onToggle && <button type="button" onClick={onToggle} aria-label={compact ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!compact}
           title={compact ? "Expand sidebar" : "Collapse sidebar"}
           className="grid h-9 w-9 cursor-pointer place-items-center rounded-8 border border-solid border-line-soft bg-transparent text-muted hover:bg-chip hover:text-text">

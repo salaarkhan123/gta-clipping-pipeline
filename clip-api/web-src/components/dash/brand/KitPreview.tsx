@@ -1,11 +1,11 @@
 "use client";
 // The brand kit's live preview: a phone (or a frame of the chosen shape) showing the kit's layout, caption style
 // and hook over a gameplay frame. Everything in it is drawn here in CSS, our own artwork: no footage, no game art.
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Icon, IconName } from "../Icon";
 import { Tabs } from "../Tabs";
 import { CAPTION, HOOK_LINES } from "../setup/Styles";
-import { Popover } from "../setup/parts";
+import { useDismiss } from "../shell/useDismiss";
 import type { Kit } from "@/lib/brandkit";
 import { hasPanels, tidy } from "@/lib/templates";
 
@@ -13,6 +13,8 @@ export const SHAPES = ["9:16", "16:9", "1:1", "4:5"] as const;
 export type Shape = (typeof SHAPES)[number];
 type Show = { captions: boolean; hook: boolean; social: boolean; safe: boolean };
 const SHOW_NAMES: [keyof Show, string][] = [["captions", "Captions"], ["hook", "Hook"], ["social", "App buttons"], ["safe", "Safe zones"]];
+// Overlay text is sized to the frame's width, scaled per shape so a wide frame doesn't get giant captions.
+const UNIT: Record<Shape, number> = { "9:16": 1, "4:5": 0.8, "1:1": 0.72, "16:9": 0.56 };
 const ratio = (s: string) => { const [w, h] = s.split(":").map(Number); return w > 0 && h > 0 ? w / h : 9 / 16; };
 
 // A city at dusk, a road and a HUD: reads as open-world gameplay at a glance.
@@ -27,9 +29,7 @@ function Gameplay() {
         <span className="absolute left-[14%] right-[14%] top-[14%] h-[30%] rounded-[30%] bg-[rgba(30,30,40,.85)]" />
         <span className="absolute bottom-[12%] left-[8%] h-[14%] w-[16%] rounded-full bg-[#ffd36b]" /><span className="absolute bottom-[12%] right-[8%] h-[14%] w-[16%] rounded-full bg-[#ffd36b]" />
       </span>
-      <span className="absolute bottom-[5%] left-[4%] aspect-square w-[16%] rounded-full border-[2px] border-solid border-[rgba(0,0,0,.6)] bg-[radial-gradient(circle,#4c7a4a_0_30%,#36583a_31%)] shadow-[0_0_0_1px_rgba(255,255,255,.35)]">
-        <span className="absolute left-1/2 top-1/2 h-[18%] w-[18%] -translate-x-1/2 -translate-y-1/2 rotate-45 bg-white" /></span>
-      <span className="absolute right-[4%] top-[4%] font-sans text-[3.2cqw] tracking-[.1em] text-white [text-shadow:0_1px_2px_#000]">★★★☆☆</span>
+      <span className="absolute right-[4%] top-[4%] font-sans text-[calc(3.2*var(--u))] tracking-[.1em] text-white [text-shadow:0_1px_2px_#000]">★★★☆☆</span>
     </span>
   );
 }
@@ -78,7 +78,7 @@ function Caption({ kit, seam }: { kit: Kit; seam: number | null }) {
   const accent = kit.caption_style === "impact" && kit.caption_accent ? { color: kit.caption_accent } : undefined;
   return (
     <span className="absolute inset-x-[6%] grid -translate-y-1/2 place-items-center text-center" style={{ top: `${at}%` }}>
-      <span className={`font-sans text-[6.4cqw] leading-[1.1] ${c.box}`}><span>{a} <span className={c.hot} style={accent}>{hot}</span> {rest.join(" ")}</span></span>
+      <span className={`font-sans text-[calc(6.4*var(--u))] leading-[1.1] ${c.box}`}><span>{a} <span className={c.hot} style={accent}>{hot}</span> {rest.join(" ")}</span></span>
     </span>
   );
 }
@@ -86,16 +86,38 @@ function Caption({ kit, seam }: { kit: Kit; seam: number | null }) {
 const SOCIAL: [IconName, string][] = [["like", "48.2K"], ["send", "1.9K"], ["bookmark", "6.1K"]];
 function Social() {
   return <>
-    <span className="absolute bottom-[16%] right-[3%] grid justify-items-center gap-[3cqw] text-white">
-      <span className="aspect-square w-[11cqw] rounded-full border-[2px] border-solid border-white bg-[linear-gradient(135deg,theme(colors.lime),theme(colors.cyan))]" />
-      {SOCIAL.map(([i, n]) => <span key={i} className="grid justify-items-center gap-[1px] font-sans text-[3cqw] font-semibold [text-shadow:0_1px_2px_#000]"><Icon name={i} size={22} />{n}</span>)}
+    <span className="absolute bottom-[16%] right-[3%] grid justify-items-center gap-[calc(3*var(--u))] text-white">
+      <span className="aspect-square w-[calc(11*var(--u))] rounded-full border-[2px] border-solid border-white bg-[linear-gradient(135deg,theme(colors.lime),theme(colors.cyan))]" />
+      {SOCIAL.map(([i, n]) => <span key={i} className="grid justify-items-center gap-[1px] font-sans text-[calc(3*var(--u))] font-semibold [text-shadow:0_1px_2px_#000]"><Icon name={i} size={22} />{n}</span>)}
     </span>
-    <span className="absolute bottom-[4%] left-[5%] right-[22%] grid gap-[1cqw] font-sans text-white [text-shadow:0_1px_2px_#000]">
-      <b className="text-[4cqw]">@yourchannel</b>
-      <span className="text-[3.4cqw]">Clutch of the night #gaming #clips</span>
-      <span className="flex items-center gap-1 text-[3cqw] opacity-85"><Icon name="music" size={12} />Original sound</span>
+    <span className="absolute bottom-[4%] left-[5%] right-[22%] grid gap-[calc(1*var(--u))] font-sans text-white [text-shadow:0_1px_2px_#000]">
+      <b className="text-[calc(4*var(--u))]">@yourchannel</b>
+      <span className="text-[calc(3.4*var(--u))]">Clutch of the night #gaming #clips</span>
+      <span className="flex items-center gap-1 text-[calc(3*var(--u))] opacity-85"><Icon name="music" size={12} />Original sound</span>
     </span>
   </>;
+}
+
+// "Show in preview": what the preview draws over the frame. Opens upward, centred under the preview.
+function ShowMenu({ show, onChange }: { show: Show; onChange: (s: Show) => void }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null), btn = useRef<HTMLButtonElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, close, box, btn);
+  return (
+    <div ref={box} className="relative">
+      <button ref={btn} type="button" aria-expanded={open} onClick={() => setOpen(!open)}
+        className="inline-flex min-h-[38px] cursor-pointer items-center gap-2 rounded-full border border-solid border-line-soft bg-transparent px-4 font-sans text-[14px] text-text hover:bg-chip aria-expanded:bg-chip">
+        <Icon name="eye" size={17} className="text-muted" />Show in preview<Icon name="chevron" size={16} className="text-muted" /></button>
+      {open && <fieldset className="absolute bottom-[calc(100%+8px)] left-1/2 z-[60] m-0 grid w-[240px] -translate-x-1/2 gap-1 rounded-16 border border-solid border-line bg-card-2 p-3 shadow-pop">
+        <legend className="sr-only">Show in preview</legend>
+        {SHOW_NAMES.map(([k, name]) => (
+          <label key={k} className="m-0 flex min-h-[36px] cursor-pointer items-center gap-3 rounded-8 px-1 text-[14px] font-normal text-text">
+            <input type="checkbox" checked={show[k]} onChange={(e) => onChange({ ...show, [k]: e.target.checked })} />{name}
+            {k === "social" && <span className="ml-auto text-[12px] text-fg-3">Upright shapes</span>}</label>))}
+      </fieldset>}
+    </div>
+  );
 }
 
 export function KitPreview({ kit, shape, onShape }: { kit: Kit; shape: Shape; onShape: (s: Shape) => void }) {
@@ -112,28 +134,20 @@ export function KitPreview({ kit, shape, onShape }: { kit: Kit; shape: Shape; on
         <span title={`Preview only. Clips made with this kit are cut to ${kit.aspect}.`} className="grid h-8 w-8 place-items-center text-muted"><Icon name="info" size={18} />
           <span className="sr-only">Preview only. Clips made with this kit are cut to {kit.aspect}.</span></span>
       </div>
-      <div id="kit-preview" role="tabpanel" aria-label={`Preview at ${shape}`} className="grid w-full place-items-center" style={{ height: "min(64vh, 600px)", minHeight: 360 }}>
+      <div id="kit-preview" role="tabpanel" aria-label={`Preview at ${shape}`} className="grid h-[min(64vh,600px)] min-h-[360px] w-full place-items-center narrow:h-[440px] narrow:min-h-0">
         <div className={`relative overflow-hidden bg-black [container-type:inline-size] ${phone ? "rounded-[34px] border-[7px] border-solid border-[#1c1c1c] shadow-[0_0_0_1px_rgba(255,255,255,.12),0_30px_60px_rgba(0,0,0,.6)]"
           : "rounded-16 shadow-[0_0_0_1px_rgba(255,255,255,.12),0_30px_60px_rgba(0,0,0,.6)]"}`}
-          style={{ aspectRatio: r, height: vertical ? "100%" : "auto", width: vertical ? "auto" : "100%", maxWidth: "100%", maxHeight: "100%" }}>
+          style={{ "--u": `${UNIT[shape]}cqw`, aspectRatio: r, height: vertical ? "100%" : "auto", width: vertical ? "auto" : "100%", maxWidth: "100%", maxHeight: "100%" } as React.CSSProperties}>
           <Panels kit={kit} shape={shape} />
           {show.hook && kit.hook_overlay && <span className="absolute inset-x-[10%] top-[9%] grid place-items-center">
-            <span className="rounded-[1.6cqw] bg-white px-[3cqw] py-[1.4cqw] text-center font-sans text-[4.6cqw] font-bold leading-[1.15] text-black shadow-[0_2px_8px_rgba(0,0,0,.35)]">{hookLine}</span></span>}
+            <span className="rounded-[calc(1.6*var(--u))] bg-white px-[calc(3*var(--u))] py-[calc(1.4*var(--u))] text-center font-sans text-[calc(4.6*var(--u))] font-bold leading-[1.15] text-black shadow-[0_2px_8px_rgba(0,0,0,.35)]">{hookLine}</span></span>}
           {show.captions && kit.captions && <Caption kit={kit} seam={seam} />}
           {show.social && vertical && <Social />}
-          {show.safe && <span aria-hidden="true" className="absolute bottom-[18%] left-[5%] right-[16%] top-[10%] rounded-[2cqw] border-[1.5px] border-dashed border-[rgba(60,240,255,.9)]" />}
+          {show.safe && <span aria-hidden="true" className="absolute bottom-[18%] left-[5%] right-[16%] top-[10%] rounded-[calc(2*var(--u))] border-[1.5px] border-dashed border-[rgba(60,240,255,.9)]" />}
           {phone && <span aria-hidden="true" className="absolute left-1/2 top-[1.4%] h-[2.4%] w-[26%] -translate-x-1/2 rounded-full bg-[#0a0a0a]" />}
         </div>
       </div>
-      <Popover label="Show in preview" button={<><Icon name="eye" size={17} className="text-muted" />Show in preview<Icon name="chevron" size={16} className="text-muted" /></>}>
-        <fieldset className="m-0 grid gap-1 border-0 p-0">
-          <legend className="mb-2 p-0 text-[13px] font-medium text-muted">Show in preview</legend>
-          {SHOW_NAMES.map(([k, name]) => (
-            <label key={k} className="m-0 flex min-h-[36px] cursor-pointer items-center gap-3 rounded-8 px-1 text-[14px] font-normal text-text">
-              <input type="checkbox" checked={show[k]} onChange={(e) => setShow({ ...show, [k]: e.target.checked })} />{name}
-              {k === "social" && <span className="ml-auto text-[12px] text-fg-3">Upright shapes</span>}</label>))}
-        </fieldset>
-      </Popover>
+      <ShowMenu show={show} onChange={setShow} />
     </div>
   );
 }
