@@ -164,7 +164,9 @@ All calls need `Authorization: Bearer <session token or API key>`. Every error i
 
 ### 1. Preview with price: `POST /v1/imports/preview`
 
-Request. `options` is optional and takes exactly what `options` of `POST /v1/clips` takes. Without it, the price is for the default options.
+Request. `options` is optional and takes exactly what `options` of `POST /v1/clips` takes. Send the same `options` here and to `POST /v1/clips/from-url`, so the price shown is the price reserved.
+
+**Default: automatic discovery** (owner, 2026-11-18). When `options` names none of `max_clips`, `limit` or `duration`, both calls use `duration: "0-90"` with `limit: null`: every moment that passes, 0 to 90 seconds each, at most 50, best first. There is no 3-clip limit. For a first run the price is the same either way (one credit per started minute). Send `max_clips`, `limit` or `duration` to choose a count or a length yourself.
 
 ```json
 {"url": "https://www.twitch.tv/videos/2301234567", "options": {"max_clips": 5, "duration": "30-60"}}

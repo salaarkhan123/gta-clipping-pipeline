@@ -195,8 +195,8 @@ def preview(body: PreviewRequest, p: Principal = Depends(current_principal), db:
     nothing is imported or stored, so no consent is needed. When `supported` is false, `refusal` says why and
     what to do instead. Lookups that reach the site are limited to 10 a minute per account; answers are cached
     for 5 minutes per link (1 minute when the site refused).
-    `estimate`: what POST /v1/clips/from-url with these `options` (default: those of POST /v1/clips) would
-    reserve, from the same price as POST /v1/clips/quote, with your balance. Nothing is reserved. Null when the
+    `estimate`: what POST /v1/clips/from-url with these `options` would reserve (default: automatic discovery,
+    url_clips.with_defaults), from the same price as POST /v1/clips/quote, with your balance. Nothing is reserved. Null when the
     link is not supported or its length is unknown before a download (import it first, then clip the upload)."""
     require_enabled(p)
     cached, source = False, None
@@ -213,7 +213,7 @@ def preview(body: PreviewRequest, p: Principal = Depends(current_principal), db:
     if source is not None and result["supported"]:
         upload = url_clips.reusable_upload(db, p.account.id, source.url)
         try:
-            plan = url_clips.plan_for(body.options or ClipOptions(), result, upload)
+            plan = url_clips.plan_for(url_clips.with_defaults(body.options), result, upload)
         except ApiError as e:
             if e.code != url_clips.NO_LENGTH[0]:
                 raise                       # options that do not fit this video: a 422, as from the quote
@@ -244,7 +244,8 @@ def clips_from_url(body: UrlClipRequest, response: Response, p: Principal = Depe
         source = classify(body.url)
     except Refused as e:
         raise ApiError(422, e.code, e.message) from None
-    account_id, request = p.account.id, body.options.model_dump(mode="json")
+    options = url_clips.with_defaults(body.options)
+    account_id, request = p.account.id, options.model_dump(mode="json")
     same = url_clips.equal_request(db, account_id, source.url, request)
     if same is not None:                    # a double click: nothing is looked up, logged or reserved again
         response.status_code = 200
@@ -255,7 +256,7 @@ def clips_from_url(body: UrlClipRequest, response: Response, p: Principal = Depe
         info, _cached = look_up(p, source)
         if info["refusal"]:
             raise ApiError(422, info["refusal"]["code"], info["refusal"]["message"])
-    plan = url_clips.plan_for(body.options, info, upload)
+    plan = url_clips.plan_for(options, info, upload)
 
     account = ledger.lock_account(db, account_id)   # serialise this account's submits: a double click waits here
     prior = replayed(db, p, idempotency_key)

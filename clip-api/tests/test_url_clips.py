@@ -136,6 +136,18 @@ def test_paste_preview_generate_import_clip(client, user, fake_ydl, transcriber)
         assert db.get(Job, job["job_id"]).name == "Ranked"
 
 
+def test_automatic_discovery_is_the_default(client, user, fake_ydl):
+    """Owner, 2026-11-18: no 3-clip limit. Every moment that passes, unless a count or a bucket is sent."""
+    headers, _ = user
+    fake_ydl.info = {"duration": 300.0}
+    assert preview(client, headers)["estimate"]["credits"] == 5     # the price is the video's minutes either way
+    auto = go(client, headers).json()
+    assert auto["options"]["duration"] == url_clips.AUTO_DURATION and auto["options"]["limit"] is None
+    assert auto["credits_reserved"] == 5
+    named = go(client, headers, options={"max_clips": 2}).json()
+    assert named["options"]["duration"] is None and named["options"]["max_clips"] == 2
+
+
 def test_options_are_checked_like_post_clips(client, user, fake_ydl):
     headers, account = user
     fake_ydl.info = {"duration": 40.0}
@@ -318,11 +330,12 @@ def test_a_link_this_account_already_has_skips_the_import(client, user, fake_ydl
     assert worker.run_once(pipeline=no_clips) == "SUCCEEDED"
     lookups = len(fake_ydl.instances)
     est = preview(client, headers, "https://twitch.tv/videos/2301234567")["estimate"]
-    assert est["basis"] == "rendered" and est["credits"] == 2      # analysed before: charged on what is rendered
+    # Analysed before: charged on what is rendered. Automatic discovery may render the whole 40 s: 1 credit at most.
+    assert est["basis"] == "rendered" and est["credits"] == 1
     r = go(client, headers, url="https://m.twitch.tv/videos/2301234567")
     assert r.status_code == 202, r.text
     job = r.json()
-    assert job["status"] == "QUEUED" and job["credits_reserved"] == 2
+    assert job["status"] == "QUEUED" and job["credits_reserved"] == 1
     assert job["import"] == {"import_id": None, "status": "SUCCEEDED", "stage": "done", "progress": 100,
                              "url": TWITCH, "platform": "twitch", "reused": True,
                              "upload_id": get(client, headers, first["job_id"])["upload_id"], "error": None}
