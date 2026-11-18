@@ -34,9 +34,9 @@ const Row = ({ href, icon, children }: { href: string; icon: IconName; children:
 
 // `compact`: the collapsed sidebar, where only the avatar shows.
 export function AccountMenu({ me, onLogout, compact }: { me: any; onLogout: () => void; compact?: boolean }) {
-  const [open, setOpen] = useState(false), [lang, setLang] = useState(false);
+  const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null), btn = useRef<HTMLButtonElement>(null);
-  const close = useCallback(() => { setOpen(false); setLang(false); }, []);
+  const close = useCallback(() => setOpen(false), []);
   useDismiss(open, close, box, btn);
   const plan = usePlanName(me.plan), name = accountName(me.email), on = useLanguageSwitches();
 
@@ -65,14 +65,8 @@ export function AccountMenu({ me, onLogout, compact }: { me: any; onLogout: () =
         </div>
         <Row href="/dashboard/billing/" icon="card">Subscription</Row>
         <Row href="/dashboard/credits/" icon="bolt">Credit usage history</Row>
-        <button type="button" className={ITEM} aria-expanded={lang} onClick={() => setLang(!lang)}>
-          <Icon name="globe" size={18} className="text-muted" />Language<span className="ml-auto text-[13px] font-normal text-muted">English</span>
-          <Icon name="chevron" size={16} className={`text-muted transition-transform ${lang ? "rotate-180" : "-rotate-90"}`} />
-        </button>
-        {lang && <div className="mx-1 mb-1 grid gap-1 rounded-12 bg-surface p-2">
-          <p className="m-0 flex items-center gap-2 px-2 py-1 text-[14px] text-text"><Icon name="check" size={16} className="text-lime" />English</p>
-          <p className="m-0 px-2 pb-1 text-[12.5px] leading-[1.4] text-muted">The app is in English for now. Other languages are coming. Captions follow the language spoken in your video.</p>
-        </div>}
+        <span className={OFF} aria-disabled="true" title="The app is in English for now. Captions follow the language spoken in your video.">
+          <Icon name="globe" size={18} />Language<span className="ml-auto text-[13px] font-normal">English</span><ComingSoonBadge short /></span>
         <Row href="/dashboard/keys/" icon="key">API keys</Row>
         <a className={ITEM} href={`${API}/docs`} target="_blank" rel="noreferrer"><Icon name="external" size={18} className="text-muted" />API docs</a>
         <div className="my-1 h-px bg-line" role="separator" />

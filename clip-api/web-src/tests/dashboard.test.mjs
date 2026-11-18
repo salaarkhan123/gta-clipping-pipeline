@@ -33,7 +33,7 @@ test("account menu: subscription, credit usage, language, API keys, log out", ()
   assert.match(menu, /<Row href="\/dashboard\/billing\/" icon="card">Subscription<\/Row>/);
   assert.match(menu, /<Row href="\/dashboard\/credits\/" icon="bolt">Credit usage history<\/Row>/);
   assert.match(menu, /<Row href="\/dashboard\/keys\/" icon="key">API keys<\/Row>/);
-  assert.match(menu, />Language</);
+  assert.match(menu, /Language<span[^>]*>English<\/span><ComingSoonBadge short \/>/);
   assert.match(menu, /onClick=\{onLogout\}/);
 });
 

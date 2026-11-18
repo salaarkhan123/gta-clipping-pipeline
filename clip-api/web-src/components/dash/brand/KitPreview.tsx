@@ -29,7 +29,6 @@ function Gameplay() {
         <span className="absolute left-[14%] right-[14%] top-[14%] h-[30%] rounded-[30%] bg-[rgba(30,30,40,.85)]" />
         <span className="absolute bottom-[12%] left-[8%] h-[14%] w-[16%] rounded-full bg-[#ffd36b]" /><span className="absolute bottom-[12%] right-[8%] h-[14%] w-[16%] rounded-full bg-[#ffd36b]" />
       </span>
-      <span className="absolute right-[4%] top-[4%] font-sans text-[calc(3.2*var(--u))] tracking-[.1em] text-white [text-shadow:0_1px_2px_#000]">★★★☆☆</span>
     </span>
   );
 }
@@ -83,17 +82,17 @@ function Caption({ kit, seam }: { kit: Kit; seam: number | null }) {
   );
 }
 
-const SOCIAL: [IconName, string][] = [["like", "48.2K"], ["send", "1.9K"], ["bookmark", "6.1K"]];
+const SOCIAL: IconName[] = ["like", "send", "bookmark"];
 function Social() {
   return <>
     <span className="absolute bottom-[16%] right-[3%] grid justify-items-center gap-[calc(3*var(--u))] text-white">
       <span className="aspect-square w-[calc(11*var(--u))] rounded-full border-[2px] border-solid border-white bg-[linear-gradient(135deg,theme(colors.lime),theme(colors.cyan))]" />
-      {SOCIAL.map(([i, n]) => <span key={i} className="grid justify-items-center gap-[1px] font-sans text-[calc(3*var(--u))] font-semibold [text-shadow:0_1px_2px_#000]"><Icon name={i} size={22} />{n}</span>)}
+      {SOCIAL.map((i) => <span key={i} className="grid justify-items-center gap-[3px] [filter:drop-shadow(0_1px_2px_#000)]"><Icon name={i} size={22} /><span className="h-[calc(1.6*var(--u))] w-[calc(6*var(--u))] rounded-full bg-[rgba(255,255,255,.7)]" /></span>)}
     </span>
     <span className="absolute bottom-[4%] left-[5%] right-[22%] grid gap-[calc(1*var(--u))] font-sans text-white [text-shadow:0_1px_2px_#000]">
-      <b className="text-[calc(4*var(--u))]">@yourchannel</b>
-      <span className="text-[calc(3.4*var(--u))]">Clutch of the night #gaming #clips</span>
-      <span className="flex items-center gap-1 text-[calc(3*var(--u))] opacity-85"><Icon name="music" size={12} />Original sound</span>
+      <span className="h-[calc(3*var(--u))] w-[42%] rounded-full bg-[rgba(255,255,255,.85)]" />
+      <span className="h-[calc(2.4*var(--u))] w-[78%] rounded-full bg-[rgba(255,255,255,.6)]" />
+      <span className="flex items-center gap-1 opacity-85"><Icon name="music" size={12} /><span className="h-[calc(2*var(--u))] w-[34%] rounded-full bg-[rgba(255,255,255,.5)]" /></span>
     </span>
   </>;
 }
