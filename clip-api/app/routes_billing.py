@@ -18,7 +18,7 @@ from .config import get_settings
 from .db import get_db
 from .deps import ApiError, Principal, session_principal
 from .models import Account, Payment
-from .plans import all_plans, get_plan
+from .plans import PLANS, all_plans, find_plan, plan_for_price, stripe_price_id
 from typing import Literal
 
 router = APIRouter()
@@ -81,24 +81,43 @@ def checkout(body: CheckoutRequest, p: Principal = Depends(session_principal)):
     return {"checkout_url": session.url}
 
 
+def _check_price(price, plan: dict, interval: str, cents: int, currency: str) -> None:
+    """The Stripe Price must charge exactly what the plan config shows, or nobody can buy it: a typo in Stripe
+    must never charge a different amount from the one on the pricing page."""
+    price = price if isinstance(price, dict) else price.to_dict()     # stripe-python 12+ objects are not dicts
+    recurring = price.get("recurring") or {}
+    problems = [name for name, ok in (
+        ("active", price.get("active") is True), ("amount", price.get("unit_amount") == cents),
+        ("currency", (price.get("currency") or "").lower() == currency.lower()),
+        ("interval", recurring.get("interval") == interval and (recurring.get("interval_count") or 1) == 1),
+        ("type", price.get("type", "recurring") == "recurring")) if not ok]
+    if problems:
+        log.error("Stripe Price %s does not match plan %s/%s (%s): refusing checkout", price.get("id"), plan["id"],
+                  interval, ", ".join(problems))
+        raise ApiError(503, "plan_unavailable", "This plan cannot be bought right now. Please try again later.")
+
+
 @router.post("/v1/billing/subscribe")
 def subscribe(body: SubscribeRequest, p: Principal = Depends(session_principal)):
-    """Start a subscription. Credits are granted when Stripe reports each invoice as paid."""
+    """Start a subscription at the plan's Stripe Price. Credits are granted when Stripe reports each invoice paid."""
     s, key = get_settings(), _stripe_key()
-    plan = get_plan(body.plan_id)
-    price = plan.get("price_year_cents" if body.interval == "year" else "price_month_cents") or 0
-    if plan["id"] != body.plan_id or price <= 0:
+    plan = next((x for x in PLANS if x["id"] == body.plan_id), None)       # plans on sale only, never legacy ones
+    cents = (plan or {}).get("price_year_cents" if body.interval == "year" else "price_month_cents") or 0
+    if not plan or cents <= 0:
         raise ApiError(404, "plan_not_found", "No such paid plan.")
     if p.account.stripe_subscription_id:
         raise ApiError(409, "already_subscribed", "You already have a subscription. Change or cancel it in the billing portal.")
+    price_id = stripe_price_id(plan, body.interval)
+    if not price_id:
+        log.error("no Stripe Price ID configured for plan %s/%s", plan["id"], body.interval)
+        raise ApiError(503, "plan_unavailable", "This plan cannot be bought right now. Please try again later.")
     import stripe
+    _check_price(stripe.Price.retrieve(price_id, api_key=key), plan, body.interval, int(cents), s.currency)
     meta = {"account_id": p.account.id, "plan_id": plan["id"], "interval": body.interval}
     who = {"customer": p.account.stripe_customer_id} if p.account.stripe_customer_id else {"customer_email": p.account.email}
     session = stripe.checkout.Session.create(
         api_key=key, mode="subscription", **who,
-        line_items=[{"quantity": 1, "price_data": {
-            "currency": s.currency, "unit_amount": int(price), "recurring": {"interval": body.interval},
-            "product_data": {"name": f"ClutchClips {plan['name']}"}}}],
+        line_items=[{"quantity": 1, "price": price_id}],
         client_reference_id=p.account.id, metadata=meta, subscription_data={"metadata": meta},
         success_url=f"{s.public_web_url}/dashboard?purchase=success",
         cancel_url=f"{s.public_web_url}/pricing?purchase=cancelled",
@@ -130,6 +149,31 @@ def _invoice_subscription(inv: dict) -> str | None:
     """The subscription an invoice belongs to, wherever this Stripe API version puts it."""
     sub = inv.get("subscription") or ((inv.get("parent") or {}).get("subscription_details") or {}).get("subscription")
     return sub.get("id") if isinstance(sub, dict) else sub
+
+
+def _price_ids(obj: dict) -> list[str]:
+    """The Stripe Price IDs on an invoice's lines or a subscription's items, in every API version's shape."""
+    rows = ((obj.get("lines") or {}).get("data") or []) + ((obj.get("items") or {}).get("data") or [])
+    found = []
+    for row in rows:
+        price = row.get("price") or ((row.get("pricing") or {}).get("price_details") or {}).get("price")
+        price = price.get("id") if isinstance(price, dict) else price
+        if price:
+            found.append(price)
+    return found
+
+
+def _subscribed_plan(obj: dict, meta: dict, fallback_plan_id: str | None = None) -> tuple[dict | None, str]:
+    """(plan, interval) that a paid invoice or a subscription is for. One of our Stripe Prices on it decides (that
+    is what Stripe charges, also after a plan change in the portal). Otherwise it is a subscription started before
+    the Price IDs, so its own metadata names the plan, which may be a legacy one: grandfathered at that plan's
+    credits. Never a number from the event."""
+    for price_id in _price_ids(obj):
+        hit = plan_for_price(price_id)
+        if hit:
+            return hit
+    plan = find_plan(meta.get("plan_id") or fallback_plan_id)
+    return plan, "year" if meta.get("interval") == "year" else "month"
 
 
 def _when(ts) -> datetime | None:
@@ -246,8 +290,9 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             if obj.get("customer"):
                 acct.stripe_customer_id = obj["customer"]
             if obj.get("mode") == "subscription":
-                if obj.get("subscription") and get_plan(meta.get("plan_id"))["id"] == meta.get("plan_id"):
-                    acct.stripe_subscription_id, acct.plan = obj["subscription"], meta["plan_id"]
+                plan = find_plan(meta.get("plan_id"))
+                if obj.get("subscription") and plan and plan.get("monthly_credits"):
+                    acct.stripe_subscription_id, acct.plan = obj["subscription"], plan["id"]
                     acct.subscription_status = acct.subscription_status or "active"
             elif obj.get("payment_status") == "paid":
                 pack = find_pack(meta.get("pack_id", ""))
@@ -260,9 +305,9 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     elif kind == "invoice.paid":
         meta = _invoice_meta(obj)
         acct = _account(db, meta.get("account_id"), obj.get("customer"))
-        plan = get_plan(meta.get("plan_id") or (acct.plan if acct else None))
-        if acct and plan.get("monthly_credits"):
-            months = 12 if meta.get("interval") == "year" else 1   # yearly plans get the year's credits up front
+        plan, interval = _subscribed_plan(obj, meta, acct.plan if acct else None)
+        if acct and plan and plan.get("monthly_credits"):
+            months = 12 if interval == "year" else 1   # yearly plans get the year's credits up front
             acct.plan = plan["id"]
             if obj.get("customer"):
                 acct.stripe_customer_id = obj["customer"]
@@ -288,8 +333,9 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     elif kind == "customer.subscription.updated":
         meta = obj.get("metadata") or {}
         acct = _account(db, meta.get("account_id"), obj.get("customer"))
-        status, plan_id = obj.get("status"), meta.get("plan_id")
-        known_plan = bool(plan_id) and get_plan(plan_id)["id"] == plan_id and bool(get_plan(plan_id).get("monthly_credits"))
+        status = obj.get("status")
+        plan, _interval = _subscribed_plan(obj, meta)
+        known_plan = bool(plan) and bool(plan.get("monthly_credits"))
         mine = bool(acct) and (acct.stripe_subscription_id == obj.get("id") or (
             # This event beat checkout.session.completed: a live subscription for a plan we sell, on an account without one.
             not acct.stripe_subscription_id and status in ("active", "trialing") and known_plan))
@@ -304,7 +350,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 acct.subscription_cancel_at = _when(ends)
                 if status in ("active", "trialing", "past_due"):  # past_due keeps the plan while Stripe retries
                     if known_plan:
-                        acct.plan = plan_id
+                        acct.plan = plan["id"]
                 else:                                             # unpaid, paused, incomplete: no service until paid
                     acct.plan = "free"
             db.commit()

@@ -21,11 +21,12 @@ from .ingest.fetch import check_hop
 from .ingest.runner import IMPORT_PREFIX
 from .ingest.sources import SOURCES, classify
 from .models import Account, ImportLog, Job, Upload, new_id, utcnow
+from .plans import PLANS, plan_of
 from .routes_media import ACTIVE, ALLOWED_EXT, iso, upload_json
 
 router = APIRouter()
-BULK_MAX = 10               # links per bulk request. One number for everyone: plan limits are the owner's call.
-MAX_ACTIVE_IMPORTS = 10     # imports one account may have waiting or running at once
+BULK_MAX = PLANS[0]["bulk_import_max"]   # links per bulk request on the free plan; paid plans allow more (app/plans.py)
+MAX_ACTIVE_IMPORTS = 10     # imports one account may have waiting or running at once (at least its plan's bulk size)
 CONSENT_TEXT = "I own this content or have permission to clip it."
 _IS_IMPORT = Job.id.like(f"{IMPORT_PREFIX}\\_%", escape="\\")
 
@@ -83,8 +84,9 @@ def create_import(db: Session, account: Account, url: str) -> tuple[Job, bool]:
     for job in active:
         if db.get(Upload, job.upload_id).source_url == source.url:
             return job, False
-    if len(active) >= MAX_ACTIVE_IMPORTS:
-        raise ApiError(429, "too_many_imports", f"{MAX_ACTIVE_IMPORTS} imports are already waiting or running. "
+    most = max(MAX_ACTIVE_IMPORTS, plan_of(account)["bulk_import_max"])   # one full bulk import always fits
+    if len(active) >= most:
+        raise ApiError(429, "too_many_imports", f"{most} imports are already waiting or running. "
                                                 "Wait for one to finish before adding more.")
     now = utcnow()
     expires = now + timedelta(days=s.retention_days)
@@ -139,14 +141,17 @@ def create(body: ImportRequest, p: Principal = Depends(current_principal), db: S
 
 @router.post("/v1/imports/bulk")
 def create_bulk(body: BulkImportRequest, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
-    """Import up to 10 links. Each link is its own import with its own log row; the answer lists every link with
-    its import or the reason it was refused."""
+    """Import several links at once: up to the plan's `bulk_import_max` (Free and Starter 10, Pro 30, Scale 50).
+    Each link is its own import with its own log row; the answer lists every link with its import or the reason it
+    was refused."""
     require_enabled(p)
     require_consent(body.consent)
     if not body.urls:
         raise ApiError(422, "no_urls", "Send at least one link in urls.")
-    if len(body.urls) > BULK_MAX:
-        raise ApiError(422, "too_many_urls", f"Send at most {BULK_MAX} links at once.")
+    plan = plan_of(p.account)
+    if len(body.urls) > plan["bulk_import_max"]:
+        raise ApiError(422, "too_many_urls", f"The {plan['name']} plan imports at most {plan['bulk_import_max']} "
+                                             "links at once.")
     results, account_id = [], p.account.id
     for url in body.urls:
         try:
