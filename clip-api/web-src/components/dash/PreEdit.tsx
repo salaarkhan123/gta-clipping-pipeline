@@ -212,9 +212,16 @@ function Line({ label, hint, checked, onChange, disabled, children }: { label: s
   );
 }
 
-export function Custom({ listed, look, onLook, setAspect, hint = "Tick what to apply to every clip." }: { listed: Listed; look: Look; onLook: (change: Partial<Look>) => void;
-  setAspect: (a: string) => void; hint?: string }) {
-  const has = (k: string) => k in listed;
+// The parts of Custom, so the editor's tool rail can show one group at a time. Leave `sections` out for all of them.
+export type Section = "resize" | "subtitles" | "emoji" | "hook" | "tighten" | "punch" | "flash" | "brand";
+const SECTION_OF: Record<string, Section> = { vertical: "resize", aspect: "resize", layout: "resize", camera: "resize", split_ratio: "resize",
+  captions: "subtitles", caption_style: "subtitles", caption_position: "subtitles", caption_accent: "subtitles", censor: "subtitles",
+  caption_emoji: "emoji", hook_overlay: "hook", tighten: "tighten", punch_zoom: "punch", flash_forward: "flash" };
+
+export function Custom({ listed, look, onLook, setAspect, hint = "Tick what to apply to every clip.", sections }: { listed: Listed; look: Look;
+  onLook: (change: Partial<Look>) => void; setAspect: (a: string) => void; hint?: string; sections?: Section[] }) {
+  const want = (s: Section) => !sections || sections.includes(s);
+  const has = (k: string) => k in listed && want(SECTION_OF[k] ?? "brand");
   const styles: string[] = listed.caption_style?.values || [look.caption_style];
   const setLayout = (layout: string) => onLook({ layout, ...(hasPanels(layout) ? {} : { camera: null, split_ratio: null }) });
   return (
@@ -253,7 +260,7 @@ export function Custom({ listed, look, onLook, setAspect, hint = "Tick what to a
         {has("punch_zoom") && <Line label="Punch-in zoom" hint="A slight zoom on the gameplay at the big moments." checked={look.punch_zoom} onChange={(v) => onLook({ punch_zoom: v })} />}
         {has("flash_forward") && <Line label="Open on the best moment" hint="Starts with a flash of the peak, then plays from the start. Added to clips the AI has rated."
           checked={look.flash_forward} onChange={(v) => onLook({ flash_forward: v })} />}
-        {["Logo", "Intro", "Outro"].map((name) => (
+        {want("brand") && ["Logo", "Intro", "Outro"].map((name) => (
           <li key={name} className="line off"><label className="check"><input type="checkbox" checked={false} disabled readOnly /><span><b>{name}</b></span></label><Soon /></li>))}
       </ul>
     </>

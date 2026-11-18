@@ -43,6 +43,16 @@ const PATHS = {
   grid: <><rect x="4" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" /></>,
   play: <path d="M7.5 5v14l11-7-11-7Z" />,
   pause: <path d="M8 5v14M16 5v14" />,
+  music: <><path d="M9 17.5V6l10-2v11.5" /><circle cx="6.5" cy="17.5" r="2.5" /><circle cx="16.5" cy="15.5" r="2.5" /></>,
+  transitions: <><path d="M4 6.5h6l4 11h6" /><path d="M4 17.5h6l1.5-4M14 6.5h6" /></>,
+  mic: <><rect x="9" y="3.5" width="6" height="11" rx="3" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5" /></>,
+  text: <path d="M5 6.5V5h14v1.5M12 5v14M9 19h6" />,
+  hook: <><path d="M5 5.5h14v9H11l-4 3.5v-3.5H5v-9Z" /><path d="M9 9.5h6M9 12h3.5" /></>,
+  skipBack: <><path d="M6 5v14" /><path d="M18.5 5.5v13L9 12l9.5-6.5Z" /></>,
+  skipForward: <><path d="M18 5v14" /><path d="M5.5 5.5v13L15 12 5.5 5.5Z" /></>,
+  zoomIn: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5M8.5 11h5M11 8.5v5" /></>,
+  zoomOut: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5M8.5 11h5" /></>,
+  undo: <><path d="M9 7.5 5 11.5l4 4" /><path d="M5 11.5h9.5a4.5 4.5 0 0 1 0 9H12" /></>,
 } as const;
 
 export type IconName = keyof typeof PATHS;
