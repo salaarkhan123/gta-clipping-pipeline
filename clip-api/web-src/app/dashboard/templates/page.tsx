@@ -1,14 +1,13 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Icon } from "@/components/dash/Icon";
-import { LookSketch } from "@/components/dash/LookSketch";
 import { useDash } from "@/components/dash/Shell";
 import { BackTitle } from "@/components/dash/ui";
 import { Tabs } from "@/components/dash/Tabs";
 import { useVideoChooser } from "@/components/dash/Upload";
 import { api } from "@/lib/api";
-import { gameName, gameOf, isPreset, isProvisional, layoutName, loadTemplates, mediaUrl, tidy } from "@/lib/templates";
+import { MediaItem, mediaUrl as mediaFile, useMedia } from "@/lib/media";
+import { gameName, gameOf, isPreset, isProvisional, layoutName, loadTemplates, tidy } from "@/lib/templates";
 
 const EDITS: [string, string][] = [["tighten", "dead air cut"], ["punch_zoom", "punch-in zoom"], ["flash_forward", "opens on the best moment"], ["hook_overlay", "on-screen hook"]];
 const PRESETS = "types";      // the tab for game-type presets, which belong to no single game
@@ -32,24 +31,32 @@ function sets(t: any): { chips: string[]; edits: string[] } {
 const wideOf = (t: any) => (t.aspect || t.options?.aspect) === "16:9";
 const CARD = { tall: "w-[200px] flex-none narrow:w-[calc((100%-12px)/2)]", wide: "w-[632px] max-w-full flex-none narrow:w-full" };
 
-// A template's picture: its own poster or preview clip when the API has one. Otherwise our own sketch of the
-// look (the panels at the template's proportions, a caption drawn the way its style renders) next to its game.
-function Preview({ t }: { t: any }) {
+// Footage is shown only for the game it is from: the site media's "templates" manifest item whose `game` is this
+// template's game (owner, 2026-11-18). Anything else leaves the picture empty: no other game's footage, no stand-in.
+const norm = (v: unknown) => String(v || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+const footageFor = (t: any, items: MediaItem[]): MediaItem | null => {
+  const own = items.find((i) => i.id === t.id);          // made for this template (a game-type preset, say)
+  if (own) return own;
+  const game = norm(gameName(gameOf(t)));
+  if (isPreset(t) || gameOf(t) === "other" || !game) return null;
+  const same = items.filter((i) => norm(i.game) === game);
+  return same[0] || null;
+};
+
+function Preview({ t, clip }: { t: any; clip: MediaItem | null }) {
   const [broken, setBroken] = useState(false);
-  const poster = mediaUrl(t.preview?.poster), video = mediaUrl(t.preview?.video);
-  const style = t.options?.caption_style || t.caption_style;
   return (
     <div className={`relative grid ${wideOf(t) ? "aspect-video" : "aspect-[9/16]"} place-items-center overflow-hidden rounded-16 bg-card-2 ring-1 ring-inset ring-[rgba(255,255,255,.06)]
       transition-shadow duration-200 group-hover:ring-[rgba(255,255,255,.22)] [&_img]:h-full [&_img]:w-full [&_img]:object-cover [&_video]:h-full [&_video]:w-full [&_video]:object-cover`}
-      aria-hidden={!video || broken ? true : undefined}>
-      {!broken && video ? <video controls muted loop playsInline preload="none" poster={poster || undefined} src={video}
-          aria-label={`${t.name} preview`} onError={() => setBroken(true)} />
-        : !broken && poster ? <img src={poster} alt="" loading="lazy" onError={() => setBroken(true)} />
-        : <span className="grid h-full w-full place-items-center content-center gap-3 [&_.mock]:h-[58%]">
-            <LookSketch aspect={typeof t.aspect === "string" ? t.aspect : "9:16"} layout={typeof t.layout === "string" ? t.layout : "auto"}
-              camera={t.panels?.camera} split={t.panels?.split_ratio} style={typeof style === "string" ? style : undefined} />
-            <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-soft"><Icon name="gamepad" size={18} />{groupName(groupOf(t))}</span>
-          </span>}
+      aria-hidden={!clip || broken ? true : undefined}>
+      {clip && !broken && (clip.kind === "video"
+        ? <video muted loop playsInline autoPlay preload="metadata" poster={clip.poster ? mediaFile("templates", clip.poster) : undefined}
+            aria-label={`${t.name} preview: ${clip.label}`} onError={() => setBroken(true)}>
+            {clip.webm && <source src={mediaFile("templates", clip.webm)} type="video/webm" />}
+            <source src={mediaFile("templates", clip.src)} type="video/mp4" />
+          </video>
+        : <img src={mediaFile("templates", clip.src)} alt="" loading="lazy" onError={() => setBroken(true)} />)}
+      {clip?.credit && !broken && <span className="absolute bottom-2 right-2 rounded-full bg-[rgba(0,0,0,.6)] px-2 py-[1px] text-[10.5px] text-soft">{clip.credit}</span>}
     </div>
   );
 }
@@ -60,6 +67,7 @@ export default function Templates() {
   const [templates, setTemplates] = useState<any[] | null>(null), [projects, setProjects] = useState<any[] | null>(null);
   const [game, setGame] = useState("all");
   const chooser = useVideoChooser(projects);
+  const footage = useMedia("templates")?.items || [];
 
   useEffect(() => {
     setGame(new URLSearchParams(window.location.search).get("game") || "all");
@@ -94,7 +102,7 @@ export default function Templates() {
             return (
               <li key={t.id} className={`group grid min-w-0 content-start gap-[10px] ${CARD[wideOf(t) ? "wide" : "tall"]}`}>
                 <div className="relative">
-                  <Preview t={t} />
+                  <Preview t={t} clip={footageFor(t, footage)} />
                   <span className="pointer-events-none absolute left-2 top-2 flex flex-wrap gap-1">
                     <span className="rounded-full bg-[rgba(0,0,0,.66)] px-2 py-[2px] text-[11px] font-semibold text-text [backdrop-filter:blur(6px)]">{groupName(groupOf(t))}</span>
                     {isProvisional(t) && <span className="rounded-full bg-[rgba(0,0,0,.66)] px-2 py-[2px] text-[11px] font-medium text-soft [backdrop-filter:blur(6px)]"

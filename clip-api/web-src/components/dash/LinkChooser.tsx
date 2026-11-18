@@ -26,14 +26,20 @@ import { ACCEPT, UploadProgress, useUpload } from "./Upload";
 type Kind = "clips" | "find" | "captions" | "reframe" | "transcripts" | "summary";
 // POST /v1/imports/preview: always 200; a link it will not import has `supported: false` and a `refusal`. A refusal for
 // a limit (too long, too big) still fills the title and the picture, so the card is shown with it.
+// The link facts (feat/ingest-metadata-ranges) are all optional: an older API sends none of them and they are not shown.
+type VideoType = "video" | "short" | "live_recording" | "vod" | "clip" | "ongoing_recording" | "live_stream" | "live_channel" | "upcoming" | "file";
 type Preview = { url?: string; platform?: string; supported?: boolean; title?: string | null; channel?: string | null; duration_sec?: number | null;
-  thumbnail_url?: string | null; kind?: "video" | "clip" | "live" | "upcoming" | null; refusal?: { code?: string; message?: string } | string | null;
-  // URL clipping (feat/url-clipping): what clipping this link would reserve, worked out by the API.
-  estimate?: { credits: number; basis?: string; balance?: number; enough?: boolean } | null };
+  thumbnail_url?: string | null; kind?: "video" | "clip" | "live" | "upcoming" | "channel" | null; refusal?: { code?: string; message?: string } | string | null;
+  // URL clipping (feat/url-clipping): what clipping this link would reserve, worked out by the API (on the range, when one is sent).
+  estimate?: { credits: number; basis?: string; duration_sec?: number; balance?: number; enough?: boolean; note?: string } | null;
+  video_type?: VideoType | null; live_status?: "not_live" | "was_live" | "recording" | "live" | "upcoming" | null; channel_url?: string | null;
+  category?: string | null; started_at?: string | null; available_sec?: number | null;
+  options?: { import?: boolean; clip?: boolean; range?: boolean; range_download?: "partial" | "full" | null } | null;
+  range?: { start_sec: number; end_sec: number } | null };
 const OFF = "Link import is switched off for now. Upload the file instead.";
 const CONSENT = "I own this video or have permission to clip it";
 const AUTO = "0-90";
-const BUCKETS: Record<string, string> = { "0-90": "Auto (under 90 s)", "0-30": "Under 30 seconds", "30-60": "30 to 60 seconds", "60-90": "60 to 90 seconds",
+const BUCKETS: Record<string, string> = { "0-90": "Auto (up to 60 s)", "0-30": "Under 30 seconds", "30-60": "30 to 60 seconds", "60-90": "60 to 90 seconds",
   "90-180": "1½ to 3 minutes", "180-300": "3 to 5 minutes" };
 const shortest = (b: string) => +b.split("-")[0] || 0;
 const GO: Record<Kind, string> = { clips: "Import and find the clips", find: "Import and search", captions: "Import and add captions",
@@ -41,7 +47,12 @@ const GO: Record<Kind, string> = { clips: "Import and find the clips", find: "Im
 const PLATFORM: Record<string, string> = { twitch: "Twitch", kick: "Kick", youtube: "YouTube", gdrive: "Google Drive", dropbox: "Dropbox", direct: "Direct link" };
 // Stages of the one URL-clipping job, in words.
 const STEP: Record<string, string> = { importing: "Downloading the video", checking: "Checking the video", storing: "Saving the video", queued: "Waiting to start" };
-const KIND: Record<string, string> = { video: "Video", clip: "Clip", live: "Live now", upcoming: "Upcoming" };
+const KIND: Record<string, string> = { video: "Video", clip: "Clip", live: "Live now", upcoming: "Upcoming", channel: "Channel" };
+const TYPE: Record<VideoType, string> = { video: "Video", short: "Short", live_recording: "Past livestream", vod: "Past broadcast", clip: "Clip",
+  ongoing_recording: "Broadcast still live", live_stream: "Live now", live_channel: "Live channel", upcoming: "Upcoming", file: "Video file" };
+const STATUS: Record<string, string> = { not_live: "Not live", was_live: "Was live", recording: "Live now, still recording", live: "Live now", upcoming: "Not started" };
+const LIVE = ["live_channel", "live_stream"];
+const when = (iso: string) => { const d = new Date(iso); return Number.isNaN(+d) ? null : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }); };
 const CHIP = "inline-flex min-h-[40px] items-center gap-2 rounded-full border border-solid px-4 font-body text-[14px] font-medium leading-[normal] disabled:opacity-60 narrow:min-h-[36px] narrow:px-3 narrow:text-[13px]";
 // The template step reuses the job form's pre-edit panel (presets, saved looks, "Add template"), laid out as tall cards.
 const TEMPLATES = "w-full [&_section.preedit]:bg-panel [&_section.preedit]:p-[18px] [&_.looks]:max-h-[640px] [&_.looks]:grid-cols-4 [&_.looks]:gap-x-[14px] [&_.looks]:gap-y-[18px] "
@@ -50,7 +61,6 @@ const TEMPLATES = "w-full [&_section.preedit]:bg-panel [&_section.preedit]:p-[18
   + "[&_.look:hover_.look-tools]:opacity-100 [&_.look:focus-within_.look-tools]:opacity-100 [@media(hover:none)]:[&_.look-tools]:opacity-100 "
   + "[&_.look-tools_.icon-btn]:h-8 [&_.look-tools_.icon-btn]:w-8 [&_.look-tools_.icon-btn]:rounded-full [&_.look-tools_.icon-btn]:border-0 [&_.look-tools_.icon-btn]:bg-[rgba(7,8,10,.82)] [&_.look-tools_.icon-btn]:text-text";
 const perMinute = (k: Kind) => k !== "captions" && k !== "reframe";
-const minutes = (sec: number) => Math.max(1, Math.ceil(sec / 60));            // the API's rule: one credit per started minute
 const kindOf = (t: ToolEntry): Kind | null => (t.tool || (t.id === "transcripts" ? "transcripts" : t.id === "summary" ? "summary" : t.id === "templates" ? "clips" : null)) as Kind | null;
 const refusalText = (r: Preview["refusal"]) => (typeof r === "string" ? r : r?.message || "");
 const hostOf = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
@@ -63,7 +73,7 @@ export function LinkChooser() {
   const [url, setUrl] = useState(""), [kind, setKind] = useState<Kind>("clips"), [consent, setConsent] = useState(false);
   const [preview, setPreview] = useState<Preview | null | undefined>(undefined);       // undefined: asking; null: no preview route or it failed
   const [step, setStep] = useState<{ text: string; pct?: number } | null>(null), [problem, setProblem] = useState("");
-  const [confirm, setConfirm] = useState<{ upload: any } | null>(null);              // the exact price, when it is more than shown
+  const [confirm, setConfirm] = useState<{ upload: any; credits?: number } | null>(null);              // the exact price, when it is more than shown
   // One call that imports and clips on the server (URL clipping), when this API has it: its path, else null.
   const [oneCall, setOneCall] = useState<string | null>(null), [off, setOff] = useState(false);
   // Options per tool.
@@ -117,11 +127,13 @@ export function LinkChooser() {
     set({ caption_style: firstStyle(listed) });
   }, [listed]);
 
-  const duration = typeof preview?.duration_sec === "number" && preview.duration_sec > 0 ? preview.duration_sec : null;
-  const refused = off || (!!preview && (preview.supported === false || !!refusalText(preview.refusal)));
+  // A broadcast still live can be imported up to what is recorded so far.
+  const length = preview?.video_type === "ongoing_recording" && typeof preview.available_sec === "number" ? preview.available_sec : preview?.duration_sec;
+  const duration = typeof length === "number" && length > 0 ? length : null;
+  const live = !!preview && (LIVE.includes(preview.video_type || "") || LIVE.includes(typeof preview.refusal === "object" ? preview.refusal?.code || "" : ""));
+  const refused = off || live || (!!preview && (preview.supported === false || !!refusalText(preview.refusal)));
   const quoted = preview?.estimate && typeof preview.estimate.credits === "number" ? preview.estimate : null;
   const chosen = picked?.kind === "template" ? [...templates.presets, ...templates.games].find((t) => t.id === picked.id) : undefined;
-  const estimate = duration ? minutes(duration) : null;
 
   function pick(k: "template" | "saved", item: any | null) {           // the job form's own rule for applying a template
     if (!listed) return;
@@ -132,11 +144,27 @@ export function LinkChooser() {
       set({ duration: item.duration });
   }
 
+  // The part of the video picked on the job-setup screen. When the API downloads only that part ("partial"), the
+  // import takes it (start_sec, end_sec) and the clip job searches the whole imported file.
+  const partial = preview?.options?.range_download === "partial";
+  const picked_range = (setup.current?.range as { start: number; end: number } | null | undefined) || null;
+  const importRange = () => (partial && picked_range ? { start_sec: picked_range.start, end_sec: picked_range.end } : {});
+  const clipOptions = (o: Record<string, unknown>) => (partial && picked_range ? { ...o, range: null } : o);
+  // The price follows the range: the preview is asked again with it (the API prices the range), never worked out here.
+  const [rangeKey, setRangeKey] = useState("");
+  useEffect(() => {
+    if (!rangeKey || !preview?.options?.range) return;
+    const [a, b] = rangeKey.split("-").map(Number);
+    const t = setTimeout(() => api<Preview>("/v1/imports/preview", { body: { url, ...(a || b ? { start_sec: a, end_sec: b } : {}) } })
+      .then((p) => setPreview((old) => ({ ...old, ...p }))).catch(() => {}), 600);
+    return () => clearTimeout(t);
+  }, [rangeKey]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   // The tool's request on an upload, built the way its own form builds it.
   function request(uploadId: string): [string, unknown] {
     const L = listed!;
     const lang = { source_lang: o.source_lang || null };
-    if (kind === "clips" && setup.current) return ["/v1/clips", { upload_id: uploadId, options: setup.current }];
+    if (kind === "clips" && setup.current) return ["/v1/clips", { upload_id: uploadId, options: clipOptions(setup.current) }];
     if (kind === "clips") {
       const options: Record<string, unknown> = { facecam_region: "auto", zoom: 1, resolution: "1080", chat_region: "none", ...look,
         ...(pre ? {} : AS_IT_IS), template: pre && chosen ? chosen.id : null, ...(pre && chosen ? extrasFrom(chosen, L) : {}), prompt: null, range: null, ...lang };
@@ -172,7 +200,7 @@ export function LinkChooser() {
     const options = (body as { options: Record<string, unknown> }).options;
     setStep({ text: "Starting…", pct: 0 });
     let job: any;
-    try { job = await api(path, { body: { url, consent: true, options } }); await reloadMe(); }
+    try { job = await api(path, { body: { url, consent: true, ...importRange(), options } }); await reloadMe(); }
     catch (e) { setStep(null); if (e instanceof ApiError && [402, 409, 422, 503].includes(e.status)) setProblem(e.message); else fail(e); return; }
     for (;;) {
       if (job.status === "FAILED" || job.status === "CANCELED" || job.status === "CANCELLED") {
@@ -195,7 +223,7 @@ export function LinkChooser() {
     if (oneCall && kind === "clips" && !more) { await clipFromUrl(oneCall); return; }
     setStep({ text: "Starting the import…", pct: 0 });
     let imp: any;
-    try { imp = await api("/v1/imports", { body: { url, consent: true } }); }
+    try { imp = await api("/v1/imports", { body: { url, consent: true, ...importRange() } }); }
     catch (e) { setStep(null); if (e instanceof ApiError && e.status === 422) setProblem(e.message); else fail(e); return; }
     while (imp.status === "QUEUED" || imp.status === "RUNNING") {
       setStep({ text: imp.status === "QUEUED" ? "Waiting to start the import" : imp.stage === "checking" ? "Checking the video" : imp.stage === "storing" ? "Saving the video" : "Downloading the video", pct: imp.progress || 0 });
@@ -209,8 +237,13 @@ export function LinkChooser() {
     }
     const u = imp.upload || (await api(`/v1/projects/${imp.upload_id}`));
     if (more) { router.push(`/dashboard/project/?id=${u.upload_id}&tool=${kind === "find" ? "find" : "clips"}${chosen ? `&template=${encodeURIComponent(chosen.id)}` : ""}`); return; }
-    if (estimate === null || (!u.analyzed && u.credits_required > estimate)) { setStep(null); setConfirm({ upload: u }); return; }
-    await runTool(u);
+    if (kind === "clips" && quoted) {
+      const [, body] = request(u.upload_id);
+      const q = await api<{ credits_reserved?: number }>("/v1/clips/quote", { body }).catch(() => null);
+      if (q && typeof q.credits_reserved === "number" && q.credits_reserved <= quoted.credits) { await runTool(u); return; }
+      setStep(null); setConfirm({ upload: u, credits: typeof q?.credits_reserved === "number" ? q.credits_reserved : undefined }); return;
+    }
+    setStep(null); setConfirm({ upload: u });
   }
 
   if (!url) return <div className="form-col"><BackTitle title="What should we make from this video?" /><p className="empty-note">No link to work with. <Link href="/dashboard/">Paste one on Home</Link>.</p></div>;
@@ -220,11 +253,7 @@ export function LinkChooser() {
   const ready = consent && !busy && !refused && !short && !!listed && me.email_verified && (kind !== "find" || !!o.query.trim());
   const priceText = quoted && kind === "clips"
     ? `Uses ${quoted.credits} credit${quoted.credits === 1 ? "" : "s"}${quoted.basis ? ` (${quoted.basis})` : ""}.${typeof quoted.balance === "number" ? ` You have ${quoted.balance.toLocaleString()}.` : ""} A failed or cancelled job gives its credits back.`
-    : estimate === null
-    ? "One credit per minute of video. The video's length is known once it is in; you see the exact price before anything is charged."
-    : perMinute(kind)
-      ? `Uses ${estimate} credit${estimate === 1 ? "" : "s"} (one per minute of video). The import is free; a failed or cancelled job gives its credits back.`
-      : `Uses one credit per minute rendered, up to ${estimate}. The import is free.`;
+    : "The import is free. Once the video is in, its exact price is shown and nothing is charged until you start.";
 
   const toolChips = (
     <ul className="flex max-w-full list-none flex-wrap justify-center gap-2 narrow:w-full narrow:flex-nowrap narrow:justify-start narrow:overflow-x-auto narrow:pb-1 narrow:[&_li]:flex-none" aria-label="What to make">
@@ -238,14 +267,46 @@ export function LinkChooser() {
         })}
       </ul>);
 
+  // What the link is, only as the preview says it.
+  const facts = ([
+    ["Platform", PLATFORM[preview?.platform || ""] || preview?.platform],
+    ["Type", preview?.video_type ? TYPE[preview.video_type] : KIND[preview?.kind || ""]],
+    ["Status", preview?.live_status && preview.live_status !== "not_live" ? STATUS[preview.live_status] : null],
+    ["Length", preview?.video_type === "ongoing_recording" && duration ? `${clock(duration)} recorded so far` : duration ? clock(duration) : null],
+    ["Creator", preview?.channel],
+    ["Game", preview?.category],
+    ["Started", preview?.started_at ? when(preview.started_at) : null],
+    ["Can do", preview?.options ? [preview.options.clip && "clip", preview.options.import && "import", preview.options.range && (partial ? "download only a part" : "pick a part")].filter(Boolean).join(", ") : null],
+  ] as [string, string | null | undefined][]).filter((f): f is [string, string] => !!f[1]);
+
+  // A live channel or a broadcast live now: nothing to import yet. Live clipping is planned.
+  if (live && preview) return (
+    <div className="mx-auto grid w-full max-w-[720px] gap-5">
+      <header className="flex items-center gap-2">
+        <Link href="/dashboard/" aria-label="Back to Home" className="grid h-9 w-9 place-items-center rounded-full text-muted hover:bg-chip hover:text-text"><Icon name="back" size={20} /></Link>
+        <h1 className="m-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[20px] font-semibold">{preview.title || preview.channel || hostOf(url)}</h1>
+      </header>
+      <section className="grid gap-4 rounded-[24px] border border-solid border-line-soft bg-card p-6">
+        {preview.thumbnail_url && <img src={preview.thumbnail_url} alt="" className="aspect-video w-full rounded-16 object-cover" />}
+        <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-[14px]">{facts.map(([k, v]) => <div key={k} className="contents"><dt className="text-muted">{k}</dt><dd className="m-0">{v}</dd></div>)}</dl>
+        <p className="m-0 text-[14px] text-label">{refusalText(preview.refusal) || "This channel is live right now. A live stream can't be imported until its broadcast is saved."}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" className="btn primary" disabled>Start live clipping</button><ComingSoonBadge />
+        </div>
+        <p className="m-0 text-[13px] text-muted">Paste the link of a past broadcast to clip it today, or upload the recording.</p>
+      </section>
+    </div>
+  );
+
   // AI Clipping: the full job-setup screen. The price is the API's own estimate for this link, never worked out here.
   if (kind === "clips" && !refused && listed && preview !== undefined && !confirm) return (
     <JobSetup listed={listed} template={template} preset={preset}
       source={{ title: preview?.title || hostOf(url), duration, thumb: preview?.thumbnail_url, badge: PLATFORM[preview?.platform || ""] || null,
-        detail: [KIND[preview?.kind || ""], PLATFORM[preview?.platform || ""] || preview?.platform, preview?.channel].filter(Boolean).join(" · ") || url }}
-      price={quoted ? { state: "ok", credits: quoted.credits, note: quoted.basis ? `Worked out from ${quoted.basis}.` : undefined }
-        : { state: "unknown", text: "One credit per minute of video. Once the video is in, the exact price is shown before anything is charged." }}
-      onOptions={(opts) => { setup.current = opts; }} onCreate={(opts) => { setup.current = opts; go(); }} onRemove={() => router.push("/dashboard/")}
+        detail: [KIND[preview?.kind || ""], PLATFORM[preview?.platform || ""] || preview?.platform, preview?.channel].filter(Boolean).join(" · ") || url, facts }}
+      price={quoted ? { state: "ok", credits: quoted.credits, note: quoted.note || (quoted.basis ? `Worked out from ${quoted.basis}.` : undefined) }
+        : { state: "unknown", text: "No price for this link yet, so it can't be started from here. Upload the file instead, or try again in a moment." }}
+      onOptions={(opts) => { setup.current = opts; const r = opts.range as { start: number; end: number } | null; setRangeKey(r ? `${r.start}-${r.end}` : "0-0"); }}
+      onCreate={(opts) => { setup.current = opts; go(); }} onRemove={() => router.push("/dashboard/")}
       consent={{ checked: consent, onChange: setConsent, text: CONSENT }} step={step} problem={problem}
       header={toolChips} />
   );
@@ -323,7 +384,7 @@ export function LinkChooser() {
         shadow-[0_-20px_40px_rgba(0,0,0,.45)] [backdrop-filter:blur(10px)] narrow:bottom-[calc(var(--app-bottom-bar,theme(spacing.tabbar))+env(safe-area-inset-bottom))] narrow:px-[14px] narrow:py-3">
         {confirm ? <>
           <p className="muted">The video is in: {clock(confirm.upload.duration_sec)} long. {perMinute(kind)
-            ? `This uses ${confirm.upload.credits_required} credit${confirm.upload.credits_required === 1 ? "" : "s"} (one per minute of video).`
+            ? `This uses ${confirm.credits ?? confirm.upload.credits_required} credit${(confirm.credits ?? confirm.upload.credits_required) === 1 ? "" : "s"}${confirm.credits === undefined ? " (one per minute of video)" : ", the exact price for these settings"}.`
             : `This uses one credit per minute rendered, up to ${confirm.upload.credits_required}.`}</p>
           <div className="row"><button type="button" className="btn primary" onClick={() => runTool(confirm.upload)}>Start</button>
             <Link className="btn ghost" href={`/dashboard/project/?id=${confirm.upload.upload_id}`}>Not now, open the project</Link></div>

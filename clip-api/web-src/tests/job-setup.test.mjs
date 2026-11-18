@@ -15,7 +15,7 @@ test("job setup: tools we don't have are marked Coming soon and can't be turned 
   const parts = source("components/dash/setup/parts.tsx");
   assert.match(parts, /\{soon \? <Switch on=\{false\} label=\{`\$\{name\}: coming soon`\} disabled \/> : children\}/);
   assert.match(parts, /\{!soon && under\}/);
-  assert.match(setup, /Brand kit[\s\S]{0,200}<ComingSoonBadge \/>/);
+  assert.match(setup, /aria-label="Brand kit"/);                                  // brand kits are real: the saved looks
   assert.match(setup, /Upload SRT <ComingSoonBadge short \/>/);
 });
 
@@ -27,7 +27,8 @@ test("job setup: the price only comes from the server, and Create waits for cons
   const chooser = source("components/dash/LinkChooser.tsx");
   assert.match(chooser, /price=\{quoted \? \{ state: "ok", credits: quoted\.credits/);       // the API's estimate for the link
   assert.match(chooser, /consent=\{\{ checked: consent, onChange: setConsent, text: CONSENT \}\}/);
-  assert.match(chooser, /api\("\/v1\/imports", \{ body: \{ url, consent: true \} \}\)/);     // the import consent, as recorded today
+  assert.match(chooser, /api\("\/v1\/imports", \{ body: \{ url, consent: true, \.\.\.importRange\(\) \} \}\)/);     // the import consent, as recorded today
+  assert.doesNotMatch(chooser, /Math\.ceil\(sec \/ 60\)|minutes\(duration\)/);                    // no price worked out in the browser
   assert.match(source("components/dash/setup/MakeView.tsx"), /useQuote\(known\?\.quote \? QUOTE : null/);
 });
 
