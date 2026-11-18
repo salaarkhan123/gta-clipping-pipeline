@@ -35,10 +35,12 @@ const CARD = { tall: "w-[200px] flex-none narrow:w-[calc((100%-12px)/2)]", wide:
 // template's game (owner, 2026-11-18). Anything else leaves the picture empty: no other game's footage, no stand-in.
 const norm = (v: unknown) => String(v || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
 const footageFor = (t: any, items: MediaItem[]): MediaItem | null => {
+  const own = items.find((i) => i.id === t.id);          // made for this template (a game-type preset, say)
+  if (own) return own;
   const game = norm(gameName(gameOf(t)));
   if (isPreset(t) || gameOf(t) === "other" || !game) return null;
   const same = items.filter((i) => norm(i.game) === game);
-  return same.find((i) => i.id === t.id) || same[0] || null;
+  return same[0] || null;
 };
 
 function Preview({ t, clip }: { t: any; clip: MediaItem | null }) {
