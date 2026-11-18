@@ -11,6 +11,8 @@ camera and crop, no captions, no hook) at THUMB_RESOLUTION, so the winner needs 
   change (more is a cut to another scene, not more action);
 - loudness at that second (people shout when something happens), and closeness to the judge's peak;
 - sharpness, up to the clip's usual sharpness (more is not better: text and maps are the sharpest pictures).
+A standby frame (a "be right back", "starting soon" or intro screen, an empty chair: the picture frozen between its
+neighbours with no face in the camera, or with nobody talking) never wins over a live one.
 A frame that is dark, flat, blurred, a menu or a results card (mostly level and upright edges, or far more detail
 than the rest of the clip) or right next to one (menus fade in and out), on a cut (or outside what the clip
 keeps), or a transition (a flash between two similar neighbours, or a dissolve between two different ones) only
@@ -55,6 +57,9 @@ BUSY = 1.5                    # action counts up to this many times the clip's m
 UI_LINES = 0.38               # share of strong edges that are level or upright above which a frame is a menu or card
 UI_DETAIL = 4.0               # this many times the clip's median sharpness: text or a map, not the game
 MENU_FADE = 2.5               # seconds: a keyframe this close to a menu is likely fading into or out of it
+STILL = 2.5                   # mean change (0-255) to both neighbouring keyframes below which the picture is frozen
+SPEECH_NEAR = 2.0             # seconds: a word this close to a frame means someone is talking over it
+SILENT_DB = -45.0             # without a transcript: quieter than this is silence
 FACE_MARGIN = 0.02            # a face this close to the camera box's edge is cut by it
 FACE_ROWS = 160               # the camera box is looked at this many pixels tall
 SCENE_ROWS = 240              # ... and a picture with no camera box (faces anywhere in it)
@@ -270,14 +275,31 @@ def inside(t: float, segments) -> bool:
     return any(s + EDGE_GUARD <= t <= e - EDGE_GUARD for s, e in segments)
 
 
+def _standby(i: int, frames: list[Frame], diff, faces: "Faces", cam, level: float | None, speech) -> bool:
+    """A "be right back", "starting soon" or intro screen, or an empty chair: the picture (the camera left out)
+    has not moved since the keyframes either side of it, and either the camera box shows no face at all or
+    nobody is talking (no word within SPEECH_NEAR seconds; without a transcript, the sound is below SILENT_DB).
+    A paused game with the streamer talking over it is not standby."""
+    near = [diff(i, j) for j in (i - 1, i + 1) if 0 <= j < len(frames)]
+    if not near or max(near) >= STILL:
+        return False
+    if cam is not None and not faces.seen:
+        return True
+    if speech is not None:
+        t = frames[i].t
+        return not any(s - SPEECH_NEAR <= t <= e + SPEECH_NEAR for s, e in speech)
+    return level is not None and level < SILENT_DB
+
+
 def score_frames(frames: list[Frame], cam=None, segments=None, loudness=None, peak: float | None = None,
-                 view=(FULL,)) -> list[Scored]:
+                 view=(FULL,), speech=None) -> list[Scored]:
     """Score each frame (see the module doc). `cam` is the camera box [x, y, w, h] as fractions of the source, or
     None; without one, the faces that count are those in `view` (the parts of the source the layout shows).
     A clip has people when it has a camera, or when faces are seen in a third of its frames: then a frame without
     a whole face, or with a face cut by an edge, loses half its score. `segments` are the pieces of the source the
     clip keeps (default: the frames' own span). `loudness(t)` gives the level at source second t, or None. `peak`
-    is the judge's most striking second."""
+    is the judge's most striking second. `speech` is the (start, end) source seconds of the words said, or None
+    when there is no transcript."""
     import cv2
     if not frames:
         return []
@@ -318,6 +340,7 @@ def score_frames(frames: list[Frame], cam=None, segments=None, loudness=None, pe
     loud = _norm([v if v is not None else 0.0 for v in levels]) if any(v is not None for v in levels) else [0.0] * n
     next_to_menu = [not menu[i] and any(menu[j] and abs(frames[j].t - frames[i].t) <= MENU_FADE
                                         for j in (i - 1, i + 1) if 0 <= j < n) for i in range(n)]
+    standby = [_standby(i, frames, diff, faces[i], cam, levels[i], speech) for i in range(n)]
     weights = WEIGHTS_CAM if people else WEIGHTS_NO_CAM
     parts = {"face": _norm(expression), "loud": loud, "action": [min(1.0, a / busy) for a in action],
              "sharp": [min(1.0, s / usual) for s in sharp]}
@@ -328,7 +351,8 @@ def score_frames(frames: list[Frame], cam=None, segments=None, loudness=None, pe
             score += PEAK_BONUS * max(0.0, 1 - abs(f.t - peak) / PEAK_REACH)
         mean, spread = float(f.gray.mean()), float(f.gray.std())
         failed = [name for name, bad in (("dark", mean < DARK), ("bright", mean > BRIGHT), ("flat", spread < FLAT),
-                                         ("blurred", sharp[i] < BLUR * usual), ("menu", menu[i]),
+                                         ("blurred", sharp[i] < BLUR * usual), ("standby", standby[i]),
+                                         ("menu", menu[i]),
                                          ("menu_edge", next_to_menu[i]), ("transition", transient[i]),
                                          ("cut", not inside(f.t, segments))) if bad]
         face = (faces[i].patch is not None and not faces[i].cut) if people else None
@@ -558,25 +582,27 @@ def canvas_for(info: MediaInfo, options, layout: str, facecam, size: tuple[int, 
 
 def make_thumbnail(src, info: MediaInfo, start: float, end: float, out: Path, *, options, layout: str, facecam,
                    text: str | None = None, segments=None, peak: float | None = None, loudness: list | None = None,
-                   deadline: Deadline | None = None) -> Thumb:
+                   speech=None, deadline: Deadline | None = None) -> Thumb:
     """The thumbnail of the clip [start, end] of `src`, drawn as render_clip draws the clip with `options`, `layout`
     and `facecam`: written to `out` (JPEG), with the frame alone next to it. `text` is the hook (or title) to set
     on it; `segments` the pieces of the source the clip keeps; `peak` the judge's most striking second;
-    `loudness` the level of each source second (dB). Raises PipelineError when no frame can be drawn."""
+    `loudness` the level of each source second (dB); `speech` the (start, end) source seconds of the clip's words,
+    or None without a transcript. Raises PipelineError when no frame can be drawn."""
     out = Path(out)
     segments = segments or [(start, end)]
     longest = max(segments, key=lambda s: s[1] - s[0])
     middle = (longest[0] + longest[1]) / 2
     graph, view = layout_graph_for(info, options, layout, facecam)
     folder, frame = out.with_suffix(".frames"), out.with_suffix(".frame.jpg")
-    pick = None
+    pick, scored = None, []
     try:
         frames = grab_frames(src, info, start, end, graph, folder, deadline)
         if frames:
             levels = loudness or []
             level = (lambda t: levels[int(t)] if 0 <= int(t) < len(levels) else None) if levels else None
             try:
-                pick = best(score_frames(frames, _camera(facecam)[0], segments, level, peak, view), middle)
+                scored = score_frames(frames, _camera(facecam)[0], segments, level, peak, view, speech)
+                pick = best(scored, middle)
             except PipelineTimeout:
                 raise
             except Exception:
@@ -608,6 +634,9 @@ def make_thumbnail(src, info: MediaInfo, start: float, end: float, out: Path, *,
     record = {"at": round(chosen.t, 3), "frames": len(frames) if pick else 0,
               "score": pick.score if pick else None, "face": pick.face if pick else None,
               "failed": pick.failed if pick else [], "text": drawn,
+              # The share of the clip's keyframes that looked like a standby screen (BRB, starting soon, an empty
+              # chair): 1.0 means the whole clip is one.
+              "standby": round(sum("standby" in s.failed for s in scored) / len(scored), 2) if scored else None,
               "canvas": {**asdict(canvas), "size": list(size)}}
     return Thumb(out, frame, record)
 

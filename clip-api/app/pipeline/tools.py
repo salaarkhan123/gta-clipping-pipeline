@@ -41,6 +41,7 @@ class RenderOptions:
     caption_position: str = "auto"    # impact only: auto | seam | lower | center
     caption_accent: str | None = None # impact only: the keyword's colour, #RRGGBB; None = the brand lime
     censor: bool = False
+    thumbnail_text: bool = True       # the worker sets the AI's title on the thumbnail (thumbs.py); false: frame only
     resolution: str | None = None     # "480" | "720" | "1080" | "2k" | "4k"; None renders at the size it always did
     preview: bool = False             # a fast, small render to look at (540 on the short side)
     camera: str | None = None         # two-panel layouts: "top" | "bottom"; None = the layout's own

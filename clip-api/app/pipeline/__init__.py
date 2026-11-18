@@ -85,6 +85,7 @@ class PipelineOptions:
     punch_zoom: bool = True               # subtle punch-in zooms (max 1.15x) on the gameplay at loudness spikes
     flash_forward: bool = True            # open on 1.5 s of the peak when the judge names one, then cut back
     hook_overlay: bool = True             # burn the judge's on-screen hook text over the first 2.5 s
+    thumbnail_text: bool = True           # set the hook (else the title) on the thumbnail; independent of hook_overlay
     template: str | None = None           # the template these options came from (recorded, not interpreted here)
     prompt: str | None = None             # the user's words for the moments they want: handed to the judge as data
     weights: dict | None = None           # per-signal weights overriding WEIGHTS, e.g. {"audio": 1.0}
@@ -395,9 +396,11 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         thumb = frame = None
         try:
             with timer.stage("thumbnail"):
+                on_thumb = thumb_text(c.meta, options.censor) if options.thumbnail_text else None
                 made = make_thumbnail(input_path, info, c.start, c.end, out_dir / f"clip-{i}.jpg", options=options,
-                                      layout=layout, facecam=facecam, text=thumb_text(c.meta, options.censor),
-                                      segments=segments, peak=c.peak, loudness=db, deadline=deadline)
+                                      layout=layout, facecam=facecam, text=on_thumb, segments=segments, peak=c.peak,
+                                      loudness=db, speech=[(s, e) for s, e, _ in spoken] if use_asr else None,
+                                      deadline=deadline)
             thumb, frame, c.features["thumbnail"] = made.path, made.frame, made.record
         except PipelineTimeout:
             raise

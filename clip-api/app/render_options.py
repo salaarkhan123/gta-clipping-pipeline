@@ -32,6 +32,9 @@ class LayoutOptions(BaseModel):
     caption_position: Literal["auto", "seam", "lower", "center"] = "auto"
     caption_accent: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")     # null: the brand lime
     censor: bool = False          # mask swears in burned captions and subtitle downloads (f***ing)
+    # The clip's thumbnail carries its hook (else its title) in big letters. Separate from hook_overlay, which is
+    # the hook burned into the video: either can be on without the other. Free either way.
+    thumbnail_text: bool = True
     # Which layouts an aspect offers is in layouts.ALLOWED. trio, grid4 and ots are not built yet and are refused.
     layout: Layout = "auto"
     # The two-panel layouts (split2 and the old split, screen_first, gameplay_a, gameplay_b, and auto when it

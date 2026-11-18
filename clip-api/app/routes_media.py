@@ -1,6 +1,7 @@
 """Uploads, clip jobs, results and credits."""
 import hashlib
 import json
+import logging
 import math
 import re
 import uuid
@@ -16,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import ledger
-from .ai import MomentPrompt
+from .ai import MomentPrompt, _hook as hook_text   # the AI's own hook rules: one line, 6 words, 48 characters
 from .config import get_settings
 from .languages import LanguageCode, SourceLanguage
 from .db import get_db
@@ -30,7 +31,9 @@ from .render_options import LayoutOptions  # noqa: F401  (re-exported: routes_to
 from .scoring import display_scores
 from .storage import LocalStorage, get_storage
 from .templates import TEMPLATES, with_tuning
+from .thumbnails import redraw, words_for
 
+log = logging.getLogger("clipapi.media")
 router = APIRouter()
 ALLOWED_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi", ".flv", ".ts"}
 ACTIVE = ("QUEUED", "RUNNING")
@@ -452,22 +455,45 @@ def clip_feedback(clip_id: str, body: Feedback, p: Principal = Depends(current_p
 
 class ClipEdit(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    title: str = Field(min_length=1, max_length=80)
+    title: str | None = Field(default=None, min_length=1, max_length=80)
+    hook: str | None = Field(default=None, min_length=1, max_length=48)   # the thumbnail's words (one line)
+
+    @model_validator(mode="after")
+    def _something(self):
+        if self.title is None and self.hook is None:
+            raise ValueError("Send a title, a hook, or both.")
+        return self
 
 
 @router.patch("/v1/clips/{clip_id}")
 def edit_clip(clip_id: str, body: ClipEdit, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
-    """Choose the clip's title: one of its `titles`, or your own words. Free: nothing is re-rendered."""
+    """Choose the clip's title (one of its `titles`, or your own words) and its hook. Free: nothing is re-rendered.
+    When the words the thumbnail carries change, it is drawn again on the same frame now (a fraction of a second).
+    A hook already burned into the video stays as it is there."""
     clip = db.get(Clip, clip_id)
     if not clip or clip.deleted_at:
         raise ApiError(404, "not_found", "No such clip.")
-    own_job(db, p, clip.job_id)
-    title = " ".join(body.title.split())
-    if not title:
-        raise ApiError(422, "validation_error", "The title is empty.")
-    clip.meta = {**(clip.meta or {}), "title": title}      # a new dict, so the JSON column is saved
+    job = own_job(db, p, clip.job_id)
+    changes = {}
+    if body.title is not None:
+        changes["title"] = " ".join(body.title.split())
+        if not changes["title"]:
+            raise ApiError(422, "validation_error", "The title is empty.")
+    if body.hook is not None:
+        changes["hook"] = hook_text(body.hook)
+        if not changes["hook"]:
+            raise ApiError(422, "validation_error", "The hook is empty.")
+    options = job.options if isinstance(job.options, dict) else {}
+    before = words_for(clip.meta, options)
+    clip.meta = {**(clip.meta or {}), **changes}            # a new dict, so the JSON column is saved
+    storage = get_storage()
+    if words_for(clip.meta, options) != before:
+        try:
+            redraw(clip, options, storage)
+        except Exception:                                   # the words are saved either way
+            log.exception("could not draw the thumbnail of %s again", clip.id)
     db.commit()
-    return with_display_scores(db, with_ranks(db, [clip_json(clip, get_storage())]))[0]
+    return with_display_scores(db, with_ranks(db, [clip_json(clip, storage)]))[0]
 
 
 def _stamp(t: float, sep: str) -> str:
