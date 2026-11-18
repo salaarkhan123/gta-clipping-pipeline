@@ -125,7 +125,7 @@ GET    /v1/live/sessions                 list
 POST   /webhooks/twitch/eventsub         Twitch only, HMAC-verified
 ```
 
-- Clips are ordinary clip rows (`GET /v1/clips/{id}`, export, feedback, subtitles unchanged) with a live session as their source.
+- Clips are ordinary clip rows (`GET /v1/clips/{id}`, export, feedback, subtitles unchanged) with a live session as their source. The reference is a new nullable field on the clip (`live_session_id`); `upload_id` is not reused, so the results page keeps working (asked for by the integration agent).
 - With the flag off every `/v1/live/*` route answers 404 `not_found`.
 - New tables (additive, written by the orchestrator in Stage 2 or later): `live_sessions`, `twitch_links`.
 
