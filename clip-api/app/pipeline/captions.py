@@ -115,7 +115,8 @@ IMPACT_FILL = 0.92               # the widest a caption gets, as a share of the 
 IMPACT_SHORT = 12                # three words share a caption only when they have this many characters between them
 ACTIVE_POP = (0.92, 1.08, 90)    # the word being said grows from this share of the line's size to this one, in ms
 UPCOMING = "&H8C&"               # a word not said yet: its letters this transparent (ASS alpha), outline kept
-CAPTION_HOLD = 0.3               # a caption stays this long after its last word, unless the next one starts first
+IMPACT_LEAD = 0.7                # a word joins a caption only when it is said this soon after the caption's first
+CAPTION_HOLD = 0.3              # a caption stays this long after its last word, unless the next one starts first
 WORD_GAP = "  "                  # two spaces: the outline eats most of one
 ACCENT = "#B8FF3C"               # the brand lime, the colour of the hook box
 LOWER_THIRD = 0.70               # where the caption sits when the caller names no row
@@ -226,13 +227,15 @@ def proper_names(words) -> list[bool]:
 
 def group_impact(words, fits=lambda texts: True) -> list[list]:
     """(start, end, text) words as impact captions: one or two words, a third only when the three are short
-    (IMPACT_SHORT characters between them). A caption also ends at a pause, after punctuation, and before a
-    word that would not fit on the line (`fits(texts)`)."""
+    (IMPACT_SHORT characters between them). A caption also ends at a pause, after punctuation, before a word
+    that would not fit on the line (`fits(texts)`), and before a word said more than IMPACT_LEAD after the
+    caption's first (a slow speaker's next word would sit on screen too long before it is said)."""
     chunks, cur = [], []
     for w in words:
         if cur:
             prev = cur[-1]
-            hard = w[0] - prev[1] >= PAUSE or prev[2].strip()[-1:] in PUNCT
+            hard = (w[0] - prev[1] >= PAUSE or prev[2].strip()[-1:] in PUNCT
+                    or w[0] - cur[0][0] > IMPACT_LEAD)
             texts = [impact_text(t) for _, _, t in cur] + [impact_text(w[2])]
             room = len(cur) < 2 or (len(cur) == 2 and sum(len(t) for t in texts) <= IMPACT_SHORT)
             if hard or not room or not fits(texts):

@@ -99,6 +99,8 @@ def test_one_or_two_words_at_a_time_and_a_third_only_when_all_three_are_short():
     assert lines("damn that clutch") == ["DAMN THAT", "CLUTCH"]               # 14 characters: the third waits
     assert lines("no way, bro. run!") == ["NO WAY", "BRO", "RUN!"]            # punctuation ends a caption and is dropped
     assert lines("he is gone now", pauses=(2,)) == ["HE IS", "GONE NOW"]      # so does a pause
+    # A slow speaker: no word waits on screen more than IMPACT_LEAD before it is said.
+    assert lines("set me for it", length=0.42, gap=0.0) == ["SET ME", "FOR IT"]
     for text in ("a b c d e f g", "supercalifragilistic is a word I know", "it is what it is and that is that"):
         for chunk in C.group_impact(timed(text)):
             assert 1 <= len(chunk) <= 3

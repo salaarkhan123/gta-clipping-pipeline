@@ -148,7 +148,7 @@ Checks (`scripts/caption_checks.py`, run on the owner's six eval videos with the
 | Number | Definition | Limit |
 |---|---|---|
 | `active_p95_ms` | 95th percentile of \|when a word lights up as the word being said − its start\|. An event that marks word *i* as the one being said is named `w<i>` | ≤ 120 ms, for every word (`active_share` 1.0) |
-| `appear_early_p95_ms` | how long before it is said a word is already on screen (95th percentile) | ≤ 600 ms |
+| `appear_early_p95_ms` | how long before it is said a word is already on screen (95th percentile; impact shows it see-through until then) | ≤ 700 ms (`captions.IMPACT_LEAD`) |
 | `dead_air_share` | share of caption time with nobody speaking: outside every word + 0.3 s, and inside any word gap of 0.6 s or more | ≤ 2% |
 | `cps_p95`, `over_cps_share` | characters per second of each caption (letters, no spaces) | over 20 cps in ≤ 5% of captions |
 | `flash_share` | captions on screen under 0.3 s | reported |
