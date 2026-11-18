@@ -1,9 +1,10 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ClipCard, ClipFilter, ClipSort, ClipToolbar } from "@/components/dash/ClipCard";
+import { CLIP_GRID, ClipCard, ClipFilter, ClipSort, ClipToolbar } from "@/components/dash/ClipCard";
 import { ProjectGrid } from "@/components/dash/ProjectCard";
 import { useDash } from "@/components/dash/Shell";
+import { PAGE_HEAD, PAGE_TITLE, SECTION_HEAD } from "@/components/dash/ui";
 import { Tabs } from "@/components/dash/Tabs";
 import { api } from "@/lib/api";
 
@@ -20,8 +21,8 @@ export default function Library() {
   }
   return (
     <div className="wide stack">
-      <div className="page-head-row">
-        <h1>Library</h1>
+      <div className={PAGE_HEAD}>
+        <h1 className={PAGE_TITLE}>Library</h1>
         <Tabs seg label="Library view" panel="library-view" value={view} onChange={show} tabs={[["projects", "Projects"], ["clips", "Clips"]]} />
       </div>
       <div id="library-view" role="tabpanel" aria-label={view === "projects" ? "Projects" : "Clips"} className="stack">
@@ -78,14 +79,14 @@ function AllClips() {
 
   return (
     <>
-      <div className="results-head">
+      <div className={SECTION_HEAD}>
         <p className="muted small">{clips?.length ? `${total} clip${total === 1 ? "" : "s"}. Clips are kept for 7 days.` : ""}</p>
         <ClipToolbar sort={sort} filter={filter} sorts={["newest", "score", "time"]} onSort={setSort} onFilter={setFilter} />
       </div>
       {clips === null ? <p className="muted">Loading your clips…</p>
         : !clips.length ? <p className="empty-note">{filter === "all" ? "No clips yet. Open a project and make some." : "No clips match this filter."}</p>
         : <>
-            <div className="clips">
+            <div className={CLIP_GRID}>
               {clips.map((c) => <ClipCard key={c.id} clip={c} project={{ id: c.upload_id, name: c.filename }}
                 onChange={(n) => setClips((list) => list!.map((x) => (x.id === n.id ? n : x)))} />)}
             </div>
