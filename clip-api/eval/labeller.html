@@ -161,7 +161,7 @@ function loadSheet(text, name) {
   fillVods(); status();
 }
 function sheetText() {
-  const sorted = [...rows].sort((a, b) => a.vod.localeCompare(b.vod) || a.start - b.start || a.end - b.end);
+  const sorted = [...rows].sort((a, b) => (a.vod < b.vod ? -1 : a.vod > b.vod ? 1 : 0) || a.start - b.start || a.end - b.end);
   return [FIELDS.join(","), ...sorted.map((r) => FIELDS.map((f) =>
     cell(f === "start" || f === "end" ? hms(r[f]) : String(r[f] ?? ""))).join(","))].join("\n") + "\n";
 }

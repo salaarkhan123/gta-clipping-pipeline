@@ -41,7 +41,7 @@ def read_sheet(path: Path) -> list[dict]:
 def write_sheet(path: Path, rows: list[dict]) -> None:
     rows = sorted(rows, key=lambda r: (r["vod"], seconds(r["start"]), seconds(r["end"])))
     with open(path, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=V2_FIELDS, extrasaction="ignore")
+        w = csv.DictWriter(f, fieldnames=V2_FIELDS, extrasaction="ignore", lineterminator="\n")   # as labeller.html
         w.writeheader()
         for r in rows:
             w.writerow({k: r.get(k, "") for k in V2_FIELDS})

@@ -248,4 +248,4 @@ def test_the_labeller_page_writes_the_same_columns_and_csv_as_the_scripts(tmp_pa
               " return { ...o, start: secs(o.start), end: secs(o.end) }; });"
               "process.stdout.write(sheetText());")
     out = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True).stdout
-    assert out == expected.read_text().replace("\r\n", "\n")
+    assert out == expected.read_bytes().decode()          # LF endings, like the page
