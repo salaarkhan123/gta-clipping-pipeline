@@ -61,6 +61,28 @@ uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-cl
 - A transcript that Video Finder made for an upload is reused by Clip Maker for its first, rough pass, so that
   pass costs nothing on the second job. Captions are still made by the caption model.
 
+## Provisional layouts
+
+`PROVISIONAL_LAYOUTS` (default `false`) controls the layouts that are built but not yet checked on real gaming
+footage: `trio`, `grid4`, `ots`, and the `auto` layout that picks a layout for each moment.
+
+- Off (the default):
+  - `GET /v1/options` does not list `trio`, `grid4` or `ots`.
+  - A request that asks for one of them gets `400 layout_not_available`. This applies to clip jobs, quotes,
+    Reframe, Captions, exports and saved templates.
+  - `auto` picks one layout for the whole video, as it did before PR #136.
+- On: the three layouts are offered, and `auto` looks at each moment. When the camera is hidden, the moment
+  fills the frame with gameplay. When the face fills the frame, the moment is framed on the person.
+
+To turn it on:
+
+1. Render a few real VODs with each of the three layouts and with `auto`.
+2. Check the frames.
+3. Set `PROVISIONAL_LAYOUTS=true` in the server's env file.
+4. Run `docker compose up -d api worker`. The API and the worker both read the setting.
+
+Jobs that are already queued keep the layout they asked for.
+
 ## Running more than one job at once
 
 Default: one job at a time. Two ways to add capacity:
