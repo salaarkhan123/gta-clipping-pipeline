@@ -1,11 +1,11 @@
 import { ComingSoonBadge } from "../../ComingSoonBadge";
 import { Section } from "../../site/Section";
+import { TemplatePreviews } from "../demos/TemplatePreviews";
 import { EyebrowIcon } from "./EyebrowIcon";
 
 // Templates per game and your own saved looks, team workspaces (not built), and the public API.
 // Game and template names are the API's own (app/templates.py).
 const GAMES = ["GTA 5", "Valorant", "Fortnite", "Apex Legends", "League of Legends", "CS2", "Minecraft", "Rust"];
-const GTA_TEMPLATES = ["GTA RP reaction", "Car chase", "Heist moments", "Funny fails"];
 
 function TemplatesVisual() {
   return (
@@ -13,9 +13,7 @@ function TemplatesVisual() {
       <div className="flex flex-wrap gap-1.5">
         {GAMES.slice(0, 5).map((g, i) => <span key={g} className={`rounded-full px-2.5 py-1 text-[11px] ${i === 0 ? "bg-white font-semibold text-black" : "bg-white/10 text-white/70"}`}>{g}</span>)}
       </div>
-      <div className="grid grid-cols-2 gap-1.5">
-        {GTA_TEMPLATES.map((t, i) => <span key={t} className={`rounded-[8px] px-2.5 py-2 text-[12px] ${i === 1 ? "bg-lime/15 text-lime ring-1 ring-lime/50" : "bg-black/40 text-white/80 ring-1 ring-white/10"}`}>{t}</span>)}
-      </div>
+      <TemplatePreviews />
       <div className="rounded-[10px] bg-black/40 p-2.5 ring-1 ring-white/10">
         <p className="text-[10px] font-semibold uppercase tracking-[.08em] text-white/45">My templates</p>
         <p className="mt-1 text-[13px] font-medium">Friday RP look</p>
