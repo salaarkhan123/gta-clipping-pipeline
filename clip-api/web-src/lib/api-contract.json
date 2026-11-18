@@ -55,7 +55,7 @@
     { "method": "GET", "path": "/v1/templates/games" },
     { "method": "GET", "path": "/v1/templates/custom" },
     { "method": "POST", "path": "/v1/templates/custom", "body": ["name", "options"] },
-    { "method": "PATCH", "path": "/v1/templates/custom/{template_id}", "body": ["name"] },
+    { "method": "PATCH", "path": "/v1/templates/custom/{template_id}", "body": ["name", "options"] },
     { "method": "DELETE", "path": "/v1/templates/custom/{template_id}" },
     { "method": "GET", "path": "/v1/templates/{template_id}/poster" }
   ],
