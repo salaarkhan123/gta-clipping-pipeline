@@ -42,6 +42,7 @@ MAX_HEIGHT = 1080
 RETRIES = 3                 # ordinary retries of a failed request or fragment; never a way to wait out a limit
 SOCKET_TIMEOUT = 30
 NO_FFMPEG = "/nonexistent/ffmpeg-is-not-for-yt-dlp"
+NOWHERE = Path("/nonexistent/a-preview-writes-nothing")     # the output folder of a preview
 NAMES = {"twitch": "Twitch", "kick": "Kick", "youtube": "YouTube"}
 YOUTUBE_REFUSES = "YouTube often refuses automated downloads: upload the file instead"
 
@@ -150,8 +151,10 @@ def _refusal(platform: str, raw: str) -> Refused:
     return Refused(code, f"{why} {UPLOAD_INSTEAD}")
 
 
-def _new_ydl(dest_dir: Path, limits: Limits, hook: Callable[[dict], None] | None = None) -> YoutubeDL:
+def _new_ydl(dest_dir: Path, limits: Limits, hook: Callable[[dict], None] | None = None,
+             socket_timeout: int = SOCKET_TIMEOUT) -> YoutubeDL:
     options = ydl_options(dest_dir, limits.max_bytes)
+    options["socket_timeout"] = socket_timeout
     if hook is not None:
         options["progress_hooks"] = [hook]
     return YoutubeDL(options)
@@ -171,15 +174,30 @@ def _check(platform: str, info: dict | None, limits: Limits) -> dict:
     return info
 
 
-def look(platform: str, url: str, dest_dir: Path, limits: Limits, ydl: YoutubeDL | None = None) -> dict:
-    """Read the video's public metadata, exactly as an import does before it downloads. Nothing is downloaded."""
-    ydl = ydl or _new_ydl(dest_dir, limits)
+def metadata(platform: str, url: str, ydl: YoutubeDL) -> dict | None:
+    """The video's public metadata, unchecked. Nothing is downloaded. A refusal by the site is Refused."""
     try:
-        info = ydl.extract_info(url, download=False)
+        return ydl.extract_info(url, download=False)
     except DownloadError as e:
         log.warning("import refused by %s for %s: %s", platform, url, e)
         raise _refusal(platform, str(e)) from None
-    return _check(platform, info, limits)
+
+
+def look(platform: str, url: str, dest_dir: Path, limits: Limits, ydl: YoutubeDL | None = None) -> dict:
+    """Read the video's public metadata, exactly as an import does before it downloads. Nothing is downloaded."""
+    return _check(platform, metadata(platform, url, ydl or _new_ydl(dest_dir, limits)), limits)
+
+
+def preview(platform: str, url: str, limits: Limits, socket_timeout: int) -> tuple[dict | None, Refused | None]:
+    """(metadata, refusal) for a link preview: the same options and the same checks as an import, with a shorter
+    socket timeout. The metadata is kept when a check refuses (a video that is too long still has a title).
+    Nothing is downloaded and nothing is written: the output folder does not exist."""
+    info = metadata(platform, url, _new_ydl(NOWHERE, limits, socket_timeout=socket_timeout))
+    try:
+        _check(platform, info, limits)
+    except Refused as e:
+        return (info if isinstance(info, dict) else None), e
+    return info, None
 
 
 def download(platform: str, url: str, dest_dir: Path, limits: Limits,

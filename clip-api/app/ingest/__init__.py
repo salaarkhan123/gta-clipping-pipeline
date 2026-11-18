@@ -9,6 +9,7 @@ fetched, and can be removed again with the takedown flow.
 - sources.py    which hosts are allowed and which downloader handles a link
 - fetch.py      direct, Google Drive and Dropbox links: one https download, every hop checked and pinned
 - platforms.py  Twitch, Kick and YouTube through yt-dlp, with a fixed set of options
+- preview.py    what a link is (title, channel, length, thumbnail) before an import: metadata only
 - runner.py     the worker's side: download, check, store, turn the placeholder into a usable upload
 - takedown.py   remove everything that came from a source URL or an account's imports
 """
