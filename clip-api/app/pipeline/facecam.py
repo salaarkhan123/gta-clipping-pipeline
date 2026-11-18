@@ -27,11 +27,14 @@ def _detector():
     return _local.cascade
 
 
-def sample_gray(src, info: MediaInfo, n: int, deadline: Deadline | None = None, width: int = 640) -> list:
+def sample_gray(src, info: MediaInfo, n: int, deadline: Deadline | None = None, width: int = 640,
+                span: tuple[float, float] | None = None) -> list:
+    """`n` gray frames spread over the video, or over `span` (start, end seconds) when one is given."""
     h = even(width * info.height / info.width)
+    a, b = span or (0.0, info.duration)
     frames = []
     for i in range(n):
-        t = info.duration * (0.05 + 0.9 * (i + 0.5) / n)
+        t = a + (b - a) * (0.05 + 0.9 * (i + 0.5) / n)
         try:
             raw = run_bytes(["ffmpeg", "-loglevel", "error", "-ss", f"{t:.2f}", *SAFE_IN, "-i", src, "-frames:v", "1",
                              "-vf", f"scale={width}:{h},format=gray", "-f", "rawvideo", "-"], deadline, cap=60)
@@ -243,6 +246,43 @@ def resolve_plan(src, info: MediaInfo, options, deadline: Deadline | None = None
     return layouts.compose(info.width, info.height, name, aspect, scene=scene.kind, cam=scene.cam, face=scene.face,
                            zoom=getattr(options, "zoom", 1.0), requested=options.layout,
                            camera=getattr(options, "camera", None), split_ratio=getattr(options, "split_ratio", None))
+
+
+MOMENT_SAMPLES = 4      # frames looked at inside each moment when the layout is auto
+
+
+def moment_scene(frames: list, facecam) -> tuple[str, tuple | None] | None:
+    """What one moment shows, from frames sampled inside it, when the video as a whole has a camera (`facecam`,
+    what resolve_facecam found): ("gameplay", None) when no face stays put in it (the camera is hidden or
+    switched off), ("camera", face) when the person fills the frame, None when it looks like the rest of the
+    video. Too few frames, or no camera in the video: None. It never finds a camera the video did not have.
+    A camera whose face was never seen (a box the user gave, a face the detector misses) is kept as it is:
+    no face in a moment would then say nothing about that moment."""
+    if (not facecam or getattr(facecam, "scene", None) != "gameplay_cam" or getattr(facecam, "face", None) is None
+            or len(frames) < 2):
+        return None
+    face = stable_face(frames)
+    if face is None:
+        return "gameplay", None
+    return ("camera", face) if face[2] > MAX_OVERLAY_FACE else None
+
+
+def moment_facecam(src, info: MediaInfo, start: float, end: float, layout: str, facecam,
+                   deadline: Deadline | None = None) -> tuple[str, object]:
+    """The (layout, facecam) render_clip draws one moment of an auto-layout job with: the job's own, unless the
+    moment shows something else (moment_scene). A moment with the camera hidden fills the frame with gameplay; one
+    where the person fills the frame is framed on them."""
+    try:
+        scene = moment_scene(sample_gray(src, info, MOMENT_SAMPLES, deadline, span=(start, end)), facecam)
+    except PipelineTimeout:
+        raise
+    except Exception:
+        log.exception("moment scene check failed; keeping the video's layout")
+        return layout, facecam
+    if scene is None:
+        return layout, facecam
+    kind, face = scene
+    return ("fill", None) if kind == "gameplay" else ("fill", CamBox(face_crop(face), face, "camera"))
 
 
 def resolve_facecam(src, info: MediaInfo, options, deadline: Deadline | None = None) -> tuple[str, object]:

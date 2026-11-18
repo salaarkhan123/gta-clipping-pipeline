@@ -38,7 +38,7 @@ def test_every_listed_value_is_accepted_and_others_are_not():
     listed = set(opts["layout"]["values"])
     assert listed == {x for layouts in opts["layout"]["by_aspect"].values() for x in layouts}
     named = set(ClipOptions.model_json_schema()["properties"]["layout"]["enum"])
-    assert listed < named                                                    # some layouts are named but not built yet
+    assert listed <= named                                                   # every named layout is built (trio, grid4, ots: provisional)
     for refused in named - listed:
         for aspect in opts["aspect"]["values"]:
             try:

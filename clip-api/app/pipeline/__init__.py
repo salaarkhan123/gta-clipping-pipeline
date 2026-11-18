@@ -32,7 +32,7 @@ import numpy as np
 from .ff import SAFE_IN, Deadline, PipelineError, PipelineTimeout, probe, run  # noqa: F401 (re-exported)
 from .render import CHAT_REGIONS, FACECAM_REGIONS, render_clip, render_thumb, resolve_layout
 from .censor import mask, mask_words
-from .facecam import resolve_facecam
+from .facecam import moment_facecam, resolve_facecam
 from .timing import Timer
 from .stt import SourceAudio, slice_wav
 from .heard import Heard, model_of
@@ -100,6 +100,12 @@ class PipelineOptions:
     source_lang: str | None = None        # spoken language (a code of app/languages.py). None: the transcribers' own
     target_lang: str | None = None        # language of titles and translated subtitles (recorded, not interpreted here)
     caption_display: str = "original"     # original | translation | both (recorded: burned captions are the original)
+    # (render, agent B)
+    render: str = "full"                  # full | preview (fast and small) | none (no video: times, copy, thumbnail)
+    hook_style: str = "serious"           # the tone the judge writes the hook in (render_options.HookStyle)
+    hook_position: str = "beginning"      # beginning | end: where the burned hook shows
+    hook_duration_ms: int | None = None   # how long it shows; None = 2.5 s
+    moment_layout: bool = False           # auto: draw each moment for what it shows (PROVISIONAL; off: one layout)
 
 
 @dataclass
@@ -109,7 +115,7 @@ class ClipResult:
     score: float
     signals: dict                 # share of the score from each signal (user-facing "why this clip")
     features: dict                # raw features (training data for the future ranker)
-    video_path: Path
+    video_path: Path | None       # None: rendered with render "none" (no video yet)
     thumb_path: Path | None = None
     captions_path: Path | None = None
     meta: dict | None = None      # the judge's title, hashtags and virality for this clip
@@ -181,6 +187,12 @@ def _with_prompt(judge: Judge, prompt: str) -> Judge:
     return lambda text, frame, context: judge(text, frame, {**context, "prompt": prompt})
 
 
+def _with_hook_style(judge: Judge, style: str) -> Judge:
+    """(render, agent B) The same judge, asked to write the on-screen hook in `style` (render_options.HookStyle).
+    "serious" is the judge's own tone and is never passed, so a request without the option is what it was."""
+    return lambda text, frame, context: judge(text, frame, {**context, "hook_style": style})
+
+
 def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                  progress_cb: Callable[[str, int], None] | None = None,
                  transcriber: Transcriber | None = None,
@@ -208,6 +220,8 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         raise PipelineError("bad_options", "Unknown chat_region.")
     if judge is not None and options.prompt:
         judge = _with_prompt(judge, options.prompt)
+    if judge is not None and options.hook_style != "serious":     # (render, agent B) the hook's tone
+        judge = _with_hook_style(judge, options.hook_style)
     # (languages, agent F) Speech in another language than the transcribers' own goes to their multilingual
     # counterparts. English, or no language given, changes nothing.
     transcriber = in_language(transcriber, options.source_lang)
@@ -400,27 +414,39 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
             hook = " ".join(mask(w) for w in hook.split())
         c.features["edit"] = {"segments": segments, "flash_forward": flash, "zoom_at": zooms, "hook": hook,
                               "removed_sec": round((c.end - c.start) - kept_duration(body), 2)}
-        video = out_dir / f"clip-{i}.mp4"
-        t0 = time.monotonic()
-        with timer.stage("render"):
-            render_clip(input_path, c.start, c.end, video, src_w=info.width, src_h=info.height,
-                        vertical=options.vertical, zoom=options.zoom, chat=options.chat_region,
-                        words=words, font=options.caption_font, layout=layout, facecam=facecam,
-                        style=options.caption_style, aspect=options.aspect, max_side=options.max_side,
-                        deadline=deadline, segments=segments, punch=zoom_expr(zooms), has_audio=info.has_audio,
-                        hook=hook, flash=flash, resolution=options.resolution, position=options.caption_position,
-                        accent=options.caption_accent, camera=options.camera, split_ratio=options.split_ratio)
-        c.features["edit"]["render_sec"] = round(time.monotonic() - t0, 2)
-        timer.count("clips")
-        timer.count("rendered_sec", round(kept_duration(segments), 1))
+        # (render, agent B) render "none" stores no video (POST /v1/clips/export makes one later), "preview" a
+        # fast small one. With moment_layout on, auto draws each moment for what it shows (facecam.moment_facecam).
+        video = out_dir / f"clip-{i}.mp4" if options.render != "none" else None
         thumb = out_dir / f"clip-{i}.jpg"
-        try:
+        timer.count("clips")
+        if video is None:
             with timer.stage("thumbnail"):
-                render_thumb(video, thumb, deadline)
-        except PipelineTimeout:
-            raise
-        except PipelineError:
-            thumb = None
+                thumb = _frame(input_path, (c.peak if c.peak is not None else c.start + 1.0), thumb, deadline)
+        else:
+            lay, cam = layout, facecam
+            if options.moment_layout and options.layout == "auto" and options.vertical and layout != "classic":
+                with timer.stage("moment_scene"):
+                    lay, cam = moment_facecam(input_path, info, c.start, c.end, layout, facecam, deadline)
+            t0 = time.monotonic()
+            with timer.stage("render"):
+                render_clip(input_path, c.start, c.end, video, src_w=info.width, src_h=info.height,
+                            vertical=options.vertical, zoom=options.zoom, chat=options.chat_region,
+                            words=words, font=options.caption_font, layout=lay, facecam=cam,
+                            style=options.caption_style, aspect=options.aspect, max_side=options.max_side,
+                            deadline=deadline, segments=segments, punch=zoom_expr(zooms), has_audio=info.has_audio,
+                            hook=hook, flash=flash, resolution=options.resolution, position=options.caption_position,
+                            accent=options.caption_accent, camera=options.camera, split_ratio=options.split_ratio,
+                            preview=options.render == "preview", hook_position=options.hook_position,
+                            hook_ms=options.hook_duration_ms)
+            c.features["edit"]["render_sec"] = round(time.monotonic() - t0, 2)
+            timer.count("rendered_sec", round(kept_duration(segments), 1))
+            try:
+                with timer.stage("thumbnail"):
+                    render_thumb(video, thumb, deadline)
+            except PipelineTimeout:
+                raise
+            except PipelineError:
+                thumb = None
         caps = None
         if words:
             caps = out_dir / f"clip-{i}.captions.json"
