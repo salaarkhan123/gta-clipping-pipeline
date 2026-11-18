@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { nameOf, numbering } from "@/components/dash/ClipCard";
 import { Editor } from "@/components/dash/Editor";
+import { ThumbnailPanel } from "@/components/dash/PremiumThumbs";
 import { useDash } from "@/components/dash/Shell";
 import { api, ApiError } from "@/lib/api";
 import { useClipOptions } from "@/lib/options";
@@ -36,6 +37,7 @@ export default function EditPage() {
       <h1 className="dash-title">Edit {name}</h1>
       <Editor project={project} clip={clip} job={job} listed={listed} known={known} number={numbers.get(clip.id)}
         onClip={(c) => setProject((p: any) => ({ ...p, clips: p.clips.map((x: any) => (x.id === c.id ? c : x)) }))} />
+      <ThumbnailPanel clip={clip} />
     </>
   );
 }
