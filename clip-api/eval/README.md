@@ -18,12 +18,18 @@ selection PR (understanding track U1 to U5) reports precision@20, precision@40 a
 | `gta-rp-1` | `gta-rp` | **owner to supply** | **yes** |
 | `<game>-1`, e.g. `valorant-1` | e.g. `valorant` | **owner to supply** | no |
 
-The held-out video is never tuned against: PRs report its numbers, but the people and agents changing the picker
-do not look at which of its clips hit or missed (`eval_clips.py` hides them unless `--show-held-out`). It is the
-GTA RP video because no tuning has seen it yet and RP is the core audience. The benchmark video cannot be held out:
-earlier work was measured on it.
+**The held-out video.** Nobody tunes thresholds, prompts, weights or anything else against `gta-rp-1`. PRs report
+its numbers, but the people and agents changing the picker do not look at which of its clips hit or missed:
+`eval_clips.py` prints only its totals unless `--show-held-out` is given, and that flag is for the final check of a
+change, not for tuning. A comparison against another tool on it (below) is reported too, and is not used to tune
+either. It is the GTA RP video because no tuning has seen it yet and RP is the core audience. The benchmark video
+cannot be held out: earlier work was measured on it.
 
 ## Owner: what to do (about 1.5 hours, most of it watching)
+
+The sheet gets moments from two places: our picker's best 30 per video (you rate them), and the moments you find
+yourself by skimming the rest of the video (step 5). Step 5 is the only check on what our picker misses, so do not
+skip it.
 
 ### 1. Pick two videos (10 minutes)
 
@@ -46,12 +52,12 @@ Use streams you own or have permission to clip. Public, non-DRM only.
   valorant-1.mp4     (name it after its game)
 ```
 
-Never put videos in the repo. An agent can do steps 3 and 5 for you once the files are there.
+Never put videos in the repo. An agent can do steps 3 and 6 for you once the files are there.
 
 ### 3. Fill the sheet with moments to rate (2 minutes, can be done by an agent)
 
-Run in `clip-api/` for each new video. `select` runs our moment picker on the file (no AI, no rendering, nothing
-uploaded, under a minute) and `add` puts its 30 best moments in the sheet as rows to rate:
+Run in `clip-api/`. `select` runs our moment picker on the file (no AI, no rendering, nothing uploaded, seconds)
+and `add` puts its 30 best moments in the sheet as rows to rate:
 
 ```bash
 python scripts/label_moments.py select ~/ClutchClips-eval/gta-rp-1.mp4 eval/runs/gta-rp-1.staging.json
@@ -62,16 +68,15 @@ python scripts/label_moments.py add eval/labels-v2.csv --vod valorant-1 --game v
     --job eval/runs/valorant-1.staging.json
 ```
 
-`gta-online-1` is already in the sheet (30 rows). Optional: if you also run a video as a normal ClutchClips job
-(with the AI judge), save its result (`curl -s $API/v1/jobs/<job_id> -H "authorization: Bearer $KEY" > job.json`)
-and `add --job job.json` it too. Only moments the sheet does not have yet are added.
+`gta-online-1` is already in the sheet (30 rows).
 
-### 4. Rate in the labeller (about 25 minutes per video)
+### 4. Rate the moments (about 20 minutes per video)
 
 1. Open `clip-api/eval/labeller.html` in Chrome.
 2. **Open sheet**: `clip-api/eval/labels-v2.csv`. **Open video**: the matching file from `~/ClutchClips-eval/`
    (named after its id, it selects its rows by itself).
-3. Each row plays from its start and pauses at its end. Rate it with a key, and it moves to the next row:
+3. Rows are listed in time order. The page does not say where a row came from: judge the moment, not the source.
+   Each row plays from its start and pauses at its end. Rate it with a key, and it moves to the next row:
 
    | Key | Rating | Means |
    |---|---|---|
@@ -81,16 +86,25 @@ and `add --job job.json` it too. Only moments the sheet does not have yet are ad
 
    Watch at 1.5x (`.` and `,` change speed). If the moment starts or ends in the wrong place, stop there and press
    `[` or `]` to move the row's start or end to the playhead. A row you are unsure about: rate it 2.
-4. **Then hunt for missed moments, 10 minutes.** The bar under the video shows the rows; the gaps are what our picker
-   did not offer. Skip through the gaps with `Shift` + `→` (30 s). For a moment worth posting: `I` at its start,
-   `O` at its end, `N` to add it, then rate it. These rows count most: they are what the picker should have found.
-5. **Save** (`Cmd+S`) writes straight back to the sheet. If Chrome asks, allow it to edit the file. If it downloads a
-   copy instead, move that over `clip-api/eval/labels-v2.csv`. Unsaved ratings survive a closed tab in the same
-   browser.
 
-If a video does not play, remux it (fast, no quality loss): `ffmpeg -i in.mkv -c copy out.mp4`.
+### 5. Hunt for the moments our picker missed (10 minutes per video, do not skip)
 
-### 5. Check and hand back (2 minutes)
+This is what measures recall: a great moment nobody offered you is invisible to every score unless you add it here.
+
+1. Look at the bar under the video. The coloured blocks are the rows you just rated; **the gaps are the parts our
+   picker passed over.**
+2. Click into a gap and skip through it with `Shift` + `→` (30 s at a time). Listen for shouting, laughter, a
+   crash, a fight, a sudden silence.
+3. For a moment worth posting: `I` at its start, `O` at its end, `N` to add it. Rate it like the others (a 3 needs
+   a reason). `Delete` removes a moment you added by mistake.
+4. Aim for at least 3 added moments per video, more if the stream is busy. Finding none in 10 minutes is a result
+   too: carry on to the next video.
+
+### 6. Save, check and hand back (2 minutes)
+
+**Save** (`Cmd+S`) writes straight back to the sheet. If Chrome asks, allow it to edit the file. If it downloads a
+copy instead, move that over `clip-api/eval/labels-v2.csv`. Unsaved ratings survive a closed tab in the same
+browser. If a video does not play, remux it (fast, no quality loss): `ffmpeg -i in.mkv -c copy out.mp4`.
 
 ```bash
 python scripts/eval_clips.py eval/labels-v2.csv
@@ -103,9 +117,9 @@ It lists each video's progress and any row it cannot accept, with its line numbe
 
 | Step | Per video | All three |
 |---|---|---|
-| Rate 30 moments of about 45 s at 1.5x, with reasons for the 3s | 15 to 20 min | 50 min |
+| Rate our 30 moments of about 45 s at 1.5x, with reasons for the 3s | 15 to 20 min | 55 min |
 | Hunt the gaps for missed moments | 10 min | 30 min |
-| Pick the videos, run the commands, check | | 15 min |
+| Pick the videos, run the commands, check | | 10 min |
 | **Total** | | **about 1.5 hours** |
 
 ## Scoring a run (PRs)
@@ -116,43 +130,87 @@ Make a run per video (`label_moments.py select`, or a real job's JSON), then:
 python scripts/eval_clips.py eval/labels-v2.csv gta-online-1=run-online.json gta-rp-1=run-rp.json valorant-1=run-val.json
 ```
 
-The first lines look like this (example numbers), followed by one line per video and its clips:
+It prints one table: a line per `@k` for the tuning videos, the held-out video, all of them, then each video; after
+it, each tuning video's clips (hit, miss, repeat or unrated) and the 3s nobody found. Put the `tuning` and
+`held_out` lines from before and after the change in the PR. `--json` gives everything.
 
-```
-tuning (2 vods): precision@20 45% · precision@40 30% · recall 70% (7 of 10 3s) · unrated@20 3 · unrated@40 9
-held_out (1 vod): precision@20 40% · precision@40 28% · recall 60% (3 of 5 3s) · unrated@20 2 · unrated@40 6
-```
+Among a run's k best clips (k = 20, 40), each clip is one of:
 
-Put the `tuning` and `held_out` lines from before and after the change in the PR. `--json` gives everything.
-
-| Metric | Meaning |
+| Clip | Meaning |
 |---|---|
-| precision@k | hits among the run's k best clips, divided by k (so a run with fewer than k clips cannot score 100%) |
-| hit | a clip on a moment rated 2 or 3, when no better-ranked clip of the run is on the same moment |
-| recall | share of the 3-rated moments some clip of the run is on |
-| unrated@k | clips among the k best on no rated moment: rate them before trusting the numbers (below) |
-| pooled lines | hits and moments added up over the videos; each video weighs the same in precision@k |
+| hit | on a moment rated 2 or 3 that no better-ranked clip of the run is on |
+| miss | on a moment rated 1 |
+| repeat | on a rated moment a better-ranked clip of the run is already on |
+| unrated | on no rated moment. **Not a miss**: nobody has judged it yet |
+
+| Number | Meaning |
+|---|---|
+| precision of rated | hits / (clips that landed on a rated moment) |
+| range | hits / clips (unrated counted as misses) to (hits + unrated) / clips (unrated counted as hits) |
+| unrated | how wide the range is: rate them before trusting a small difference (below) |
+| fewer than k clips | when a run returned n < k clips: flagged, and the strict range over k (hits / k to (hits + unrated) / k) is printed next to the range over the n it returned |
+| recall of 3s | share of the 3-rated moments some clip of the run is on (all of its clips) |
+
+Precision is never printed as one number that counts unrated clips as bad. Pooled lines add up the counts over
+videos, so each video weighs the same.
 
 **Matching rule.** A clip is on the rated moment of its own video that it overlaps most, if the overlap is at least
 10 s (a third of the clip, for clips under 30 s). On equal overlap the higher rating wins. A clip is on one moment at
 most; unrated rows take no part. Ranking: the clips' `rank`, else `score`, else the order listed.
 
-**When unrated@k is high.** A new picker finds moments nobody rated yet. Add them and rate them, then score both runs
-again: `label_moments.py add ... --job new-run.json` (only uncovered moments are added). Rating a moment is about the
-video, not about the run, so this is fine on the held-out video too.
+**When unrated is high.** A new picker finds moments nobody rated yet. Add them and rate them (blind, in the
+labeller), then score both runs again: `label_moments.py add ... --job new-run.json` adds only moments the sheet does
+not cover. Rating a moment is about the video, not about the run, so this is fine on the held-out video too.
 
 **Sheet rules** (`eval_clips.py` refuses a sheet that breaks them): columns `id, vod, game, start, end, rating,
 reason, held_out, source`; `vod` and `game` short ids (a-z, 0-9, dashes); times `h:mm:ss`; 5 to 300 s long;
 `rating` 1, 2, 3 or empty (not rated yet); `reason` under 80 characters and required for a 3; `held_out` yes or no;
 one `game` and one `held_out` per video; unique ids; two rated rows of one video may not overlap by more than half
-(the same moment rated twice).
+(the same moment rated twice). `source` records which runs offered a row (`clutchclips:<run>#<rank>`, joined with
+`+` when several did, `owner` for one you added); it stays in the CSV and the labeller never shows it.
+
+## Later: head-to-head against Wayin (optional, not part of the steps above)
+
+Once the engine is tuned, the same sheet can score Wayin's clips next to ours. This needs paid Wayin exports, so it
+waits for the owner's go-ahead.
+
+1. Run each of the three videos through Wayin's game clipping with its default settings. Download every clip into
+   `~/ClutchClips-eval/wayin/<vod-id>/`, numbered in Wayin's order (`01_...mp4`, `02_...mp4`). If the names cannot
+   carry the order, write a CSV with a header `filename,rank` (or `filename,score`) instead.
+2. Place the clips in their source video by audio:
+
+   ```bash
+   python scripts/label_moments.py wayin ~/ClutchClips-eval/gta-rp-1.mp4 ~/ClutchClips-eval/wayin/gta-rp-1 \
+       eval/runs/gta-rp-1.wayin.json            # add --ranks ranks.csv when the files are not numbered
+   ```
+
+   The start and the end of each clip are found separately (Wayin trims dead air, so one clip can be several
+   pieces of the source); it prints each clip's source span and how confident each end is. Matches under 0.85
+   confidence, ambiguous ones, or ends that do not make one moment are refused and listed, never guessed. Checked on
+   real recordings: pieces cut from a 78-minute stream and re-encoded (one with 15 s cut out of the middle, one 6 dB
+   louder) came back at their exact spans with confidence 0.97 to 1.00; a piece of another video was refused.
+3. Add Wayin's moments the sheet does not cover yet, and rate them blind in the labeller like the rest (all of
+   Wayin's clips are added, not just 30; ones that cover an existing row only add `wayin:...` to its `source`):
+
+   ```bash
+   python scripts/label_moments.py add eval/labels-v2.csv --vod gta-rp-1 --game gta-rp --held-out yes \
+       --job eval/runs/gta-rp-1.wayin.json
+   ```
+
+4. Score both systems on the same sheet; the table puts ClutchClips and Wayin side by side per video and pooled:
+
+   ```bash
+   python scripts/eval_clips.py eval/labels-v2.csv gta-online-1=ours-online.json gta-online-1=eval/runs/gta-online-1.wayin.json ...
+   ```
+
+   The comparison on the held-out video is reported, and is not used to tune.
 
 ## Eval set v1
 
-One video per sheet, labels 0 to 3, scored against one job:
+One video per sheet, labels 0 to 3, scored against one run:
 
 ```bash
-python scripts/eval_clips.py eval/benchmark-2h-labels.csv job.json
+python scripts/eval_clips.py eval/benchmark-2h-labels.csv run.json
 ```
 
 - `benchmark-2h-labels.csv`: 46 candidate moments of the benchmark video from the audio signal
@@ -168,7 +226,7 @@ python scripts/eval_clips.py eval/benchmark-2h-labels.csv job.json
 | unlabelled | clips on no labelled row (the sheet missed them: label them and re-run) |
 | duplicate pairs | two clips on the same moment or less than 60 s apart |
 | per quarter | clips in each quarter of the video |
-| precision@20, @40 | as in v2 |
+| @20, @40 | hits, misses, repeats, unrated and the precision range, as in v2 |
 
 v1 labels: **3** would post as-is · **2** good (a trim away) · **1** weak · **0** nothing / junk. Rows you leave
 unlabelled are ignored. `python scripts/make_label_sheet.py <video> <out.csv>` writes a new v1 sheet.
