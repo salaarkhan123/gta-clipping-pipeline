@@ -16,9 +16,15 @@ export type MediaItem = {
   width: number; height: number;
   duration_sec?: number;
   rating?: number;          // AI rating shown on a clip card (0 to 100), when the item is a finished clip
+  rating_source?: "signals" | "ai";
+  rank?: number;
   game?: string;
+  credit?: string;          // e.g. "Footage: <creator>". Shown wherever the footage is shown.
+  words?: string;           // path to a word-timings JSON (captions and editor demos)
+  source?: { creator: string; url: string; start_sec?: number; end_sec?: number };
 };
-export type MediaManifest = { section: MediaSection; version: number; items: MediaItem[] };
+export type MediaManifest = { section: MediaSection; version: number; items: MediaItem[];
+  permission?: string; credits?: { creator: string; url: string }[] };
 
 const asked: Partial<Record<MediaSection, Promise<MediaManifest | null>>> = {};
 export function loadMedia(section: MediaSection): Promise<MediaManifest | null> {
