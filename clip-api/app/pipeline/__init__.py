@@ -42,7 +42,8 @@ from .timing import Timer
 from .stt import SourceAudio, slice_wav
 from .heard import Heard, model_of
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
-from .transcribe import Transcriber, Transcript, exclamation_hits, extract_wav, in_language, snap_to_speech
+from .transcribe import (Transcriber, Transcript, exclamation_hits, extract_wav, in_language, snap_to_sentences,
+                         snap_to_speech)
 from .edit import FLASH_LEN, KEEP_PAUSE, MAX_REMOVED, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, select_cuts, with_flash_forward, zoom_expr, zoom_peaks
 from .moments import BUCKETS, MAX_CLIPS, NOMINAL, Moment
 from .llm_pass import PASS_BUDGET_SEC, PassResult, Proposal, Proposer, mix, run_pass
@@ -52,8 +53,8 @@ from .windows import fits, pick_spread, pick_windows
 WEIGHTS = {"chat_motion": 1.0, "audio": 0.7}   # hand-set; the learned ranker replaces these later
 TRANSCRIPT_BONUS = 0.15                        # max re-rank bonus from exclamation phrases
 PAD = 4.0                                      # seconds of audio transcribed either side of a candidate
-JUDGE_PAD = 8.0                                # ... when a judge chooses the cut: room to grow a 30 s window to 45 s
-JUDGE_MIN_LEN, JUDGE_MAX_LEN = 15.0, 45.0      # the clip lengths a judge may choose
+JUDGE_PAD = 15.0                               # ... when a judge chooses the cut: room to grow a 30 s window to 60 s
+JUDGE_MIN_LEN, JUDGE_MAX_LEN = 15.0, 60.0      # the clip lengths a judge may choose (U4: story cuts up to 60 s)
 MIN_CLIP = 10.0
 MIN_RELATIVE_SCORE = 0.2                      # candidates below 20% of the best window are dropped
 MAX_CANDIDATES = 30                           # how many moments the judge may look at per video, for up to 10 clips
@@ -62,6 +63,10 @@ SILENT_DB = -90.0                             # the level given to seconds outsi
 JUDGE_WEIGHT = 0.75                           # final rank = 0.75 * judge score + 0.25 * signal strength
 JUDGE_FLOOR = 20                              # judge scores below this are junk (menus, intro cards, dead air)
 JUDGE_THREADS = 4
+LONG_VIDEO_SEC = 3600.0                       # (U4) an analysed part this long is a long video: it aims at 30-50 clips
+LONG_MIN_CLIPS = 30                           # ... when every moment is asked for: at least this many when it has them
+FILL_FLOOR = 15                               # ... topping up from below JUDGE_FLOOR, never below this (menus, ads)
+PEAKS = 3                                     # per signal, the strongest seconds the judge is told about
 
 # judge(transcript_text, frame_path, context) -> {"virality": {"score": 0-100, ...}, ...} or None
 Judge = Callable[[str, Path | None, dict], dict | None]
@@ -363,9 +368,11 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     else:
         # A flash-forward adds FLASH_LEN to the rendered clip: the judge's cut leaves room for it in the bucket.
         cut_limits = (limits[0], limits[1] - (FLASH_LEN if options.flash_forward else 0.0)) if limits else None
+        every = options.duration is not None and options.limit is None
         ranked = _judge(candidates, judge, input_path, out_dir, progress, deadline, t1, options.judge_focus,
-                        timer, limits=cut_limits, floor=t0,
-                        every=options.duration is not None and options.limit is None)
+                        timer, limits=cut_limits, floor=t0, every=every,
+                        fill=LONG_MIN_CLIPS if every and t1 - t0 >= LONG_VIDEO_SEC else 0,
+                        timeline=lambda c: _timeline(series, c.offset, c.end + JUDGE_PAD, base))
     # Without the new options this is max_clips over the whole video, as before. A long list is spread by how
     # many moments there really are, and "same topic" only counts between clips near each other (variety.py).
     many = limits is not None or options.limit is not None
@@ -562,9 +569,36 @@ def pool_size(want: int, judged: bool, with_transcript: bool) -> int:
 
 
 def _snap(c: _Candidate, duration: float, limits: tuple[float, float] | None = None, floor: float = 0.0) -> None:
-    segs = [(s + c.offset, e + c.offset, t) for s, e, t in c.transcript.segments]
+    """(U4) Both edges on whole sentences when the transcript has word timings; otherwise on the nearest
+    transcript segment edge, as before."""
     min_len, max_len = limits or (MIN_CLIP, 60.0)
-    c.start, c.end = snap_to_speech(c.start, c.end, segs, lo=floor, hi=duration, min_len=min_len, max_len=max_len)
+    words = [(s + c.offset, e + c.offset, w) for s, e, w in c.transcript.words]
+    snapped = snap_to_sentences(c.start, c.end, words, lo=floor, hi=duration, min_len=min_len, max_len=max_len)
+    if snapped is None:
+        segs = [(s + c.offset, e + c.offset, t) for s, e, t in c.transcript.segments]
+        snapped = snap_to_speech(c.start, c.end, segs, lo=floor, hi=duration, min_len=min_len, max_len=max_len)
+    c.start, c.end = snapped
+
+
+def _timeline(series: dict[str, np.ndarray], start: float, end: float, base: int) -> dict:
+    """(U4) The signal timeline the judge reads: for each per-second signal, its PEAKS strongest seconds in
+    [start, end] (at least 3 s apart), as (seconds from `start`, strength 0-1 against the signal's own peak in the
+    video). Today's signals are loudness and chat motion; the U2 timeline adds its signals to `series`."""
+    out = {}
+    for name, vals in series.items():
+        a, b = max(0, int(start) - base), min(len(vals), int(math.ceil(end)) - base)
+        top = float(np.max(vals)) if len(vals) else 0.0
+        if b <= a or top <= 0:
+            continue
+        peaks: list[int] = []
+        for i in sorted(range(a, b), key=lambda i: -vals[i]):
+            if vals[i] <= 0 or len(peaks) == PEAKS:
+                break
+            if all(abs(i - j) >= 3 for j in peaks):
+                peaks.append(i)
+        if peaks:
+            out[name] = [(round(i + base - start, 1), round(min(1.0, float(vals[i]) / top), 2)) for i in sorted(peaks)]
+    return out
 
 
 def _fit(c: _Candidate, limits: tuple[float, float], floor: float, ceiling: float) -> None:
@@ -631,11 +665,14 @@ def _apply_trim(c: _Candidate, trim: dict | None, duration: float,
 
 def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path, progress, deadline,
            duration: float = float("inf"), focus: str | None = None, timer: Timer | None = None,
-           limits: tuple[float, float] | None = None, floor: float = 0.0, every: bool = False) -> list[_Candidate]:
+           limits: tuple[float, float] | None = None, floor: float = 0.0, every: bool = False, fill: int = 0,
+           timeline=None) -> list[_Candidate]:
     """Rate every candidate, drop the junk, and return them best first. The judge may also choose each clip's cut:
-    15-45 s, or inside `limits` (told to the judge as `cut_range`, whole seconds).
+    15-60 s, or inside `limits` (told to the judge as `cut_range`, whole seconds).
     `every`: the caller returns all of them, not a top N, so only moments the judge rated at or above its floor
-    count; moments it failed to rate are used only when it rated none at all."""
+    count; moments it failed to rate are used only when it rated none at all. `fill` (a long video): when fewer
+    than `fill` pass the floor, the best of the rest rated at least FILL_FLOOR top it up to `fill`.
+    `timeline(c)`: the signal peaks inside the candidate's transcript, sent to the judge (see _timeline)."""
     timer = timer or Timer()
     progress("judging", 60)
     with timer.stage("judge_frames"):
@@ -649,6 +686,7 @@ def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path,
                                        "lines": [(round(s, 1), t) for s, _e, t in c.transcript.segments],
                                        "window": (round(c.start - c.offset, 1), round(c.end - c.offset, 1)),
                                        **({"cut_range": (math.ceil(limits[0]), math.floor(limits[1]))} if limits else {}),
+                                       **({"timeline": timeline(c)} if timeline is not None else {}),
                                        **({"focus": focus} if focus else {})})
 
     with timer.stage("judge_ai"), ThreadPoolExecutor(JUDGE_THREADS) as pool:
@@ -675,6 +713,8 @@ def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path,
     junk = [c for c in rated if c.features["judge_score"] < JUDGE_FLOOR]
     # If the judge failed for some, rank them by signals after the good ones; junk only fills an otherwise empty result.
     unrated.sort(key=lambda c: c.final, reverse=True)
+    if every and len(keep) < fill:          # a long video short of moments: the best of the weaker ones, not junk
+        keep += [c for c in junk if c.features["judge_score"] >= FILL_FLOOR][:fill - len(keep)]
     out = (keep if rated else unrated) if every else keep + unrated
     return out if out else junk[:1]
 

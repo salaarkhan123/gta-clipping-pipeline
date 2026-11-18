@@ -22,10 +22,12 @@ from .pipeline.moments import KINDS, kind_of
 
 log = logging.getLogger("clipapi.ai")
 API_URL = "https://api.anthropic.com/v1/messages"
-PARTS = ("hook", "flow", "value", "trend")
+# (U4) Judge v2: five sub-scores, each 0-100; the clip's score is their plain mean until U5 calibrates the weights.
+SCORES = ("hook", "payoff", "clarity", "emotion", "pacing")
+PARTS = ("hook", "flow", "value", "trend")         # judge v1's four, still read from a reply in the older shape
 MAX_TOKENS = 1024
-CUT_RULE = "the best {lo} to {hi} second clip"      # the clip lengths the judge may cut; 15 to 45 unless a bucket is set
-TRANSCRIPT_CHARS = 2500                             # timed transcript sent to the judge, at least
+CUT_RULE = "the best {lo} to {hi} second clip"      # the clip lengths the judge may cut; 15 to 60 unless a bucket is set
+TRANSCRIPT_CHARS = 3200                             # timed transcript sent to the judge, at least (a 60 s cut + room)
 CHARS_PER_SEC = 25                                  # ... and this much per second of the longest clip it may cut
 
 SYSTEM = (
@@ -40,9 +42,12 @@ SYSTEM = (
     "promise anything the clip does not show: a title that misdescribes the clip is worse than a plain one.\n\n"
     "HOOK. One line of on-screen text, 6 words at most, shown over the first seconds of the clip. It tells a "
     "viewer why to keep watching and must be true to the clip. No hashtags, no emoji, no full stop.\n\n"
-    "RATING. virality has four parts, each 0-100: hook = how strongly the first 3 seconds grab attention; flow = "
-    "pacing and whether it stands alone without context; value = how funny, impressive or surprising the moment "
-    "is; trend = fit with what gaming audiences share. Be strict: an average clip scores around 50. Base "
+    "RATING. virality has five parts, each 0-100, for the clip as you cut it: hook = how strongly the first 3 "
+    "seconds make a scrolling viewer stop; payoff = whether the clip lands what it sets up (the punchline, the "
+    "outcome, the reaction) before it ends; clarity = whether a viewer who never saw the stream understands what "
+    "is happening without any context; emotion = how strong the feeling is (laughter, rage, hype, shock, "
+    "tension); pacing = whether it keeps moving, with no dead air, no slow build-up and nothing after the payoff. "
+    "Be strict: an average clip scores around 50 on each. Base "
     "everything only on the transcript, the frame and the signals given. Do not invent events, names or games "
     "that are not evident; if the game is not clearly GTA, write for the game you see. If the frame or transcript "
     "shows a menu, loading screen, channel branding or intro card, ad, AFK or dead air rather than a real moment, "
@@ -56,8 +61,10 @@ SYSTEM = (
     "clip), clutch (a skilled play, a narrow win or a last-second escape), fail (a mistake, a death, a crash or "
     "a glitch going wrong), story (a scene or a conversation worth watching for what happens or what is told).\n\n"
     "CUT. When the transcript lines carry time marks like [12.4], also choose the cut, in seconds on those marks: "
-    "cut.start and cut.end are " + CUT_RULE.format(lo=15, hi=45) + " of this moment. Start right where the action or the "
+    "cut.start and cut.end are " + CUT_RULE.format(lo=15, hi=60) + " of this moment. Start right where the action or the "
     "reaction begins, not on the build-up before it, and end just after the payoff, not on a trailing silence. "
+    "Start and end on whole sentences: never cut into the middle of what someone is saying. A story, an argument "
+    "or a scene may take up to the longest cut to land; a quick reaction, clutch or fail is usually 15 to 30 s. "
     "cut.peak is the second where the most striking 1 to 2 seconds begin (the loudest reaction or the punchline). "
     "Stay within the marks you were given."
 )
@@ -74,7 +81,7 @@ TOOL = {
             "description": {"type": "string", "description": "Max 150 chars."},
             "hashtags": {"type": "array", "items": {"type": "string"}, "description": "3 to 5 tags without #."},
             "virality": {"type": "object", "properties": {k: {"type": "integer", "minimum": 0, "maximum": 100}
-                                                          for k in PARTS}, "required": list(PARTS)},
+                                                          for k in SCORES}, "required": list(SCORES)},
             "reason": {"type": "string",
                        "description": "One sentence, max 200 chars, on why it would or would not perform."},
             "kind": {"type": "string", "enum": list(KINDS), "description": "The one label that fits the moment best."},
@@ -93,7 +100,7 @@ TOOL = {
 
 
 def system_for(cut_range=None) -> str:
-    """The system prompt. `cut_range` (shortest, longest seconds) replaces the 15 to 45 second cut rule when the
+    """The system prompt. `cut_range` (shortest, longest seconds) replaces the 15 to 60 second cut rule when the
     request asked for a clip-length bucket."""
     try:
         lo, hi = (int(x) for x in cut_range)
@@ -101,7 +108,7 @@ def system_for(cut_range=None) -> str:
         return SYSTEM
     if not 0 < lo <= hi:
         return SYSTEM
-    return SYSTEM.replace(CUT_RULE.format(lo=15, hi=45), CUT_RULE.format(lo=lo, hi=hi))
+    return SYSTEM.replace(CUT_RULE.format(lo=15, hi=60), CUT_RULE.format(lo=lo, hi=hi))
 
 
 def _clamp(v, lo=0, hi=100) -> int:
@@ -140,7 +147,8 @@ def parse_meta(text) -> dict | None:
     if not isinstance(raw, dict):
         return None
     v = raw.get("virality") if isinstance(raw.get("virality"), dict) else {}
-    parts = {k: _clamp(v.get(k)) for k in PARTS}
+    v2 = any(k in v for k in SCORES if k not in PARTS)          # judge v2's five, or v1's four in an older reply
+    parts = {k: _clamp(v.get(k)) for k in (SCORES if v2 else PARTS)}
     tags = raw.get("hashtags") if isinstance(raw.get("hashtags"), list) else []
     tags = [re.sub(r"[^A-Za-z0-9_]", "", str(t))[:30] for t in tags]
     given = raw.get("titles") if isinstance(raw.get("titles"), list) else []
@@ -156,7 +164,8 @@ def parse_meta(text) -> dict | None:
     out = {"title": title, "titles": titles, "hook": _hook(raw.get("hook")), "description": str(raw.get("description") or "").strip()[:200],
            "hashtags": [t for t in tags if t][:5],
            "virality": {"score": round(sum(parts.values()) / len(parts)), **parts},
-           "reason": str(raw.get("reason") or "").strip()[:240], "kind": kind_of(raw.get("kind")), "source": "ai"}
+           "reason": str(raw.get("reason") or "").strip()[:240], "kind": kind_of(raw.get("kind")), "source": "ai",
+           **({"scores": dict(parts)} if v2 else {})}
     tip = raw.get("tip")
     if isinstance(tip, dict) and str(tip.get("text") or "").strip():
         action = tip.get("action") if tip.get("action") in ("trim_start", "trim_end") else "none"
@@ -296,6 +305,22 @@ def moments_request(lines, context: dict) -> tuple[str, str]:
     return MOMENTS_SYSTEM.format(lo=int(lo), hi=int(hi)), text
 
 
+def _timeline_text(timeline) -> str:
+    """(U4) The signal timeline inside the window, on the transcript's time marks: per signal, the seconds where it
+    peaks. `timeline` is {signal: [(mark, strength 0-1), ...]} (pipeline._timeline); empty when there is none."""
+    if not isinstance(timeline, dict):
+        return ""
+    rows = []
+    for name, peaks in sorted(timeline.items()):
+        try:
+            marks = ", ".join(f"[{float(t):.1f}] {float(v):.2f}" for t, v in list(peaks)[:5])
+        except (TypeError, ValueError):
+            continue
+        if marks:
+            rows.append(f"{str(name)[:24]}: {marks}")
+    return ("Signal peaks (time mark, strength 0-1):\n" + "\n".join(rows) + "\n") if rows else ""
+
+
 class ClaudeAI:
     def __init__(self, api_key: str, model: str, client: httpx.Client | None = None):
         self.api_key, self.model = api_key, model
@@ -326,7 +351,8 @@ class ClaudeAI:
         content.append({"type": "text", "text": (
             focus +
             f"Clip length: {context.get('length', 0):.0f} s\n"
-            f"Why it was picked (signal shares): {json.dumps(context.get('signals', {}))}\n" + body_text)})
+            f"Why it was picked (signal shares): {json.dumps(context.get('signals', {}))}\n"
+            + _timeline_text(context.get("timeline")) + body_text)})
         # The forced tool call means Haiku 5.5 skips thinking, so max_tokens only has to hold the tool input
         # (~150-300 tokens). 1024 leaves room for a long reason; only the tokens produced are billed.
         body = {"model": self.model, "max_tokens": MAX_TOKENS, "system": system, "tools": [TOOL],

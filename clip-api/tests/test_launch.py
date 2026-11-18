@@ -165,13 +165,14 @@ class FakeAI:
                 "virality": {"score": 81, "hook": 90, "flow": 70, "value": 85, "trend": 79}, "reason": "r", "source": "ai"}
 
 
-def test_clips_get_ai_titles_scores_and_subtitles(client, user, video, transcriber):
+def test_clips_get_ai_titles_scores_and_subtitles(client, user, video):
     headers, _ = user
     up = upload(client, headers, video)
     r = client.post("/v1/clips", json={"upload_id": up["upload_id"], "options": {"max_clips": 1, "clip_length": 10}},
                     headers=headers)
     ai = FakeAI()
-    assert worker.run_once(transcriber, ai=ai) == "SUCCEEDED"
+    from tests.test_punchier_clips import Talker      # speech all through the excerpt: the judge's window is wider now
+    assert worker.run_once(Talker(), ai=ai) == "SUCCEEDED"
     clip = client.get(f"/v1/jobs/{r.json()['job_id']}", headers=headers).json()["clips"][0]
     assert clip["title"] == "Big moment" and clip["virality"]["score"] == 81 and clip["hashtags"] == ["gta6"]
     assert ai.calls[0][0] and ai.calls[0][2] is not None                    # got the clip's words and a frame

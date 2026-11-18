@@ -142,7 +142,7 @@ def test_a_judge_cut_outside_the_bucket_is_rejected(long, tmp_path, no_render, c
         assert length_ms(clip) + 1500 > 60000
     else:
         assert "nominated" not in clip.features, why
-        assert abs(length_ms(clip) - 45000) <= 1000                          # the nominated window is kept
+        assert abs(length_ms(clip) - 45000) <= 3000                          # the nominated window, on whole sentences
     assert inside(clip, "30-60", rendered=False)
 
 
@@ -383,4 +383,4 @@ def test_without_the_new_options_the_pipeline_asks_for_exactly_what_it_did_befor
         ("pick_windows", (20, 4, duration), {}),             # twice as many with a transcript
         ("pick_spread", (20, 7, duration), {})]              # five spare for the judge
     assert all(k == {} and len(a) == 1 for n, a, k in calls if n == "audio_rms_db")          # the whole file, no seek
-    assert all(set(c) == {"length", "signals", "lines", "window"} for c in seen)             # no cut_range
+    assert all(set(c) == {"length", "signals", "lines", "window", "timeline"} for c in seen)  # no cut_range

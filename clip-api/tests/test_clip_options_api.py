@@ -22,7 +22,7 @@ BEFORE = {"id", "job_id", "index", "start_sec", "end_sec", "tier", "score", "sig
           "title", "description", "hashtags", "virality", "reason", "titles", "hook", "hook_on_screen", "suggestion",
           "video_url", "thumb_url", "captions_url", "rank", "rank_of"}       # every clip field before this change
 NEW = {"start_ms", "end_ms", "virality_score", "kind", "why", "rank_index", "timeline_index",
-       "display_score"}                                                      # display_score: the calibrated score (app/scoring.py)
+       "display_score", "scores"}     # display_score: the calibrated score (app/scoring.py); scores: judge v2 (U4)
 GOOD = {"titles": ["a", "b", "c"], "hook": "h", "hashtags": ["gta6"], "virality": {"hook": 70, "flow": 60, "value": 80, "trend": 50},
         "reason": "He never saw the cop coming."}
 
@@ -274,8 +274,8 @@ def ai_with(reply, seen):
 
 
 def test_the_judge_is_told_the_buckets_range_and_gets_more_transcript_for_long_clips():
-    assert "15 to 45 second" in SYSTEM and system_for(None) == SYSTEM and system_for((0, 0)) == SYSTEM
-    assert "180 to 298 second" in system_for((180, 298)) and "15 to 45" not in system_for((180, 298))
+    assert "15 to 60 second" in SYSTEM and system_for(None) == SYSTEM and system_for((0, 0)) == SYSTEM
+    assert "180 to 298 second" in system_for((180, 298)) and "15 to 60" not in system_for((180, 298))
     reply = {"stop_reason": "tool_use", "content": [{"type": "tool_use", "name": "clip_meta",
                                                      "input": {**GOOD, "kind": "story", "cut": {"start": 4, "end": 250, "peak": 40}}}]}
     lines = [(float(k), "word " * 12) for k in range(0, 300, 2)]              # 5 minutes of talk: about 10,000 characters
