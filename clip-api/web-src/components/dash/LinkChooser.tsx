@@ -172,7 +172,7 @@ export function LinkChooser() {
       : `Uses one credit per minute rendered, up to ${estimate}. The import is free.`;
 
   return (
-    <div className="mx-auto grid w-full max-w-[980px] grid-cols-[minmax(0,1fr)] justify-items-center gap-[18px] pb-[120px] narrow:pb-10">
+    <div className="mx-auto grid w-full max-w-[980px] grid-cols-[minmax(0,1fr)] justify-items-center gap-[18px]">
       <header className="relative grid w-full justify-items-center">
         <Link href="/dashboard/" aria-label="Back to Home" className="absolute left-0 top-0 grid h-9 w-9 place-items-center rounded-8 text-muted hover:bg-chip hover:text-text"><Icon name="back" size={20} /></Link>
         <h1 className="px-10 text-center text-[26px] narrow:text-[20px]">What should we make from this video?</h1>
