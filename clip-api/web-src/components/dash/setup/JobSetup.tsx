@@ -135,7 +135,7 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
             <div className="grid content-start gap-2 rounded-16 border border-solid border-line-soft bg-surface p-2">
               <div className="relative aspect-video overflow-hidden rounded-12 bg-black">
                 {source.thumb ? <img src={source.thumb} alt="" className="h-full w-full object-cover" />
-                  : <img src="/media/setup/source-16x9.webp" alt="" className="h-full w-full object-cover opacity-80" onError={(e) => { e.currentTarget.style.display = "none"; }} />}
+                  : <span className="grid h-full w-full place-items-center text-[13px] text-muted">{source.badge ? `${source.badge}: no picture for this video` : "No picture for this video"}</span>}
                 {(res || source.badge) && <span className="absolute left-2 top-2 rounded-8 bg-[rgba(0,0,0,.66)] px-2 py-[2px] text-[12px] font-medium [backdrop-filter:blur(6px)]">{res || source.badge}</span>}
                 {source.duration && <span className="absolute bottom-2 right-2 rounded-8 bg-[rgba(0,0,0,.66)] px-2 py-[2px] text-[12px] font-medium tabular-nums">{clock(source.duration)}</span>}
                 <button type="button" onClick={onRemove} aria-label="Choose a different video" title="Choose a different video"
