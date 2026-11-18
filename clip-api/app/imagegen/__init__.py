@@ -5,7 +5,7 @@ with our own renderer (app/pipeline/thumbs.py), so the words are always spelled 
 (scripts/premium_thumb_bench.py). It touches no database, storage or credits: it reads a frame from disk and
 writes two JPEGs, or raises GenerationFailed with every attempt it made.
 
-Attempts: the primary provider, then one retry on the fallback (the primary again when there is no fallback).
+Attempts: the provider, then one retry (on a second provider when one is configured, else the same one).
 A call fails on a provider error, a timeout, a safety block, an answer without an image, or when the streamer's
 face is gone from the output (faces.face_kept).
 """
@@ -84,8 +84,8 @@ def generate(frame: Path, out_dir: Path, *, look: str, instruction: str | None, 
              accent: str | None, editors: list[ImageEditor], timeout: float,
              between: Callable[[], None] = lambda: None) -> Generated:
     """Restyle `frame` (the clip's thumbnail frame, no text) with `look` and the cleaned `instruction`, then draw
-    `text` on it laid out on `canvas` (thumbs.Canvas of the frame). `editors`: [primary, fallback]; the first
-    is tried, then one retry on the next (or the same one when it is alone). `between()` runs before each
+    `text` on it laid out on `canvas` (thumbs.Canvas of the frame). `editors`: the providers in order (today Gemini
+    only); the first is tried, then one retry on the next (the same one when it is alone). `between()` runs before each
     attempt and may raise (a cancel). Raises GenerationFailed when no attempt gave a usable picture."""
     from PIL import Image
 
@@ -135,15 +135,12 @@ def generate(frame: Path, out_dir: Path, *, look: str, instruction: str | None, 
 
 
 def editors_from(settings) -> list[ImageEditor]:
-    """[primary, fallback] from the settings: Gemini when GEMINI_API_KEY is set, then BFL when BFL_API_KEY is."""
-    from .bfl import BflEditor
+    """The providers to use, in order: Gemini when GEMINI_API_KEY is set (its retry goes to Gemini again). Only
+    providers that do not train on what we send are listed (DEPLOY.md, "Data handling")."""
     from .gemini import GeminiEditor
-    out: list[ImageEditor] = []
-    if settings.gemini_api_key:
-        out.append(GeminiEditor(settings.gemini_api_key, settings.gemini_image_model, settings.gemini_image_size))
-    if settings.bfl_api_key:
-        out.append(BflEditor(settings.bfl_api_key))
-    return out
+    if not settings.gemini_api_key:
+        return []
+    return [GeminiEditor(settings.gemini_api_key, settings.gemini_image_model, settings.gemini_image_size)]
 
 
 def style_look(settings, style: str) -> str | None:

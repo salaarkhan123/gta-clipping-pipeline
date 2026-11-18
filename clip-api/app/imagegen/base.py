@@ -1,6 +1,6 @@
 """What every image-edit provider takes and gives back, and how it fails.
 
-A provider is one small module (gemini.py, bfl.py) with one class that has `name`, `model` and
+A provider is one small module (gemini.py) with one class that has `name`, `model` and
 `edit(request, timeout) -> EditResult`. It never touches the database, storage or credits, and it raises
 ProviderFailed for every way a call can go wrong, so the caller can retry on the next provider and refund.
 """

@@ -117,10 +117,9 @@ class Settings(BaseSettings):
     # free frame-based thumbnail is always made and stays free.
     premium_thumbnails: bool = False
     premium_thumb_credits: int = Field(25, ge=1)      # what one premium thumbnail costs: the only price used
-    gemini_api_key: str = ""                          # primary: Gemini Nano Banana 2.1 (image edit)
+    gemini_api_key: str = ""                          # Gemini Nano Banana 2.1 (image edit); a billing-enabled key only
     gemini_image_model: str = "gemini-nano-banana-2.1"
     gemini_image_size: str = "2K"                     # 1K | 2K | 4K (upper-case K)
-    bfl_api_key: str = ""                             # fallback: Black Forest Labs FLUX.1 Kontext [pro]
     premium_thumb_timeout_sec: float = Field(60.0, ge=5, le=300)   # one provider attempt, end to end
     premium_thumb_styles: str = DEFAULT_THUMB_STYLES
 

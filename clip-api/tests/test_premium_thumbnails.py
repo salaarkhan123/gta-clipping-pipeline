@@ -15,7 +15,7 @@ from sqlalchemy import select
 from app import imagegen, ledger, thumbnail_jobs as tj, worker
 from app.config import get_settings
 from app.db import new_session
-from app.imagegen import bfl, gemini
+from app.imagegen import gemini
 from app.imagegen.base import FACE_LOST, NO_IMAGE, PROVIDER_ERROR, SAFETY, TIMEOUT, EditRequest, EditResult, ProviderFailed
 from app.imagegen.prompts import InstructionRefused, build_prompt, clean_instruction
 from app.models import Clip, ClipThumbnail, CreditLedger, Job, LikenessConsent, Upload, new_id, utcnow
@@ -43,7 +43,6 @@ def premium(monkeypatch):
     s = get_settings()
     monkeypatch.setattr(s, "premium_thumbnails", True)
     monkeypatch.setattr(s, "gemini_api_key", "test-not-a-key")
-    monkeypatch.setattr(s, "bfl_api_key", "")
     return s
 
 
@@ -237,7 +236,7 @@ def test_an_old_clip_without_a_clean_frame_is_refused_before_any_charge(client, 
 def test_a_premium_thumbnail_is_charged_once_and_joins_the_gallery_without_replacing_the_free_one(client, user,
                                                                                                     premium, monkeypatch):
     primary = Ok()
-    use(monkeypatch, primary, Ok("bfl"))
+    use(monkeypatch, primary)
     c = make_clip(client, user)
     before = balance(client, c["headers"])
     job = order(client, c, style="high_energy", instruction="neon purple night lighting").json()
@@ -267,27 +266,35 @@ def test_a_premium_thumbnail_is_charged_once_and_joins_the_gallery_without_repla
     assert (diff > 60).mean() > 0.01                                 # the hook was drawn on it by our renderer
 
 
-def test_a_failed_primary_is_retried_once_on_the_fallback(client, user, premium, monkeypatch):
-    first, second = Fails(PROVIDER_ERROR), Ok("bfl")
-    use(monkeypatch, first, second)
+class FailsOnce(Ok):
+    def edit(self, request, timeout):
+        if not self.calls:
+            self.calls.append(request)
+            raise ProviderFailed(PROVIDER_ERROR, "gemini said no once")
+        return super().edit(request, timeout)
+
+
+def test_a_failed_attempt_is_retried_once_on_gemini(client, user, premium, monkeypatch):
+    only = FailsOnce()
+    use(monkeypatch, only)
     c = make_clip(client, user)
     job = order(client, c).json()
     assert run_thumbnail() == "SUCCEEDED"
-    assert first.calls == 1 and len(second.calls) == 1
+    assert len(only.calls) == 2
     got = client.get(f"/v1/jobs/{job['job_id']}", headers=c["headers"]).json()
-    assert [(a["provider"], a["ok"]) for a in got["result"]["attempts"]] == [("gemini", False), ("bfl", True)]
+    assert [(a["provider"], a["ok"]) for a in got["result"]["attempts"]] == [("gemini", False), ("gemini", True)]
     assert [r.kind for r in job_rows(job["job_id"])] == ["reserve", "commit"]
 
 
 @pytest.mark.parametrize("code", [PROVIDER_ERROR, TIMEOUT, SAFETY, NO_IMAGE])
 def test_every_provider_failure_after_the_retry_is_refunded_in_full(client, user, premium, monkeypatch, code):
-    first, second = Fails(code), Fails(code, "bfl")
-    use(monkeypatch, first, second)
+    only = Fails(code)
+    use(monkeypatch, only)
     c = make_clip(client, user)
     before = balance(client, c["headers"])
     job = order(client, c).json()
     assert run_thumbnail() == "FAILED"
-    assert first.calls == second.calls == 1                        # one retry, no more
+    assert only.calls == 2                                          # one retry, no more
     assert_refunded_once(job["job_id"])
     assert balance(client, c["headers"]) == before
     got = client.get(f"/v1/jobs/{job['job_id']}", headers=c["headers"]).json()
@@ -296,25 +303,16 @@ def test_every_provider_failure_after_the_retry_is_refunded_in_full(client, user
         assert not db.execute(select(ClipThumbnail).where(ClipThumbnail.clip_id == c["clip_id"])).first()
 
 
-def test_with_one_provider_the_retry_uses_it_again(client, user, premium, monkeypatch):
-    only = Fails(TIMEOUT)
-    use(monkeypatch, only)
-    c = make_clip(client, user)
-    job = order(client, c).json()
-    assert run_thumbnail() == "FAILED" and only.calls == 2
-    assert_refunded_once(job["job_id"])
-
-
 def test_an_output_that_lost_the_face_is_rejected_retried_and_refunded(client, user, premium, monkeypatch):
     monkeypatch.setattr(imagegen, "faces", lambda im: [(0.3, 0.05, 0.4, 0.2)])     # the frame shows a face
     monkeypatch.setattr(imagegen, "face_kept", lambda face, out: False)            # neither output keeps it
-    a, b = Ok(), Ok("bfl")
-    use(monkeypatch, a, b)
+    a = Ok()
+    use(monkeypatch, a)
     c = make_clip(client, user)
     before = balance(client, c["headers"])
     job = order(client, c).json()
     assert run_thumbnail() == "FAILED"
-    assert len(a.calls) == len(b.calls) == 1 and a.calls[0].reference is not None   # the close-up was sent
+    assert len(a.calls) == 2 and a.calls[0].reference is not None   # retried once; the close-up was sent
     assert client.get(f"/v1/jobs/{job['job_id']}", headers=c["headers"]).json()["error"]["code"] == FACE_LOST
     assert_refunded_once(job["job_id"])
     assert balance(client, c["headers"]) == before
@@ -550,6 +548,20 @@ def test_the_face_check_keeps_a_kept_face_and_catches_a_lost_one(astronaut):
         assert max(crop.size) == 512
 
 
+# ---------- provider data handling ----------
+def test_gemini_is_the_only_provider_and_the_retry_goes_to_it_again(monkeypatch):
+    s = get_settings()
+    monkeypatch.setattr(s, "gemini_api_key", "g")
+    assert [e.name for e in imagegen.editors_from(s)] == ["gemini"]
+    monkeypatch.setattr(s, "gemini_api_key", "")
+    assert imagegen.editors_from(s) == []                           # no provider: the routes answer 503
+    assert not hasattr(s, "bfl_api_key")                            # removed: BFL trains on API inputs by default
+
+
+def test_gemini_asks_google_not_to_store_the_request():
+    assert gemini.GeminiEditor("k").body(request_())["store"] is False
+
+
 # ---------- provider clients, on mocked transports ----------
 def jpeg_bytes(size=(64, 112)) -> bytes:
     buf = BytesIO()
@@ -606,50 +618,4 @@ def test_gemini_timeout_is_a_timeout():
         raise httpx.ReadTimeout("slow", request=req)
     with pytest.raises(ProviderFailed) as e:
         gemini.GeminiEditor("k", transport=httpx.MockTransport(handler)).edit(request_(), 5)
-    assert e.value.code == TIMEOUT
-
-
-def bfl_handler(statuses: list[str], poll="https://api.us1.bfl.ai/v1/get_result?id=1",
-                sample="https://delivery-eu1.bfl.ai/x.jpg"):
-    calls = {"post": None, "polls": 0}
-
-    def handler(req: httpx.Request) -> httpx.Response:
-        if req.method == "POST":
-            calls["post"] = (req.headers.get("x-key"), json.loads(req.content))
-            return httpx.Response(200, json={"id": "1", "polling_url": poll})
-        if str(req.url).startswith(poll):
-            status = statuses[min(calls["polls"], len(statuses) - 1)]
-            calls["polls"] += 1
-            return httpx.Response(200, json={"status": status, "result": {"sample": sample}})
-        return httpx.Response(200, content=jpeg_bytes(), headers={"content-type": "image/jpeg"})
-    return handler, calls
-
-
-def test_bfl_posts_the_documented_body_polls_and_downloads():
-    handler, calls = bfl_handler(["Pending", "Pending", "Ready"])
-    got = bfl.BflEditor("k", transport=httpx.MockTransport(handler), sleep=lambda s: None).edit(request_(), 10)
-    key, body = calls["post"]
-    assert key == "k" and body["aspect_ratio"] == "9:16" and body["output_format"] == "jpeg" and body["input_image"]
-    assert calls["polls"] == 3 and got.image == jpeg_bytes() and got.cost_usd == 0.04
-
-
-@pytest.mark.parametrize("statuses, poll, code", [
-    (["Content Moderated"], "https://api.us1.bfl.ai/v1/get_result?id=1", SAFETY),
-    (["Request Moderated"], "https://api.us1.bfl.ai/v1/get_result?id=1", SAFETY),
-    (["Error"], "https://api.us1.bfl.ai/v1/get_result?id=1", PROVIDER_ERROR),
-    (["Ready"], "https://evil.example.com/poll", PROVIDER_ERROR),          # only BFL's own hosts are followed
-])
-def test_bfl_failures_have_their_codes(statuses, poll, code):
-    handler, _ = bfl_handler(statuses, poll)
-    with pytest.raises(ProviderFailed) as e:
-        bfl.BflEditor("k", transport=httpx.MockTransport(handler), sleep=lambda s: None).edit(request_(), 10)
-    assert e.value.code == code
-
-
-def test_bfl_that_never_finishes_times_out():
-    handler, _ = bfl_handler(["Pending"])
-    clock = iter(range(0, 1000, 3))
-    with pytest.raises(ProviderFailed) as e:
-        bfl.BflEditor("k", transport=httpx.MockTransport(handler), sleep=lambda s: None,
-                      clock=lambda: next(clock)).edit(request_(), 10)
     assert e.value.code == TIMEOUT

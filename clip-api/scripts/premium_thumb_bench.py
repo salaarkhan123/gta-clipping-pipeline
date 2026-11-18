@@ -3,20 +3,20 @@
 
 Usage:
   python scripts/premium_thumb_bench.py <out_dir> --video <file> <moments.csv> [--video <file> <moments.csv> ...]
-         [--per-video 14 6] [--env-file <path to the settings file with GEMINI_API_KEY / BFL_API_KEY>]
+         [--per-video 14 6] [--env-file <path to the settings file with GEMINI_API_KEY>]
          [--max-usd 3.0] [--max-calls 40]
 
 For each picked moment (rows of the CSV spread evenly, the first rows of a stream skipped as they are often a
 "be right back" screen) it makes the free thumbnail exactly as the pipeline does (thumbs.make_thumbnail), then
-the premium one through imagegen.generate, the code the worker runs: Gemini first, one retry on BFL. Styles cycle
+the premium one through imagegen.generate, the code the worker runs: Gemini, one retry on Gemini. Styles cycle
 through the four presets; every third moment also gets a custom instruction.
 
 Writes, in <out_dir>: NN/free.jpg, NN/premium.jpg, NN/premium.clean.jpg, results.json (every attempt: provider,
 model, outcome, seconds, dollars and how they were worked out), summary.md, and sheet-N.jpg contact sheets (free
 left, premium right). Keys are read by Settings from the environment or --env-file and are never printed.
 
-Spending guard: no call is started once the estimated spend reaches --max-usd or --max-calls calls were made. A
-fallback that answers it has no balance is marked unavailable and not called again.
+Spending guard: no call is started once the estimated spend reaches --max-usd or --max-calls calls were made, and
+the run stops after 3 failed generations in a row.
 """
 import argparse
 import csv
@@ -62,16 +62,12 @@ def seconds(value: str) -> float:
 
 
 class Guard:
-    """Wraps an editor: counts calls and dollars, refuses calls past the caps, and stops calling a fallback that
-    has no balance."""
+    """Wraps an editor: counts calls and dollars and refuses calls past the caps."""
     def __init__(self, editor, budget: dict):
         self.editor, self.budget, self.name, self.model = editor, budget, editor.name, editor.model
-        self.unavailable: str | None = None
 
     def edit(self, request, timeout):
         b = self.budget
-        if self.unavailable:
-            raise ProviderFailed("fallback_unavailable", self.unavailable)
         if b["calls"] >= b["max_calls"] or b["usd"] >= b["max_usd"]:
             b["capped"] = True
             raise ProviderFailed("bench_cap", "Benchmark spending cap reached; call not made.")
@@ -81,10 +77,6 @@ class Guard:
             result = self.editor.edit(request, timeout)
         except ProviderFailed as e:
             b["usd"] += e.cost_usd or 0
-            low = e.message.lower()
-            if self.name == "bfl" and (" 402" in e.message or "credit" in low or "balance" in low or "insufficient" in low):
-                self.unavailable = f"BFL has no balance ({e.message[:120]})"
-                raise ProviderFailed("fallback_unavailable", self.unavailable) from None
             raise
         b["usd"] += result.cost_usd or 0
         return result
@@ -155,10 +147,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--aspect", default="9:16")
     args = ap.parse_args(argv)
     settings = Settings(_env_file=str(args.env_file)) if args.env_file else Settings()
-    if not settings.gemini_api_key and not settings.bfl_api_key:
-        raise SystemExit("Set GEMINI_API_KEY (and BFL_API_KEY for the fallback) first.")
-    if settings.gemini_api_key:
-        settings.gemini_image_model = pick_model(settings)
+    if not settings.gemini_api_key:
+        raise SystemExit("Set GEMINI_API_KEY (a key of a Google project with billing on) first.")
+    settings.gemini_image_model = pick_model(settings)
     budget = {"calls": 0, "usd": 0.0, "max_calls": args.max_calls, "max_usd": args.max_usd, "capped": False,
               "by_provider": {}}
     editors = [Guard(e, budget) for e in editors_from(settings)]

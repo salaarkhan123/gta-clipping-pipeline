@@ -28,6 +28,9 @@ was recognised, and the spending guard stopped the run.
 
 1. Google AI Studio: turn on billing for the project of `GEMINI_API_KEY` (paid tier). The free tier has a quota of
    0 for Nano Banana 2.1.
-2. Optional: add credit to the BFL account of `BFL_API_KEY` (about $1 covers the fallback's share).
-3. Run the command above (about 20 x $0.055 = $1.10; capped at $3.00 and 40 calls). It writes
+2. Run the command above (about 20 x $0.055 = $1.10; capped at $3.00 and 40 calls). It writes
    `results.json`, `summary.md` and `sheet-N.jpg` (free left, premium right) in `<out>`.
+
+Update 2026-11-18: Black Forest Labs is removed as a provider (it trains on API inputs by default and has no API or
+account setting to stop it). Gemini is the only provider; the one automatic retry goes to Gemini again. The BFL row
+above is history from run 1.

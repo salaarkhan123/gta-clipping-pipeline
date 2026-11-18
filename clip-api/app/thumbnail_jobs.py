@@ -46,7 +46,6 @@ FAILED_MESSAGE = {
     "safety_block": "The image service declined this picture.",
     "no_image": "The image service returned no picture.",
     "face_lost": "The result lost the streamer's face, so it was not kept.",
-    "fallback_unavailable": "The image service had a problem.",
     "clip_gone": "The clip was deleted.",
 }
 
