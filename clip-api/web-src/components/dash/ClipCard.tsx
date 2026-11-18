@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { API, api, ApiError, clock, getToken } from "@/lib/api";
 import { ExportFull } from "./ExportFull";
-import { Icon, IconName } from "./Icon";
+import { Icon, IconName, Soon } from "./Icon";
 import { BACKDROP, CARD_ROW, MEDIA, Shape, thumbVar, useShape } from "./ProjectCard";
 import { useDash } from "./Shell";
 
@@ -119,7 +119,7 @@ export function ClipCard({ clip, onChange, project, uploadId, lit, number, selec
             <button className="btn small ghost" aria-pressed={clip.kept === true} onClick={() => keep(true)}>Keep</button>
             <button className="btn small ghost" aria-pressed={clip.kept === false} onClick={() => keep(false)}>Discard</button>
           </div>
-          <p className="muted small">Coming soon: {SOON.map(([, label]) => label.toLowerCase()).join(", ")}.</p>
+          <p className="muted small flex flex-wrap items-center gap-2">{SOON.map(([, label]) => label).join(", ")} <Soon short /></p>
           {clip.captions_url && <div className="clip-actions" role="group" aria-label="Captions file">
             <span className="muted">Captions file</span>
             {["srt", "vtt", "txt"].map((f) => <button key={f} className="btn small ghost" onClick={() => downloadSubtitles(clip.id, f).catch(fail)}>{f.toUpperCase()}</button>)}

@@ -7,7 +7,7 @@ import { Logo } from "@/components/Chrome";
 import { API } from "@/lib/api";
 import { useLanguageSwitches } from "@/lib/languages";
 import { isBuilt, toolHref, TOOLS } from "@/lib/tools";
-import { Icon, IconName } from "./Icon";
+import { Icon, IconName, Soon } from "./Icon";
 
 // Sections that are not built yet are listed but never linked. `under` lists the routes that light an item up.
 const SECTIONS: { href?: string; label: string; icon: IconName; under?: string[] }[] = [
@@ -48,7 +48,7 @@ function Rail({ path }: { path: string }) {
                   <Icon name={s.icon} size={21} /><span>{s.label}</span></Link>
               : <span aria-disabled="true" title={`${s.label}: coming soon`} className={`${RAIL_ITEM} cursor-default text-muted`}>
                   <Icon name={s.icon} size={20} /><span>{s.label}</span>
-                  <small className="font-body text-[9px] font-semibold uppercase leading-[normal] tracking-[.04em] text-dim">Soon</small></span>}
+                  <Soon short /></span>}
           </li>))}
       </ul>
     </nav>
@@ -97,7 +97,7 @@ export function TopBar({ me, onLogout }: { me: any; onLogout: () => void }) {
               <li key={t.id}>{isBuilt(t, on)
                 ? <Link className={`${MENU_ITEM} hover:bg-chip-hover`} href={toolHref(t)}><Icon name={t.icon} size={18} className="text-muted" />{t.name}</Link>
                 : <span className={`${MENU_ITEM} cursor-default text-muted`} aria-disabled="true"><Icon name={t.icon} size={18} className="text-muted" />{t.name}
-                    <small className="soon-tag ml-auto">Soon</small></span>}</li>))}
+                    <span className="ml-auto"><Soon short /></span></span>}</li>))}
           </ul>
         </Menu>
         <a className={`${BAR_BUTTON} px-[10px] narrow:hidden`} href={`${API}/docs`} target="_blank" rel="noreferrer">API</a>

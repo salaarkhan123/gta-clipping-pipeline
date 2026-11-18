@@ -1,3 +1,5 @@
+import { ComingSoonBadge } from "@/components/ComingSoonBadge";
+
 // The dashboard's own line icons: 24 px grid, drawn for ClutchClips. Decorative, so always hidden from screen readers.
 const PATHS = {
   home: <><path d="M4 11.5 12 4l8 7.5" /><path d="M6.5 10v9.5h11V10" /><path d="M10 19.5v-5h4v5" /></>,
@@ -52,6 +54,17 @@ const PATHS = {
   skipForward: <><path d="M18 5v14" /><path d="M5.5 5.5v13L15 12 5.5 5.5Z" /></>,
   zoomIn: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5M8.5 11h5M11 8.5v5" /></>,
   zoomOut: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5M8.5 11h5" /></>,
+  smile: <><circle cx="12" cy="12" r="8.5" /><path d="M8.5 14a4 4 0 0 0 7 0M9 9.5h.01M15 9.5h.01" /></>,
+  shapes: <><circle cx="8" cy="8" r="4" /><path d="M14 13.5h6.5V20H14z" /><path d="m15.5 4 3.5 6h-7l3.5-6Z" /></>,
+  volume: <><path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3v-5Z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></>,
+  wave: <path d="M4 12h1.5M7.5 8v8M11 5v14M14.5 9v6M18 7v10M20.5 12H20" />,
+  expand: <path d="M14 4.5h5.5V10M19.5 4.5 13.5 10.5M10 19.5H4.5V14M4.5 19.5l6-6" />,
+  palette: <><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.4 0 2-1 2-2 0-1.5-1.5-1.8-1.5-3s1-2 2.5-2H18a2.5 2.5 0 0 0 2.5-2.5c0-4.3-3.8-7.5-8.5-7.5Z" /><path d="M7.5 12h.01M9.5 8h.01M14.5 8h.01" /></>,
+  eye: <><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="3" /></>,
+  translate: <><path d="M4 6h9M8.5 4v2c0 4-2 7-4.5 8.5M6.5 10c1 2 3 3.5 5.5 4" /><path d="m13 20 3.5-8 3.5 8M14.2 17.5h4.6" /></>,
+  rewind: <><path d="M11 6.5 4.5 12l6.5 5.5v-11Z" /><path d="M19.5 6.5 13 12l6.5 5.5v-11Z" /></>,
+  info: <><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5M12 8h.01" /></>,
+  phone: <rect x="7.5" y="3.5" width="9" height="17" rx="2" />,
   undo: <><path d="M9 7.5 5 11.5l4 4" /><path d="M5 11.5h9.5a4.5 4.5 0 0 1 0 9H12" /></>,
 } as const;
 
@@ -66,4 +79,4 @@ export function Icon({ name, size = 20, className }: { name: IconName; size?: nu
 }
 
 // Marks something that is planned but not built. Never put this on a working link.
-export const Soon = () => <small className="soon-tag">Coming soon</small>;
+export const Soon = ({ short }: { short?: boolean }) => <ComingSoonBadge short={short} className="ml-1" />;

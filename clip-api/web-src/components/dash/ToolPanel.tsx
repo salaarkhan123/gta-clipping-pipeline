@@ -47,7 +47,7 @@ export function ToolPanel({ upload, onStarted, open }: { upload: any; onStarted:
 }
 
 // Reframe and Captions: one part of the video (or all of it), rendered once.
-function RenderForm({ tool, upload, listed, onStarted }: { tool: "reframe" | "captions"; upload: any; listed: Listed; onStarted: (job: any) => void }) {
+export function RenderForm({ tool, upload, listed, onStarted }: { tool: "reframe" | "captions"; upload: any; listed: Listed; onStarted: (job: any) => void }) {
   const { reloadMe, fail } = useDash();
   const [o, setO] = useState({ aspect: "9:16", caption_style: firstStyle(listed), censor: false, from: "", to: "" });
   const [starting, setStarting] = useState(false), [problem, setProblem] = useState("");

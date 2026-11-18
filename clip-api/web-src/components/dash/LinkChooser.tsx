@@ -12,7 +12,9 @@ import { allows, inside, Listed, onlyListed, useClipOptions } from "@/lib/option
 import { route } from "@/lib/routes";
 import { AS_IT_IS, extrasFrom, loadCustom, loadTemplates, Look, lookFrom, Saved, startLook, tidy } from "@/lib/templates";
 import { isBuilt, ToolEntry, TOOLS } from "@/lib/tools";
+import { ComingSoonBadge } from "@/components/ComingSoonBadge";
 import { Icon } from "./Icon";
+import { JobSetup } from "./setup/JobSetup";
 import { offeredBucket } from "./JobForm";
 import { AspectSelect, Picked, PreEdit, Templates } from "./PreEdit";
 import { useDash } from "./Shell";
@@ -69,6 +71,8 @@ export function LinkChooser() {
   const [pre, setPre] = useState(true), [look, setLook] = useState<Look | null>(null), [picked, setPicked] = useState<Picked>(null);
   const [templates, setTemplates] = useState<Templates>({ presets: [], games: [] }), [saved, setSaved] = useState<Saved[] | null>(null);
   const file = useRef<HTMLInputElement>(null);
+  // AI Clipping uses the full job-setup screen; it hands back the options it would send.
+  const setup = useRef<Record<string, unknown> | null>(null), [template, setTemplate] = useState<string | undefined>(undefined);
   // "Upload the file instead": the uploaded video opens on the chosen tool's own form, where its price is shown.
   const { up, start: upload, cancel } = useUpload((u) => router.push(kind === "transcripts" ? `/dashboard/transcript/?id=${u.upload_id}`
     : kind === "summary" ? `/dashboard/summary/?id=${u.upload_id}` : `/dashboard/project/?id=${u.upload_id}&tool=${kind}`));
@@ -77,6 +81,7 @@ export function LinkChooser() {
     const q = new URLSearchParams(window.location.search);
     const u = q.get("url") || "";
     setUrl(u);
+    setTemplate(q.get("template") || undefined);
     const t = TOOLS.find((x) => x.id === q.get("tool"));
     if (t && kindOf(t)) setKind(kindOf(t)!);
     // No preview route, or it could not answer (rate limit, server busy): the plain card, and the import says the rest.
@@ -125,6 +130,7 @@ export function LinkChooser() {
   function request(uploadId: string): [string, unknown] {
     const L = listed!;
     const lang = { source_lang: o.source_lang || null };
+    if (kind === "clips" && setup.current) return ["/v1/clips", { upload_id: uploadId, options: setup.current }];
     if (kind === "clips") {
       const options: Record<string, unknown> = { facecam_region: "auto", zoom: 1, resolution: "1080", chat_region: "none", ...look,
         ...(pre ? {} : AS_IT_IS), template: pre && chosen ? chosen.id : null, ...(pre && chosen ? extrasFrom(chosen, L) : {}), prompt: null, range: null, ...lang };
@@ -214,6 +220,30 @@ export function LinkChooser() {
       ? `Uses ${estimate} credit${estimate === 1 ? "" : "s"} (one per minute of video). The import is free; a failed or cancelled job gives its credits back.`
       : `Uses one credit per minute rendered, up to ${estimate}. The import is free.`;
 
+  const toolChips = (
+    <ul className="flex max-w-full list-none flex-wrap justify-center gap-2 narrow:w-full narrow:flex-nowrap narrow:justify-start narrow:overflow-x-auto narrow:pb-1 narrow:[&_li]:flex-none" aria-label="What to make">
+        {chips.map((t) => {
+          const k = kindOf(t), ok = isBuilt(t, on) && !!k;
+          const sel = ok && k === kind && t.id !== "templates";
+          return <li key={t.id}>{ok
+            ? <button type="button" aria-pressed={sel} disabled={busy} onClick={() => { setKind(k!); if (t.id === "templates") document.getElementById("chooser-templates")?.scrollIntoView({ block: "start" }); }}
+                className={`${CHIP} cursor-pointer ${sel ? "border-text bg-text text-bg" : "border-transparent bg-chip text-text hover:bg-chip-hover"}`}><Icon name={t.icon} size={18} />{t.name}</button>
+            : <span className={`${CHIP} cursor-default border-dashed border-line bg-transparent text-dim`} aria-disabled="true"><Icon name={t.icon} size={18} />{t.name}<ComingSoonBadge short /></span>}</li>;
+        })}
+      </ul>);
+
+  // AI Clipping: the full job-setup screen. The price is the API's own estimate for this link, never worked out here.
+  if (kind === "clips" && !refused && listed && preview !== undefined && !confirm) return (
+    <JobSetup listed={listed} template={template}
+      source={{ title: preview?.title || hostOf(url), duration, thumb: preview?.thumbnail_url, badge: PLATFORM[preview?.platform || ""] || null,
+        detail: [KIND[preview?.kind || ""], PLATFORM[preview?.platform || ""] || preview?.platform, preview?.channel].filter(Boolean).join(" · ") || url }}
+      price={quoted ? { state: "ok", credits: quoted.credits, note: quoted.basis ? `Worked out from ${quoted.basis}.` : undefined }
+        : { state: "unknown", text: "One credit per minute of video. Once the video is in, the exact price is shown before anything is charged." }}
+      onOptions={(opts) => { setup.current = opts; }} onCreate={(opts) => { setup.current = opts; go(); }} onRemove={() => router.push("/dashboard/")}
+      consent={{ checked: consent, onChange: setConsent, text: CONSENT }} step={step} problem={problem || (short ? "Not enough credits for this video." : "")}
+      header={toolChips} />
+  );
+
   return (
     <div className="mx-auto grid w-full max-w-[980px] grid-cols-[minmax(0,1fr)] justify-items-center gap-[18px]">
       <header className="relative grid w-full justify-items-center">
@@ -221,16 +251,7 @@ export function LinkChooser() {
         <h1 className="px-10 text-center text-[26px] narrow:text-[20px]">What should we make from this video?</h1>
       </header>
 
-      <ul className="flex max-w-[900px] list-none flex-wrap justify-center gap-2 narrow:w-full narrow:flex-nowrap narrow:justify-start narrow:overflow-x-auto narrow:pb-1 narrow:[&_li]:flex-none" aria-label="What to make">
-        {chips.map((t) => {
-          const k = kindOf(t), ok = isBuilt(t, on) && !!k;
-          const sel = ok && k === kind && t.id !== "templates";
-          return <li key={t.id}>{ok
-            ? <button type="button" aria-pressed={sel} disabled={busy} onClick={() => { setKind(k!); if (t.id === "templates") document.getElementById("chooser-templates")?.scrollIntoView({ block: "start" }); }}
-                className={`${CHIP} cursor-pointer ${sel ? "border-lime bg-lime-wash text-lime" : "border-transparent bg-chip text-text hover:bg-chip-hover"}`}><Icon name={t.icon} size={18} />{t.name}</button>
-            : <span className={`${CHIP} cursor-default border-dashed border-line bg-transparent text-dim`} aria-disabled="true"><Icon name={t.icon} size={18} />{t.name}<small className="soon-tag">Soon</small></span>}</li>;
-        })}
-      </ul>
+      {toolChips}
 
       <p className="inline-flex max-w-[min(100%,420px)] items-center gap-2 rounded-full bg-chip px-4 py-[9px] text-[14px] text-muted" title={url}>
         <Icon name="link" size={16} /><span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{url}</span></p>

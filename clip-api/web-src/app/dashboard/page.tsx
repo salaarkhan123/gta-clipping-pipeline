@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
+import { ComingSoonBadge } from "@/components/ComingSoonBadge";
 import { Icon } from "@/components/dash/Icon";
 import { ProjectGrid } from "@/components/dash/ProjectCard";
 import { useDash } from "@/components/dash/Shell";
@@ -67,7 +68,7 @@ function Home() {
                 : "border-dashed border-line bg-transparent text-dim"}`}><Icon name={t.icon} size={22} /></span>
               <span className={`max-w-[11ch] font-body text-[13px] font-medium leading-[1.25] narrow:text-[12px] ${built ? "" : "text-muted"}`}>{t.name}</span>
               {built ? t.badge === "new" && <small className={`${BADGE} border-[rgba(184,255,60,.35)] bg-[#1c2a0e] text-lime`}>New</small>
-                : <small className={`${BADGE} border-line bg-card-2 text-muted`}>Soon</small>}
+                : <ComingSoonBadge short className="absolute left-[calc(50%+6px)] top-[-4px] bg-bg" />}
             </>;
             return (
               <li key={t.id} className="grid">

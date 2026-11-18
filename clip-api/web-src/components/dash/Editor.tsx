@@ -339,7 +339,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
               <Icon name={x.icon} size={22} /><span>{x.label}</span></button>)}
             <span className="mx-3 my-1 h-px flex-none bg-line-soft mid:mx-1 mid:my-2 mid:h-auto mid:w-px" aria-hidden="true" />
             {PLANNED.map(([icon, label]) => <span key={label} aria-disabled="true" title={`${label}: coming soon`} className={`${RAIL_ITEM} cursor-default text-dim`}>
-              <Icon name={icon} size={22} /><span>{label}</span><Soon /></span>)}
+              <Icon name={icon} size={22} /><span>{label}</span><Soon short /></span>)}
           </nav>
         </div>
 

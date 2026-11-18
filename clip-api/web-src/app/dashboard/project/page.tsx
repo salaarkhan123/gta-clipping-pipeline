@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BulkEdit } from "@/components/dash/BulkEdit";
 import { CLIP_GRID, ClipCard, ClipFilter, ClipSort, ClipToolbar, numbering, useSteadyOrder } from "@/components/dash/ClipCard";
@@ -9,7 +10,8 @@ import { isActive, JobNote } from "@/components/dash/JobNote";
 import { useDash } from "@/components/dash/Shell";
 import { BackTitle, PAGE_HEAD, SECTION_HEAD, STRIP } from "@/components/dash/ui";
 import { Timeline } from "@/components/dash/Timeline";
-import { isTool, Tool, ToolPanel } from "@/components/dash/ToolPanel";
+import { MakeView } from "@/components/dash/setup/MakeView";
+import { isTool, Tool } from "@/components/dash/ToolPanel";
 import { api, ApiError, clock } from "@/lib/api";
 import { useClipOptions } from "@/lib/options";
 import { useRoutes } from "@/lib/routes";
@@ -49,6 +51,7 @@ async function downloadEach(urls: string[], onStep: (n: number) => void) {
 // One project: the source video and where its clips came from, the tools, what is running, and every clip made from it.
 export default function Project() {
   const { fail, reloadMe, say } = useDash();
+  const router = useRouter();
   const [id, setId] = useState<string | null>(null);
   const [open, setOpen] = useState<{ tool?: Tool; template?: string }>({});   // handed over by Home or the template gallery
   const [project, setProject] = useState<any>(null), [gone, setGone] = useState(false);
@@ -144,11 +147,11 @@ export default function Project() {
   }
 
   if (making) return (
-    <div className="form-col">
-      <div className={PAGE_HEAD}>{title}
-        {(clips.length > 0 || anyActive) && <button type="button" className="btn small ghost" onClick={() => setMaking(false)}>
-          {clips.length ? `Back to the clips (${clips.length})` : "Back to the results"}</button>}</div>
-      <ToolPanel upload={project} open={open} onStarted={started} />
+    <div className="wide">
+      <MakeView upload={project} tool={open.tool} template={open.template} onStarted={started}
+        onBack={() => (clips.length > 0 || anyActive ? setMaking(false) : router.push("/dashboard/"))}
+        back={(clips.length > 0 || anyActive) && <button type="button" className="btn small ghost" onClick={() => setMaking(false)}>
+          {clips.length ? `Back to the clips (${clips.length})` : "Back to the results"}</button>} />
     </div>
   );
 
