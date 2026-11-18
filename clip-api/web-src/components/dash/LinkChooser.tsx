@@ -35,7 +35,7 @@ const KIND: Record<string, string> = { video: "Video", clip: "Clip", live: "Live
 const CHIP = "inline-flex min-h-[40px] items-center gap-2 rounded-full border border-solid px-4 font-body text-[14px] font-medium leading-[normal] disabled:opacity-60 narrow:min-h-[36px] narrow:px-3 narrow:text-[13px]";
 // The template step reuses the job form's pre-edit panel (presets, saved looks, "Add template"), laid out as tall cards.
 const TEMPLATES = "w-full [&_section.preedit]:bg-panel [&_section.preedit]:p-[18px] [&_.looks]:max-h-[640px] [&_.looks]:grid-cols-4 [&_.looks]:gap-x-[14px] [&_.looks]:gap-y-[18px] "
-  + "narrow:[&_.looks]:max-h-[520px] narrow:[&_.looks]:grid-cols-2 [&_.look-art]:aspect-[9/16] [&_.look-art]:rounded-12 [&_.look-art]:bg-bg [&_.look-art_img]:object-contain "
+  + "narrow:[&_.looks]:max-h-[520px] narrow:[&_.looks]:grid-cols-2 [&_.look-art]:aspect-[9/16] [&_.look-art]:rounded-12 [&_.look-art]:[background:theme(colors.bg)] [&_.look-art_img]:object-contain "
   + "[&_.look]:relative [&_.look_strong]:text-[14.5px] [&_.look-tools]:absolute [&_.look-tools]:right-2 [&_.look-tools]:top-2 [&_.look-tools]:opacity-0 "
   + "[&_.look:hover_.look-tools]:opacity-100 [&_.look:focus-within_.look-tools]:opacity-100 [@media(hover:none)]:[&_.look-tools]:opacity-100 "
   + "[&_.look-tools_.icon-btn]:h-8 [&_.look-tools_.icon-btn]:w-8 [&_.look-tools_.icon-btn]:rounded-full [&_.look-tools_.icon-btn]:border-0 [&_.look-tools_.icon-btn]:bg-[rgba(7,8,10,.82)] [&_.look-tools_.icon-btn]:text-text";
@@ -172,7 +172,7 @@ export function LinkChooser() {
       : `Uses one credit per minute rendered, up to ${estimate}. The import is free.`;
 
   return (
-    <div className="mx-auto grid w-full max-w-[980px] justify-items-center gap-[18px] pb-[120px] narrow:pb-10">
+    <div className="mx-auto grid w-full max-w-[980px] grid-cols-[minmax(0,1fr)] justify-items-center gap-[18px] pb-[120px] narrow:pb-10">
       <header className="relative grid w-full justify-items-center">
         <Link href="/dashboard/" aria-label="Back to Home" className="absolute left-0 top-0 grid h-9 w-9 place-items-center rounded-8 text-muted hover:bg-chip hover:text-text"><Icon name="back" size={20} /></Link>
         <h1 className="px-10 text-center text-[26px] narrow:text-[20px]">What should we make from this video?</h1>
