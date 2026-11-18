@@ -58,6 +58,19 @@ def test_route_exists_with_its_fields(route):
         assert not missing, f"{_route_id(route)} no longer takes query {missing}"
 
 
+READS = [r for r in CONTRACT["routes"] if r["method"] == "GET" and r.get("response") and "{" not in r["path"]]
+
+
+@pytest.mark.parametrize("route", READS, ids=_route_id)
+def test_response_has_the_fields_the_site_reads(route, client, user):
+    # The OpenAPI document has no response models yet, so these are checked by calling the route as a new account.
+    headers, _ = user
+    r = client.get(route["path"], headers=headers)
+    assert r.status_code == 200, f"{_route_id(route)}: {r.status_code} {r.text[:200]}"
+    missing = sorted(set(route["response"]) - set(r.json()))
+    assert not missing, f"{_route_id(route)} no longer returns {missing}"
+
+
 def test_edit_options_match_the_edit_model():
     # lib/edit.ts sends only these in `edit.options`; the API rejects any other name with 422.
     assert sorted(CONTRACT["edit_options"]) == sorted(LayoutOptions.model_fields)
