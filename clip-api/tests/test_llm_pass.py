@@ -371,6 +371,23 @@ def test_the_judge_never_rates_a_standby_candidate_and_all_standby_is_no_moments
     assert e.value.code == "no_moments"
 
 
+def test_a_candidate_with_a_small_standby_share_is_still_judged(tmp_path):
+    # U2's contract: `standby` is a boolean (True past STANDBY_REJECT), `standby_share` the float behind it.
+    cands = [P._Candidate(start=0.0, end=30.0, base=1.0, signals={"i": 0}, features={"standby": False, "standby_share": 0.3}),
+             P._Candidate(start=100.0, end=130.0, base=1.0, signals={"i": 1}, features={"standby_share": 0.2}),
+             P._Candidate(start=200.0, end=230.0, base=1.0, signals={"i": 2}, features={"standby": 0.4}),     # not True
+             P._Candidate(start=300.0, end=330.0, base=1.0, signals={"i": 3}, features={"standby": True, "standby_share": 0.9})]
+    rated = []
+
+    def judging(text, frame, ctx):
+        rated.append(ctx["signals"]["i"])
+        return {"title": "t", "virality": {"score": 80}}
+    timer = Timer()
+    out = P._judge(cands, judging, tmp_path / "none.mp4", tmp_path, lambda *a: None, None, timer=timer)
+    assert sorted(rated) == [0, 1, 2] and sorted(c.start for c in out) == [0.0, 100.0, 200.0]
+    assert timer.as_dict()["counts"]["standby_rejected"] == 1
+
+
 def test_the_transcript_pass_is_told_never_to_propose_standby():
     system, _text = moments_request([], {"chunk": (0.0, 300.0)})
     assert "Never propose a standby" in system and "empty chair" in system and "BRB" in system

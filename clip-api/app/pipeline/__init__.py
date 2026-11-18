@@ -681,10 +681,12 @@ def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path,
     timer = timer or Timer()
     progress("judging", 60)
     # A candidate flagged as a standby screen (U2: BRB, intro card, empty chair, menu) is never judged or kept.
-    standby = [c for c in candidates if c.features.get("standby")]
+    # The flag is the boolean `features.standby` (True only past U2's STANDBY_REJECT share); `standby_share`, a
+    # float, is information only: a moment with a little standby in it is still judged.
+    standby = [c for c in candidates if c.features.get("standby") is True]
     if standby:
         timer.count("standby_rejected", len(standby))
-        candidates = [c for c in candidates if not c.features.get("standby")]
+        candidates = [c for c in candidates if c.features.get("standby") is not True]
         if not candidates:
             raise PipelineError("no_moments", "No stand-out moments were found in this video.")
     with timer.stage("judge_frames"):
