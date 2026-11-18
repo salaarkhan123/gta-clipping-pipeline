@@ -4,18 +4,19 @@
 // Data: POST /v1/imports/preview when this API has it (found in /openapi.json, never probed), GET /v1/options,
 // GET /v1/languages, the template routes, POST /v1/imports, then the tool's own route. Tailwind utilities.
 import Link from "next/link";
+import { ComingSoonBadge } from "@/components/ComingSoonBadge";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, clock, videoFileProblem } from "@/lib/api";
 import { useLanguages } from "@/lib/languages";
-import { allows, inside, Listed, onlyListed, useClipOptions } from "@/lib/options";
+import { polishLook } from "@/lib/polish";
+import { allows, inside, Listed, offeredBucket, onlyListed, useClipOptions } from "@/lib/options";
 import { route } from "@/lib/routes";
 import { AS_IT_IS, extrasFrom, loadCustom, loadTemplates, Look, lookFrom, Saved, startLook, tidy } from "@/lib/templates";
 import { isBuilt, ToolEntry, TOOLS } from "@/lib/tools";
-import { ComingSoonBadge } from "@/components/ComingSoonBadge";
 import { Icon } from "./Icon";
+import { useImportSources } from "./ImportBox";
 import { JobSetup } from "./setup/JobSetup";
-import { offeredBucket } from "@/lib/options";
 import { AspectSelect, Picked, PreEdit, Templates } from "./PreEdit";
 import { useDash } from "./Shell";
 import { BackTitle } from "./ui";
@@ -73,6 +74,7 @@ export function LinkChooser() {
   const file = useRef<HTMLInputElement>(null);
   // AI Clipping uses the full job-setup screen; it hands back the options it would send.
   const setup = useRef<Record<string, unknown> | null>(null), [template, setTemplate] = useState<string | undefined>(undefined);
+  const [preset, setPreset] = useState<Partial<Look>>({});           // Home's polish chips
   // "Upload the file instead": the uploaded video opens on the chosen tool's own form, where its price is shown.
   const { up, start: upload, cancel } = useUpload((u) => router.push(kind === "transcripts" ? `/dashboard/transcript/?id=${u.upload_id}`
     : kind === "summary" ? `/dashboard/summary/?id=${u.upload_id}` : `/dashboard/project/?id=${u.upload_id}&tool=${kind}`));
@@ -82,6 +84,7 @@ export function LinkChooser() {
     const u = q.get("url") || "";
     setUrl(u);
     setTemplate(q.get("template") || undefined);
+    setPreset(polishLook(window.location.search));
     const t = TOOLS.find((x) => x.id === q.get("tool"));
     if (t && kindOf(t)) setKind(kindOf(t)!);
     // No preview route, or it could not answer (rate limit, server busy): the plain card, and the import says the rest.
@@ -94,8 +97,11 @@ export function LinkChooser() {
           else setPreview(null);
         })
       : setPreview(null));
-    // Imports can be switched off on the server (IMPORTS_ENABLED=false): say so up front and offer the upload.
-    api<{ enabled?: boolean }>("/v1/imports/sources").then((x) => { if (x?.enabled === false) setOff(true); }).catch(() => {});
+  }, [fail]);
+  // Imports can be switched off on the server (IMPORTS_ENABLED=false): say so up front and offer the upload.
+  const sources = useImportSources();
+  useEffect(() => { if (sources && sources.enabled === false) setOff(true); }, [sources]);
+  useEffect(() => {
     // URL clipping: POST /v1/clips taking `url`, or its own route. Found in /openapi.json, never probed.
     Promise.all([route("post", "/v1/clips"), route("post", "/v1/clips/from-url")])
       .then(([clips, fromUrl]) => setOneCall(clips?.fields.includes("url") ? "/v1/clips" : fromUrl ? "/v1/clips/from-url" : null));
@@ -234,7 +240,7 @@ export function LinkChooser() {
 
   // AI Clipping: the full job-setup screen. The price is the API's own estimate for this link, never worked out here.
   if (kind === "clips" && !refused && listed && preview !== undefined && !confirm) return (
-    <JobSetup listed={listed} template={template}
+    <JobSetup listed={listed} template={template} preset={preset}
       source={{ title: preview?.title || hostOf(url), duration, thumb: preview?.thumbnail_url, badge: PLATFORM[preview?.platform || ""] || null,
         detail: [KIND[preview?.kind || ""], PLATFORM[preview?.platform || ""] || preview?.platform, preview?.channel].filter(Boolean).join(" · ") || url }}
       price={quoted ? { state: "ok", credits: quoted.credits, note: quoted.basis ? `Worked out from ${quoted.basis}.` : undefined }
@@ -314,7 +320,7 @@ export function LinkChooser() {
       </section>}
 
       {!refused && <div className="sticky bottom-0 z-20 grid w-[min(100%,720px)] gap-[10px] rounded-t-16 border border-b-0 border-solid border-line bg-[rgba(13,15,18,.96)] px-[18px] pb-4 pt-[14px]
-        shadow-[0_-20px_40px_rgba(0,0,0,.45)] [backdrop-filter:blur(10px)] narrow:bottom-[calc(theme(spacing.tabbar)+env(safe-area-inset-bottom))] narrow:px-[14px] narrow:py-3">
+        shadow-[0_-20px_40px_rgba(0,0,0,.45)] [backdrop-filter:blur(10px)] narrow:bottom-[calc(var(--app-bottom-bar,theme(spacing.tabbar))+env(safe-area-inset-bottom))] narrow:px-[14px] narrow:py-3">
         {confirm ? <>
           <p className="muted">The video is in: {clock(confirm.upload.duration_sec)} long. {perMinute(kind)
             ? `This uses ${confirm.upload.credits_required} credit${confirm.upload.credits_required === 1 ? "" : "s"} (one per minute of video).`
