@@ -1,7 +1,7 @@
 "use client";
 import { useRef } from "react";
 import { Cam, Gameplay, SplitClip } from "../demos/Frames";
-import { Footage, useItems } from "../demos/Footage";
+import { Credits, Footage, useItems } from "../demos/Footage";
 import { useInView } from "../demos/motion";
 import s from "../demos/demos.module.css";
 import { Section } from "../../site/Section";
@@ -15,9 +15,12 @@ const PEAKS = [[0.08, 0.5], [0.21, 0.8], [0.34, 0.45], [0.47, 1], [0.63, 0.65], 
 function FoundClip() {
   const item = useItems("clip-finding")[0] ?? null, box = useRef<HTMLDivElement>(null), seen = useInView(box);
   return (
-    <div ref={box} className="relative aspect-[9/16] h-[260px] shrink-0 overflow-hidden rounded-[14px] ring-1 ring-white/10 narrow:h-[190px]">
-      {item ? <Footage section="clip-finding" item={item} play={seen} /> : <SplitClip game="gta" />}
-      {item?.rank && <span className="absolute bottom-2 left-2 z-10 rounded-full bg-black/65 px-2 py-[3px] text-[11px] font-semibold text-white">Match #{item.rank}</span>}
+    <div className="flex shrink-0 flex-col items-center">
+      <div ref={box} className="relative aspect-[9/16] h-[260px] overflow-hidden rounded-[14px] ring-1 ring-white/10 narrow:h-[190px]">
+        {item ? <Footage section="clip-finding" item={item} play={seen} /> : <SplitClip game="gta" />}
+        {item?.rank && <span className="absolute bottom-2 left-2 z-10 rounded-full bg-black/65 px-2 py-[3px] text-[11px] font-semibold text-white">Match #{item.rank}</span>}
+      </div>
+      <Credits items={[item]} className="mt-2" />
     </div>
   );
 }

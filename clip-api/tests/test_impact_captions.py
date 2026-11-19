@@ -421,7 +421,13 @@ def test_rendered_the_bundled_font_is_what_is_drawn_where_the_plan_says_and_the_
             assert len(rows) > 5000, (name, position)                         # the caption is there
             want = caption_center(plan, position, m.half, C.IMPACT_FILL)
             assert (rows.min() + rows.max()) / 2 == pytest.approx(want, abs=6), (name, position)
-            assert rows.max() - rows.min() == pytest.approx(m.cap, abs=8)      # the capitals: 6% of the frame height
+            # The capitals: 6% of the frame height. BANANA is the word being said at 0.5 s, so it has grown to
+            # ACTIVE_POP's size (#180); OKAY, already said, keeps the line's own.
+            said, other = lime(img), white(img)
+            other_rows = np.nonzero(other)[0]
+            assert other_rows.max() - other_rows.min() == pytest.approx(m.cap, abs=8), (name, position)
+            assert rows.max() - rows.min() == pytest.approx(m.cap * C.ACTIVE_POP[1], abs=8), (name, position)
+            assert said.sum() > 0
             # Anton is a condensed face: OKAY  BANANA is as wide as the font's own table says. Any stand-in
             # (the machine's default sans is half as wide again) fails this.
             letters = C.impact_width(["OKAY", "BANANA"], m.em) - 2 * m.outline

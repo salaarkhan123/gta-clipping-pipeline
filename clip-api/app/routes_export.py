@@ -176,7 +176,10 @@ def export_plan(db: Session, p: Principal, body: ExportRequest) -> ExportPlan:
         if len(clips) != 1:
             raise ApiError(422, "one_clip_per_edit", "Send an edit with exactly one clip in `clips`.")
         edits[clips[0].id] = check_edit(db, clips[0], body.edit).model_dump()
-    options = _options(job, body.options.model_dump(exclude_unset=True), body.options.hook)
+    # `hook` not sent: the export keeps what the job chose (its hook_overlay), so a clip made with the hook off
+    # is not exported with one.
+    hook = body.options.hook if "hook" in body.options.model_fields_set else bool((job.options or {}).get("hook_overlay", True))
+    options = _options(job, body.options.model_dump(exclude_unset=True), hook)
     s, account_plan = get_settings(), plan_of(p.account)
     plan = ExportPlan(job=job, clips=clips, options=options, edits=edits,
                       resolution=rendered_resolution(db, job, options, account_plan.get("max_side")))

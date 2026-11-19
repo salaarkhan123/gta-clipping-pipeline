@@ -9,7 +9,8 @@
   stuck                                         list WAITING/QUEUED/RUNNING jobs
   make-admin EMAIL / revoke-admin EMAIL         let an account use the admin routes (/v1/admin/...) from its login
   ops-status                                    queue and worker health as key=value lines (read-only; ops.sh status)
-  send-test-email --to ADDRESS                  send one email through the configured SMTP (exit 2: not configured, 1: failed)
+  send-test-email --to ADDRESS                  send one email through the configured provider, Resend or SMTP
+                                                (exit 2: not configured, 1: failed)
   bump-token-epoch                              void every password-reset and email-verification link already sent
   selftest                                      load every model and tool once (run in the worker container)
   db-status                                     schema revision and differences from the models (read-only)

@@ -110,6 +110,21 @@ def test_disable_hides_everything_and_restore_brings_it_back_with_its_files(clie
     assert events(ref) == [("claimant", "received"), ("admin", "disable"), ("admin", "restore")]
 
 
+@pytest.mark.parametrize("second", ["clip", "upload"])
+def test_restoring_one_case_never_undoes_another_cases_removal(client, mail, admin, owned, second):
+    """Two cases on the same content (Codex, #218): A disables, B disables too; restoring or rejecting A keeps
+    the content hidden while B still holds it, and it comes back only when B lets go as well."""
+    a, _ = report(client, owned["clip"])
+    b, _ = report(client, owned[second])
+    assert decide(client, admin[0], a, "disable").status_code == 200
+    assert decide(client, admin[0], b, "disable").status_code == 200
+    assert visible(client, owned)[0] is False
+    assert decide(client, admin[0], a, "restore").json()["status"] == "restored"
+    assert visible(client, owned)[0] is False                     # B still holds it
+    assert decide(client, admin[0], b, "reject", message="Not your work").json()["status"] == "rejected"
+    assert visible(client, owned)[0] is True                      # nobody holds it now
+
+
 def test_reject_after_disable_puts_the_content_back(client, mail, admin, owned):
     ref, _ = report(client, owned["clip"])
     decide(client, admin[0], ref, "disable")

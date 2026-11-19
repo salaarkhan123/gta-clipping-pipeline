@@ -1,0 +1,42 @@
+{
+ "section": "hero-long-video",
+ "version": 1,
+ "permission": "owner-confirmed 2026-11-18",
+ "credits": [
+  {
+   "creator": "xQc",
+   "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU"
+  }
+ ],
+ "items": [
+  {
+   "id": "vod",
+   "candidate": "xqc-m1",
+   "label": "The long video",
+   "kind": "video",
+   "src": "vod.mp4",
+   "webm": "vod.webm",
+   "poster": "vod.webp",
+   "width": 960,
+   "height": 540,
+   "duration_sec": 12480.1,
+   "game": "GTA VI",
+   "aspect": "16:9",
+   "layout": "original",
+   "rank": 1,
+   "rating": 99,
+   "rating_source": "signals",
+   "credit": "Footage: xQc",
+   "source": {
+    "id": "xqc",
+    "creator": "xQc",
+    "title": "xQc Plays GRAND THEFT AUTO VI (Part 1)",
+    "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU",
+    "start_sec": 8790.67,
+    "end_sec": 8798.67
+   },
+   "loop_sec": 8.0,
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  }
+ ]
+}
