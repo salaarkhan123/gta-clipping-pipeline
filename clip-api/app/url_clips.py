@@ -114,6 +114,7 @@ def transfer_json(imp: Job) -> dict:
     (null when the site does not say), and the part of the video it takes (null: all of it)."""
     result = imp.result or {}
     return {"bytes_done": result.get("bytes_done"), "bytes_total": result.get("bytes_total"),
+            "fetched": result.get("fetched"),       # once it has finished: runner.fetched_json
             "range": range_json(result.get("range") or (imp.options or {}).get("range"))}
 
 
@@ -124,6 +125,8 @@ def link_json(db: Session, job: Job) -> dict:
     if imp is None:                     # the account had the video already: nothing was imported
         return {"import_id": None, "status": "SUCCEEDED", "stage": "done", "progress": 100, "url": link.get("url"),
                 "platform": link.get("platform"), "reused": True, "bytes_done": None, "bytes_total": None,
+                "fetched": {"mode": "none", "bytes": 0, "seconds": 0.0, "full_bytes": None, "full_seconds": None,
+                            "full_bytes_estimated": False},
                 "range": range_json(link.get("range")),
                 "upload_id": job.upload_id, "error": None}
     ready = job.status != WAITING and imp.status == "SUCCEEDED"

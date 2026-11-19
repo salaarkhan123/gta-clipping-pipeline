@@ -141,11 +141,15 @@ def _started_at(info: dict) -> str | None:
 
 
 def _range_download(source: Source, info: dict) -> str:
-    """"partial": a chosen range is downloaded on its own (the site serves the video as a list of segments);
-    "full": the whole video is downloaded and the range is cut from it."""
-    listed = any(isinstance(f, dict) and str(f.get("protocol") or "").startswith("m3u8")
-                 and f.get("vcodec") != "none" for f in info.get("formats") or [])
-    return "partial" if listed else "full"
+    """What to expect for a chosen range. "partial": it is downloaded on its own (the site lists the video as
+    segments, or serves each stream as one indexed MP4 file that can be read by byte range); "full": the whole
+    video is downloaded and the range is cut from it. A forecast from the metadata: what an import really did is
+    its `fetched.mode`."""
+    def by_part(f) -> bool:
+        protocol = str(f.get("protocol") or "")
+        return f.get("vcodec") != "none" and (protocol.startswith("m3u8") or (
+            source.platform == "youtube" and protocol == "https" and f.get("ext") == "mp4"))
+    return "partial" if any(isinstance(f, dict) and by_part(f) for f in info.get("formats") or []) else "full"
 
 
 def answer(url: str, source: Source | None, info: dict | None = None, refusal: Refused | None = None) -> dict:
