@@ -93,7 +93,9 @@ def picture_hash(frame: Path | None) -> int | None:
     try:
         from PIL import Image
         with Image.open(frame) as img:
-            grey = list(img.convert("L").resize((9, 8), Image.BILINEAR).getdata())
+            # One byte per pixel of an "L" image, row by row: the same values getdata() gave (deprecated in
+            # Pillow 13, removed in 14), on every Pillow requirements.txt allows.
+            grey = list(img.convert("L").resize((9, 8), Image.BILINEAR).tobytes())
     except Exception:
         return None
     bits = 0
