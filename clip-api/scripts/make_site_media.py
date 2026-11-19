@@ -531,6 +531,10 @@ def render(sources: dict, shots: list, work: Path, out: Path, only: set | None, 
                 item["boxes"] = plan_boxes(seg_file, [s for s in shots if s["section"] == section
                                                       and s["source"] == sid and s.get("moment") == shot.get("moment")
                                                       and s.get("variant") in shot["boxes"]])
+            curve = work / "scout" / f"{sid}.signals.json"
+            if shot.get("duration") == "source" and curve.exists():      # the whole video's highlight curve
+                shutil.copy2(curve, dest / f"{cid}.signals.json")
+                item["signals"] = f"{cid}.signals.json"
             if shot.get("duration") == "source":
                 item["duration_sec"] = scouts.get(sid, {}).get("duration_sec") or src.get("duration_sec")
                 item["loop_sec"] = round(seconds, 2)
@@ -873,12 +877,16 @@ def main(argv=None) -> int:
     if a.step == "publish":
         if not (a.featured and a.public):
             p.error("publish needs --featured and --public")
-        featured = a.featured.expanduser()
-        if not featured.exists():       # the owner has not saved picks: every confirmed candidate, best first
-            featured = work / "default-featured.json"
-            featured.write_text(json.dumps(default_picks(out, set(a.exclude.split(",")) if a.exclude else set()),
-                                           indent=1) + "\n")
-            print(f"no {a.featured.name}: publishing the default picks written to {featured}")
+        # Every confirmed candidate, best first, for each section the owner has not picked; the owner's picks
+        # (featured.json) win for the sections they cover.
+        picks = default_picks(out, set(a.exclude.split(",")) if a.exclude else set())
+        owner = a.featured.expanduser()
+        if owner.exists():
+            picks["sections"].update(load(owner).get("sections", {}))
+            picks["owner_sections"] = sorted(load(owner).get("sections", {}))
+        featured = work / "default-featured.json"
+        featured.write_text(json.dumps(picks, indent=1) + "\n")
+        print(f"owner picks for: {', '.join(picks.get('owner_sections', [])) or 'none'}; defaults elsewhere")
         return publish(featured, out, a.public.expanduser())
     raw = load(a.shots)["shots"]
     if a.step == "more":

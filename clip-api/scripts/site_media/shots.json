@@ -2,7 +2,7 @@
  "about": "Shot list for make_site_media.py. `moment` is a rank (or a list of ranks) from the engine's scout of that source, best = 1; each rank is one candidate. Sections captions, reframe, templates and setup need a `variant`. Defaults: layout auto (facecam detected), impact captions, an 8 s loop from the clip's start.",
  "shots": [
   {"section": "hero-long-video", "label": "The long video", "source": "tgg", "moment": [1, 2], "kind": "source", "duration": "source"},
-  {"section": "hero-long-video", "label": "The long video", "source": "xqc", "moment": [1], "kind": "source", "duration": "source"},
+  {"section": "hero-long-video", "label": "The long video", "source": "xqc", "moment": [1, 3], "kind": "source", "duration": "source"},
 
   {"section": "hero-vertical-clips", "label": "GTA VI", "source": "tgg", "moment": [1, 2, 3]},
   {"section": "hero-vertical-clips", "label": "GTA VI", "source": "tgg2", "moment": [1, 2, 3, 4, 5, 6, 7, 8]},
@@ -10,6 +10,7 @@
   {"section": "hero-vertical-clips", "label": "Fortnite", "source": "ninja", "moment": [1, 2, 3]},
   {"section": "hero-vertical-clips", "label": "Valorant", "source": "timmy", "moment": [1, 2, 3, 4, 5, 6, 7, 8]},
   {"section": "hero-vertical-clips", "label": "Forza Horizon 5", "source": "forza", "moment": [1, 2, 3, 4, 5, 6]},
+  {"section": "hero-vertical-clips", "variant": "wide", "label": "GTA VI (16:9)", "source": "xqc", "moment": 3, "options": {"aspect": "16:9"}, "rating_from": "xqc-m3"},
   {"section": "hero-vertical-clips", "variant": "wide", "label": "Forza Horizon 5 (16:9)", "source": "forza", "moment": 1, "options": {"aspect": "16:9"}, "rating_from": "forza-m1"},
 
   {"section": "captions", "variant": "plain", "label": "No captions (words for a live overlay)", "source": "xqc", "moment": 1, "options": {"captions": false}, "words_from": "impact"},
