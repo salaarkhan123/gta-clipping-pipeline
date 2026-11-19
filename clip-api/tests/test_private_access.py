@@ -19,7 +19,7 @@ import jwt
 import pytest
 from sqlalchemy import select, update
 
-from app import storage, worker
+from app import deps, storage, worker
 from app.config import get_settings
 from app.db import new_session
 from app.ingest import platforms
@@ -75,6 +75,10 @@ ROUTES: dict[tuple[str, str], Case] = {
     ("POST", "/v1/clips/{clip_id}/thumbnails/premium/quote"): Case(body={"style": "cinematic"}),
     ("POST", "/v1/clips/{clip_id}/thumbnails/premium"): Case(body={"style": "cinematic", "confirm": True,
                                                                   "likeness_consent": True}),
+    # (#146) a counter-notice on a report about A's content: only A's login may send one
+    ("POST", "/v1/trust/my-cases/{reference}/counter-notice"): Case(body={
+        "name": "Some Body", "address": "1 Any St, Calgary AB", "phone": "+1 555 0102",
+        "explanation": "This is my own recording.", "mistake": True, "consent": True, "signature": "Some Body"}),
 }
 
 # Routes with an id in the path that are public on purpose.
@@ -112,7 +116,8 @@ PUBLIC_BODY_IDS = {
 
 # Account routes that list things: as B they must hold none of A's ids.
 LISTINGS = ("/v1/me", "/v1/keys", "/v1/uploads", "/v1/jobs", "/v1/clips", "/v1/projects", "/v1/imports",
-            "/v1/credits", "/v1/templates/custom", "/v1/me/consents")        # consents: #158
+            "/v1/credits", "/v1/templates/custom", "/v1/me/consents",        # consents: #158
+            "/v1/trust/my-cases")                                             # reports about your content: #146
 PUBLIC_GETS = {
     "/health": "status only", "/v1/auth/verify": "takes an emailed token", "/v1/languages": "fixed list",
     "/v1/options": "fixed list", "/v1/templates": "catalogue", "/v1/templates/games": "catalogue",
@@ -255,8 +260,15 @@ def world(client, video) -> World:
                              style="cinematic", clean_key=f"thumbs/{clip['id']}/{thumb_id}.clean.jpg",
                              image_key=f"thumbs/{clip['id']}/{thumb_id}.jpg", show_text=True))
         db.commit()
+    deps._buckets.clear()                     # (#146) a copyright report about A's clip; it changes no content
+    reported = client.post("/v1/trust/reports", json={
+        "kind": "copyright", "name": "Rights Holder", "email": f"rh{uuid.uuid4().hex[:8]}@studio-example.com",
+        "address": "1 Main St", "relationship": "owner", "work": "My original recording",
+        "reported_urls": [clip["id"]], "good_faith": True, "accurate": True, "signature": "Rights Holder"})
+    assert reported.status_code == 201, reported.text
     ids = {"key_id": a_key_id, "job_id": clip_job, "clip_id": clip["id"], "upload_id": up["upload_id"],
-           "template_id": template.json()["id"], "import_id": imp["import_id"], "thumb_id": thumb_id}
+           "template_id": template.json()["id"], "import_id": imp["import_id"], "thumb_id": thumb_id,
+           "reference": reported.json()["reference"]}
     w = World(a, a_key, b, b_key, b_account, ids)
     exported = client.get(f"/v1/jobs/{clip_job}", headers=a).json()["clips"]
     assert exported[0]["preview_url"] and exported[0]["export_url"], exported       # a preview and an export exist
@@ -435,6 +447,7 @@ def test_listings_show_a_their_own(client, world):
     assert ids["job_id"] in client.get("/v1/credits", headers=a).text
     assert ids["template_id"] in client.get("/v1/templates/custom", headers=a).text
     assert ids["key_id"] in client.get("/v1/keys", headers=a).text
+    assert ids["reference"] in client.get("/v1/trust/my-cases", headers=a).text
 
 
 # ---- AC2: signed file links ----

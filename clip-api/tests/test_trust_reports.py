@@ -228,6 +228,7 @@ def people(client):
 ADMIN_BODIES = {
     ("GET", "/v1/admin/trust/cases"): None,
     ("GET", "/v1/admin/trust/cases/{reference}"): None,
+    ("POST", "/v1/admin/trust/cases/{reference}/decisions"): {"action": "note", "note": "access test"},
 }
 
 
