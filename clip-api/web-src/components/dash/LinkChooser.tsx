@@ -271,7 +271,7 @@ export function LinkChooser() {
     setStep(null); setConfirm({ upload: u });
   }
 
-  if (!url) return <div className="form-col"><BackTitle title="What should we make from this video?" /><p className="empty-note">No link to work with. <Link href="/dashboard/">Paste one on Home</Link>.</p></div>;
+  if (!url) return <div className="form-col"><BackTitle title="What should we make from this video?" /><p className="empty-note">No link to work with. <Link href="/dashboard/" className="underline">Paste one on Home</Link>.</p></div>;
   const chips = TOOLS.filter((t) => t.id !== "editor");
   const busy = !!step;
   const short = !!quoted && quoted.enough === false;

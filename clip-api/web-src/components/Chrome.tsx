@@ -145,7 +145,7 @@ export function Footer() {
           <Link href="/takedown/" className={FOOT_LINK}>Report content</Link>
         </nav>
       </div>
-      <p className="mx-auto mt-12 max-w-site border-0 border-t border-solid border-line pt-6 text-[13px] text-fg-3">© {new Date().getFullYear()} ClutchClips</p>
+      <p className="mx-auto mt-12 max-w-site border-0 border-t border-solid border-line pt-6 text-[13px] text-fg-2">© {new Date().getFullYear()} ClutchClips</p>
     </footer>
   );
 }
