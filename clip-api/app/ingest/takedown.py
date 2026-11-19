@@ -18,6 +18,7 @@ from .. import ledger
 from ..db import new_session
 from ..models import Account, Clip, Export, ImportLog, Job, Upload, utcnow
 from ..storage import get_storage, transcript_key, transcript_parts_key, vindex_key
+from ..thumbnail_jobs import thumbnail_keys
 from ..thumbnails import frame_key_of
 from .sources import canonical
 
@@ -120,6 +121,7 @@ def _take_down(db, storage, upload: Upload, dry_run: bool) -> Removed:
             if not dry_run:
                 clip.deleted_at = now
     clip_ids = [c.id for c in clips]
+    out.files += thumbnail_keys(db, clip_ids)         # premium thumbnails and edited ones (#140)
     exports = db.execute(select(Export).where(Export.clip_id.in_(clip_ids), Export.storage_key.is_not(None))
                          ).scalars().all() if clip_ids else []
     for export in exports:

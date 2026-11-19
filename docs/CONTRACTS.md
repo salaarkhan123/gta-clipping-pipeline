@@ -143,7 +143,16 @@ Panel sizes are a public template field, `panels: {"camera": "top" | "bottom" | 
 - When the title arrives after the clip (the find tool, or a clip the judge could not rate), the worker sets it on the same frame then. The AI is always shown the frame without text.
 - The frame without text is stored with the clip (`clips/<job>/<clip>.frame.jpg`, its key in `features.thumbnail.frame_key`) and deleted with it (expiry, lost jobs, takedown). `PATCH /v1/clips/{id}` takes `title` and/or `hook` (max 48 characters, one line, at most six words: the AI's own rules). When the words the thumbnail carries change, it is drawn again on that frame inside the request (about 0.1 s, no video read, free) and stored over the same key, so `thumb_url` links already on a page show the new picture (a browser may need a reload). A hook burned into the video does not change. Clips made before frames were kept keep their thumbnail.
 - `features.thumbnail` records the choice: `at` (source second), `frames` looked at, `score`, `face`, `failed` (checks the frame failed, when every frame failed some), `text` (whether text was drawn), `standby` (the share of the clip's keyframes that looked like standby, 0 to 1), `frame_key` and `canvas` (where text may go, so the text can be set again later).
-- AI-generated thumbnails are a separate paid option, priced in their own ticket. Not built.
+
+### Premium thumbnails (#140, paid, behind `PREMIUM_THUMBNAILS`)
+
+- `GET /v1/clips/{id}/thumbnails`: `{selected, thumbnails: [{id ("original" or thb_…), kind, style, url, text, show_text, editable, selected}], pending: [job ids], premium: null | {credits, styles: [{id, name}], instruction_max, consent, note}}`. Free.
+- `POST /v1/clips/{id}/thumbnails/{thumb_id}/select`: the clip's `thumb_url` shows that one (`clips.thumb_chosen_key`); `original` goes back to `thumb_key`, which the job made and `PATCH /v1/clips/{id}` redraws. Free.
+- `PATCH /v1/clips/{id}/thumbnails/{thumb_id}` `{text?, show_text?}`: that thumbnail's own words, redrawn on its picture without text by `thumbs.write_thumbnail` into a new file. Free. For `original` the new picture is a copy; the job's `thumb_key` keeps following the title and hook.
+- `POST /v1/clips/{id}/thumbnails/premium/quote` `{style, instruction?}`: `{credits_reserved, credits, likeness_consent_required, consent, note}`. Reserves nothing.
+- `POST /v1/clips/{id}/thumbnails/premium` `{style, instruction?, confirm: true, credits?, likeness_consent}` with optional `Idempotency-Key`: a job `thm_…` (tool `premium_thumbnail`) to poll. 422 `confirm_required`, `likeness_consent_required`, `instruction_not_allowed`, `unknown_style`; 409 `price_changed`, `no_clean_frame`; 402; 404 `premium_thumbnails_off`. An identical request while one is queued or running returns that job.
+- The model never draws text; our renderer draws the hook on the result. A result is never chosen for the user.
+- Schema revision 0009 (additive, after #158's 0008): `clips.thumb_id`, `clips.thumb_chosen_key`; tables `clip_thumbnails` and `likeness_consents` (append-only). The frame comes from `features.thumbnail.frame_key`.
 
 ## Score calibration (A)
 

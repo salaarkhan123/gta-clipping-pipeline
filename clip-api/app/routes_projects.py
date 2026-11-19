@@ -13,6 +13,7 @@ from .storage import get_storage
 
 router = APIRouter()
 ACTIVE = ("QUEUED", "RUNNING")
+NOT_THUMB = ~Job.id.startswith("thm_", autoescape=True)    # premium thumbnail jobs (#140) are not runs of a project
 
 
 def _live_uploads(account_id: str):
@@ -27,9 +28,9 @@ def list_projects(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, g
     uploads = db.execute(_live_uploads(p.account.id).order_by(Upload.created_at.desc())
                          .limit(limit).offset(offset)).scalars().all()
     ids = [u.id for u in uploads]
-    jobs = dict(db.execute(select(Job.upload_id, func.count(Job.id)).where(Job.upload_id.in_(ids))
+    jobs = dict(db.execute(select(Job.upload_id, func.count(Job.id)).where(Job.upload_id.in_(ids), NOT_THUMB)
                            .group_by(Job.upload_id)).all()) if ids else {}
-    active = set(db.execute(select(Job.upload_id).where(Job.upload_id.in_(ids), Job.status.in_(ACTIVE)))
+    active = set(db.execute(select(Job.upload_id).where(Job.upload_id.in_(ids), Job.status.in_(ACTIVE), NOT_THUMB))
                  .scalars()) if ids else set()
     clips: dict[str, int] = {}
     thumbs: dict[str, str] = {}
@@ -52,7 +53,7 @@ def get_project(upload_id: str, p: Principal = Depends(current_principal), db: S
     """One project: the upload, a signed link to the source video, its jobs (newest first) and all its clips."""
     upload = own_upload(db, p, upload_id)
     storage = get_storage()
-    jobs = db.execute(select(Job).where(Job.upload_id == upload.id, Job.account_id == p.account.id)
+    jobs = db.execute(select(Job).where(Job.upload_id == upload.id, Job.account_id == p.account.id, NOT_THUMB)
                       .order_by(Job.created_at.desc())).scalars().all()
     tool_of = {j.id: (j.options or {}).get("tool", "clips") for j in jobs}
     clips = db.execute(select(Clip).where(Clip.job_id.in_(list(tool_of)), Clip.deleted_at.is_(None))
