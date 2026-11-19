@@ -17,7 +17,11 @@ test("every judge v2 score has a label", () => {
 test("the labels cover the scores app/ai.py names", (t) => {
   const ai = here("../../app/ai.py");
   if (!existsSync(ai)) return t.skip("backend not in this tree");
-  const m = readFileSync(ai, "utf8").match(/^SCORES\s*=\s*\(([^)]*)\)/m);
+  // app/ai.py names them, or (with #177) takes them from app/pipeline/ranking.py: `SCORES = ranking.SCORES`.
+  const src = readFileSync(ai, "utf8");
+  const ranking = here("../../app/pipeline/ranking.py");
+  const m = src.match(/^SCORES\s*=\s*\(([^)]*)\)/m)
+    || (/^SCORES\s*=\s*ranking\.SCORES\b/m.test(src) && existsSync(ranking) && readFileSync(ranking, "utf8").match(/^SCORES\s*=\s*\(([^)]*)\)/m));
   if (!m) return t.skip("this backend has no judge v2 SCORES yet");
   const keys = [...m[1].matchAll(/"([a-z_]+)"/g)].map((x) => x[1]);
   assert.deepEqual(keys, [...V2_SCORES]);

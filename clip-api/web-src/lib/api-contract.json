@@ -57,11 +57,29 @@
     { "method": "POST", "path": "/v1/templates/custom", "body": ["name", "options"] },
     { "method": "PATCH", "path": "/v1/templates/custom/{template_id}", "body": ["name", "options"] },
     { "method": "DELETE", "path": "/v1/templates/custom/{template_id}" },
-    { "method": "GET", "path": "/v1/templates/{template_id}/poster" }
+    { "method": "GET", "path": "/v1/templates/{template_id}/poster" },
+    { "method": "POST", "path": "/v1/uploads/multipart", "body": ["filename", "size_bytes"] },
+    { "method": "POST", "path": "/v1/uploads/multipart/parts", "body": ["upload_token"] },
+    { "method": "POST", "path": "/v1/uploads/multipart/complete", "body": ["upload_token"] },
+    { "method": "POST", "path": "/v1/uploads/multipart/abort", "body": ["upload_token"] },
+    { "method": "GET", "path": "/v1/clips/{clip_id}/thumbnails" },
+    { "method": "POST", "path": "/v1/clips/{clip_id}/thumbnails/{thumb_id}/select" },
+    { "method": "PATCH", "path": "/v1/clips/{clip_id}/thumbnails/{thumb_id}", "body": ["text", "show_text"] },
+    { "method": "POST", "path": "/v1/clips/{clip_id}/thumbnails/premium/quote", "body": ["style", "instruction"] },
+    { "method": "POST", "path": "/v1/clips/{clip_id}/thumbnails/premium",
+      "body": ["style", "instruction", "credits", "likeness_consent", "confirm"] },
+    { "method": "POST", "path": "/v1/trust/reports", "body": ["kind", "name", "email", "organization", "address", "phone",
+      "relationship", "work", "reported_urls", "details", "good_faith", "accurate", "signature", "website"] },
+    { "method": "GET", "path": "/v1/trust/my-cases", "response": ["cases"] },
+    { "method": "POST", "path": "/v1/trust/my-cases/{reference}/counter-notice",
+      "body": ["name", "address", "phone", "explanation", "mistake", "consent", "signature"] },
+    { "method": "GET", "path": "/v1/admin/trust/cases", "query": ["limit", "offset", "status", "kind"] },
+    { "method": "GET", "path": "/v1/admin/trust/cases/{reference}" },
+    { "method": "POST", "path": "/v1/admin/trust/cases/{reference}/decisions", "body": ["action"] }
   ],
   "clip_fields": ["id", "job_id", "start_sec", "end_sec", "score", "kind", "title", "titles", "hook", "why", "kept", "reaction", "bookmarked",
     "video_url", "preview_url", "thumb_url", "captions_url", "segments", "virality", "scores", "scoring_version"],
-  "edit_options": ["aspect", "camera", "caption_accent", "caption_position", "caption_style", "captions", "censor", "chat_region",
-    "facecam_box", "facecam_region", "hook_duration_ms", "hook_position", "hook_style", "layout", "render", "resolution", "split_ratio",
-    "vertical", "zoom"]
+  "edit_options": ["aspect", "camera", "caption_accent", "caption_look", "caption_position", "caption_style", "captions", "censor",
+    "chat_region", "facecam_box", "facecam_region", "hook_duration_ms", "hook_position", "hook_style", "layout", "render", "resolution",
+    "split_ratio", "thumbnail_text", "vertical", "zoom"]
 }

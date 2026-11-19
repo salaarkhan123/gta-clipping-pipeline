@@ -74,6 +74,7 @@ test("each card that shows footage names every creator it shows, once, at the bo
     "demos/Reframe.tsx": /<Credits items=\{items\} \/>/,
     "demos/HookText.tsx": /<Credits items=\{\[real\]\} \/>/,
     "sections/EditorSection.tsx": /<Credits items=\{\[clip\]\}/,
+    "sections/ModelsSection.tsx": /<Credits items=\{\[item\]\}/,               // the moment finder's real clip (#193)
   };
   for (const [f, credits] of Object.entries(cards)) {
     const text = source(`components/landing/${f}`);
@@ -82,7 +83,7 @@ test("each card that shows footage names every creator it shows, once, at the bo
     assert.ok(plays.length > 0, f);
   }
   // Files with no Credits line play no footage.
-  for (const f of ["demos/DeadAir.tsx", "sections/ModelsSection.tsx", "sections/WorkflowSection.tsx", "sections/TeamsSection.tsx"])
+  for (const f of ["demos/DeadAir.tsx", "sections/WorkflowSection.tsx", "sections/TeamsSection.tsx"])
     assert.doesNotMatch(source(`components/landing/${f}`), /<Footage /, f);
 });
 
