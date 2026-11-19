@@ -62,3 +62,11 @@ def test_me_says_whether_the_account_is_an_admin(client):
         db.get(Account, r.json()["account"]["id"]).is_admin = True
         db.commit()
     assert client.get("/v1/me", headers=h).json()["is_admin"] is True
+
+
+def test_form_fields_keep_a_visible_keyboard_focus():
+    """styles.css once set `outline: none` on input, select and textarea focus, leaving checkboxes and radios with no
+    focus mark at all and text fields with a 2% border change. The global :focus-visible ring must reach them."""
+    css = (WEB / "app" / "styles.css").read_text()
+    for rule in re.findall(r"^(?:input|select|textarea)[^{]*:focus[^{]*\{([^}]*)\}", css, re.M):
+        assert "outline" not in rule, rule
