@@ -155,6 +155,29 @@ Panel sizes are a public template field, `panels: {"camera": "top" | "bottom" | 
 - `POST /v1/clips/{id}/thumbnails/premium` `{style, instruction?, confirm: true, credits?, likeness_consent}` with optional `Idempotency-Key`: a job `thm_…` (tool `premium_thumbnail`) to poll. 422 `confirm_required`, `likeness_consent_required`, `instruction_not_allowed`, `unknown_style`; 409 `price_changed`, `no_clean_frame`; 402; 404 `premium_thumbnails_off`. An identical request while one is queued or running returns that job.
 - The model never draws text; our renderer draws the hook on the result. A result is never chosen for the user.
 - Schema revision 0009 (additive, after #158's 0008): `clips.thumb_id`, `clips.thumb_chosen_key`; tables `clip_thumbnails` and `likeness_consents` (append-only). The frame comes from `features.thumbnail.frame_key`.
+## Captions and on-screen text v1 (captions agent, 2026-11-18)
+
+Owner: the captions agent owns `app/pipeline/captions.py`, `render.text_track` (the ASS file a clip burns in), the new `app/pipeline/placement.py` and `app/pipeline/copy_check.py`, and `scripts/caption_checks.py`. The reframing agent owns the layout geometry and writes "Reframe boxes v1" (`layouts.reframe_boxes`), which placement only reads.
+
+Inputs (agreed with U1/U2 and the reframing agent):
+- Words: `(start, end, text)`, clip-relative seconds after cuts (`edit.remap_words`), the caption model's own text only (#139), sorted by start, `end > start`; back-to-back words may touch. There is no per-word confidence.
+- Standby: `features.standby_spans` (`[[start, end], ...]` source seconds) when U2 provides it. Without it the word gaps decide (below).
+- Boxes: `reframe_boxes(...)["keep_out"]`, canvas `[x0, y0, x1, y1]` px, static for the clip. In a two-panel layout the camera panel is not a keep-out box (captions sit on the seam); the head inside it is.
+
+Checks (`scripts/caption_checks.py`, run on the owner's six eval videos with the hand-labelled boxes in `scripts/caption_eval_boxes.json`; every number is measured on the ASS file `render.text_track` writes, for 9:16 auto and the 16:9 original frame):
+
+| Number | Definition | Limit |
+|---|---|---|
+| `active_p95_ms` | 95th percentile of \|when a word lights up as the word being said − its start\|. An event that marks word *i* as the one being said is named `w<i>` | ≤ 120 ms, for every word (`active_share` 1.0) |
+| `appear_early_p95_ms` | how long before it is said a word is already on screen (95th percentile) | ≤ 600 ms |
+| `dead_air_share` | share of caption time with nobody speaking: outside every word + 0.3 s, and inside any word gap of 0.6 s or more | ≤ 2% |
+| `cps_p95`, `over_cps_share` | characters per second of each caption (letters, no spaces) | over 20 cps in ≤ 5% of captions |
+| `flash_share` | captions on screen under 0.3 s | reported |
+| `over_max_words_share` | captions with more than 3 words (impact) | 0 |
+| `caption_overlap_share`, `hook_overlap_share` | share of frames with text on screen in which a caption or the hook covers a keep-out box | 0 |
+| `out_of_frame` | text events drawn past an edge of the frame | 0 |
+
+`measure` exits 1 while a limit is broken. `sheet` renders each eval window as a preview and cuts a contact sheet per game and aspect for the owner (renders are deleted; footage is never committed).
 
 ## Score calibration (A)
 

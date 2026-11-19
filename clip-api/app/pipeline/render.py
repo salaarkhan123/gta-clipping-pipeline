@@ -286,6 +286,31 @@ def hook_window(length: float, position: str = "beginning", ms: int | None = Non
     return (0.0, round(show, 3)) if position == "beginning" else (round(max(0.0, length - show), 3), round(length, 3))
 
 
+def text_track(path: Path, words, *, src_w: int, src_h: int, vertical: bool, zoom: float, chat: str,
+               plan: LayoutPlan | None, aspect: str, font: str, style: str, position: str = "auto",
+               accent: str | None = None, hook: str | None = None,
+               hook_at: tuple[float, float] | None = None) -> int:
+    """Write the clip's captions and hook (an ASS file) for the frame render_clip draws: `plan` when reframing
+    with one, the classic layout when reframing without one, the source's own frame when not reframing.
+    Returns the number of captions. scripts/caption_checks.py measures exactly this file."""
+    ow, oh = ASPECTS.get(aspect, ASPECTS["9:16"]) if vertical else (src_w, src_h)
+    if not vertical:
+        top, under, span = 0, int(1080 * 0.1), (0.0, 1.0)
+    elif plan is not None:
+        top, under, span = plan.caption_top, plan.hook_top, plan.text_span
+    else:
+        top, under, span = caption_top(src_w, src_h, "classic", zoom, chat, oh), hook_top("classic", oh), (0.0, 1.0)
+    center = None
+    if style == "impact":
+        # Measured in the frame's own pixels (the old styles write a source frame as if it were 1920x1080).
+        k = 1.0 if vertical else oh / 1080
+        center, under = impact_rows(plan, oh, position, under if vertical else int(oh * 0.1),
+                                    top if vertical and plan is None else None, k)
+    # Always written for the 1080 canvas: the subtitle renderer scales it to whatever size the clip is.
+    return build_ass(words, path, vertical, top, font, style, play=(ow, oh), hook=hook, hook_top=under,
+                     span=span, center=center, accent=accent, hook_at=hook_at)
+
+
 def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, src_h: int,
                 vertical: bool, zoom: float, chat: str, words, font: str,
                 layout: str = "fill", facecam=None, style: str = "pop", aspect: str = "9:16",
@@ -325,25 +350,12 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
             aspect = plan.aspect
         elif layouts.canonical(layout, aspect) != "classic":
             plan = plan_for(src_w, src_h, layout, facecam, aspect, zoom, camera, split_ratio)
-        ref = ow, oh = ASPECTS.get(aspect, ASPECTS["9:16"]) if vertical else (src_w, src_h)
+        ref = ASPECTS.get(aspect, ASPECTS["9:16"]) if vertical else (src_w, src_h)
         if words or hook:
-            if not vertical:
-                top, under, span = 0, int(1080 * 0.1), (0.0, 1.0)
-            elif plan is not None:
-                top, under, span = plan.caption_top, plan.hook_top, plan.text_span
-            else:
-                top, under, span = caption_top(src_w, src_h, "classic", zoom, chat, oh), hook_top("classic", oh), (0.0, 1.0)
-            center = None
-            if style == "impact":
-                # Measured in the frame's own pixels (the old styles write a source frame as if it were 1920x1080).
-                k = 1.0 if vertical else oh / 1080
-                center, under = impact_rows(plan, oh, position, under if vertical else int(oh * 0.1),
-                                            top if vertical and plan is None else None, k)
-            # Always written for the 1080 canvas: the subtitle renderer scales it to whatever size the clip is.
             length = sum(e - s for s, e in segments) if segments else end - start
-            build_ass(words, tmp / "cap.ass", vertical, top, font, style, play=(ow, oh), hook=hook, hook_top=under,
-                      span=span, center=center, accent=accent,
-                      hook_at=hook_window(length, hook_position, hook_ms) if hook else None)
+            text_track(tmp / "cap.ass", words, src_w=src_w, src_h=src_h, vertical=vertical, zoom=zoom, chat=chat,
+                       plan=plan, aspect=aspect, font=font, style=style, position=position, accent=accent,
+                       hook=hook, hook_at=hook_window(length, hook_position, hook_ms) if hook else None)
             cap_filter = f"ass=filename={tmp / 'cap.ass'}"
             if style == "impact":
                 # The renderer is handed our own font file, so the text never depends on what the machine has
