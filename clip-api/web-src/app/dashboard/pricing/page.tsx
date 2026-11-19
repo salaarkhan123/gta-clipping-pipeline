@@ -43,6 +43,8 @@ export default function AppPricing() {
       {!plans ? <p className="muted">Loading plans…</p>
         : <PlanCards plans={plans} currency={currency} yearly={yearly} current={me.plan} busy={busy} freeHref="/dashboard/"
             onPick={(p) => go("/v1/billing/subscribe", { plan_id: p.id, interval: yearly ? "year" : "month" }, p.id)} />}
+      <p className="muted small text-center">Plans renew until you cancel. By subscribing or buying credits you agree to the{" "}
+        <a href="/terms/#credits" className="text-lime underline">Terms of Service</a> and the <a href="/refunds/" className="text-lime underline">Refund Policy</a>.</p>
       {packs.length > 0 && <section className={BALANCE} aria-labelledby="packs-title">
         <div><h2 id="packs-title">Need a few more credits?</h2><p className="muted small">One-time top-ups. They never expire.</p></div>
         <div className="row">{packs.map((k) => (

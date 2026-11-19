@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getToken } from "@/lib/api";
+import { POLICIES } from "@/lib/legal";
 
 // `small`: the app's top bar size; the name hides on a phone.
 export function Logo({ small }: { small?: boolean }) {
@@ -56,6 +57,10 @@ export function Footer() {
           <h4>Company</h4>
           <Link href="/contact/">Contact</Link>
           <a href="mailto:support@clutchclips.io">support@clutchclips.io</a>
+        </nav>
+        <nav>
+          <h4>Legal</h4>
+          {POLICIES.map((p) => <Link key={p.id} href={p.path}>{p.title}</Link>)}
         </nav>
       </div>
       <p className="container copy">© {new Date().getFullYear()} ClutchClips</p>

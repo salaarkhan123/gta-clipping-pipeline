@@ -17,7 +17,8 @@ export function AuthForm({ initial = "signup", onDone, note }: { initial?: "sign
         await api("/v1/auth/forgot", { body: { email }, auth: false });
         setSent(true);
       } else {
-        const r = await api(`/v1/auth/${mode}`, { body: { email, password }, auth: false });
+        // accept_policies records the current Terms, Privacy Policy and Acceptable Use Policy versions (GET /v1/me/consents).
+        const r = await api(`/v1/auth/${mode}`, { body: mode === "signup" ? { email, password, accept_policies: true } : { email, password }, auth: false });
         setToken(r.token);
         onDone();
       }
@@ -39,7 +40,10 @@ export function AuthForm({ initial = "signup", onDone, note }: { initial?: "sign
       )}
       {mode === "signup" && (
         <label className="check"><input type="checkbox" required checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-          <span>I own the videos I upload, or have permission to clip them.</span></label>
+          <span>I agree to the <a href="/terms/" target="_blank" rel="noopener" className="text-lime underline">Terms of Service</a>,{" "}
+            <a href="/privacy/" target="_blank" rel="noopener" className="text-lime underline">Privacy Policy</a> and{" "}
+            <a href="/acceptable-use/" target="_blank" rel="noopener" className="text-lime underline">Acceptable Use Policy</a>, and I own the
+            videos I upload or have permission to clip them.</span></label>
       )}
       {error && <p className="error" role="alert">{error}</p>}
       <button className="btn primary" disabled={busy}>

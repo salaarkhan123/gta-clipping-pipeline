@@ -68,6 +68,8 @@ export function SourceBar({ onUploaded, pending }: { onUploaded: (uploadId: stri
         {names.length > 2 && <span className={`${CHIP} cursor-help text-muted`} title={sources!.sources.map((s) => `${s.name}: ${s.accepts}${s.note ? ` ${s.note}` : ""}`).join("\n")}>
           <Icon name="link" size={16} />{names.slice(0, 2).join(", ")} + {names.length - 2} more</span>}
       </div>
+      <p className="muted small text-center">Upload only videos you own or have permission to clip. See the{" "}
+        <a href="/terms/#rights" target="_blank" rel="noopener" className="text-lime underline">Terms</a>.</p>
       {box && sources && <div className="relative w-full rounded-16 border border-solid border-line bg-panel px-[18px] pb-[18px] pt-1 [&_.import-head]:pr-10 [&_.import]:border-t-0">
         <button type="button" className="icon-btn absolute right-3 top-3 h-8 w-8 border-0" aria-label="Close the import box" onClick={() => setBox(null)}><Icon name="close" size={18} /></button>
         <ImportBox key={box.n} sources={sources} start={box} onReady={(u) => onUploaded(u.upload_id)} />
