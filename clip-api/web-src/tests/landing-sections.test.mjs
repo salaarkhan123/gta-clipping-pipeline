@@ -47,16 +47,32 @@ test("future features are written in the future tense", () => {
   assert.match(source("components/landing/sections/TeamsSection.tsx"), /will be able to share/);
 });
 
-test("an AI rating is shown on real footage only when the AI judge rated it", () => {
+test("an AI rating is shown only when the AI judge rated the clip", () => {
   const footage = source("components/landing/demos/Footage.tsx");
   assert.match(footage, /export const aiRated = \(item: Item \| null\) => typeof item\?\.rating === "number" && item\.rating_source === "ai";/);
-  assert.match(source("components/landing/demos/VodToClips.tsx"), /\{aiRated\(c\) && <AiRating/);
+  for (const f of ["demos/VodToClips.tsx", "demos/CaptionStyles.tsx", "demos/Reframe.tsx", "demos/HookText.tsx", "demos/DeadAir.tsx",
+    "sections/ModelsSection.tsx", "sections/WorkflowSection.tsx", "sections/EditorSection.tsx", "sections/TeamsSection.tsx"]) {
+    for (const line of source(`components/landing/${f}`).split("\n").filter((l) => l.includes("<AiRating"))) assert.match(line, /aiRated\(/, f);
+  }
 });
 
 test("demo media never plays sound, waits for reduced motion and carries its credit", () => {
   const footage = source("components/landing/demos/Footage.tsx");
-  assert.match(footage, /<video muted /);
+  assert.match(footage, /<video[^>]*\bmuted\b/);
   assert.match(footage, /!reduced/);
   assert.match(footage, /item\.credit/);
   assert.match(source("components/landing/demos/demos.module.css"), /prefers-reduced-motion: reduce/);
+});
+
+test("the caption presets follow the clip's real words with the renderer's line rules", () => {
+  const demo = source("components/landing/demos/CaptionStyles.tsx"), cap = source("components/landing/demos/Caption.tsx");
+  const py = source("../app/pipeline/captions.py");
+  for (const name of ["PAUSE", "IMPACT_SHORT"]) {
+    const ours = cap.match(new RegExp(`${name} = ([\\d.]+)`))[1], theirs = py.match(new RegExp(`^${name} = ([\\d.]+)`, "m"))[1];
+    assert.equal(Number(ours), Number(theirs), name);
+  }
+  assert.match(demo, /wordAt\(said, v\.currentTime\)/);            // timed by the playing clip
+  assert.match(demo, /"No captions"/);
+  assert.match(demo, /Font <ComingSoonBadge short \/>/);           // the app has no font or effect choice yet
+  assert.match(demo, /Effects <ComingSoonBadge short \/>/);
 });

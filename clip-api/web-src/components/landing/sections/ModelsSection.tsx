@@ -1,6 +1,5 @@
 "use client";
 import { useRef } from "react";
-import { AiRating } from "../demos/Bits";
 import { Cam, Gameplay, SplitClip } from "../demos/Frames";
 import { useInView } from "../demos/motion";
 import s from "../demos/demos.module.css";
@@ -32,7 +31,6 @@ function FinderVisual() {
       </div>
       <div className="relative aspect-[9/16] h-[260px] shrink-0 overflow-hidden rounded-[14px] ring-1 ring-white/10 narrow:h-[190px]">
         <SplitClip game="gta" />
-        <AiRating value={95} className="absolute bottom-2 left-2" />
       </div>
     </div>
   );

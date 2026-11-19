@@ -50,7 +50,7 @@
 /* Colours from the renderer: lime #B8FF3C (impact, karaoke, tag), yellow #FFFF00 (pop, bold, boxed, bounce,
    reveal), green #7AFF66 (neon). */
 .cap { --o: .07em; white-space: nowrap; word-spacing: .12em; color: #fff; font-weight: 800; text-transform: uppercase; text-align: center; line-height: 1.08; letter-spacing: .01em;
-  font-family: inherit;
+  font-family: "DejaVu Sans", Verdana, Geneva, sans-serif;
   text-shadow: var(--o) 0 0 #000, calc(-1 * var(--o)) 0 0 #000, 0 var(--o) 0 #000, 0 calc(-1 * var(--o)) 0 #000,
     var(--o) var(--o) 0 #000, calc(-1 * var(--o)) calc(-1 * var(--o)) 0 #000, var(--o) calc(-1 * var(--o)) 0 #000,
     calc(-1 * var(--o)) var(--o) 0 #000, 0 .12em .3em rgba(0,0,0,.55); }

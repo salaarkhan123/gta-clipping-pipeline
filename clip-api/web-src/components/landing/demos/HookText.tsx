@@ -1,5 +1,5 @@
 "use client";
-import { Caption } from "./Caption";
+import { Caption, sampleWords } from "./Caption";
 import { Footage, useItem } from "./Footage";
 import { Gameplay } from "./Frames";
 import { useReducedMotion, useTicker } from "./motion";
@@ -8,6 +8,7 @@ import s from "./demos.module.css";
 // The on-screen hook: a line the AI writes from what was said, near-black on lime (captions.py HOOK_TEXT,
 // HOOK_BOX), at the start of the clip for 2.5 s unless set otherwise. Text only: there is no voice.
 const HOOK = "He tried the bridge jump. Twice.";
+const SAMPLE = sampleWords(["watch", "this", "one", "more", "time"]);
 const TONES = ["Serious", "Casual", "Humorous", "Dramatic", "Excited", "Calm"];   // 6 of the 13 hook styles
 
 export function HookText({ play }: { play: boolean }) {
@@ -43,7 +44,7 @@ export function HookText({ play }: { play: boolean }) {
             <Gameplay game="gta" label={false} />
             <span className={`${s.hook} absolute inset-x-[8%] top-[11%] rounded-[8px] bg-lime px-2.5 py-1.5 text-center text-[17px] font-extrabold leading-tight text-ink narrow:text-[12px]`}>{HOOK}</span>
             <span className="absolute inset-x-2 top-[74%] text-center text-[22px] narrow:text-[16px]">
-              <Caption style="impact" words={["WATCH", "THIS", "ONE", "MORE", "TIME"]} keys={[4]} at={reduced ? 0 : tick} />
+              <Caption style="impact" words={SAMPLE} at={reduced ? 0 : tick % SAMPLE.length} />
             </span>
           </>}
         </div>

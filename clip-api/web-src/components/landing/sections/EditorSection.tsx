@@ -1,6 +1,6 @@
 "use client";
 import { useRef } from "react";
-import { Caption } from "../demos/Caption";
+import { Caption, sampleWords } from "../demos/Caption";
 import { Footage, useItem, useWords } from "../demos/Footage";
 import { SplitClip } from "../demos/Frames";
 import { useInView, useReducedMotion, useTicker } from "../demos/motion";
@@ -33,7 +33,7 @@ export function EditorSection() {
   const cut = said.length >= 8 ? words.flatMap((w, i) => (FILLER.test(w) ? [i] : [])) : CUT;
   const spoken = words.map((_, i) => i).filter((i) => !cut.includes(i));
   const now = spoken[tick % spoken.length];
-  const caps = words.map((w) => w.replace(/[^\p{L}\p{N}'!?]/gu, "").toUpperCase());
+  const timed = said.length >= 8 ? said.slice(0, 40) : sampleWords(WORDS);
 
   return (
     <Section id="editor" eyebrow="Editor" icon={<EyebrowIcon name="edit" />} title={<>Let the AI cut it,<br className="narrow:hidden" /> then make it yours</>}
@@ -74,7 +74,7 @@ export function EditorSection() {
                 <SplitClip game="gta" />
                 <span className="absolute inset-x-[8%] top-[6%] rounded-[7px] bg-lime px-2 py-1 text-center text-[13px] font-extrabold leading-tight text-ink">He actually landed it</span>
                 <span className="absolute inset-x-2 top-[33%] -translate-y-1/2 text-center text-[20px]">
-                  <Caption style="impact" words={caps} keys={[22]} at={now} />
+                  <Caption style="impact" words={timed} at={now} />
                 </span>
               </>}
             </div>

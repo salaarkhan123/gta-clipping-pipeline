@@ -38,15 +38,16 @@ export const aiRated = (item: Item | null) => typeof item?.rating === "number" &
 
 // One item: the poster, then a muted loop once it is on screen and playing. Never sound, never for reduced motion.
 // The footage credit the permission asks for sits in a corner.
-export function Footage({ section, item, play, credit = true, className = "" }: {
-  section: MediaSection; item: Item; play: boolean; credit?: boolean; className?: string }) {
+// `videoRef`: the playing video element, for demos that follow its time (captions on the real words).
+export function Footage({ section, item, play, credit = true, className = "", videoRef }: {
+  section: MediaSection; item: Item; play: boolean; credit?: boolean; className?: string; videoRef?: React.Ref<HTMLVideoElement> }) {
   const box = useRef<HTMLSpanElement>(null), seen = useInView(box), reduced = useReducedMotion();
   const live = item.kind === "video" && seen && play && !reduced;
   return (
     <span ref={box} className={`absolute inset-0 overflow-hidden bg-black ${className}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {(item.poster || item.kind === "image") && <img src={mediaUrl(section, item.poster || item.src)} alt={item.label} loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" />}
-      {live && <video muted loop playsInline autoPlay preload="none" poster={item.poster ? mediaUrl(section, item.poster) : undefined}
+      {live && <video ref={videoRef} muted loop playsInline autoPlay preload="none" poster={item.poster ? mediaUrl(section, item.poster) : undefined}
         className="absolute inset-0 h-full w-full object-cover" aria-hidden="true">
         {item.webm && <source src={mediaUrl(section, item.webm)} type="video/webm" />}
         <source src={mediaUrl(section, item.src)} type="video/mp4" />
