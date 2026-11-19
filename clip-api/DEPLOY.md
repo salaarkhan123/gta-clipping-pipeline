@@ -18,6 +18,12 @@ schema. On a selftest failure it prints the rollback command. Caddy and Postgres
 not restarted; `web/` is served straight from the checkout, so the site updates with the pull. A change to the
 `Caddyfile` needs `docker compose up -d caddy` as well.
 
+**Security headers** (in the `Caddyfile`, on both domains): HSTS (one year, includeSubDomains, no preload),
+nosniff, `strict-origin-when-cross-origin`, `X-Frame-Options: DENY` plus `frame-ancestors 'none'`, a minimal
+`Permissions-Policy`, and no `Server` or `Via` header. The site's Content-Security-Policy allows only itself, the API
+domain and `*.digitaloceanspaces.com` for media. When the site starts loading from a new origin (fonts, a CDN,
+analytics), add that origin to the policy in the same PR, or the browser blocks it.
+
 ## Schema migrations
 
 Alembic, in `app/migrations/`. Migrations are additive only (new tables, new nullable or defaulted columns, new
@@ -295,6 +301,106 @@ informed authorization.
 
 - Benchmark with real calls (about $0.06 a thumbnail), from `clip-api/` with the keys in its settings file:
   `python scripts/premium_thumb_bench.py <out_dir> --video <file> <moments.csv> --per-video 20`.
+## Moving files to Cloudflare R2
+
+The production choice: R2 charges nothing for downloads, and clip files are mostly downloaded. Same code path as
+Spaces (`STORAGE_BACKEND=s3`): a private bucket, and every link the site shows is a signed URL straight from the
+bucket, valid for `SIGNED_URL_TTL_SEC` (at most 7 days, R2's limit; longer values are cut to 7 days).
+
+**What differs from S3** (developers.cloudflare.com/r2, read 2026-11-17; pages under `/r2/`):
+- Region is `auto` (`api/s3/api/`). Endpoint `https://<account id>.r2.cloudflarestorage.com` (`api/tokens/`).
+- No full-object CRC32 checksums and no checksum headers on CopyObject or PutBucketCors (`api/s3/api/`): the
+  client sends checksums only when the API requires them.
+- Multipart: every part but the last the same size, 5 MiB to 5 GiB, at most 10,000 parts
+  (`objects/multipart-objects/`). boto3 cuts equal parts. Unfinished multipart uploads are aborted after 7 days by
+  default, so no lifecycle rule is needed for them.
+- DeleteObjects takes 1,000 keys (`platform/release-notes/`, 2022-07-01); deleting a folder sends batches of 1,000.
+- Signed URLs: 1 second to 7 days, GET/HEAD/PUT/DELETE, only on the S3 endpoint, not on a custom domain
+  (`api/s3/presigned-urls/`). So media is served from `<account id>.r2.cloudflarestorage.com`.
+- Buckets are private unless public access is turned on (`buckets/public-buckets/`). Leave the r2.dev URL and
+  custom domains off.
+- The site reads captions from the bucket in the browser, so the bucket needs CORS rules (`buckets/cors/`).
+- R2 does not document the `response-content-disposition` override, so each file is also stored with
+  `Content-Disposition: attachment; filename=...` (documented on PutObject). The Download button saves the clip
+  under its name; `<video>` and `<img>` ignore the header.
+
+**Price** (`r2/pricing/`, read 2026-11-17): storage $0.015 per GB-month, Class A operations (writes, lists)
+$4.50 per million, Class B (reads) $0.36 per million, downloads free. Free each month: 10 GB-month, 1 million
+Class A, 10 million Class B. Deletes are free.
+
+| 1 TB stored, 5 TB downloaded per month | R2 | Spaces |
+|---|---|---|
+| Storage | 1,000 GB × $0.015 = $15.00 (less 10 GB free: $14.85) | $5 base (250 GiB) + 681 GiB × $0.02 = $18.62 |
+| Downloads | free | 1,024 GiB in the base, then 3,633 GiB × $0.01 = $36.33 |
+| Operations | about 0.4 M Class A (uploads in 8 MiB parts, clips) and 1 M Class B: inside the free tier, $0 | included |
+| **Total** | **about $15 per month** | **about $55 per month** |
+
+Downloads by the worker (R2 to the droplet) are free too. Above 1 M writes a month, Class A costs $4.50
+per further million.
+
+1. In the Cloudflare dashboard, R2, **Create bucket**: a name (for example `clutchclips-media`), Location:
+   **Specify jurisdiction** off, **Location hint** nearest the droplet (NYC or TOR droplet: Eastern North America
+   `enam`; SFO: `wnam`; AMS, FRA, LON: `weur`; SGP, BLR: `apac`; SYD: `oc`). Default storage class Standard.
+   Hints are best effort and apply only when the bucket is created (`reference/data-location/`).
+2. Bucket, **Settings**: Public Development URL **disabled**, no custom domain. **CORS policy**, Add, JSON tab,
+   paste (the site is the only origin; `www` redirects to it):
+   ```json
+   [
+     {
+       "AllowedOrigins": ["https://clutchclips.io"],
+       "AllowedMethods": ["GET", "HEAD"],
+       "AllowedHeaders": ["range"],
+       "ExposeHeaders": ["Content-Length", "Content-Range", "Content-Type", "ETag"],
+       "MaxAgeSeconds": 3600
+     }
+   ]
+   ```
+3. R2, **Manage API tokens**, **Create API token**: permission **Object Read & Write**, **Apply to specific
+   buckets only**: the bucket from step 1, TTL forever. Copy the Access Key ID and Secret Access Key (shown once)
+   and the S3 endpoint `https://<account id>.r2.cloudflarestorage.com`.
+4. Add to the server's env file (keep `STORAGE_BACKEND=local` for now):
+   ```
+   S3_ENDPOINT_URL=https://<account id>.r2.cloudflarestorage.com
+   S3_REGION=auto
+   S3_BUCKET=clutchclips-media
+   S3_ACCESS_KEY_ID=<access key id>
+   S3_SECRET_ACCESS_KEY=<secret access key>
+   SIGNED_URL_TTL_SEC=3600
+   ```
+   Then `docker compose up -d api worker caddy` when no job is RUNNING. Caddy adds `S3_ENDPOINT_URL` to the site's
+   Content-Security-Policy (`MEDIA_ORIGIN` in `docker-compose.yml`), so the browser may load media from it.
+5. Check the bucket: put, get, signed URL (bytes, type, file name), CORS for `PUBLIC_WEB_URL`, private (no
+   unsigned reads), delete, delete-folder. Every line must be `ok`. Then copy the files (safe to repeat; nothing
+   local is deleted):
+   ```bash
+   docker compose exec -T -e STORAGE_BACKEND=s3 api python scripts/check_storage.py
+   docker compose exec -T api python scripts/migrate_storage.py --dry-run
+   docker compose exec -T api python scripts/migrate_storage.py
+   ```
+   Optional, from a laptop with the repo: `tests/test_r2_live.py` runs every storage call, the migration and the
+   check against the bucket (`R2_ENDPOINT_URL`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`; under
+   half a cent of operations, cleans up after itself).
+6. Switch: set `STORAGE_BACKEND=s3`, `docker compose up -d api worker` (when no job is RUNNING), then run
+   `migrate_storage.py` once more to pick up anything written in between. It must end with `failed 0`.
+7. Verify: run one job on the site, play a clip, open the editor (captions load from the bucket), press
+   Download (saved under the clip's name). The browser console shows no CSP or CORS error. Keep the local files
+   for a week (`data/storage` in the `data` volume), then delete them.
+
+**Roll back:** set `STORAGE_BACKEND=local` and `docker compose up -d api worker`. Files created while on R2 are
+only in the bucket; copy them back with `aws s3 sync` (endpoint as above, region `auto`) before deleting it.
+
+**Storage folders** (retention and account deletion delete by folder, `delete_prefix`; ticket #150):
+
+| Folder | Holds | Removed with |
+|---|---|---|
+| `uploads/<account id>/<upload id>.<ext>` | source videos | the upload; `uploads/<account id>/` with the account |
+| `transcripts/<upload id>.json`, `index/<upload id>.npz` | per-upload transcript and visual index | the upload (single keys, not folders) |
+| `clips/<job id>/` | clip videos, previews, thumbnails, captions | the job |
+| `exports/<job id>/` | rendered exports | the job |
+| `healthcheck/`, `r2-live-test/` | left only if a check was killed midway | safe to delete any time |
+
+`delete_prefix` takes only a whole folder ending in `/`, so `uploads/acct_1/` never touches `uploads/acct_10/`,
+and raises if the bucket refuses any key.
 
 ## Moving files to DigitalOcean Spaces
 
@@ -307,7 +413,8 @@ GiB downloaded. Transfer from a Space to a Droplet in the same region group is f
 droplet's region.
 
 1. In the DigitalOcean panel: create a Space in the droplet's region with **file listing restricted**, and a
-   Spaces access key limited to that bucket.
+   Spaces access key limited to that bucket. Add the CORS rule from the R2 section (Settings, CORS
+   Configurations: origin `https://clutchclips.io`, GET and HEAD, header `range`).
 2. Add to the server's env file (keep `STORAGE_BACKEND=local` for now):
    `S3_ENDPOINT_URL=https://<region>.digitaloceanspaces.com`, `S3_REGION=<region>` (for example `nyc3`),
    `S3_BUCKET=<space name>`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`. Then `docker compose up -d api worker`

@@ -60,7 +60,22 @@ def test_local_backend_exits_2(monkeypatch, capsys):
 def test_all_steps_ok_and_object_removed(s3, capsys):
     assert load_script().main() == 0
     lines = capsys.readouterr().out.splitlines()
-    assert lines == ["ok put", "ok get", "ok signed-url", "ok delete"]
+    assert lines == ["ok put", "ok get", "ok signed-url", "ok cors", "ok private", "ok delete", "ok delete-prefix"]
+    assert keys(s3) == []
+
+
+def test_missing_cors_rules_fail_the_check(s3, capsys, monkeypatch):
+    mod = load_script()
+    real_get = mod.httpx.get
+
+    def no_cors(url, **kw):                     # a bucket without CORS rules sends no Access-Control headers
+        r = real_get(url, **kw)
+        r.headers.pop("access-control-allow-origin", None)
+        return r
+    monkeypatch.setattr(mod.httpx, "get", no_cors)
+    assert mod.main() == 1
+    out = capsys.readouterr().out
+    assert "FAIL cors: the bucket does not let http://localhost:3000 read files" in out and "ok delete-prefix" in out
     assert keys(s3) == []
 
 
@@ -70,7 +85,7 @@ def test_failed_step_exits_1_and_still_deletes(s3, capsys, monkeypatch):
     monkeypatch.setattr(storage.S3Storage, "fetch", boom)
     assert load_script().main() == 1
     lines = capsys.readouterr().out.splitlines()
-    assert lines == ["ok put", "FAIL get: download broke", "ok delete"]
+    assert lines == ["ok put", "FAIL get: download broke", "ok delete", "ok delete-prefix"]
     assert keys(s3) == []
 
 
@@ -80,7 +95,7 @@ def test_signed_url_failure_exits_1_and_still_deletes(s3, capsys, monkeypatch):
     lines = capsys.readouterr().out.splitlines()
     assert lines[:2] == ["ok put", "ok get"]
     assert lines[2].startswith("FAIL signed-url: signed URL returned HTTP 404")
-    assert lines[3] == "ok delete"
+    assert lines[3:] == ["ok delete", "ok delete-prefix"]
     assert keys(s3) == []
 
 
@@ -89,4 +104,5 @@ def test_put_failure_exits_1_and_skips_get(s3, capsys, monkeypatch):
         raise RuntimeError("upload broke")
     monkeypatch.setattr(storage.S3Storage, "put", boom)
     assert load_script().main() == 1
-    assert capsys.readouterr().out.splitlines() == ["FAIL put: upload broke", "ok delete"]
+    assert capsys.readouterr().out.splitlines() == ["FAIL put: upload broke", "ok delete",
+                                                    "FAIL delete-prefix: upload broke"]

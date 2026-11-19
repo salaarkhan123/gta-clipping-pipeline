@@ -55,6 +55,7 @@ services:
     environment:
       API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env}
       WEB_DOMAIN: ${WEB_DOMAIN:?set WEB_DOMAIN in .env}
+      MEDIA_ORIGIN: ${S3_ENDPOINT_URL:-}     # the bucket host the site's CSP allows (Caddyfile)
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./web:/srv/web:ro

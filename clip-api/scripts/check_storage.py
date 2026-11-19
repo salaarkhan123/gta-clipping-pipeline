@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Check the S3/R2 bucket end to end through app/storage.py.
 
-Needs STORAGE_BACKEND=s3 and the S3_* settings (DEPLOY.md, "Moving files to DigitalOcean Spaces"). Writes and deletes one small
-object under healthcheck/. Prints `ok <step>` or `FAIL <step>: <error>` per step.
+Needs STORAGE_BACKEND=s3 and the S3_* settings (DEPLOY.md, "Moving files to Cloudflare R2"). Writes and deletes
+a few small objects under healthcheck/<id>/. Prints `ok <step>` or `FAIL <step>: <error>` per step:
+put, get, signed-url (bytes, content type, download name), cors (the site at PUBLIC_WEB_URL may read the
+signed URL), private (the object is not readable without a signature), delete, delete-prefix.
 Exit 0 = all ok, 1 = a step failed, 2 = not running against S3.
 """
 import os
@@ -20,12 +22,15 @@ from app.config import get_settings  # noqa: E402
 
 
 def main() -> int:
-    if get_settings().storage_backend != "s3":
+    s = get_settings()
+    if s.storage_backend != "s3":
         print("check_storage only checks S3: set STORAGE_BACKEND=s3 and the S3_* settings")
         return 2
     store = storage.get_storage()
-    key = f"healthcheck/{uuid.uuid4()}"
+    folder = f"healthcheck/{uuid.uuid4()}/"
+    key = folder + "probe.json"
     payload = os.urandom(1024)
+    origin = s.public_web_url.rstrip("/")
     failed = False
 
     def step(name: str, fn) -> bool:
@@ -39,11 +44,11 @@ def main() -> int:
         print(f"ok {name}")
         return True
 
-    def put() -> None:
+    def write(k: str, data: bytes) -> None:
         with tempfile.TemporaryDirectory() as d:
             src = Path(d) / "in.bin"
-            src.write_bytes(payload)
-            store.put(key, src)
+            src.write_bytes(data)
+            store.put(k, src)
 
     def get() -> None:
         with tempfile.TemporaryDirectory() as d:
@@ -58,17 +63,43 @@ def main() -> int:
             raise ValueError(f"signed URL returned HTTP {r.status_code}")
         if r.content != payload:
             raise ValueError("signed URL bytes differ from uploaded bytes")
+        if r.headers.get("content-type") != "application/json":
+            raise ValueError(f"content-type is {r.headers.get('content-type')!r}, expected 'application/json'")
+        if 'filename="probe.json"' not in r.headers.get("content-disposition", ""):
+            raise ValueError(f"content-disposition is {r.headers.get('content-disposition')!r}")
+
+    def cors() -> None:
+        r = httpx.get(store.url(key), headers={"Origin": origin}, timeout=30)
+        allowed = r.headers.get("access-control-allow-origin")
+        if allowed not in (origin, "*"):
+            raise ValueError(f"the bucket does not let {origin} read files (Access-Control-Allow-Origin: {allowed}). "
+                             "Paste the CORS rules from DEPLOY.md")
+
+    def private() -> None:
+        status = httpx.get(store.url(key).split("?")[0], timeout=30).status_code
+        if status < 400:
+            raise ValueError(f"the object is readable without a signature (HTTP {status}): turn public access off")
 
     def delete() -> None:
         store.delete(key)
         if store.exists(key):
             raise ValueError("object still exists after delete")
 
+    def delete_prefix() -> None:
+        for name in ("a.txt", "sub/b.txt"):
+            write(folder + name, b"x")
+        removed = store.delete_prefix(folder)
+        left = store.keys(folder)
+        if left:
+            raise ValueError(f"{len(left)} objects left after deleting {removed}")
+
     try:
-        if step("put", put) and step("get", get):
-            step("signed-url", signed_url)
+        if step("put", lambda: write(key, payload)) and step("get", get) and step("signed-url", signed_url):
+            step("cors", cors)
+            step("private", private)
     finally:
         step("delete", delete)
+        step("delete-prefix", delete_prefix)
     return 1 if failed else 0
 
 
