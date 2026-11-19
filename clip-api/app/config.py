@@ -86,12 +86,15 @@ class Settings(BaseSettings):
 
     # Auth and email
     jwt_ttl_hours: int = 168
-    auto_verify_email: bool = True    # dev default; set false in prod once SMTP is configured
+    auto_verify_email: bool = True    # dev default; set false in prod once email delivery works
+    # Email (app/emailer.py): resend | smtp | none. Empty: smtp when SMTP_HOST is set, otherwise none.
+    email_provider: str = ""
+    resend_api_key: str = ""
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
-    email_from: str = "no-reply@example.com"
+    email_from: str = "noreply@clutchclips.io"
     # Signup without accept_policies=true is refused (422 terms_required). Off by default so API clients written
     # before consent records keep working; the website always sends it. Owner decision (app/legal.py).
     require_terms_acceptance: bool = False
@@ -209,7 +212,11 @@ class Settings(BaseSettings):
         if self.database_url.startswith("sqlite"):
             problems.append("DATABASE_URL must point at Postgres")
         if self.auto_verify_email:
-            problems.append("AUTO_VERIFY_EMAIL must be false (configure SMTP)")
+            problems.append("AUTO_VERIFY_EMAIL must be false (configure email delivery)")
+        from .emailer import missing_keys, provider
+        if provider(self) not in ("resend", "smtp") or missing_keys(self):
+            problems.append("email delivery must be configured: EMAIL_PROVIDER=resend with RESEND_API_KEY, "
+                            "or EMAIL_PROVIDER=smtp with SMTP_HOST")
         if problems:
             raise RuntimeError("Unsafe production config: " + "; ".join(problems))
 

@@ -7,13 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from . import routes_auth, routes_billing, routes_direct_upload, routes_export, routes_ingest, routes_legal, routes_media, routes_meta, routes_projects, routes_templates, routes_text, routes_thumbnails, routes_tools, routes_trust
+from . import log_redact, routes_auth, routes_billing, routes_direct_upload, routes_export, routes_ingest, routes_legal, routes_media, routes_meta, routes_projects, routes_templates, routes_text, routes_thumbnails, routes_tools, routes_trust
 from .config import get_settings
 from .db import get_engine, init_db
 from .deps import ApiError
 from .render_options import refused_layout
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+log_redact.install()          # no verification or file token in the access log
 
 
 @asynccontextmanager

@@ -207,6 +207,50 @@ docker compose exec -T db psql -U clip -d clip -c \
   "select plan, subscription_status, count(*) from accounts where stripe_subscription_id is not null group by 1, 2"
 ```
 
+## Email (Resend)
+
+The api sends verification, password-reset and account emails through Resend's HTTPS API (`app/emailer.py`).
+SMTP port 587 is blocked from the droplet, so SMTP is optional. Logs never hold a link, a token or a full
+address: `email_sent` and `email_delivery_failed` lines show `s***@domain`. The access log redacts
+`?token=` and `/v1/files/<token>` (`app/log_redact.py`).
+
+To switch production to Resend, follow this order. A PR never changes server settings.
+
+1. On the droplet, add the key yourself. Never paste it in chat, a ticket or git:
+   ```bash
+   cd /root/clip-api
+   nano .env      # EMAIL_PROVIDER=resend, RESEND_API_KEY=re_..., EMAIL_FROM=noreply@clutchclips.io
+   ```
+   Leave `ENV` and `AUTO_VERIFY_EMAIL` as they are for now.
+2. Load the new env into the two app containers. This does not touch Caddy or Postgres:
+   ```bash
+   docker compose up -d api worker
+   ```
+3. Send one real message, then check the Resend dashboard and the inbox:
+   ```bash
+   docker compose exec api python scripts/admin.py send-test-email --to you@yourdomain.com
+   ```
+   - Exit 0 prints Resend's message id.
+   - Exit 2 means a key is missing.
+   - Exit 1 means Resend refused it: 401 or 403 is a wrong key, 422 means `EMAIL_FROM` is not on a verified domain.
+4. Only after a real delivery succeeds, set `ENV=prod` and `AUTO_VERIFY_EMAIL=false` in `.env`, then run
+   `docker compose up -d api worker` again. With `ENV=prod` the api refuses to start without working email
+   settings, so a typo stops the start instead of leaving mail unsent.
+
+### Reset and verification links that were logged
+
+Before this change, with no email provider configured, the api wrote each email's text, reset and verification
+links included, to the container log. To clean up:
+
+1. Void every link already sent: `docker compose exec api python scripts/admin.py bump-token-epoch`.
+   - Reset links already expire after 1 hour or on a password change; verification links after 48 hours.
+   - The bump kills all of them at once without rotating `SECRET_KEY`, which would log everyone out.
+2. Truncate the old container logs (Docker's json-file driver):
+   ```bash
+   for c in $(docker compose ps -q api worker); do truncate -s 0 "$(docker inspect --format='{{.LogPath}}' $c)"; done
+   ```
+3. Delete any copies made from those logs, such as downloads or pasted snippets.
+
 ## Link import and takedowns
 
 Users can import a public video link (Twitch, Kick, direct https video links, Google Drive and Dropbox share
