@@ -141,8 +141,12 @@ def footage(job: dict, estimate: dict, trail: dict) -> None:
     full_bytes, full_sec = fetched.get("full_bytes"), fetched.get("full_seconds")
     share = (f", so {100 * fetched['bytes'] / full_bytes:.1f}% of it was downloaded"
              if isinstance(full_bytes, (int, float)) and full_bytes > 0 and isinstance(fetched.get("bytes"), (int, float)) else "")
-    say("footage", f"whole video in the same streams: {full_sec} s, {mb(full_bytes)}"
-                   f"{' (the site does not size these streams)' if full_bytes is None else ''}{share}")
+    if full_sec is None and full_bytes is None:
+        return                              # nothing was downloaded, so there is nothing to compare with
+    sized = (" (the site gives no size)" if full_bytes is None
+             else " (estimated from the downloaded part: the site gives no size)" if fetched.get("full_bytes_estimated")
+             else " (the site's own size)")
+    say("footage", f"whole video in the same streams: {full_sec} s, {mb(full_bytes)}{sized}{share}")
 
 
 def follow(api: Api, job_id: str, step: str, timeout: float, every: float, trail: dict | None = None) -> dict:
