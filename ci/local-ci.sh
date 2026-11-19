@@ -5,7 +5,7 @@
 #
 # Usage: ci/local-ci.sh <pr-number | commit> [all|test|docker-build]
 #
-# test          Ubuntu 24.04 (what ubuntu-latest was) with Python 3.12, apt ffmpeg, git and node, against Postgres 16,
+# test          the production image's base (python:3.12-slim-trixie, Debian ffmpeg 7.1) with git and node, against Postgres 16,
 #               `pytest -q -rs`, like the GitHub job. Runs natively (linux/arm64 on Apple silicon); GitHub ran amd64.
 # docker-build  `docker build clip-api` for linux/amd64, the production droplet's platform. The image is removed after.
 # A change made only of Markdown files outside clip-api/ and web-src/ needs neither job; both get a success status
@@ -79,14 +79,13 @@ with_timeout() {  # container-name command... : kill the container after TIMEOUT
 }
 
 run_test() {
-  # The GitHub job ran on ubuntu-latest (Ubuntu 24.04: Python 3.12, apt ffmpeg 6.1, git and node on the runner).
-  # Same here, so the same tests run and none is skipped for a missing tool.
+  # The base and ffmpeg of clip-api/Dockerfile (python:3.12-slim-trixie, Debian ffmpeg 7.1), so the tests render
+  # with the ffmpeg production renders with; plus git and node, so no test is skipped for a missing tool.
   local reqs; reqs="$(cat "$src/clip-api/requirements.txt" "$src/clip-api/requirements-dev.txt" | shasum | cut -c1-12)"
-  local image="clutchclips-ci:u2404-$reqs"
+  local image="clutchclips-ci:trixie-$reqs"
   if ! docker image inspect "$image" >/dev/null 2>&1; then
-    printf '%s\n' 'FROM ubuntu:24.04' 'ENV DEBIAN_FRONTEND=noninteractive' \
-      'RUN apt-get update && apt-get install -y --no-install-recommends python3.12 python3.12-venv ffmpeg git nodejs ca-certificates fonts-dejavu-core && rm -rf /var/lib/apt/lists/*' \
-      'RUN python3.12 -m venv /venv' 'ENV PATH=/venv/bin:$PATH' \
+    printf '%s\n' 'FROM python:3.12-slim-trixie' 'ENV DEBIAN_FRONTEND=noninteractive' \
+      "RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg git nodejs ca-certificates fonts-dejavu-core && ffmpeg -version | head -1 | grep -q '^ffmpeg version 7\.1\.' && rm -rf /var/lib/apt/lists/*" \
       'COPY requirements.txt requirements-dev.txt /tmp/' \
       'RUN pip install --no-cache-dir -r /tmp/requirements.txt -r /tmp/requirements-dev.txt' \
       | docker build -q -t "$image" -f - "$src/clip-api" >/dev/null
