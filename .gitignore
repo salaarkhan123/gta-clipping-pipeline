@@ -81,6 +81,9 @@ _tmp/
 # The site's own short loops (scripts/make_site_media.py publish; each under 1.5 MB) are the exception.
 !clip-api/web-src/public/media/**/*.mp4
 !clip-api/web-src/public/media/**/*.webm
+# Caddy serves the checked-in static export, including the same source-built preview videos.
+!clip-api/web/media/**/*.mp4
+!clip-api/web/media/**/*.webm
 *.avi
 *.m4a
 *.mp3

@@ -107,3 +107,15 @@ def test_candidates_file_is_confirmed_only_when_every_candidate_is(tmp_path):
     data = json.loads(path.read_text())
     assert data["permission"] == "NOT CONFIRMED for: cod-m1"
     assert data["candidates"][0]["commercial_permission"] == "owner-confirmed 2026-11-18"
+
+
+def test_deployed_site_contains_the_published_media_bytes():
+    """The production checkout serves the committed web directory directly through Caddy."""
+    api = SCRIPT.parents[1]
+    public = api / "web-src" / "public" / "media"
+    assets = [file for file in public.rglob("*") if file.is_file()]
+    assert any(file.suffix == ".mp4" for file in assets)
+    for source in assets:
+        served = api / "web" / "media" / source.relative_to(public)
+        assert served.is_file(), source.relative_to(public)
+        assert served.read_bytes() == source.read_bytes(), source.relative_to(public)
