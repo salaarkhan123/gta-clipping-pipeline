@@ -78,6 +78,8 @@ export function ClipPlayer(p: PlayerProps) {
   if (!clip) return null;
 
   const r = ratingOf(clip), name = p.nameOf(clip), shape = p.shapeOf(clip), game = p.gameOf(clip);
+  // A link imported with a range: clip times count from the start of the imported part (job `import.range`).
+  const start = p.jobOf(clip)?.import?.range?.start_sec, offset = typeof start === "number" ? start : 0;
   const lit = Array.isArray(cues) ? cueAt(cues, now) : -1;
   const titles: string[] = Array.isArray(clip.titles) ? clip.titles.filter((t: string) => t && t !== clip.title) : [];
   const rename = (title: string) => {
@@ -140,7 +142,7 @@ export function ClipPlayer(p: PlayerProps) {
                     <span className="tabular-nums">{clock(lengthOf(clip))}</span>
                     {game && <><span aria-hidden="true">·</span><span>{game}</span></>}
                     {clip.kind && <><span aria-hidden="true">·</span><span>{kindName(clip.kind)}</span></>}
-                    <span aria-hidden="true">·</span><span>From {clock(clip.start_sec)} in the video</span>
+                    <span aria-hidden="true">·</span><span>From {clock(clip.start_sec + offset)} in {offset ? "the original stream" : "the video"}</span>
                   </p>
                 </div>
               </div>
