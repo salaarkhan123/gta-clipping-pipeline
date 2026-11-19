@@ -3,6 +3,7 @@ import { AiRating, LinkIcon } from "./Bits";
 import { aiRated, Credits, Footage, Item, useItem, useItems } from "./Footage";
 import { Cam, Gameplay, SplitClip } from "./Frames";
 import s from "./demos.module.css";
+import { pastePrompt } from "@/lib/platforms";
 
 // One long stream in; the clips found in it out, in one row: the first as a wide 16:9 clip, the rest vertical.
 // Each clip carries its AI rating bottom-left, but only when the AI judge rated it (rating_source "ai").
@@ -39,7 +40,7 @@ export function VodToClips({ play }: { play: boolean }) {
 
       <div className="flex w-[min(500px,100%)] items-center gap-2.5 rounded-full bg-black/45 py-1.5 pl-4 pr-1.5 ring-1 ring-white/10" aria-hidden="true">
         <LinkIcon className="h-4 w-4 shrink-0 text-white/60" />
-        <span className="min-w-0 flex-1 truncate text-[14px] text-white/75">Paste a Twitch or Kick link, or drop the file</span>
+        <span className="min-w-0 flex-1 truncate text-[14px] text-white/75">{pastePrompt()}</span>
         <span className="shrink-0 rounded-full bg-white px-4 py-2 text-[14px] font-semibold text-black">Get clips</span>
       </div>
 

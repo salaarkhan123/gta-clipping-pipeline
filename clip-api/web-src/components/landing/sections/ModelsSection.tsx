@@ -1,77 +1,93 @@
 "use client";
 import { useRef } from "react";
-import { Cam, Gameplay, SplitClip } from "../demos/Frames";
-import { Credits, Footage, useItems } from "../demos/Footage";
+import { AiRating } from "../demos/Bits";
+import { aiRated, Credits, Footage, Item, useItem, useItems, useSignals } from "../demos/Footage";
 import { useInView } from "../demos/motion";
+import { BeforeFrame } from "../demos/Reframe";
 import s from "../demos/demos.module.css";
 import { Section } from "../../site/Section";
 import { EyebrowIcon } from "./EyebrowIcon";
 
-// Where the strong moments sit along a 2-hour stream (fractions of its length) and how strong each is.
-const PEAKS = [[0.08, 0.5], [0.21, 0.8], [0.34, 0.45], [0.47, 1], [0.63, 0.65], [0.78, 0.9], [0.9, 0.55]];
+const clock = (sec: number) => {
+  const t = Math.round(sec), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), x = t % 60;
+  return `${h ? `${h}:${String(m).padStart(2, "0")}` : m}:${String(x).padStart(2, "0")}`;
+};
+type Sourced = Item & { aspect?: string; source?: { id?: string; start_sec?: number; end_sec?: number } };
 
-// A moment the finder found, from the media pipeline (clip-finding). Ranked on signals, so it shows its rank, never an
-// AI rating. Until the section has footage, the drawn clip stands in.
-function FoundClip() {
-  const item = useItems("clip-finding")[0] ?? null, box = useRef<HTMLDivElement>(null), seen = useInView(box);
+// The long stream's timeline with the moments the engine picked from it, all real: the stream is the media
+// pipeline's VOD, the marks are the clips it cut from that same stream (their source times), and the result is
+// the best-rated of them. With no media yet the card stays empty.
+function FinderVisual({ play }: { play: boolean }) {
+  const vod = useItem("hero-long-video", "vod") as Sourced | null;
+  // The engine's own highlight score along the stream, as bars (the loudest point in each stretch).
+  const signals = useSignals("hero-long-video", vod), BARS = 96;
+  const bars = signals ? Array.from({ length: BARS }, (_, b) => {
+    const v = signals.values, a = Math.floor((b * v.length) / BARS), z = Math.max(a + 1, Math.floor(((b + 1) * v.length) / BARS));
+    return Math.max(...v.slice(a, z));
+  }) : [];
+  const all = [...useItems("hero-vertical-clips"), ...useItems("editor"), ...useItems("clip-finding")] as Sourced[];
+  const len = vod?.duration_sec ?? 0, from = vod?.source?.id;
+  const picked = len && from ? all.filter((i) => i.source?.id === from && typeof i.source?.start_sec === "number" && i.source.start_sec < len) : [];
+  const marks = [...new Map(picked.map((i) => [Math.round(i.source!.start_sec! / 30), i])).values()];   // one mark per moment
+  // The result: the best-rated finished vertical clip from that stream.
+  const best = (useItems("hero-vertical-clips") as Sourced[]).filter((i) => /^clip-\d+$/.test(i.id) && i.source?.id === from)
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))[0] ?? null;
   return (
-    <div className="flex shrink-0 flex-col items-center">
-      <div ref={box} className="relative aspect-[9/16] h-[260px] overflow-hidden rounded-[14px] ring-1 ring-white/10 narrow:h-[190px]">
-        {item ? <Footage section="clip-finding" item={item} play={seen} /> : <SplitClip game="gta" />}
-        {item?.rank && <span className="absolute bottom-2 left-2 z-10 rounded-full bg-black/65 px-2 py-[3px] text-[11px] font-semibold text-white">Match #{item.rank}</span>}
+    <div className="flex h-full flex-col gap-3">
+      <div className="flex min-h-0 flex-1 items-center gap-6 narrow:gap-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-5 narrow:gap-3">
+          <div className="grid gap-2">
+            <span className="text-[14px] font-semibold text-white/85">Describe the moments you want</span>
+            <span className="h-[42px] rounded-[10px] bg-black/35 ring-1 ring-white/15" />
+          </div>
+          <div className="relative h-14 rounded-[10px] bg-black/35 ring-1 ring-white/10">
+            {bars.length > 0 && <span className="absolute inset-x-1 bottom-1 top-2 flex items-end gap-px" aria-hidden="true">
+              {bars.map((v, b) => <span key={b} className="flex-1 rounded-t-[1px] bg-white/20" style={{ height: `${Math.max(4, v * 100)}%` }} />)}</span>}
+            {marks.map((m) => {
+              const on = m === best || (best && m.source?.start_sec === best.source?.start_sec);
+              return <span key={m.id} className={`absolute inset-y-2 w-[3px] rounded-full ${on ? `${s.glow} bg-lime` : "bg-white/50"}`}
+                style={{ left: `${(m.source!.start_sec! / len) * 100}%` }} title={clock(m.source!.start_sec!)} />;
+            })}
+            {len > 0 && <>
+              <span className="absolute -bottom-5 left-0 text-[11px] text-white/45">0:00</span>
+              <span className="absolute -bottom-5 right-0 text-[11px] text-white/45">{clock(len)}</span>
+              {best && <span className="absolute -top-5 -translate-x-1/2 whitespace-nowrap text-[11px] text-lime"
+                style={{ left: `${(best.source!.start_sec! / len) * 100}%` }}>{clock(best.source!.start_sec!)}</span>}
+            </>}
+          </div>
+        </div>
+        <div className="relative aspect-[9/16] h-[240px] shrink-0 overflow-hidden rounded-[14px] bg-white/[.04] ring-1 ring-white/10 narrow:h-[180px]">
+          {best && <><Footage section="hero-vertical-clips" item={best} play={play} />
+            {aiRated(best) && <AiRating value={Math.round(best.rating!)} className="absolute bottom-2 left-2 z-10" />}</>}
+        </div>
       </div>
-      <Credits items={[item]} className="mt-2" />
+      <Credits items={[vod, best]} />
     </div>
   );
 }
 
-function FinderVisual() {
+// The real before and after: the 16:9 original with the engine's facecam box and the crop it took, and the
+// vertical clip it made from them.
+function ReframeVisual({ play }: { play: boolean }) {
+  const original = useItem("reframe", "original"), split = useItem("reframe", "split2");
   return (
-    <div className="flex h-full items-center gap-6 narrow:gap-4">
-      <div className="flex min-w-0 flex-1 flex-col gap-5 narrow:gap-3">
-        <div className="grid gap-2">
-          <span className="text-[14px] font-semibold text-white/85">Describe the moments you want</span>
-          <span className="rounded-[10px] bg-black/35 px-3.5 py-2.5 text-[14px] text-white/90 ring-1 ring-white/15 narrow:text-[13px]">
-            Police chases that end in a crash<span className={s.caret} /></span>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {["“no way”", "heist", "clutch"].map((t) => <span key={t} className="rounded-[8px] bg-white/10 px-2.5 py-1 text-[12px] text-white/75">{t}</span>)}
-        </div>
-        <div className="relative h-14 rounded-[10px] bg-black/35 ring-1 ring-white/10">
-          {PEAKS.map(([x, h], i) => <span key={i} className={`absolute bottom-2 w-[6%] rounded-[3px] ${h === 1 ? "bg-lime" : "bg-white/25"}`}
-            style={{ left: `${x * 94}%`, height: `${h * 70}%` }} />)}
-          <span className={`${s.glow} absolute inset-y-1 rounded-[8px]`} style={{ left: "calc(47% * .94 - 1.5%)", width: "9%" }} />
-          <span className="absolute -bottom-5 left-0 text-[11px] text-white/45">0:00</span>
-          <span className="absolute -bottom-5 right-0 text-[11px] text-white/45">2:00:00</span>
+    <div className="flex h-full flex-col gap-3">
+      <div className="flex min-h-0 flex-1 items-center justify-center gap-5 narrow:gap-3">
+        <div className="w-[58%]"><BeforeFrame item={original} layout="split2" play={play} /></div>
+        <div className="flex flex-col gap-1.5" aria-hidden="true">{[0, 1, 2].map((i) => <span key={i} className={`${s.dot} h-1.5 w-1.5 rounded-full bg-white`} style={{ ["--d" as string]: `${i * 0.2}s` }} />)}</div>
+        <div className="relative aspect-[9/16] h-[240px] overflow-hidden rounded-[12px] bg-white/[.04] ring-1 ring-white/10 narrow:h-[170px]">
+          {split && <Footage section="reframe" item={split} play={play} />}
         </div>
       </div>
-      <FoundClip />
-    </div>
-  );
-}
-
-function ReframeVisual() {
-  return (
-    <div className="flex h-full items-center justify-center gap-5 narrow:gap-3">
-      <div className="relative aspect-video w-[55%] overflow-hidden rounded-[10px] ring-1 ring-white/10">
-        <Gameplay game="valorant" label={false} />
-        <span className="absolute right-[3%] top-[5%] aspect-[4/3] w-[24%] overflow-hidden rounded-[5px]"><Cam /></span>
-        <span className={`${s.find} absolute right-[1.5%] top-[2%] aspect-[4/3] w-[27%] rounded-[7px] border-2 border-dashed border-lime`} />
-        <span className="absolute bottom-[8%] left-[14%] h-[64%] w-[46%] rounded-[7px] border-2 border-dashed border-cyan/70" />
-      </div>
-      <div className="flex flex-col gap-1.5" aria-hidden="true">{[0, 1, 2].map((i) => <span key={i} className={`${s.dot} h-1.5 w-1.5 rounded-full bg-white`} style={{ ["--d" as string]: `${i * 0.2}s` }} />)}</div>
-      <div className="flex flex-col items-center gap-2">
-        <div className="relative aspect-[9/16] h-[250px] overflow-hidden rounded-[12px] ring-1 ring-white/10 narrow:h-[170px]"><SplitClip game="valorant" /></div>
-        <span className="text-[13px] font-medium text-white/80">9:16</span>
-      </div>
+      <Credits items={[original, split]} />
     </div>
   );
 }
 
 const CARDS = [
-  { title: "Moment finder", visual: <FinderVisual />, tone: "#2a2620",
+  { title: "Moment finder", Visual: FinderVisual, tone: "#2a2620",
     text: "Listens for your reactions, watches chat speed up and reads what was said, then ranks every moment of the stream. Want something specific? Describe it in your own words, or search for what was said or shown, and get a clip of every match." },
-  { title: "Facecam reframe", visual: <ReframeVisual />, tone: "#22242c",
+  { title: "Facecam reframe", Visual: ReframeVisual, tone: "#22242c",
     text: "Finds your facecam on its own, keeps it out of the gameplay crop and stacks the two for vertical. Captions and the hook never sit on your face. Prefer it another way? Pick the layout, which panel the camera goes in and how big it is." },
 ];
 
@@ -85,7 +101,7 @@ export function ModelsSection() {
         {CARDS.map((c) => (
           <article key={c.title}>
             <div className="h-[340px] overflow-hidden rounded-card p-7 shadow-card narrow:h-auto narrow:min-h-[260px] narrow:p-5"
-              style={{ background: `radial-gradient(120% 100% at 30% 0%, ${c.tone}, #0e0f12 85%)` }} aria-hidden="true">{c.visual}</div>
+              style={{ background: `radial-gradient(120% 100% at 30% 0%, ${c.tone}, #0e0f12 85%)` }}><c.Visual play={seen} /></div>
             <h3 className="mt-6 text-h3 text-fg">{c.title}</h3>
             <p className="mt-2 text-body-lg text-fg-2">{c.text}</p>
           </article>

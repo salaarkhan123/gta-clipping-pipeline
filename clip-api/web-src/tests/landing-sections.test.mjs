@@ -74,17 +74,28 @@ test("each card that shows footage names every creator it shows, once, at the bo
     "demos/Reframe.tsx": /<Credits items=\{items\} \/>/,
     "demos/HookText.tsx": /<Credits items=\{\[real\]\} \/>/,
     "sections/EditorSection.tsx": /<Credits items=\{\[clip\]\}/,
-    "sections/ModelsSection.tsx": /<Credits items=\{\[item\]\}/,               // the moment finder's real clip (#193)
+    "demos/DeadAir.tsx": /<Credits items=\{\[clip\]\} \/>/,
+    "sections/ModelsSection.tsx": /<Credits items=\{\[vod, best\]\} \/>[\s\S]*<Credits items=\{\[original, split\]\} \/>/,
+    "sections/WorkflowSection.tsx": /<Credits items=\{clips\} \/>/,
   };
   for (const [f, credits] of Object.entries(cards)) {
     const text = source(`components/landing/${f}`);
     assert.match(text, credits, f);
-    const plays = [...text.matchAll(/<Footage section="[\w-]+" item=\{([\w.?]+)\}/g)].map((m) => m[1]);
+    const plays = [...text.matchAll(/<Footage section="[\w-]+" item=\{([\w.?\[\]]+)\}/g)].map((m) => m[1]);
     assert.ok(plays.length > 0, f);
   }
   // Files with no Credits line play no footage.
-  for (const f of ["demos/DeadAir.tsx", "sections/WorkflowSection.tsx", "sections/TeamsSection.tsx"])
-    assert.doesNotMatch(source(`components/landing/${f}`), /<Footage /, f);
+  assert.doesNotMatch(source("components/landing/sections/TeamsSection.tsx"), /<Footage /);
+});
+
+test("the dead-air and moment-finder cards draw only real data: no sample transcript, peaks or prompt", () => {
+  const dead = source("components/landing/demos/DeadAir.tsx"), models = source("components/landing/sections/ModelsSection.tsx");
+  assert.match(dead, /useWords\("editor", clip\)/);
+  assert.doesNotMatch(dead, /const (SAID|WAVE|SAMPLE)\b/);
+  assert.match(models, /i\.source\?\.id === from/);               // marks are clips cut from that same stream
+  assert.match(models, /useSignals\("hero-long-video", vod\)/);     // bars are the engine's own highlight score
+  assert.match(dead, /usePeaks\("editor", clip\)/);                // waveform is the clip's own audio levels
+  assert.doesNotMatch(models, /PEAKS|Police chases|"heist"/);
 });
 
 test("the caption presets follow the clip's real words with the renderer's line rules", () => {

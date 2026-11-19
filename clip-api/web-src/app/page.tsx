@@ -16,6 +16,7 @@ import { EditorSection } from "@/components/landing/sections/EditorSection";
 import { ModelsSection } from "@/components/landing/sections/ModelsSection";
 import { TeamsSection } from "@/components/landing/sections/TeamsSection";
 import { WorkflowSection } from "@/components/landing/sections/WorkflowSection";
+import { linkPhrase, platformNames, VERIFIED_PLATFORMS } from "@/lib/platforms";
 
 const list = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
@@ -25,11 +26,11 @@ function faq(signup: number | null, langs: Languages | null): FaqItem[] {
   const spoken = langs?.languages.filter((l) => l.transcribe) || [];
   return [
     { q: "How does ClutchClips work?", a: <>
-      <p>Paste a public Twitch or Kick link, or upload the recording. ClutchClips reads the transcript, listens for the hype, finds the strongest moments and cuts them into vertical clips with your facecam stacked over the gameplay and captions on.</p>
+      <p>Paste {linkPhrase()}, or upload the recording. ClutchClips reads the transcript, listens for the hype, finds the strongest moments and cuts them into vertical clips with your facecam stacked over the gameplay and captions on.</p>
       <p>Every clip gets an AI rating, so you know which one to post first.</p></> },
     { q: "What videos can I use?", a: <>
       <p>Streams and VODs you own, or have permission to clip. Upload MP4, MOV, MKV or WebM files up to 8 GB and 6 hours long.</p>
-      <p>Links work for public Twitch and Kick videos. YouTube links are best effort and may fail; if one does, upload the file instead. Every link import asks you to confirm you own the video or have permission to clip it.</p></> },
+      <p>{VERIFIED_PLATFORMS.length ? `Links work for public ${platformNames()} videos. ` : ""}If a link can't be imported, upload the file instead. Every link import asks you to confirm you own the video or have permission to clip it.</p></> },
     { q: "Which languages are supported?", a: spoken.length
       ? <p>Speech in {spoken.length} languages can be transcribed and captioned, including {list(spoken.slice(0, 6).map((l) => l.name))}. Pick the spoken language when you start, or let it be detected.{langs && !langs.translation ? " Translated captions are coming soon." : ""}</p>
       : <p>Pick the spoken language when you start a job. The list in the app shows every language that can be transcribed.</p> },

@@ -8,13 +8,14 @@ import { useInView } from "../demos/motion";
 import { Reframe } from "../demos/Reframe";
 import { BRollSoon, VoiceSoon } from "../demos/Soon";
 import { VodToClips } from "../demos/VodToClips";
+import { linkPhrase } from "@/lib/platforms";
 
 type Card = { id: string; tab: string; title: string; text: string; tone: string; soon?: boolean; Demo: (p: { play: boolean }) => React.ReactNode };
 
 // The hero's demo cards. Built features first; the last ones are not built yet and say so on the card.
 const CARDS: Card[] = [
   { id: "clips", tab: "Clips", title: "A stream in, ranked clips out", tone: "#1b2729",
-    text: "Drop a VOD or paste a Twitch or Kick link. ClutchClips finds the moments worth posting and cuts them into vertical clips, best first, each with an AI rating.",
+    text: `Drop a VOD or paste ${linkPhrase()}. ClutchClips finds the moments worth posting and cuts them into vertical clips, best first, each with an AI rating.`,
     Demo: VodToClips },
   { id: "captions", tab: "Captions", title: "Caption styles", tone: "#2a2420",
     text: "Word-by-word captions burned into the clip, in twelve styles. Pick one per clip or set it once in a template.",

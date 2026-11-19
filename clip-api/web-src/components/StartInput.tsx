@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { AuthDialog } from "@/components/Auth";
 import { Icon } from "@/components/dash/Icon";
 import { getToken, setPendingFile, VIDEO_TYPES, videoFileProblem } from "@/lib/api";
+import { pastePrompt } from "@/lib/platforms";
 
 const isLink = (v: string) => /^https?:\/\/\S+\.\S+/i.test(v.trim());
 
@@ -59,7 +60,7 @@ export function StartInput({ start, variant = "hero", id }: { start: Start; vari
         </button>
         <label htmlFor={`${id || variant}-link`} className="sr-only">Video link</label>
         <input id={`${id || variant}-link`} value={text} onChange={(e) => setText(e.target.value)} inputMode="url" autoComplete="off" spellCheck={false}
-          placeholder="Paste a Twitch or Kick link, or upload a file"
+          placeholder={pastePrompt()}
           className="h-full min-w-0 flex-1 truncate rounded-none border-0 bg-transparent p-0 font-sans text-[16px] text-label placeholder:text-fg-2 focus:outline-none" />
         <button type="submit" className="btn btn-primary h-[52px] flex-none narrow:h-11 narrow:px-4 narrow:text-[15px]">
           Get clips

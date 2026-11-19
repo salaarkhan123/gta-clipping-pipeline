@@ -10,6 +10,14 @@
   {
    "creator": "iiTzTimmy",
    "url": "https://www.youtube.com/watch?v=ovyMOe_017I"
+  },
+  {
+   "creator": "iShowSpeed",
+   "url": "https://www.youtube.com/watch?v=qNOcoUKzt80"
+  },
+  {
+   "creator": "NICKMERCS",
+   "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
   }
  ],
  "items": [
@@ -76,11 +84,71 @@
   },
   {
    "id": "hook-3",
-   "candidate": "ninja-m2",
+   "candidate": "fifa-speed-m1",
    "label": "Hook text over the opening",
    "kind": "video",
    "src": "hook-3.mp4",
    "poster": "hook-3.webp",
+   "width": 540,
+   "height": 960,
+   "duration_sec": 8.0,
+   "game": "EA SPORTS FC 27",
+   "aspect": "9:16",
+   "layout": "auto",
+   "caption_style": "impact",
+   "hook": "WAIT FOR THE WALKOUT",
+   "hook_source": "shot-list",
+   "rank": 1,
+   "rating": 99,
+   "rating_source": "signals",
+   "credit": "Footage: iShowSpeed",
+   "commercial_permission": "owner-confirmed 2026-11-18",
+   "source": {
+    "id": "fifa-speed",
+    "creator": "iShowSpeed",
+    "title": "iShowSpeed's FIRST FC 27 Pack Opening!",
+    "url": "https://www.youtube.com/watch?v=qNOcoUKzt80",
+    "start_sec": 748.15,
+    "end_sec": 756.15
+   }
+  },
+  {
+   "id": "hook-4",
+   "candidate": "cod-nick-m1",
+   "label": "Hook text over the opening",
+   "kind": "video",
+   "src": "hook-4.mp4",
+   "poster": "hook-4.webp",
+   "width": 540,
+   "height": 960,
+   "duration_sec": 8.0,
+   "game": "Call of Duty: Warzone",
+   "aspect": "9:16",
+   "layout": "auto",
+   "caption_style": "impact",
+   "hook": "WAIT FOR IT",
+   "hook_source": "shot-list",
+   "rank": 1,
+   "rating": 99,
+   "rating_source": "signals",
+   "credit": "Footage: NICKMERCS",
+   "commercial_permission": "owner-confirmed 2026-11-18",
+   "source": {
+    "id": "cod-nick",
+    "creator": "NICKMERCS",
+    "title": "THIS MIGHT BE THE BEST VERSION OF WARZONE",
+    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c",
+    "start_sec": 869.1,
+    "end_sec": 877.1
+   }
+  },
+  {
+   "id": "hook-5",
+   "candidate": "ninja-m2",
+   "label": "Hook text over the opening",
+   "kind": "video",
+   "src": "hook-5.mp4",
+   "poster": "hook-5.webp",
    "width": 540,
    "height": 960,
    "duration_sec": 8.0,

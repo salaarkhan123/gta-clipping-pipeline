@@ -50,7 +50,7 @@ const sections = [
     <ul>
       <li>Link import only accepts public videos that play in a signed-out browser and are not protected by DRM.</li>
       <li>We never use logins, cookies, accounts, proxies or any other way around a block, paywall, age gate or rate limit. If a site
-        refuses, the import fails and you can upload the file instead. YouTube imports are best effort and may fail.</li>
+        refuses, the import fails and you can upload the file instead. Some sites refuse automated downloads, so an import may fail.</li>
       <li>Every import asks you to confirm that you own the video or have permission to clip it. We log your account, the link, your
         confirmation and the time.</li>
       <li>The site you import from has its own terms, and they apply to you. Our import does not give you rights the site&apos;s terms do not.</li>
