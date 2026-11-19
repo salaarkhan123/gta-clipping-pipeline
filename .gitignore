@@ -78,6 +78,9 @@ _tmp/
 *.mov
 *.mkv
 *.webm
+# The site's own short loops (scripts/make_site_media.py publish; each under 1.5 MB) are the exception.
+!clip-api/web-src/public/media/**/*.mp4
+!clip-api/web-src/public/media/**/*.webm
 *.avi
 *.m4a
 *.mp3
