@@ -1,6 +1,6 @@
 "use client";
 import { Caption, sampleWords } from "./Caption";
-import { Footage, useItem } from "./Footage";
+import { Credits, Footage, useItem } from "./Footage";
 import { Gameplay } from "./Frames";
 import { useReducedMotion, useTicker } from "./motion";
 import s from "./demos.module.css";
@@ -53,6 +53,7 @@ export function HookText({ play }: { play: boolean }) {
           <span className={`${s.hookbar} absolute inset-y-[-3px] w-0.5 bg-white`} />
         </figcaption>
         <span className="text-[12px] text-white/55 narrow:hidden">Hook on screen for the first 2.5 s</span>
+        <Credits items={[real]} />
       </figure>
     </div>
   );

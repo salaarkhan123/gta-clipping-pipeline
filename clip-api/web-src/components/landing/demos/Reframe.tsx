@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Pill } from "./Bits";
-import { Footage, Item, useItems } from "./Footage";
+import { Credits, Footage, Item, useItems } from "./Footage";
 import { Cam, Gameplay, SplitClip } from "./Frames";
 import { useReducedMotion, useTicker } from "./motion";
 import s from "./demos.module.css";
@@ -42,7 +42,8 @@ export function Reframe({ play }: { play: boolean }) {
   const face = (l: (typeof LAYOUTS)[number], live: boolean) => { const it = find(l.id); return it ? <Footage section="reframe" item={it} play={live} /> : l.draw; };
 
   return (
-    <div className={`${s.demo} flex h-full items-center justify-center gap-10 narrow:flex-col narrow:gap-4`} data-play={play}>
+    <div className={`${s.demo} flex h-full flex-col items-center justify-center gap-3`} data-play={play}>
+    <div className="flex items-center justify-center gap-10 narrow:flex-col narrow:gap-4">
       <figure className="flex w-[min(420px,100%)] flex-col items-center gap-4 narrow:gap-2.5">
         <div className="relative aspect-video w-full overflow-hidden rounded-[12px] ring-1 ring-white/10">
           {original ? <>
@@ -82,6 +83,8 @@ export function Reframe({ play }: { play: boolean }) {
           </figcaption>
         </figure>
       </>}
+    </div>
+    <Credits items={items} />
     </div>
   );
 }

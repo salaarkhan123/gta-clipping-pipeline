@@ -60,8 +60,30 @@ test("demo media never plays sound, waits for reduced motion and carries its cre
   const footage = source("components/landing/demos/Footage.tsx");
   assert.match(footage, /<video[^>]*\bmuted\b/);
   assert.match(footage, /!reduced/);
-  assert.match(footage, /item\.credit/);
   assert.match(source("components/landing/demos/demos.module.css"), /prefers-reduced-motion: reduce/);
+});
+
+test("each card that shows footage names every creator it shows, once, at the bottom", () => {
+  const footage = source("components/landing/demos/Footage.tsx");
+  assert.doesNotMatch(footage, /item\.credit &&/);                  // no credit chip on a frame
+  assert.match(footage, /export function Credits\(\{ items/);
+  // Every item a card plays is in its Credits line.
+  const cards = {
+    "demos/VodToClips.tsx": /<Credits items=\{\[vod, wide\?\.item, \.\.\.tall\]\}/,
+    "demos/CaptionStyles.tsx": /<Credits items=\{\[plain\]\} \/>/,
+    "demos/Reframe.tsx": /<Credits items=\{items\} \/>/,
+    "demos/HookText.tsx": /<Credits items=\{\[real\]\} \/>/,
+    "sections/EditorSection.tsx": /<Credits items=\{\[clip\]\}/,
+  };
+  for (const [f, credits] of Object.entries(cards)) {
+    const text = source(`components/landing/${f}`);
+    assert.match(text, credits, f);
+    const plays = [...text.matchAll(/<Footage section="[\w-]+" item=\{([\w.?]+)\}/g)].map((m) => m[1]);
+    assert.ok(plays.length > 0, f);
+  }
+  // Files with no Credits line play no footage.
+  for (const f of ["demos/DeadAir.tsx", "sections/ModelsSection.tsx", "sections/WorkflowSection.tsx", "sections/TeamsSection.tsx"])
+    assert.doesNotMatch(source(`components/landing/${f}`), /<Footage /, f);
 });
 
 test("the caption presets follow the clip's real words with the renderer's line rules", () => {

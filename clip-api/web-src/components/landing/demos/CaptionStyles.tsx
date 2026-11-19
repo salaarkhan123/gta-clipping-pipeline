@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ComingSoonBadge } from "../../ComingSoonBadge";
 import { CAPTION_STYLES, Caption, CaptionStyle, sampleWords, styleName, Timed } from "./Caption";
-import { Footage, useItem, useWords } from "./Footage";
+import { Credits, Footage, useItem, useWords } from "./Footage";
 import { SplitClip } from "./Frames";
 import { useReducedMotion, useTicker } from "./motion";
 import s from "./demos.module.css";
@@ -70,15 +70,16 @@ export function CaptionStyles({ play }: { play: boolean }) {
   };
 
   return (
-    <div className={`${s.demo} flex h-full items-center justify-center gap-10 narrow:flex-col narrow:gap-4`} data-play={play}>
-      <div className="relative aspect-[9/16] h-[440px] shrink-0 overflow-hidden rounded-[16px] ring-1 ring-white/10 narrow:h-[290px]">
+    <div className={`${s.demo} flex h-full flex-col items-center justify-center gap-3`} data-play={play}>
+    <div className="flex items-center justify-center gap-10 narrow:flex-col narrow:gap-4">
+      <div className="relative aspect-[9/16] h-[420px] shrink-0 overflow-hidden rounded-[16px] ring-1 ring-white/10 narrow:h-[290px]">
         {plain ? <Footage section="captions" item={plain} play={play} videoRef={video} /> : <SplitClip game="gta" />}
         {style !== "none" && <span className="absolute inset-x-2 top-[33%] z-10 -translate-y-1/2 text-center text-[22px] narrow:text-[15px]">
           <Caption style={style} words={words} at={at} />
         </span>}
       </div>
 
-      <div className="flex h-[440px] w-[300px] flex-col overflow-hidden rounded-[16px] bg-black/35 ring-1 ring-white/10 narrow:h-auto narrow:w-full">
+      <div className="flex h-[420px] w-[300px] flex-col overflow-hidden rounded-[16px] bg-black/35 ring-1 ring-white/10 narrow:h-auto narrow:w-full">
         <div className="flex items-center gap-4 border-b border-white/10 px-4 py-3 text-[14px]">
           <span className="font-semibold text-white">Presets</span>
           <span className="flex items-center gap-1.5 text-white/45">Font <ComingSoonBadge short /></span>
@@ -90,6 +91,8 @@ export function CaptionStyles({ play }: { play: boolean }) {
           {CAPTION_STYLES.map((c) => tile(c.id, styleName(c.id), <Caption style={c.id} words={words} at={last.current} />))}
         </ul>
       </div>
+    </div>
+    <Credits items={[plain]} />
     </div>
   );
 }

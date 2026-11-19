@@ -1,7 +1,7 @@
 "use client";
 import { useRef } from "react";
 import { Caption, sampleWords } from "../demos/Caption";
-import { Footage, useItem, useWords } from "../demos/Footage";
+import { Credits, Footage, useItem, useWords } from "../demos/Footage";
 import { SplitClip } from "../demos/Frames";
 import { useInView, useReducedMotion, useTicker } from "../demos/motion";
 import s from "../demos/demos.module.css";
@@ -111,6 +111,7 @@ export function EditorSection() {
           </div>
         </div>
       </div>
+      <Credits items={[clip]} className="mt-3" />
     </Section>
   );
 }

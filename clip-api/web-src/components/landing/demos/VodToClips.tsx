@@ -1,6 +1,6 @@
 "use client";
 import { AiRating, LinkIcon } from "./Bits";
-import { aiRated, Footage, Item, useItem, useItems } from "./Footage";
+import { aiRated, Credits, Footage, Item, useItem, useItems } from "./Footage";
 import { Cam, Gameplay, SplitClip } from "./Frames";
 import s from "./demos.module.css";
 
@@ -53,9 +53,7 @@ export function VodToClips({ play }: { play: boolean }) {
           </li>
         ))}
       </ol>
-      {/* The full credit for every clip in the row: on small tiles the corner credit is cut short. */}
-      {(wide || tall.length > 0) && <p className="-mt-2 text-center text-[11px] text-white/50">
-        Footage: {[...new Set([wide?.item, ...tall].map((c) => c?.credit?.replace(/^Footage:\s*/, "")).filter(Boolean))].join(", ")}</p>}
+      <Credits items={[vod, wide?.item, ...tall]} className="-mt-2" />
     </div>
   );
 }
