@@ -81,9 +81,19 @@ uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-cl
   signals come from the loudness decode (one ffmpeg process, two outputs), so audio is still decoded once; they
   add about 17 CPU-seconds per 2-hour video for their FFTs. `pipeline/timeline.py` has them.
 - `scene` (picture change between key frames) is built but off (weight 0): it costs a key-frame decode.
+- The picture signals come from one decode of the key frames (`pipeline/frames.py`), in a thread beside the audio
+  decode: about 12 s and 90 CPU-seconds for a 2-hour 1080p H.264 video on the M4, 2 to 4 s for the AV1 uploads.
 - Standby: a candidate whose picture stands still with nobody talking for 90% of its seconds never becomes a clip
-  (starting-soon and BRB screens, an empty chair, a menu left open). Each clip records `features.standby`, the
-  share. It decodes only the key frames inside each candidate.
+  (starting-soon and BRB screens, an empty chair, a menu left open). The same for a screen that was already shown
+  at least two minutes earlier (a lobby or menu coming back). Stretches of 30 s or more of either are not even
+  nominated. Each clip records `features.standby_share`, `standby_spans` and `repeat_share`.
+- Game events (`pipeline/events.py`): the strongest banner-like key frames (at most 80 per video) are read with
+  the local `tesseract` program and matched against a phrase table per game ("WON", "VICTORY ROYALE", "WASTED").
+  A result banner raises the score of the 15 s before it; a shop or settings screen is not nominated. The game
+  comes from the job's template. Without `tesseract` (it is in the Docker image) there are no game events and
+  nothing else changes. Free: no network, no model download.
+- `reaction` (movement inside the camera box the layout step found) is built with weight 0 until it is measured
+  on more than one video with a detected camera.
 
 ## Provisional layouts
 

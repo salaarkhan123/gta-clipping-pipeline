@@ -187,3 +187,25 @@ Everything Wayin's gaming product has that we do not. Same rules as above, plus:
 3. Wave 1b, from the screenshots: A2 (prompt, score calibration), B2 (`impact` captions), C2 (presets, posters, custom templates), D2 (job form, pre-editing, results grid).
 4. Wave 2: F, E, G. H gates every merge once Wayin clips exist to compare with.
 Money PRs stay open for the owner.
+
+## Signal timeline v1 (understanding track: #154 and the PR after it)
+
+Inside `run_pipeline`, `series[name]` is one value per analysed second (value i = source second `base + i`).
+Scored signals (weights in `pipeline.WEIGHTS`): `audio`, `audio_flux`, `audio_bursts`, `chat_motion`, `scene`,
+`reaction`, `game_event`. Flags, 0 or 1: `standby`, `repeat`.
+
+On every candidate and clip (`features`):
+
+| Field | Meaning |
+|---|---|
+| `standby_share` | share of its seconds where the picture stands still and nobody speaks (0 to 1) |
+| `standby` | `true` only when the share is `STANDBY_REJECT` (0.9) or more; such a candidate is dropped before the judge |
+| `standby_spans` | those seconds as `[[start, end], ...]`, source seconds. Captions and hooks stay out of them |
+| `repeat_share`, `repeat` | the same for a screen already shown at least 120 s earlier; dropped at 0.9 or more |
+| `game_events` | banners read on screen in or just after the clip: `[{t, kind, phrase}]`, kind `event` (a result: won, eliminated, wasted), `round` (a phase marker), `menu` |
+
+Rules for readers: a small `standby_share` is information, not a reason to drop (only the `standby` flag is). The
+judge is told the share when it is above 0. One place decides each: `pipeline/frames.py` (key frames, still,
+repeat), `pipeline/timeline.py` (`keyframes` + `standby_share` for one window outside the pipeline),
+`pipeline/events.py` (banners). `frames.frame_pass(..., on_frame=fn)` hands every decoded key frame (320x180 RGB)
+to `fn(t, rgb)`, so another detector never needs its own decode.
