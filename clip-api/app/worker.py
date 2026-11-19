@@ -430,12 +430,15 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 storage.put(vkey, work / "vindex.npz")
         else:
             opts = PipelineOptions(caption_font=s.caption_font, source_lang=language, target_lang=target,
-                                   moment_layout=s.provisional_layouts, **options)   # (render, agent B)
+                                   moment_layout=s.provisional_layouts, quality_floor=s.clip_quality_floor,
+                                   **options)   # (render, agent B; U4 quality floor)
             # The pipeline's judge takes (text, frame, context); the AI client takes (text, context, frame).
             extra = ({"judge": lambda text, frame, ctx: ai.clip_meta(text, {**ctx, **lang_ctx}, frame),
                       "fast_transcriber": indexer} if ai is not None else {})
             if ai is not None and s.llm_pass and hasattr(ai, "propose_moments"):
                 extra["proposer"] = ai.propose_moments          # (U3) reads the whole transcript, when there is one
+            if ai is not None and hasattr(ai, "rewrite_hook"):  # (U4) a hook that repeats another clip's is rewritten
+                extra["hook_writer"] = lambda text, taken, ctx: ai.rewrite_hook(text, taken, {**ctx, **lang_ctx})
             # (U1) What this upload already has transcribed (a whole transcript, pieces of earlier clip jobs) is read
             # instead of transcribed again, and what this job transcribes is kept for the next one.
             heard, whole = load_heard(storage, upload_id, language or "en", work)

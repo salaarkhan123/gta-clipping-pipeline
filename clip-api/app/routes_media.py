@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import ledger
-from .ai import MomentPrompt, _hook as hook_text   # the AI's own hook rules: one line, 6 words, 48 characters
+from .ai import MomentPrompt, rating_of, _hook as hook_text   # the AI's own hook rules: one line, 6 words, 48 characters
 from .config import get_settings
 from .languages import LanguageCode, SourceLanguage
 from .db import get_db
@@ -168,10 +168,8 @@ TIERS = ((75, "top"), (55, "strong"), (35, "solid"), (0, "long_shot"))
 def tier_of(meta: dict | None) -> str | None:
     """A fixed label for the AI's 0-100 score. None when the AI did not rate the clip: a score derived from
     loudness alone says how a moment compares inside its own video, not how good it is."""
-    v = (meta or {}).get("virality") or {}
-    if (meta or {}).get("source") == "signals" or not isinstance(v.get("score"), (int, float)):
-        return None
-    return next(name for floor, name in TIERS if v["score"] >= floor)
+    rated = rating_of(meta)
+    return next(name for floor, name in TIERS if rated["rating"] >= floor) if rated else None
 
 
 def with_ranks(db: Session, clips: list[dict]) -> list[dict]:
@@ -196,10 +194,8 @@ def with_ranks(db: Session, clips: list[dict]) -> list[dict]:
 
 def _ai_score(meta: dict | None) -> int | float | None:
     """The AI's 0-100 score, or None when the AI did not rate the clip (the same test as tier_of)."""
-    v = (meta or {}).get("virality") or {}
-    if (meta or {}).get("source") == "signals" or not isinstance(v.get("score"), (int, float)):
-        return None
-    return v["score"]
+    rated = rating_of(meta)
+    return rated["rating"] if rated else None
 
 
 def clip_json(c: Clip, storage) -> dict:
@@ -214,6 +210,10 @@ def clip_json(c: Clip, storage) -> dict:
             **{k: (c.meta or {}).get(k) for k in ("title", "description", "hashtags", "virality", "reason")},
             "titles": (c.meta or {}).get("titles") or ([c.meta["title"]] if (c.meta or {}).get("title") else []),
             "hook": (c.meta or {}).get("hook"),
+            # (U4) judge v2's five sub-scores and which judge made the rating (ai.rating_of: the one reader). Clips
+            # judged before v2 have no `scores` and say "judge-v1"; a clip the AI did not rate has neither.
+            "scores": (rating_of(c.meta) or {}).get("scores"),
+            "scoring_version": (rating_of(c.meta) or {}).get("scoring_version"),
             "hook_on_screen": bool(((c.features or {}).get("edit") or {}).get("hook")),   # burned into the video
             "suggestion": (c.meta or {}).get("suggestion"),
             # (render, agent B) the best render there is: the latest export, else the job's own, else its preview.

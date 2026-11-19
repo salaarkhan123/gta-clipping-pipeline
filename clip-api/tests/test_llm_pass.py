@@ -203,7 +203,10 @@ def story_transcript() -> Heard:
 
 
 def judge(text, frame, ctx):
-    return {"title": "t", "virality": {"score": 95 if "funniest story" in text else 30}, "reason": "r"}
+    """Rates the story high when it is inside the candidate's own window (not only in the padding around it)."""
+    a, b = ctx["window"]
+    inside = " ".join(t for s, t in ctx["lines"] if a - 1 <= s < b)
+    return {"title": "t", "virality": {"score": 95 if "funniest story" in inside else 30}, "reason": "r"}
 
 
 def story_proposer(calls=None):
@@ -237,7 +240,7 @@ def test_a_quiet_moment_the_llm_found_is_judged_and_wins(video, tmp_path, monkey
     calls = []
     clips, counts = run(video, tmp_path / "a", transcript=story_transcript(), proposer=story_proposer(calls))
     assert used == ["pick_windows"]                          # the pass saw every chunk: no per-quarter floor
-    assert calls and calls[0]["cut_range"] == (15, 45) and calls[0]["chunk"] == (0.0, 40.0)
+    assert calls and calls[0]["cut_range"] == (P.JUDGE_MIN_LEN, P.JUDGE_MAX_LEN) and calls[0]["chunk"] == (0.0, 40.0)
     c = clips[0]
     assert c.start < 8 and c.features["nominated_by"] == "llm" and c.features["proposal"]["kind"] == "story"
     assert counts["llm_chunks"] == 1 and counts["llm_proposals"] == 1 and counts["llm_tokens_in"] == 1000

@@ -79,7 +79,13 @@ uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-cl
   same number of candidates as before. Without a whole transcript, or when the AI fails (3 tries per chunk,
   60 s each, 150 s for the whole pass), candidates come from the signals exactly as before. A job's counts
   show what happened: `llm_chunks`, `llm_chunks_failed`, `llm_tokens_in`, `llm_tokens_out`, `llm_pass_skipped`,
-  `llm_pass_failed`. `false` turns it off.
+  `llm_pass_failed`. `false` turns it off. **U1's transcript reuse and this pass only run with
+  `TRANSCRIBE_WHOLE=true`**: set it in the Step 2 deploy, or make it the default once hosted transcription lands
+  (the local model is the bottleneck on CPU).
+- `CLIP_QUALITY_FLOOR` (default 40, U4): with a clip-length bucket and no clip count (automatic discovery), a moment
+  becomes a clip only when the AI rates it at least this (0-100; an ordinary clip is about 50). There is no quota: a
+  long video gets as many clips as it has moments this good, at most 50, and none becomes filler; a job with none is
+  `no_moments` and refunded. Tune it on the tuning videos only.
 
 ## Moment signals (U2)
 
