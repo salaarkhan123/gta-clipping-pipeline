@@ -27,12 +27,12 @@ INTERVALS = ("month", "year")
 PLANS: list[dict] = [
     {"id": "free", "name": "Free", "price_month_cents": 0, "price_year_cents": 0, "monthly_credits": 0,
      "max_side": 720, "max_render_min": 10, "bulk_import_max": 10, "custom_templates_max": 1},
-    # price_year_cents is the yearly charge: $5.58 / $9.58 / $69.99 a month, billed yearly.
-    {"id": "starter_v2", "name": "Starter", "price_month_cents": 1599, "price_year_cents": 6696, "monthly_credits": 500,
+    # price_year_cents is the yearly charge: $66.99 / $114.99 / $839.99 a year (owner, 2026-11-19).
+    {"id": "starter_v2", "name": "Starter", "price_month_cents": 1599, "price_year_cents": 6699, "monthly_credits": 500,
      "max_side": 1080, "max_render_min": 60, "bulk_import_max": 10, "custom_templates_max": 1},
-    {"id": "pro_v2", "name": "Pro", "price_month_cents": 2699, "price_year_cents": 11496, "monthly_credits": 1000,
+    {"id": "pro_v2", "name": "Pro", "price_month_cents": 2699, "price_year_cents": 11499, "monthly_credits": 1000,
      "max_side": 2160, "max_render_min": 180, "bulk_import_max": 30, "custom_templates_max": 3},
-    {"id": "scale_v2", "name": "Scale", "price_month_cents": 13999, "price_year_cents": 83988, "monthly_credits": 6000,
+    {"id": "scale_v2", "name": "Scale", "price_month_cents": 13999, "price_year_cents": 83999, "monthly_credits": 6000,
      "max_side": 2160, "max_render_min": None, "bulk_import_max": 50, "custom_templates_max": 10},
 ]
 

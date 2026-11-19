@@ -178,9 +178,9 @@ Stripe Price that you create; the API only needs its ID.
 
    | Plan | Monthly Price | Yearly Price |
    |---|---|---|
-   | Starter | $15.99 per month | $66.96 per year |
-   | Pro | $26.99 per month | $114.96 per year |
-   | Scale | $139.99 per month | $839.88 per year |
+   | Starter | $15.99 per month | $66.99 per year |
+   | Pro | $26.99 per month | $114.99 per year |
+   | Scale | $139.99 per month | $839.99 per year |
 
 2. Put each Price ID (`price_...`) in `.env`:
 

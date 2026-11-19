@@ -173,6 +173,8 @@ Run on 2026-11-16 without the AI judge (selection only): 7 of the 15 found, 8 mi
 
 1 credit processes 1 minute of source video. Pro adds 2 seats, brand kit, custom fonts, AI music, speech enhancement, B-roll and hook generation; Scale adds 4 seats and priority processing. Per credit: $0.032 (Starter), $0.027 (Pro), $0.023 (Scale) at monthly prices; $0.011, $0.0096, $0.0117 billed yearly.
 
+Our own yearly prices differ from theirs since 2026-11-19 (owner): $66.99, $114.99 and $839.99 a year, set in `clip-api/app/plans.py`. The table above stays as their prices were read.
+
 ## Decisions (owner, 2026-11-16)
 
 1. **API names:** our own parameter names, with a published mapping to Wayin's documented options. ClutchClips stays an independent platform with equivalent function.

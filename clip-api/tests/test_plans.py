@@ -15,11 +15,12 @@ from tests.test_stripe_events import T0, fresh_ids, i, invoice, me, rows, send, 
 PRICES = {"stripe_price_starter_month": "price_st_m", "stripe_price_starter_year": "price_st_y",
           "stripe_price_pro_month": "price_pro_m", "stripe_price_pro_year": "price_pro_y",
           "stripe_price_scale_month": "price_sc_m", "stripe_price_scale_year": "price_sc_y"}
-# WayinVideo's plans (docs/PARITY.md, w11): name, monthly cents, yearly cents per month, credits a month, then our
-# enforced limits: export short side, links per bulk import, saved templates.
-WAYIN = {"starter_v2": ("Starter", 1599, 558, 500, 1080, 10, 1),
-         "pro_v2": ("Pro", 2699, 958, 1000, 2160, 30, 3),
-         "scale_v2": ("Scale", 13999, 6999, 6000, 2160, 50, 10)}
+# The plans on sale: name, monthly cents, yearly cents, credits a month, then our enforced limits: export short side,
+# links per bulk import, saved templates. Monthly prices, credits and limits are WayinVideo's (docs/PARITY.md, w11);
+# the yearly prices are the owner's of 2026-11-19: $66.99, $114.99, $839.99 a year.
+WAYIN = {"starter_v2": ("Starter", 1599, 6699, 500, 1080, 10, 1),
+         "pro_v2": ("Pro", 2699, 11499, 1000, 2160, 30, 3),
+         "scale_v2": ("Scale", 13999, 83999, 6000, 2160, 50, 10)}
 
 
 @pytest.fixture
@@ -49,10 +50,10 @@ def test_plans_on_sale_are_wayins_and_legacy_plans_are_not_listed(client):
     body = client.get("/v1/billing/plans").json()
     listed = [p["id"] for p in body["plans"]]
     assert listed == ["free", "starter_v2", "pro_v2", "scale_v2"] and all_plans() == PLANS
-    for plan_id, (name, month, per_month_yearly, credits, side, bulk, templates) in WAYIN.items():
+    for plan_id, (name, month, year, credits, side, bulk, templates) in WAYIN.items():
         p = next(x for x in body["plans"] if x["id"] == plan_id)
         assert (p["name"], p["price_month_cents"], p["price_year_cents"], p["monthly_credits"]) == (
-            name, month, per_month_yearly * 12, credits)
+            name, month, year, credits)
         assert (p["max_side"], p["bulk_import_max"], p["custom_templates_max"]) == (side, bulk, templates)
     assert not {p["id"] for p in LEGACY_PLANS} & set(listed)
     for p in PLANS + LEGACY_PLANS:            # every plan, sold or grandfathered, has every limit the API reads
@@ -103,8 +104,8 @@ def a_price(cents: int, interval: str, **over) -> dict:
 
 
 @pytest.mark.parametrize("plan_id,interval,price_id,cents", [
-    ("starter_v2", "month", "price_st_m", 1599), ("pro_v2", "year", "price_pro_y", 11496),
-    ("scale_v2", "year", "price_sc_y", 83988)])
+    ("starter_v2", "month", "price_st_m", 1599), ("pro_v2", "year", "price_pro_y", 11499),
+    ("scale_v2", "year", "price_sc_y", 83999)])
 def test_subscribe_checks_out_at_the_configured_stripe_price(client, user, prices, monkeypatch, plan_id, interval,
                                                               price_id, cents):
     headers, account = user
