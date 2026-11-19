@@ -22,7 +22,7 @@ import { useDash } from "./Shell";
 import { BackTitle } from "./ui";
 import { captionStyles, firstStyle, framing } from "./ToolPanel";
 import { ACCEPT, UploadProgress, useUpload } from "./Upload";
-import { importStep } from "@/lib/imports";
+import { importStep, optionsForUpload } from "@/lib/imports";
 
 type Kind = "clips" | "find" | "captions" | "reframe" | "transcripts" | "summary";
 // POST /v1/imports/preview: always 200; a link it will not import has `supported: false` and a `refusal`. A refusal for
@@ -74,7 +74,10 @@ export function LinkChooser() {
   const [url, setUrl] = useState(""), [kind, setKind] = useState<Kind>("clips"), [consent, setConsent] = useState(false);
   const [preview, setPreview] = useState<Preview | null | undefined>(undefined);       // undefined: asking; null: no preview route or it failed
   const [step, setStep] = useState<{ text: string; pct?: number } | null>(null), [problem, setProblem] = useState("");
-  const [confirm, setConfirm] = useState<{ upload: any; credits?: number } | null>(null);              // the exact price, when it is more than shown
+  const [confirm, setConfirm] = useState<{ upload: any; credits?: number; original?: boolean } | null>(null);   // the exact price, when it is more than shown
+  // The import was refused or failed after the settings were chosen: "Upload original video" is offered, and the
+  // upload then runs the same job with the same settings (`original`: the file being uploaded is that one).
+  const [failed, setFailed] = useState(false), original = useRef(false), fileAgain = useRef<HTMLInputElement>(null);
   // One call that imports and clips on the server (URL clipping), when this API has it: its path, else null.
   const [oneCall, setOneCall] = useState<string | null>(null), [off, setOff] = useState(false);
   // Options per tool.
@@ -86,9 +89,11 @@ export function LinkChooser() {
   // AI Clipping uses the full job-setup screen; it hands back the options it would send.
   const setup = useRef<Record<string, unknown> | null>(null), [template, setTemplate] = useState<string | undefined>(undefined);
   const [preset, setPreset] = useState<Partial<Look>>({});           // Home's polish chips
-  // "Upload the file instead": the uploaded video opens on the chosen tool's own form, where its price is shown.
-  const { up, start: upload, cancel } = useUpload((u) => router.push(kind === "transcripts" ? `/dashboard/transcript/?id=${u.upload_id}`
-    : kind === "summary" ? `/dashboard/summary/?id=${u.upload_id}` : `/dashboard/project/?id=${u.upload_id}&tool=${kind}`));
+  // "Upload original video" before any setting was chosen (the link was refused at the preview): the uploaded
+  // video opens on the chosen tool's own form, with the template picked on Home, where its price is shown. After a
+  // failed import the settings exist already: `uploaded` asks for the same job on the upload.
+  const { up, start: upload, cancel } = useUpload((u) => original.current ? uploaded(u) : router.push(kind === "transcripts" ? `/dashboard/transcript/?id=${u.upload_id}`
+    : kind === "summary" ? `/dashboard/summary/?id=${u.upload_id}` : `/dashboard/project/?id=${u.upload_id}&tool=${kind}${template ? `&template=${encodeURIComponent(template)}` : ""}`));
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
@@ -165,10 +170,11 @@ export function LinkChooser() {
   }, [rangeKey]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // The tool's request on an upload, built the way its own form builds it.
-  function request(uploadId: string): [string, unknown] {
+  // `whole`: the upload is the original video, not the part an import would have cut, so the picked part stays in the options.
+  function request(uploadId: string, whole = false): [string, unknown] {
     const L = listed!;
     const lang = { source_lang: o.source_lang || null };
-    if (kind === "clips" && setup.current) return ["/v1/clips", { upload_id: uploadId, options: clipOptions(setup.current) }];
+    if (kind === "clips" && setup.current) return ["/v1/clips", { upload_id: uploadId, options: whole ? optionsForUpload(setup.current, picked_range) : clipOptions(setup.current) }];
     if (kind === "clips") {
       const options: Record<string, unknown> = { facecam_region: "auto", zoom: 1, resolution: "1080", chat_region: "none", ...look,
         ...(pre ? {} : AS_IT_IS), template: pre && chosen ? chosen.id : null, ...(pre && chosen ? extrasFrom(chosen, L) : {}), prompt: null, range: null, ...lang };
@@ -190,12 +196,26 @@ export function LinkChooser() {
   const after = (uploadId: string) => (kind === "transcripts" ? `/dashboard/transcript/?id=${uploadId}` : kind === "summary" ? `/dashboard/summary/?id=${uploadId}`
     : `/dashboard/project/?id=${uploadId}${kind === "find" ? "&tool=find" : ""}`);
 
-  const runTool = useCallback(async (u: any) => {
+  const runTool = useCallback(async (u: any, whole = false) => {
     setStep({ text: "Starting…" });
-    const [path, body] = request(u.upload_id);
+    const [path, body] = request(u.upload_id, whole);
     try { await api(path, { body }); await reloadMe(); router.push(after(u.upload_id)); }
     catch (e) { setStep(null); fail(e); }
   }, [kind, o, look, pre, chosen, listed]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The original video is in, after its link could not be imported: the same job, with the same settings. The price
+  // is asked from the server first. No more than the price already shown for the link: it starts. Otherwise the
+  // exact price is shown and the user confirms it.
+  async function uploaded(u: any) {
+    original.current = false;
+    setFailed(false); setProblem("");
+    if (kind !== "clips") { setConfirm({ upload: u, original: true }); return; }
+    const [, body] = request(u.upload_id, true);
+    const q = await api<{ credits_reserved?: number }>("/v1/clips/quote", { body }).catch(() => null);
+    const credits = typeof q?.credits_reserved === "number" ? q.credits_reserved : undefined;
+    if (credits !== undefined && quoted && credits <= quoted.credits) { await runTool(u, true); return; }
+    setConfirm({ upload: u, credits, original: true });
+  }
 
   // URL clipping: one call reserves the quoted credits, imports and starts clipping on the server; the page follows
   // the one job until its video exists, then the project page follows the rest.
@@ -205,10 +225,10 @@ export function LinkChooser() {
     setStep({ text: "Starting…", pct: 0 });
     let job: any;
     try { job = await api(path, { body: { url, consent: true, ...importRange(), options } }); await reloadMe(); }
-    catch (e) { setStep(null); if (e instanceof ApiError && [402, 409, 422, 503].includes(e.status)) setProblem(e.message); else fail(e); return; }
+    catch (e) { setStep(null); if (e instanceof ApiError && [402, 409, 422, 503].includes(e.status)) { setProblem(e.message); setFailed(e.status === 422 || e.status === 503); } else fail(e); return; }
     for (;;) {
       if (job.status === "FAILED" || job.status === "CANCELED" || job.status === "CANCELLED") {
-        setStep(null); setProblem(job.error?.message || "The import failed and the credits went back. Upload the file instead."); return;
+        setStep(null); setProblem(job.error?.message || "The import failed and the credits went back. Upload the file instead."); setFailed(job.status === "FAILED"); return;
       }
       if (job.upload_id) {
         const ready = await api(`/v1/projects/${job.upload_id}`).then(() => true).catch(() => false);
@@ -222,13 +242,13 @@ export function LinkChooser() {
 
   // Import, then: the job starts at once when its price is no more than the one shown; otherwise the exact price is asked first.
   async function go(more = false) {
-    setProblem("");
+    setProblem(""); setFailed(false);
     if (kind === "find" && !o.query.trim() && !more) { setProblem("Type what you're looking for first."); return; }
     if (oneCall && kind === "clips" && !more) { await clipFromUrl(oneCall); return; }
     setStep({ text: "Starting the import…", pct: 0 });
     let imp: any;
     try { imp = await api("/v1/imports", { body: { url, consent: true, ...importRange() } }); }
-    catch (e) { setStep(null); if (e instanceof ApiError && e.status === 422) setProblem(e.message); else fail(e); return; }
+    catch (e) { setStep(null); if (e instanceof ApiError && e.status === 422) { setProblem(e.message); setFailed(true); } else fail(e); return; }
     while (imp.status === "QUEUED" || imp.status === "RUNNING") {
       setStep({ text: importStep(imp, "Downloading the video"), pct: imp.progress || 0 });
       await new Promise((r) => setTimeout(r, 2000));
@@ -237,6 +257,7 @@ export function LinkChooser() {
     if (imp.status !== "SUCCEEDED" || !imp.upload_id) {
       setStep(null);
       setProblem(imp.error?.message || (imp.status === "FAILED" ? "The import failed. Upload the file instead." : "The import was cancelled."));
+      setFailed(imp.status === "FAILED");
       return;
     }
     const u = imp.upload || (await api(`/v1/projects/${imp.upload_id}`));
@@ -283,6 +304,17 @@ export function LinkChooser() {
     ["Can do", preview?.options ? [preview.options.clip && "clip", preview.options.import && "import", preview.options.range && (partial ? "download only a part" : "pick a part")].filter(Boolean).join(", ") : null],
   ] as [string, string | null | undefined][]).filter((f): f is [string, string] => !!f[1]);
 
+  // After a refused or failed import: the settings on the screen stay, and the original file can be uploaded to run
+  // the same job on it. Nothing was charged for the import (a link clip job that fails is refunded in full).
+  const pickOriginal = (e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return;
+    const bad = videoFileProblem(f); if (bad) { setProblem(bad); return; } original.current = true; upload(f); };
+  const uploadOriginal = failed && !confirm ? <div className="grid gap-2">
+    <input ref={fileAgain} type="file" accept={ACCEPT} hidden onChange={pickOriginal} />
+    {up ? <UploadProgress up={up} onCancel={() => { original.current = false; cancel(); }} />
+      : <button type="button" className="btn small primary justify-self-start" onClick={() => fileAgain.current?.click()}><Icon name="upload" size={16} />Upload original video</button>}
+    <p className="m-0 text-[12.5px] text-muted">Your settings stay as they are, and nothing was charged for the import.</p>
+  </div> : null;
+
   // A live channel or a broadcast live now: nothing to import yet. Live clipping is planned.
   if (live && preview) return (
     <div className="mx-auto grid w-full max-w-[720px] gap-5">
@@ -313,6 +345,7 @@ export function LinkChooser() {
       onCreate={(opts) => { setup.current = opts; go(); }} onRemove={() => router.push("/dashboard/")}
       consent={{ checked: consent, onChange: setConsent, text: CONSENT }} step={step}
       problem={problem || (tooLong && !quoted ? `${refusalText(preview!.refusal)} Pick a part of it under Adjust range to get a price.` : "")}
+      afterProblem={uploadOriginal} busy={!!up}
       header={toolChips} />
   );
 
@@ -345,7 +378,7 @@ export function LinkChooser() {
       {refused && <div className="error grid w-[min(100%,560px)] gap-[10px]" role="alert">
         <p>{off ? OFF : refusalText(preview!.refusal) || "This link can't be imported."}</p>
         <input ref={file} type="file" accept={ACCEPT} hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) { const bad = videoFileProblem(f); if (bad) setProblem(bad); else upload(f); } }} />
-        {up ? <UploadProgress up={up} onCancel={cancel} /> : <div><button type="button" className="btn small primary" onClick={() => file.current?.click()}><Icon name="upload" size={16} />Upload the file instead</button></div>}
+        {up ? <UploadProgress up={up} onCancel={cancel} /> : <div><button type="button" className="btn small primary" onClick={() => file.current?.click()}><Icon name="upload" size={16} />Upload original video</button></div>}
       </div>}
 
       {!refused && listed && langs && look && <section className="panel w-[min(100%,640px)] [&_label]:grid-cols-[9rem_minmax(0,1fr)] [&_label]:items-center [&_label]:text-[15px] [&_label]:text-text
@@ -391,12 +424,13 @@ export function LinkChooser() {
           <p className="muted">The video is in: {clock(confirm.upload.duration_sec)} long. {perMinute(kind)
             ? `This uses ${confirm.credits ?? confirm.upload.credits_required} credit${(confirm.credits ?? confirm.upload.credits_required) === 1 ? "" : "s"}${confirm.credits === undefined ? " (one per minute of video)" : ", the exact price for these settings"}.`
             : `This uses one credit per minute rendered, up to ${confirm.upload.credits_required}.`}</p>
-          <div className="row"><button type="button" className="btn primary" onClick={() => runTool(confirm.upload)}>Start</button>
+          <div className="row"><button type="button" className="btn primary" onClick={() => runTool(confirm.upload, !!confirm.original)}>Start</button>
             <Link className="btn ghost" href={`/dashboard/project/?id=${confirm.upload.upload_id}`}>Not now, open the project</Link></div>
         </> : <>
           <label className="check text-[14.5px] text-text"><input type="checkbox" checked={consent} disabled={busy} onChange={(e) => setConsent(e.target.checked)} /><span>{CONSENT}</span></label>
           {short && <p className="error" role="alert">Not enough credits for this video. <Link href="/dashboard/pricing/">Get more credits</Link></p>}
           {problem && <p className="error" role="alert">{problem}</p>}
+          {uploadOriginal}
           {step ? <div className="uploading" role="status"><p>{step.text}{typeof step.pct === "number" ? ` ${step.pct}%` : ""}</p>
               {typeof step.pct === "number" && <progress max={100} value={step.pct} aria-label="Import progress" />}</div>
             : <div className="row start-row border-t-0 pt-0"><p className="muted">{priceText}</p>

@@ -37,10 +37,10 @@ const QUICK = ["Funny reactions", "Clutch plays", "Epic fails", "Chases and cras
 const DISPLAY: Record<string, string> = { translation: "Translated only", both: "Both languages" };
 const languageName = (code: string) => { try { return new Intl.DisplayNames(["en"], { type: "language" }).of(code) || code; } catch { return code; } };
 
-export function JobSetup({ source, listed, template, preset, price, onOptions, onCreate, onRemove, consent, step, problem, header, busy }: {
+export function JobSetup({ source, listed, template, preset, price, onOptions, onCreate, onRemove, consent, step, problem, afterProblem, header, busy }: {
   source: SetupSource; listed: Listed; template?: string; preset?: Partial<Look>; price: Price; onOptions: (o: Record<string, unknown>) => void; onCreate: (o: Record<string, unknown>) => void;
   onRemove: () => void; consent?: { checked: boolean; onChange: (on: boolean) => void; text: string }; step?: { text: string; pct?: number } | null;
-  problem?: string; header?: React.ReactNode; busy?: boolean }) {
+  problem?: string; afterProblem?: React.ReactNode; header?: React.ReactNode; busy?: boolean }) {
   const { me } = useDash();
   const langs = useLanguages();
   const has = (k: string) => k in listed;
@@ -286,6 +286,7 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
           {price.state === "failed" && <p className="m-0 text-[12.5px] text-warn">No price yet: {price.message}</p>}
           {consent && <label className="check m-0 text-[13.5px] text-label"><input type="checkbox" checked={consent.checked} disabled={!!step} onChange={(e) => consent.onChange(e.target.checked)} /><span>{consent.text}</span></label>}
           {problem && <p className="error m-0" role="alert">{problem}</p>}
+          {afterProblem}
           {step ? <div className="grid gap-2" role="status"><p className="m-0 text-[14px]">{step.text}{typeof step.pct === "number" ? ` ${step.pct}%` : ""}</p>
             {typeof step.pct === "number" && <progress max={100} value={step.pct} aria-label="Progress" />}</div> : create}
           {!consent && <p className="m-0 text-center text-[12.5px] text-muted">You confirmed you own this video, or have permission to clip it, when you uploaded it.</p>}

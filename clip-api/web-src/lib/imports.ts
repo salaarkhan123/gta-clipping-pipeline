@@ -8,6 +8,13 @@ const STAGES: Record<string, string> = {
   done: "Done",
 };
 
+// A link that could not be imported: the user uploads the original file and the same job is asked for on it. The
+// options are the ones chosen for the link. A part picked for the import (sent there as start_sec / end_sec, with
+// `range` null) becomes the job's own `range` on the upload, so the same part of the video is clipped.
+export function optionsForUpload<T extends Record<string, unknown>>(options: T, picked: { start: number; end: number } | null | undefined): T {
+  return picked ? { ...options, range: { start: picked.start, end: picked.end } } : options;
+}
+
 const mb = (n: number) => Math.max(0.1, n / 1e6).toFixed(n >= 1e8 ? 0 : 1);
 
 // "Downloading the video · 12.0 of 24.0 MB" when the API sends byte counts, else just the stage.
