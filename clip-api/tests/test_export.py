@@ -194,7 +194,7 @@ def test_an_edit_sent_with_the_export_is_saved_and_priced():
     with pytest.raises(ValueError):
         ClipEditDoc(trim={"start": 0, "end": 10}, cuts=[[0, 9.5]])              # under a second left
     lines = ClipEditDoc(trim={"start": 0, "end": 10}, caption_lines=[{"start": 1, "end": 2, "text": "a b"}])
-    assert lines.words() == [(1.0, 1.5, "a"), (1.5, 2.0, "b")]
+    assert lines.caption_words() == [(1.0, 1.5, "a"), (1.5, 2.0, "b")]
 
 
 def test_words_on_a_rendered_timeline_go_back_to_source_seconds():

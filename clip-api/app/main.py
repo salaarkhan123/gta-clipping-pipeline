@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from . import routes_auth, routes_billing, routes_export, routes_fonts, routes_ingest, routes_media, routes_meta, routes_projects, routes_templates, routes_text, routes_tools
+from . import routes_auth, routes_billing, routes_captions, routes_export, routes_fonts, routes_ingest, routes_media, routes_meta, routes_projects, routes_templates, routes_text, routes_tools
 from .config import get_settings
 from .db import get_engine, init_db
 from .deps import ApiError
@@ -39,6 +39,7 @@ app.include_router(routes_text.router, tags=["languages"])      # (languages, ag
 app.include_router(routes_projects.router, tags=["projects"])
 app.include_router(routes_templates.router, tags=["templates"])
 app.include_router(routes_fonts.router, tags=["templates"])      # caption fonts (captions agent)
+app.include_router(routes_captions.router, tags=["clips"])       # caption words for text editing (captions agent)
 app.include_router(routes_meta.router, tags=["clips"])
 app.include_router(routes_billing.router, tags=["billing"])
 app.include_router(routes_ingest.router, tags=["imports"])     # link import (agent E)
