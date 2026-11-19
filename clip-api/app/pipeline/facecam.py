@@ -27,6 +27,19 @@ def _detector():
     return _local.cascade
 
 
+def _weak_detectors():
+    """The looser second look: two more face detectors bundled with OpenCV (another frontal one and a profile one),
+    for a streamer who looks down at the keyboard or turns away, which the first detector misses."""
+    if getattr(_local, "weak", None) is None:
+        import cv2
+        cs = [cv2.CascadeClassifier(cv2.data.haarcascades + f)
+              for f in ("haarcascade_frontalface_alt2.xml", "haarcascade_profileface.xml")]
+        if any(c.empty() for c in cs):
+            raise RuntimeError("face detector data is missing")
+        _local.weak = cs
+    return [_detector(), *_local.weak]
+
+
 def sample_gray(src, info: MediaInfo, n: int, deadline: Deadline | None = None, width: int = 640,
                 span: tuple[float, float] | None = None) -> list:
     """`n` gray frames spread over the video, or over `span` (start, end seconds) when one is given."""
@@ -57,13 +70,9 @@ def find_face(frames: list) -> tuple[float, float, float, float] | None:
     return None if face is None or face[2] > MAX_OVERLAY_FACE else face
 
 
-def stable_face(frames: list) -> tuple[float, float, float, float] | None:
-    """A face that stays in one place across the video, whatever its size, or None."""
-    det, faces = _detector(), []
-    for i, g in enumerate(frames):
-        fh_px, fw_px = g.shape
-        for (x, y, w, h) in det.detectMultiScale(g, scaleFactor=1.1, minNeighbors=6, minSize=(24, 24)):
-            faces.append((i, (x + w / 2) / fw_px, (y + h / 2) / fh_px, w / fw_px, h / fh_px))
+def _clusters(faces: list) -> list[list]:
+    """Face hits (frame index, centre x, centre y, w, h) grouped by place and size, the group seen in the most
+    frames first."""
     clusters: list[list] = []
     for f in faces:
         for c in clusters:
@@ -73,11 +82,46 @@ def stable_face(frames: list) -> tuple[float, float, float, float] | None:
                 break
         else:
             clusters.append([f])
-    best = max(clusters, key=lambda c: len({f[0] for f in c}), default=None)
+    return sorted(clusters, key=lambda c: -len({f[0] for f in c}))
+
+
+def _median_face(cluster: list) -> tuple[float, float, float, float]:
+    cx, cy, fw, fh = (float(np.median([f[k] for f in cluster])) for k in (1, 2, 3, 4))
+    return cx, cy, fw, fh
+
+
+def stable_face(frames: list) -> tuple[float, float, float, float] | None:
+    """A face that stays in one place across the video, whatever its size, or None."""
+    det, faces = _detector(), []
+    for i, g in enumerate(frames):
+        fh_px, fw_px = g.shape
+        for (x, y, w, h) in det.detectMultiScale(g, scaleFactor=1.1, minNeighbors=6, minSize=(24, 24)):
+            faces.append((i, (x + w / 2) / fw_px, (y + h / 2) / fh_px, w / fw_px, h / fh_px))
+    best = next(iter(_clusters(faces)), None)
     if not best or len({f[0] for f in best}) < max(3, int(0.4 * len(frames))):
         return None
-    cx, cy, fw, fh = (float(np.median([f[k] for f in best])) for k in (1, 2, 3, 4))
-    return cx, cy, fw, fh
+    return _median_face(best)
+
+
+WEAK_FRAMES = 2          # a loose face hit in this many frames, in one place, is worth checking for a camera box
+
+
+def weak_faces(frames: list) -> list[tuple[int, tuple[float, float, float, float]]]:
+    """Places where a face shows in at least WEAK_FRAMES frames, by any of three detectors at a looser setting
+    (profiles both ways): (frames seen in, face), most frames first. Many are not a streamer (game characters, a
+    poster): a caller trusts one only with more evidence, such as a still camera box around it (find_cam_rect)."""
+    hits = []
+    for i, g in enumerate(frames):
+        h_px, w_px = g.shape
+        for k, det in enumerate(_weak_detectors()):
+            views = ((g, False), (np.ascontiguousarray(g[:, ::-1]), True)) if k == 2 else ((g, False),)
+            for img, flipped in views:
+                for (x, y, w, h) in det.detectMultiScale(img, scaleFactor=1.1, minNeighbors=3, minSize=(20, 20)):
+                    if flipped:
+                        x = w_px - x - w
+                    hits.append((i, (x + w / 2) / w_px, (y + h / 2) / h_px, w / w_px, h / h_px))
+    out = [(len({f[0] for f in c}), _median_face(c)) for c in _clusters(hits)]
+    return [(n, face) for n, face in out if n >= WEAK_FRAMES]
 
 
 STILL_FRACTION = 0.5     # a row or column belongs to the camera when this share of it barely changes over the video
@@ -161,11 +205,18 @@ CAMERA_STILL = 0.5       # this share of the frame barely changing over the vide
 STILL_LEVEL = 10.0       # mean change (0-255) between samples minutes apart below which a pixel counts as still
 
 
+ROOM_CHANGE = 28.0       # median change (0-255) between samples minutes apart below which the picture is a room, not a game
+CAMERA_FRAMES = 0.5      # a face in this share of the frames, in one place, with no overlay box: the person is the picture
+# How sure each way of finding the camera is (Scene.confidence); docs/REFRAME_EVAL.md has the eval set behind them.
+CONFIDENCE = {"rect": 0.9, "weak_rect": 0.75, "face_crop": 0.6, "camera": 0.8, "weak_camera": 0.6}
+
+
 @dataclass(frozen=True)
 class Scene:
     kind: str                            # "gameplay_cam" | "camera" | "gameplay"
     cam: list[float] | None = None       # the webcam overlay [x, y, w, h] (fractions): gameplay_cam only
     face: tuple | None = None            # the person's face (centre x, centre y, w, h), when there is one
+    confidence: float | None = None      # 0-1, how sure the camera is (CONFIDENCE); None for "gameplay" or a given box
 
 
 def still_share(frames: list) -> float:
@@ -179,23 +230,44 @@ def still_share(frames: list) -> float:
     return float((change[picture] < STILL_LEVEL).mean()) if picture.any() else 0.0
 
 
+def median_change(frames: list) -> float:
+    """The median change (0-255) of a pixel between frames sampled minutes apart: 35 and up for gameplay, about
+    20 for a room on camera, whatever moves in it."""
+    if len(frames) < 2:
+        return 255.0
+    stack = np.stack([f.astype(np.float32) for f in frames])
+    return float(np.median(np.abs(np.diff(stack, axis=0)).mean(axis=0)))
+
+
 def classify(frames: list) -> Scene:
     """Gameplay with a webcam overlay, a camera that fills the frame, or gameplay with no camera.
 
     A face that stays put is a person on camera. It is an overlay when its own rectangle can be found, or when
     the picture around it keeps changing (a cut-out camera over the game). It is the whole picture when the face
-    is large or most of the frame is as still as a room."""
+    is large or most of the frame is as still as a room.
+
+    When the strict face detector finds no overlay box, a looser look (weak_faces) tries again: a streamer looking
+    down at the keyboard is often seen in only a few frames, or only in profile. A loose face is trusted only when
+    a still camera box grows around it, so a game character never becomes a camera. With no box, a face in most
+    frames over a picture that changes like a room is a person filling the frame (a react or just-chatting video)."""
     face = stable_face(frames)
-    if face is None:
-        return Scene("gameplay")
-    if face[2] > MAX_OVERLAY_FACE:
-        return Scene("camera", None, face)
-    rect = find_cam_rect(frames, face)
+    if face is not None and face[2] > MAX_OVERLAY_FACE:
+        return Scene("camera", None, face, CONFIDENCE["camera"])
+    rect = find_cam_rect(frames, face) if face else None
     if rect:
-        return Scene("gameplay_cam", rect, face)
-    if still_share(frames) >= CAMERA_STILL:
-        return Scene("camera", None, face)
-    return Scene("gameplay_cam", face_crop(face), face)
+        return Scene("gameplay_cam", rect, face, CONFIDENCE["rect"])
+    weak = [(n, f) for n, f in weak_faces(frames) if f[2] <= MAX_OVERLAY_FACE] if len(frames) >= 4 else []
+    for _n, loose in weak:
+        rect = find_cam_rect(frames, loose)
+        if rect:
+            return Scene("gameplay_cam", rect, face or loose, CONFIDENCE["weak_rect"])
+    if face is not None:
+        if still_share(frames) >= CAMERA_STILL:
+            return Scene("camera", None, face, CONFIDENCE["camera"])
+        return Scene("gameplay_cam", face_crop(face), face, CONFIDENCE["face_crop"])
+    if weak and weak[0][0] >= CAMERA_FRAMES * len(frames) and median_change(frames) < ROOM_CHANGE:
+        return Scene("camera", None, weak[0][1], CONFIDENCE["weak_camera"])
+    return Scene("gameplay")
 
 
 def detect_scene(src, info: MediaInfo, deadline: Deadline | None = None, samples: int = 12) -> Scene:
@@ -209,15 +281,16 @@ def detect_scene(src, info: MediaInfo, deadline: Deadline | None = None, samples
 
 
 class CamBox(list):
-    """A detected camera box [x, y, w, h] that also remembers the face it was found from and the scene type.
-    It is a plain list to every caller that only passes it on; render_clip reads the rest, so a face found here
-    is never cut by a panel edge there."""
+    """A detected camera box [x, y, w, h] that also remembers the face it was found from, the scene type and how
+    sure the detection is (Scene.confidence). It is a plain list to every caller that only passes it on;
+    render_clip reads the rest, so a face found here is never cut by a panel edge there."""
     face: tuple | None = None
     scene: str | None = None
+    confidence: float | None = None
 
-    def __init__(self, box, face=None, scene=None):
+    def __init__(self, box, face=None, scene=None, confidence=None):
         super().__init__(box)
-        self.face, self.scene = face, scene
+        self.face, self.scene, self.confidence = face, scene, confidence
 
 
 def resolve_plan(src, info: MediaInfo, options, deadline: Deadline | None = None) -> LayoutPlan | None:
@@ -245,7 +318,8 @@ def resolve_plan(src, info: MediaInfo, options, deadline: Deadline | None = None
         raise PipelineError("bad_options", f"The {options.layout} layout needs facecam_region or facecam_box.")
     return layouts.compose(info.width, info.height, name, aspect, scene=scene.kind, cam=scene.cam, face=scene.face,
                            zoom=getattr(options, "zoom", 1.0), requested=options.layout,
-                           camera=getattr(options, "camera", None), split_ratio=getattr(options, "split_ratio", None))
+                           camera=getattr(options, "camera", None), split_ratio=getattr(options, "split_ratio", None),
+                           confidence=scene.confidence)
 
 
 MOMENT_SAMPLES = 4      # frames looked at inside each moment when the layout is auto
@@ -299,5 +373,6 @@ def resolve_facecam(src, info: MediaInfo, options, deadline: Deadline | None = N
             layout = "fill"
         return layout, facecam
     if plan.scene == "camera":      # the person is the picture: pass the head and shoulders as the box to hold
-        return layouts.legacy_name(plan.layout), CamBox(face_crop(plan.face), plan.face, "camera")
-    return layouts.legacy_name(plan.layout), (CamBox(plan.cam, plan.face, plan.scene) if plan.cam else None)
+        return layouts.legacy_name(plan.layout), CamBox(face_crop(plan.face), plan.face, "camera", plan.confidence)
+    return layouts.legacy_name(plan.layout), (CamBox(plan.cam, plan.face, plan.scene, plan.confidence)
+                                              if plan.cam else None)

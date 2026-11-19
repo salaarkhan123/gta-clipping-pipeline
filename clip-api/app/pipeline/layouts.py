@@ -276,6 +276,7 @@ class LayoutPlan:
     seam: int | None = None             # the line between two stacked panels, in canvas pixels from the top
     head: tuple | None = None           # where a caption must not go: the person's head on the canvas (x0, y0, x1, y1)
     source: tuple[int, int] | None = None   # the source's size in pixels: what `panels[].src` are measured in
+    confidence: float | None = None     # how sure the camera detection is (facecam.Scene.confidence); None: given or none
 
 
 def canonical(layout: str, aspect: str) -> str:
@@ -527,6 +528,17 @@ def _full(c: _Ctx) -> dict | None:
                 caption_top=int(oh * 0.70), hook_top=int(oh * 0.18))
 
 
+def _full_clear(c: _Ctx) -> dict | None:
+    """full, asked for by name, on a source whose camera the crop cannot hold whole: the gameplay crop that
+    leaves the camera out completely (zooming in up to WIDE_ZOOM to find room beside it). The person is never cut."""
+    ow, oh = c.size
+    _how, rect = avoid_camera(c.sw, c.sh, ow, oh, c.zoom, c.cam, c.face, WIDE_ZOOM)
+    if rect is None:
+        return None
+    return dict(panels=(Panel("gameplay", rect, (0, 0, ow, oh), punch=True),),
+                caption_top=int(oh * 0.70), hook_top=int(oh * 0.18))
+
+
 def _fit(c: _Ctx) -> dict:
     """The whole source, letterboxed. The bars are a blurred piece of the gameplay with no person in it, or black."""
     ow, oh = c.size
@@ -635,6 +647,8 @@ def _text_off_the_face(c: _Ctx, parts: dict) -> dict:
 _NOTES = {
     "no_camera": "No webcam overlay was found in this video, so the gameplay fills the frame.",
     "camera_only": "The camera fills this video, so there is no separate gameplay to place.",
+    "camera_left_out": "The gameplay fills the frame as asked; the camera could not fit whole in it, so it is "
+                       "left out rather than cut. Choose pip or split to show it.",
     "in_the_way": "The camera could not be shown cleanly in the layout that was asked for, so this one is used "
                   "instead: people are never blurred or cut.",
 }
@@ -652,8 +666,9 @@ def split_problem(camera, split_ratio) -> str | None:
 
 def compose(src_w: int, src_h: int, layout: str, aspect: str, *, scene: str | None = None, cam=None, face=None,
             zoom: float = 1.0, requested: str | None = None, camera: str | None = None,
-            split_ratio: float | None = None) -> LayoutPlan:
+            split_ratio: float | None = None, confidence: float | None = None) -> LayoutPlan:
     """The boxes for `layout` (a canonical name or "auto") on a source whose scene type is already known.
+    `confidence` is the camera detection's (facecam.Scene.confidence), passed through to the plan.
     `cam` is the webcam overlay [x, y, w, h] and `face` the person's face (centre x, centre y, w, h), both as
     fractions of the source. Raises PipelineError("layout_unavailable") for the layouts that are not built.
 
@@ -680,21 +695,28 @@ def compose(src_w: int, src_h: int, layout: str, aspect: str, *, scene: str | No
         first = "split2" if scene == "gameplay_cam" and aspect != "16:9" else "full"
     # What to draw, most wanted first. Each later one shows more of the source as it is, and fit always works.
     order = {"full": ["full", "pip", "fit"], "fit": ["fit"], "pip": ["pip", "full", "fit"]}.get(first, [first, "full", "pip", "fit"])
+    if layout == "full" and scene == "gameplay_cam":
+        # Asked for by name: the gameplay fills the frame. When the camera cannot be held whole in the crop, the
+        # crop keeps it out completely (never cut) rather than turning into pip, which is a different layout.
+        order = ["full", "full_clear", "pip", "fit"]
     for name in order:
         if name == "pip" and name != first and "pip" not in ALLOWED[aspect]:
             continue           # a fallback is only ever a layout this shape offers
-        parts = (_fit(c) if name == "fit" else _full(c) if name == "full" else _pip(c) if name == "pip"
-                 else _BUILDERS[name](c) if name in _BUILDERS else _two(c, name))
+        parts = (_fit(c) if name == "fit" else _full(c) if name == "full" else _full_clear(c) if name == "full_clear"
+                 else _pip(c) if name == "pip" else _BUILDERS[name](c) if name in _BUILDERS else _two(c, name))
+        cleared = name == "full_clear"
+        if cleared:
+            name = "full"
         if parts is None:
             continue
         if name in ("full", "fit"):
             parts = _text_off_the_face(c, parts)
-        note = None
+        note = _NOTES["camera_left_out"] if parts is not None and cleared else None
         if name != first:
             note = _NOTES["no_camera" if scene == "gameplay" else "camera_only" if scene == "camera" else "in_the_way"]
         return LayoutPlan(requested=requested or layout, layout=name, scene=scene, aspect=aspect, size=c.size,
                           cam=c.cam, face=c.face, note=note, head=_person_on_canvas(c, parts["panels"]),
-                          source=(src_w, src_h), **parts)
+                          source=(src_w, src_h), confidence=confidence if scene != "gameplay" else None, **parts)
     raise PipelineError("layout_unavailable", "This video could not be reframed.")     # unreachable: fit always draws
 
 
@@ -794,6 +816,7 @@ def reframe_boxes(plan: LayoutPlan | None, *, src: tuple[int, int] | None = None
     if head:
         keep_out.append(head)
     facecam = None
+    conf = confidence if confidence is not None else plan.confidence
     if plan.cam:
         cam_out = None
         for p in plan.panels:
@@ -807,7 +830,7 @@ def reframe_boxes(plan: LayoutPlan | None, *, src: tuple[int, int] | None = None
                 cam_out = _xyxy(shown)
                 keep_out.append(cam_out)
         facecam = {"src": [round(v, 4) for v in plan.cam], "out": cam_out,
-                   "confidence": None if confidence is None else round(float(confidence), 3)}
+                   "confidence": None if conf is None else round(float(conf), 3)}
     hud = []
     for kind, box in hud_regions(game):
         shown = _shown(cam_px(box, sw, sh), plan.panels)
