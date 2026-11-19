@@ -140,6 +140,22 @@ def clip_text(r) -> str:
     return str(r.features.get("text", ""))
 
 
+def _fetch_caption_font(storage, account_id: str, options: dict, work: Path) -> None:
+    """(captions) When caption_look names an uploaded font ("custom:<id>"), fetch the account's file into the job's
+    work dir and hand its path to the renderer. A font that is gone fails the job (refunded) with a clear error."""
+    from .routes_fonts import account_font
+    font = str((options.get("caption_look") or {}).get("font") or "")
+    if not font.startswith("custom:"):
+        return
+    row = account_font(storage, account_id, font[len("custom:"):])
+    if row is None or not storage.exists(row["key"]):
+        raise PipelineError("caption_font_missing", "The caption font this job uses was deleted. Choose another "
+                            "font and try again.")
+    dest = work / ("caption_font" + Path(row["key"]).suffix)
+    storage.fetch(row["key"], dest)
+    options["caption_font_file"] = str(dest)
+
+
 def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=run_pipeline,
                 indexer: Transcriber | None = None, embedder=None, ai=None) -> str:
     """Run one claimed job to a final state. Always settles credits. Returns the final status."""
@@ -155,6 +171,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
         options["max_side"] = plan_of(db.get(Account, job.account_id)).get("max_side")
         src_key, ext, upload_id = upload.storage_key, Path(upload.storage_key).suffix, upload.id
         has_audio, video_sec = upload.has_audio, upload.duration_sec
+        account_id = job.account_id
 
     work = Path(tempfile.mkdtemp(prefix="job_", dir=s.work_dir))
     stop = threading.Event()
@@ -184,6 +201,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
         return {"queue_sec": round(queue, 1), "total_sec": round(queue + time.monotonic() - t_start, 1)}
 
     try:
+        _fetch_caption_font(storage, account_id, options, work)    # (captions) an uploaded caption font
 
         def progress(stage: str, pct: int) -> None:
             if stage != mark[1]:
