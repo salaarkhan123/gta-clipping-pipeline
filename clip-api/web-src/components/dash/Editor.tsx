@@ -2,8 +2,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { addCut, cutsInside, dropDraft, Edit, forApi, inCut, keptLength, Line, linesOf, loadDraft, loadWords, MIN_LENGTH, removeSpan, round,
-  saveDraft, saveOnClip, sameEdit, sourceTime, Span, startEdit, Word } from "@/lib/edit";
+import { addCut, cutsInside, dropDraft, Edit, EditWord, forApi, inCut, keptLength, Line, linesOf, loadDraft, loadWords, MIN_LENGTH, removeSpan, round,
+  loadEditWords, saveDraft, saveOnClip, sameEdit, sourceTime, Span, startEdit, Word } from "@/lib/edit";
+import { CaptionLook, CaptionLookControls, CaptionOverlay, captionAt, tidyLook, WordFace, WordMenu } from "./editor/Words";
 import { creditWords, exportBody, followJob, useQuote } from "@/lib/exporting";
 import { layoutsFor, Listed, onlyListed } from "@/lib/options";
 import { EXPORT, EXPORT_QUOTE, Routes } from "@/lib/routes";
@@ -64,6 +65,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
   const [edit, setEdit] = useState<Edit>(first);
   const [restored, setRestored] = useState<number | null>(null), [draftAt, setDraftAt] = useState<number | null>(null);
   const [words, setWords] = useState<Word[] | null>(null), [wordsProblem, setWordsProblem] = useState("");
+  const [apiWords, setApiWords] = useState<EditWord[] | null>(null);            // GET /v1/clips/{id}/words (#215)
   const [tab, setTab] = useState<Tab>("transcript");
   const [tool, setTool] = useState<Tool | null>(null);
   const [view, setView] = useState<"edit" | "file">("edit");
@@ -95,7 +97,8 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
 
   useEffect(() => {
     let on = true;
-    loadWords(clip).then((w) => on && setWords(w)).catch((e) => { if (on) { setWords([]); setWordsProblem(e.message); } });
+    const fromApi = known.words ? loadEditWords(clip.id).then((r) => { if (on) setApiWords(r.words); return r.words as Word[]; }) : loadWords(clip);
+    fromApi.then((w) => on && setWords(w)).catch((e) => { if (on) { setWords([]); setWordsProblem(e.message); } });
     return () => { on = false; };
   }, [clip.id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -144,7 +147,11 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
     seek(words[i].start);
   }
   const cutSelection = () => { if (selSpan) { set({ cuts: addCut(edit.cuts, selSpan) }); setSel(null); } };
-  const restoreSelection = () => { if (selSpan) { set({ cuts: removeSpan(edit.cuts, selSpan) }); setSel(null); } };
+  const restoreSelection = () => { if (selSpan) { set({ cuts: removeSpan(edit.cuts, selSpan), ...(model ? { words: model.map((w) => (w.start >= selSpan[0] && w.end <= selSpan[1] ? { ...w, cut: false } : w)) } : {}) }); setSel(null); } };
+  // Text-based editing (#215): the words as the user edits them; null when this API can't take them.
+  const model: EditWord[] | null = known.words ? (edit.words ?? apiWords) : null;
+  const pickedIdx = sel ? Array.from({ length: Math.abs(sel.b - sel.a) + 1 }, (_, k) => Math.min(sel.a, sel.b) + k) : [];
+  const captionLook = ((edit.options.caption_look as CaptionLook | null) || {}) as CaptionLook;
 
   function setLine(i: number, text: string) {
     const next = (edit.caption_lines.length ? edit.caption_lines : computed).map((l, j) => (j === i ? { ...l, text } : l));
@@ -155,7 +162,8 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
   const canSave = !!known.patchClip?.fields.includes("edit");
   // Export needs the exact price first: without the quote route there is no Export.
   const exportRoute = known.exportQuote ? known.exportRoute : null;
-  const options = onlyListed(listed, edit.options);
+  // caption_look (#213) is sent once the API's schema has it, whether or not GET /v1/options lists it.
+  const options = { ...onlyListed(listed, edit.options), ...(known.captionLook && edit.options.caption_look ? { caption_look: edit.options.caption_look } : {}) };
   const body = exportRoute ? exportBody(exportRoute, { jobId: clip.job_id, clipIds: [clip.id], options, edit: forApi(edit) }) : null;
   const quote = useQuote(confirm && known.exportQuote ? EXPORT_QUOTE : null, confirm ? body : null);
   const unsaved = !sameEdit(edit, base);
@@ -248,9 +256,10 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
                             ${picked ? "bg-[rgba(255,255,255,.16)] text-text" : "bg-transparent"} ${now ? "text-lime" : cut ? "text-danger" : "text-label"}
                             ${cut ? "line-through opacity-70" : ""} ${out ? "opacity-35" : ""}`}
                           aria-label={`${w.text}, ${stamp(w.start)}${cut ? ", cut" : ""}${out ? ", outside the trim" : ""}`}
-                          onClick={(e) => pickWord(i, e.shiftKey)}>{w.text}</button>;
+                          onClick={(e) => pickWord(i, e.shiftKey)}>{model?.[i] ? <WordFace w={model[i]} /> : w.text}</button>;
                       })}
                     </div>}
+                {!!words?.length && <WordMenu on={!!known.words} words={model} picked={pickedIdx} onWords={(next) => set({ words: next })} onCutWithVideo={cutSelection} />}
                 <p className="muted m-0 text-[12.5px]">Click a word to jump to it. Shift-click another to select everything between, then press Cut or Delete.</p>
                 {!mapping.exact && (job?.options?.tighten || job?.options?.flash_forward) && !!words?.length &&
                   <p className="muted m-0 text-[12.5px]">Word times may be off by a moment: dead air was cut from this clip when it was made, and the exact parts aren&apos;t known yet.</p>}
@@ -260,7 +269,8 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
                     <button type="button" className="link" onClick={() => set({ cuts: removeSpan(edit.cuts, c) })}>Restore</button></li>)}
                 </ul>}
               </>}
-              {tab === "captions" && <>
+              {tab === "captions" && model && <p className="notice m-0 max-w-none">Edit captions word by word in the Transcript tab: pick words, then edit, split, highlight, add an emoji or remove them. Your word edits are what the export draws.</p>}
+              {tab === "captions" && !model && <>
                 {!look.captions && <p className="notice m-0 max-w-none">Captions are off. Turn them on in the Captions tool; these lines are used once they&apos;re on.</p>}
                 {!words?.length ? <p className="muted">No caption lines: this clip has no words.</p> : <>
                   <p className="muted m-0 text-[12.5px]">Change the words of any line. Times stay as they were said.</p>
@@ -295,7 +305,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
               </div>
             </div>
             <div className="relative grid min-h-0 w-full flex-1 place-items-center mid:flex-none">
-              <div style={{ aspectRatio: `${aw || 9} / ${ah || 16}`, "--w": `calc(62vh * ${aw || 9} / ${ah || 16})` } as React.CSSProperties}
+              <div style={{ aspectRatio: `${aw || 9} / ${ah || 16}`, "--w": `calc(62vh * ${aw || 9} / ${ah || 16})`, containerType: "size" } as React.CSSProperties}
                 className="relative h-full max-h-full max-w-full overflow-hidden rounded-16 bg-black shadow-[0_20px_60px_rgba(0,0,0,.55)] mid:h-auto mid:w-[min(100%,var(--w))]">
                 {clip.thumb_url && <img src={clip.thumb_url} alt="" aria-hidden="true" className="absolute inset-[-24px] h-[calc(100%+48px)] w-[calc(100%+48px)] object-cover blur-[18px] brightness-[.4]" />}
                 <video ref={video} key={view} preload="metadata" playsInline src={view === "edit" ? project.source_url : clip.export_url || clip.video_url}
@@ -303,7 +313,11 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
                   className="relative block h-full w-full object-contain"
                   onLoadedMetadata={() => { if (view === "edit" && video.current) video.current.currentTime = t; }}
                   onTimeUpdate={onTime} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} />
-                {lineNow && look.captions && <span className="editor-caption" aria-hidden="true">{lineNow.text}</span>}
+                {look.captions && view === "edit" && (() => {
+                  const cap = model ? captionAt(model, t, String(look.caption_style || "impact"))
+                    : lineNow ? [{ start: lineNow.start, end: lineNow.end, text: lineNow.text, hidden: false, cut: false, highlight: null, emoji: null, break_before: false }] : null;
+                  return cap ? <CaptionOverlay words={cap} look={captionLook} /> : null;
+                })()}
                 {view === "edit" && <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-[rgba(0,0,0,.6)] px-[10px] py-[3px] text-[11.5px] font-medium text-soft">Source preview</span>}
               </div>
             </div>
@@ -320,6 +334,8 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
             </div>
             <div className="grid min-h-0 content-start gap-3 overflow-y-auto pr-1 [&_.line]:p-3 [&_.lines]:gap-2 [&_.options]:grid [&_.options]:gap-3 [&_.panels]:p-3 [&_.panel-sketch]:hidden [&_select]:w-full">
               <Custom listed={listed} look={look} onLook={onLook} setAspect={setAspect} sections={open.sections} hint={open.id === "edits" ? "Applied when you export." : ""} />
+              {open.id === "captions" && look.captions && <CaptionLookControls spec={known.captionLook} look={captionLook}
+                onLook={(l) => onLook({ caption_look: tidyLook(l) } as any)} />}
               {open.id === "edits" && <ul className="lines m-0" aria-label="Not on an existing clip yet">{["Punch-in zoom", "Open on the best moment"].map((n) => <li key={n} className="line off"><span className="font-medium text-fg-2">{n}</span><Soon short /></li>)}</ul>}
               {open.id === "hook" && "hook_overlay" in listed && look.hook_overlay && <fieldset className="panels hook-set">
                 <legend>Hook text</legend>
