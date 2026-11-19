@@ -20,6 +20,7 @@
    "height": 960,
    "duration_sec": 14.12,
    "words": "editor-1.words.json",
+   "peaks": "editor-1.peaks.json",
    "game": "GTA VI",
    "aspect": "9:16",
    "layout": "auto",
@@ -28,6 +29,7 @@
    "rating": 99,
    "rating_source": "signals",
    "credit": "Footage: xQc",
+   "commercial_permission": "owner-confirmed 2026-11-18",
    "source": {
     "id": "xqc",
     "creator": "xQc",
@@ -35,8 +37,7 @@
     "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU",
     "start_sec": 8790.71,
     "end_sec": 8804.83
-   },
-   "commercial_permission": "owner-confirmed 2026-11-18"
+   }
   },
   {
    "id": "editor-2",
@@ -49,6 +50,7 @@
    "height": 960,
    "duration_sec": 15.0,
    "words": "editor-2.words.json",
+   "peaks": "editor-2.peaks.json",
    "game": "GTA VI",
    "aspect": "9:16",
    "layout": "auto",
@@ -79,6 +81,7 @@
    "height": 960,
    "duration_sec": 14.39,
    "words": "editor-3.words.json",
+   "peaks": "editor-3.peaks.json",
    "game": "GTA VI",
    "aspect": "9:16",
    "layout": "auto",
