@@ -4,16 +4,16 @@
  "permission": "owner-confirmed 2026-11-18",
  "credits": [
   {
+   "creator": "xQc",
+   "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU"
+  },
+  {
    "creator": "TmarTn2",
    "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
   },
   {
    "creator": "iShowSpeed",
    "url": "https://www.youtube.com/watch?v=qNOcoUKzt80"
-  },
-  {
-   "creator": "xQc",
-   "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU"
   },
   {
    "creator": "iiTzTimmy",
@@ -31,12 +31,67 @@
  "items": [
   {
    "id": "clip-1",
+   "candidate": "xqc-m3",
+   "label": "GTA VI",
+   "kind": "video",
+   "src": "clip-1.mp4",
+   "poster": "clip-1.webp",
+   "width": 540,
+   "height": 960,
+   "duration_sec": 8.0,
+   "game": "GTA VI",
+   "aspect": "9:16",
+   "layout": "auto",
+   "caption_style": "impact",
+   "rank": 3,
+   "rating": 85,
+   "rating_source": "ai",
+   "credit": "Footage: xQc",
+   "source": {
+    "id": "xqc",
+    "creator": "xQc",
+    "title": "xQc Plays GRAND THEFT AUTO VI (Part 1)",
+    "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU",
+    "start_sec": 1369.39,
+    "end_sec": 1377.39
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18",
+   "rating_raw": 43,
+   "ai_model": "claude-haiku-5-5",
+   "ai_scores": {
+    "hook": 55,
+    "payoff": 35,
+    "clarity": 40,
+    "emotion": 45,
+    "pacing": 40
+   },
+   "scoring_version": "judge-v2-equal",
+   "ai_reason": "The streamer's loud COMIN' IN is a fun hook, but there is no speech beyond the radio line, the boat arrival is calm, and viewers without context won't know the stakes.",
+   "ai_kind": "reaction",
+   "ai_calls": [
+    {
+     "cid": "xqc-m3",
+     "model": "claude-haiku-5-5",
+     "status": 200,
+     "input_tokens": 2883,
+     "output_tokens": 426,
+     "cost_usd": 0.000501,
+     "price_per_mtok": [
+      0.1,
+      0.5
+     ],
+     "pricing_source": "claude-api skill table, cached 2026-11-03, checked 2026-11-18"
+    }
+   ]
+  },
+  {
+   "id": "clip-2",
    "candidate": "forza-m1",
    "label": "Forza Horizon 5",
    "kind": "video",
-   "src": "clip-1.mp4",
-   "webm": "clip-1.webm",
-   "poster": "clip-1.webp",
+   "src": "clip-2.mp4",
+   "webm": "clip-2.webm",
+   "poster": "clip-2.webp",
    "width": 540,
    "height": 960,
    "duration_sec": 8.0,
@@ -112,13 +167,13 @@
    ]
   },
   {
-   "id": "clip-2",
+   "id": "clip-3",
    "candidate": "fifa-speed-m1",
    "label": "EA FC 27 pack opening",
    "kind": "video",
-   "src": "clip-2.mp4",
-   "webm": "clip-2.webm",
-   "poster": "clip-2.webp",
+   "src": "clip-3.mp4",
+   "webm": "clip-3.webm",
+   "poster": "clip-3.webp",
    "width": 540,
    "height": 960,
    "duration_sec": 8.0,
@@ -158,62 +213,6 @@
      "status": 200,
      "input_tokens": 2911,
      "output_tokens": 413,
-     "cost_usd": 0.000498,
-     "price_per_mtok": [
-      0.1,
-      0.5
-     ],
-     "pricing_source": "claude-api skill table, cached 2026-11-03, checked 2026-11-18"
-    }
-   ]
-  },
-  {
-   "id": "clip-3",
-   "candidate": "xqc-m9",
-   "label": "GTA VI",
-   "kind": "video",
-   "src": "clip-3.mp4",
-   "webm": "clip-3.webm",
-   "poster": "clip-3.webp",
-   "width": 540,
-   "height": 960,
-   "duration_sec": 8.0,
-   "game": "GTA VI",
-   "aspect": "9:16",
-   "layout": "auto",
-   "caption_style": "impact",
-   "rank": 9,
-   "rating": 89,
-   "rating_source": "ai",
-   "credit": "Footage: xQc",
-   "commercial_permission": "owner-confirmed 2026-11-18",
-   "source": {
-    "id": "xqc",
-    "creator": "xQc",
-    "title": "xQc Plays GRAND THEFT AUTO VI (Part 1)",
-    "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU",
-    "start_sec": 7452.97,
-    "end_sec": 7460.97
-   },
-   "rating_raw": 47,
-   "ai_model": "claude-haiku-5-5",
-   "ai_scores": {
-    "hook": 55,
-    "payoff": 45,
-    "clarity": 35,
-    "emotion": 50,
-    "pacing": 50
-   },
-   "scoring_version": "judge-v2-equal",
-   "ai_reason": "Funny bait-and-lost banter with a clear reaction, but without seeing the game the setup of the sink joke and who lost is hard to follow.",
-   "ai_kind": "funny",
-   "ai_calls": [
-    {
-     "cid": "xqc-m9",
-     "model": "claude-haiku-5-5",
-     "status": 200,
-     "input_tokens": 2956,
-     "output_tokens": 405,
      "cost_usd": 0.000498,
      "price_per_mtok": [
       0.1,
@@ -418,45 +417,44 @@
   },
   {
    "id": "clip-wide",
-   "candidate": "wide--forza-m1",
-   "label": "Forza Horizon 5 (16:9)",
+   "candidate": "wide--xqc-m3",
+   "label": "GTA VI (16:9)",
    "kind": "video",
    "src": "clip-wide.mp4",
-   "webm": "clip-wide.webm",
    "poster": "clip-wide.webp",
    "width": 960,
    "height": 540,
    "duration_sec": 8.0,
-   "game": "Forza Horizon 5",
+   "game": "GTA VI",
    "aspect": "16:9",
    "layout": "auto",
    "caption_style": "impact",
-   "rank": 1,
-   "rating": 92,
+   "rank": 3,
+   "rating": 85,
    "rating_source": "ai",
-   "credit": "Footage: TmarTn2",
+   "credit": "Footage: xQc",
    "commercial_permission": "owner-confirmed 2026-11-18",
    "source": {
-    "id": "forza",
-    "creator": "TmarTn2",
-    "title": "Forza Horizon 5 - Part 1 - The Beginning",
-    "url": "https://www.youtube.com/watch?v=78kntDlbjMI",
-    "start_sec": 2604.65,
-    "end_sec": 2612.65
+    "id": "xqc",
+    "creator": "xQc",
+    "title": "xQc Plays GRAND THEFT AUTO VI (Part 1)",
+    "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU",
+    "start_sec": 1369.39,
+    "end_sec": 1377.39
    },
-   "rating_raw": 51,
+   "rating_raw": 43,
    "ai_model": "claude-haiku-5-5",
    "ai_scores": {
-    "hook": 62,
-    "payoff": 48,
-    "clarity": 42,
-    "emotion": 55,
-    "pacing": 50
+    "hook": 55,
+    "payoff": 35,
+    "clarity": 40,
+    "emotion": 45,
+    "pacing": 40
    },
    "scoring_version": "judge-v2-equal",
-   "ai_reason": "The denial line is funny and the on-screen text sets up a crash, but the car crash is only shown at the end and the context of who pushed whom is unclear without the stream.",
-   "ai_kind": "argument",
-   "rating_of_candidate": "forza-m1"
+   "ai_reason": "The streamer's loud COMIN' IN is a fun hook, but there is no speech beyond the radio line, the boat arrival is calm, and viewers without context won't know the stakes.",
+   "ai_kind": "reaction",
+   "rating_of_candidate": "xqc-m3"
   }
  ]
 }
