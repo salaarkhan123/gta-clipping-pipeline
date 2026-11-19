@@ -14,6 +14,8 @@ EXCLAMATIONS = ("oh my god", "oh my gosh", "no way", "what the", "let's go", "le
 class Transcript:
     words: list[tuple[float, float, str]] = field(default_factory=list)      # (start, end, word)
     segments: list[tuple[float, float, str]] = field(default_factory=list)   # sentence-ish chunks
+    # (start, end, speaker) when the transcriber identified who speaks; None when it does not (never guessed)
+    turns: list[tuple[float, float, str]] | None = None
 
 
 class Transcriber(Protocol):
@@ -69,6 +71,14 @@ class FasterWhisperTranscriber:
             self._others[language] = FasterWhisperTranscriber(self.multilingual, self.beam_size, self.words,
                                                               language=language, multilingual=self.multilingual)
         return self._others[language]
+
+    def timing_words(self) -> "FasterWhisperTranscriber":
+        """The same model, language and settings, timing every word (what a stored whole transcript needs)."""
+        if self.words:
+            return self
+        out = FasterWhisperTranscriber(self.model_name, self.beam_size, True, self.language, self.multilingual)
+        out._others = {code: t.timing_words() for code, t in self._others.items()}
+        return out
 
     def options(self) -> dict:
         """What the model is asked to do. For English this is exactly what it was before languages existed."""

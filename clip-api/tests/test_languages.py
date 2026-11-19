@@ -183,7 +183,8 @@ def test_a_clip_job_detects_the_language_stores_it_and_uses_the_multilingual_mod
     t2 = Lingual({"fr": 0.99})                                    # known now: not detected again
     client.post("/v1/clips", json={"upload_id": up["upload_id"], "options": {"max_clips": 1, "clip_length": 10}},
                 headers=headers)
-    assert worker.run_once(t2) == "SUCCEEDED" and t2.asked == [] and set(t2.log) == {"es"}
+    assert worker.run_once(t2) == "SUCCEEDED" and t2.asked == []
+    assert t2.log == []                                           # (U1) the first job's Spanish text is read again
 
 
 def test_english_is_detected_and_keeps_the_english_model(client, user, video):
@@ -208,7 +209,8 @@ def test_detection_off_or_unsure_keeps_english(client, user, video, monkeypatch)
     off = Lingual({"es": 0.99})
     client.post("/v1/clips", json={"upload_id": up["upload_id"], "options": {"max_clips": 1, "clip_length": 10}},
                 headers=headers)
-    assert worker.run_once(off) == "SUCCEEDED" and off.asked == [] and set(off.log) == {"en"}
+    assert worker.run_once(off) == "SUCCEEDED" and off.asked == []
+    assert off.log == []                                          # (U1) the first job's English text is read again
     with new_session() as db:
         assert db.get(Upload, up["upload_id"]).language is None
 

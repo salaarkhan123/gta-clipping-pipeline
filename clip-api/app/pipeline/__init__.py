@@ -21,6 +21,7 @@ Three options change what is selected (all optional; without them nothing change
 import json
 import math
 import time
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -34,7 +35,8 @@ from .thumbs import make_thumbnail, thumb_text
 from .censor import mask, mask_words
 from .facecam import moment_facecam, resolve_facecam
 from .timing import Timer
-from .stt import SourceAudio, slice_wav, window as transcript_window
+from .stt import SourceAudio, slice_wav
+from .heard import Heard, model_of
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
 from .transcribe import Transcriber, Transcript, exclamation_hits, extract_wav, in_language, snap_to_speech
 from .edit import FLASH_LEN, KEEP_PAUSE, MAX_REMOVED, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, select_cuts, with_flash_forward, zoom_expr, zoom_peaks
@@ -149,20 +151,37 @@ def _frame(src: Path, t: float, out: Path, deadline: Deadline | None) -> Path | 
 
 
 def _transcribe(c: "_Candidate", i: int, transcriber, src: Path, duration: float, out_dir: Path, deadline,
-                pad: float = PAD, audio: Path | None = None, floor: float = 0.0) -> None:
+                pad: float = PAD, audio: Path | None = None, floor: float = 0.0, heard: Heard | None = None,
+                any_model: bool = False, timed=None) -> bool:
     """Whisper over the candidate plus `pad` either side, never outside [floor, duration]. `audio` is the job's
-    extracted WAV: with it the piece is cut straight out of that file; without it ffmpeg seeks into the source."""
+    extracted WAV: with it the piece is cut straight out of that file; without it ffmpeg seeks into the source.
+
+    `heard`: what this upload already has transcribed. When it covers the piece (by this transcriber's model, or by
+    any model with `any_model`) the text is read from it and nothing is transcribed: returns False. Otherwise the
+    new piece is added to it: returns True. `timed`: a context manager the transcription itself runs in (a timer
+    stage), so reading known text is not counted as transcribing."""
     c.offset = max(floor, c.start - pad)
-    length = min(duration, c.end + pad) - c.offset
+    end = min(duration, c.end + pad)
+    model = model_of(transcriber)
+    known = heard.window(c.offset, end, None if any_model else model) if heard is not None else None
+    if known is not None:
+        c.transcript = known[0]
+        return False
     wav = out_dir / f"cand{i}.wav"
-    if audio is not None:
-        slice_wav(audio, c.offset, length, wav)
-    else:
-        extract_wav(src, c.offset, length, wav, deadline)
-    try:
-        c.transcript = transcriber.transcribe(wav)
-    finally:
-        wav.unlink(missing_ok=True)
+    with timed if timed is not None else nullcontext():
+        if audio is not None:
+            slice_wav(audio, c.offset, end - c.offset, wav)
+        else:
+            extract_wav(src, c.offset, end - c.offset, wav, deadline)
+        try:
+            c.transcript = transcriber.transcribe(wav)
+        finally:
+            wav.unlink(missing_ok=True)
+    if heard is not None:
+        heard.add(c.offset, end, model, Transcript(
+            words=[(s + c.offset, e + c.offset, w) for s, e, w in c.transcript.words],
+            segments=[(s + c.offset, e + c.offset, x) for s, e, x in c.transcript.segments]))
+    return True
 
 
 def _with_prompt(judge: Judge, prompt: str) -> Judge:
@@ -183,11 +202,13 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                  deadline: Deadline | None = None,
                  judge: Judge | None = None,
                  fast_transcriber: Transcriber | None = None, timer: Timer | None = None,
-                 transcript: Transcript | None = None, source_audio: SourceAudio | None = None,
+                 transcript: Heard | None = None, source_audio: SourceAudio | None = None,
                  on_clip: Callable[[ClipResult], None] | None = None,
                  on_moments: Callable[[list[Moment]], None] | None = None) -> list[ClipResult]:
     """`timer`, when given, receives how long each stage took and how much work it did (see timing.py).
-    `transcript` is an existing transcript of the whole recording (absolute seconds), if there is one.
+    `transcript` (heard.Heard) is what earlier jobs transcribed of this recording: candidates it covers are read
+    from it instead of transcribed again (the rough pass from any model, captions only from the caption model's
+    own text), and what this run transcribes is added to it for the caller to keep.
     `source_audio` is the recording's audio already decoded by the caller (stt.extract_audio): candidates are
     then cut from it. Without it nothing is extracted up front, which is faster when only candidates are read.
     `on_clip` is called with each clip as soon as it is rendered (best first); the return value is every clip in
@@ -268,10 +289,11 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     # Candidates the judge will mostly reject only need a rough transcript: use the fast model for them,
     # then the caption model for the ones that make the cut.
     rough = fast_transcriber if (judge is not None and fast_transcriber is not None) else transcriber
-    # A transcript of the whole recording (made by the fast model, e.g. for Video Finder) stands in for the rough
-    # pass. Only then: the clips that make the cut are still transcribed by the caption model below, so caption
-    # quality does not depend on where the rough text came from.
-    reuse = transcript is not None and use_asr and rough is not transcriber
+    # What the upload already has transcribed stands in for the rough pass: text by any model when the clips that
+    # make the cut are transcribed again by the caption model below (so caption quality does not depend on where
+    # the rough text came from), otherwise only the caption model's own text.
+    heard = transcript if transcript is not None else Heard()
+    second_pass = rough is not transcriber
     # With a judge, nominate from every quarter of a long video so it sees the whole thing; it still decides.
     picks = (pick_spread if judge is not None else pick_windows)(total, length, count, span,
                                                                  **({"skip_edges": False} if ranged else {}))
@@ -302,14 +324,12 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         pad = JUDGE_PAD if judge is not None else PAD
         if judge is not None and limits:      # enough either side for the judge to grow the window to the bucket's longest
             pad = max(JUDGE_PAD, (limits[1] - length) / 2)
-        if reuse:      # the recording already has a transcript: read the candidate out of it
-            lo = max(t0, c.start - pad)
-            c.transcript, c.offset = transcript_window(transcript, lo, min(t1, c.end + pad))
-            timer.count("transcript_reused")
-        else:
-            with timer.stage("transcribe_rough"):
-                _transcribe(c, i, rough, input_path, t1, out_dir, deadline, pad=pad, audio=audio, floor=t0)
+        made = _transcribe(c, i, rough, input_path, t1, out_dir, deadline, pad=pad, audio=audio, floor=t0,
+                           heard=heard, any_model=second_pass, timed=timer.stage("transcribe_rough"))
+        if made:
             timer.count("transcribed_rough_sec", round(c.end - c.start + 2 * pad, 1))
+        else:
+            timer.count("transcript_reused")
         text = " ".join(s[2] for s in c.transcript.segments)
         hits = exclamation_hits(text)
         inside = [w for w in c.transcript.words if c.start <= w[0] + c.offset < c.end]
@@ -347,10 +367,13 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     if judge is not None:
         for i, c in enumerate(chosen):
             progress("transcribing", 62 + int(8 * i / len(chosen)))
-            if use_asr and rough is not transcriber:
-                with timer.stage("transcribe_final"):
-                    _transcribe(c, 100 + i, transcriber, input_path, t1, out_dir, deadline, audio=audio, floor=t0)
-                timer.count("transcribed_final_sec", round(c.end - c.start + 2 * PAD, 1))
+            if use_asr and second_pass:
+                made = _transcribe(c, 100 + i, transcriber, input_path, t1, out_dir, deadline, audio=audio,
+                                   floor=t0, heard=heard, timed=timer.stage("transcribe_final"))
+                if made:
+                    timer.count("transcribed_final_sec", round(c.end - c.start + 2 * PAD, 1))
+                else:
+                    timer.count("transcript_reused")
             _snap(c, t1, limits, t0)
     if limits:
         for c in chosen:
