@@ -71,7 +71,7 @@ def plan_for(src_w: int, src_h: int, layout: str, facecam, aspect: str = "9:16",
     `split_ratio` adjust the two-panel layouts (layouts.compose)."""
     box, face, scene = _camera(facecam)
     return layouts.compose(src_w, src_h, layout, aspect, scene=scene, cam=box, face=face, zoom=zoom, camera=camera,
-                           split_ratio=split_ratio)
+                           split_ratio=split_ratio, confidence=getattr(facecam, "confidence", None))
 
 
 def layout_filter(src_w: int, src_h: int, layout: str, zoom: float, chat: str, facecam,
@@ -286,7 +286,7 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
                 plan: LayoutPlan | None = None, resolution: str | None = None, preview: bool = False,
                 position: str = "auto", accent: str | None = None, camera: str | None = None,
                 split_ratio: float | None = None, hook_position: str = "beginning",
-                hook_ms: int | None = None) -> None:
+                hook_ms: int | None = None, follow: bool = False, game: str | None = None) -> None:
     """Cut [start, end] from src and render it. `words` are clip-relative (start, end, text) or empty.
 
     `style` is a caption style from captions.CAPTION_STYLES. For "impact", `position` ("auto", "seam", "lower",
@@ -305,6 +305,11 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
     box, or what facecam.resolve_facecam returned). `resolution` ("480", "720", "1080", "2k", "4k") sets the
     output's short side, never above the source's; without it the size is what it always was. `preview` is a
     fast, small render to look at before paying for the real one. The plan cap `max_side` always wins.
+
+    `follow` moves the gameplay crop with the action over the clip (action.follow_plan: faces, then what moves
+    on its own, then the middle; `game`, a templates.GAMES id, keeps crosshair games centred). It applies to one
+    continuous cut (no `segments`) and to gameplay panels with no person in them; it costs one small decode of
+    the clip.
     """
     # Caption files live in the system temp dir so the path has no spaces (ffmpeg filter paths are fussy).
     tmp = Path(tempfile.mkdtemp(prefix="clipcap"))
@@ -352,6 +357,9 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
         pieces = segments if segments and segments != [(start, end)] else None
         lo, hi = (min(s for s, _ in pieces), max(e for _, e in pieces)) if pieces else (start, end)
         level = loudness_filter(measure_loudness(src, start, end, deadline)) if (loudness and has_audio) else ""
+        if vertical and plan is not None and follow and not pieces:
+            from .action import follow_plan
+            plan = follow_plan(src, plan, lo, hi, game=game, deadline=deadline)
         if vertical:
             # 30 fps out: TikTok, Shorts and Reels play it natively and it cuts render time by ~40% on 60 fps VODs.
             graph = (layouts.layout_graph(plan, size if direct else None, punch) if plan is not None
