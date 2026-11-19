@@ -1,7 +1,7 @@
 "use client";
 import { useRef } from "react";
-import { Caption } from "../demos/Caption";
-import { Footage, useItem, useWords } from "../demos/Footage";
+import { Caption, sampleWords } from "../demos/Caption";
+import { Credits, Footage, useItem, useWords } from "../demos/Footage";
 import { SplitClip } from "../demos/Frames";
 import { useInView, useReducedMotion, useTicker } from "../demos/motion";
 import s from "../demos/demos.module.css";
@@ -33,7 +33,7 @@ export function EditorSection() {
   const cut = said.length >= 8 ? words.flatMap((w, i) => (FILLER.test(w) ? [i] : [])) : CUT;
   const spoken = words.map((_, i) => i).filter((i) => !cut.includes(i));
   const now = spoken[tick % spoken.length];
-  const caps = words.map((w) => w.replace(/[^\p{L}\p{N}'!?]/gu, "").toUpperCase());
+  const timed = said.length >= 8 ? said.slice(0, 40) : sampleWords(WORDS);
 
   return (
     <Section id="editor" eyebrow="Editor" icon={<EyebrowIcon name="edit" />} title={<>Let the AI cut it,<br className="narrow:hidden" /> then make it yours</>}
@@ -55,7 +55,7 @@ export function EditorSection() {
           <div className="flex flex-col gap-3 border-r border-white/[.07] p-5 narrow:order-3 narrow:border-r-0 narrow:border-t narrow:p-4">
             <p className="text-[12px] text-white/50">Click a word to jump to it. Shift-click another to select everything between, then cut it.</p>
             <div className="flex items-center gap-2 text-[12px]">
-              <span className="text-white/70">{cut.length} word{cut.length === 1 ? "" : "s"} cut</span>
+              <span className="text-white/70">{cut.length ? `${cut.length} word${cut.length === 1 ? "" : "s"} cut` : "No words cut"}</span>
               <span className="rounded-full bg-white/10 px-2.5 py-1 text-white/60 ring-1 ring-white/10">Cut</span>
               <span className="rounded-full bg-white/10 px-2.5 py-1 text-white/80 ring-1 ring-white/10">Restore</span>
             </div>
@@ -74,7 +74,7 @@ export function EditorSection() {
                 <SplitClip game="gta" />
                 <span className="absolute inset-x-[8%] top-[6%] rounded-[7px] bg-lime px-2 py-1 text-center text-[13px] font-extrabold leading-tight text-ink">He actually landed it</span>
                 <span className="absolute inset-x-2 top-[33%] -translate-y-1/2 text-center text-[20px]">
-                  <Caption style="impact" words={caps} keys={[22]} at={now} />
+                  <Caption style="impact" words={timed} at={now} />
                 </span>
               </>}
             </div>
@@ -94,7 +94,7 @@ export function EditorSection() {
           <div className="flex items-center gap-4 text-[12px] text-white/70">
             <span className="flex items-center gap-1.5 rounded-full bg-lime px-3 py-1 font-semibold text-ink">
               <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M7 5v14l12-7z" /></svg>Play</span>
-            <span className="tabular-nums">0:04 · clip 0:27</span>
+            <span className="tabular-nums">0:04 · clip {clip?.duration_sec ? `${Math.floor(Math.round(clip.duration_sec) / 60)}:${String(Math.round(clip.duration_sec) % 60).padStart(2, "0")}` : "0:27"}</span>
             <span className="ml-auto flex gap-2 narrow:hidden">
               <span className="rounded-full px-3 py-1 ring-1 ring-white/15">Undo all changes</span>
               <span className="rounded-full px-3 py-1 ring-1 ring-white/15">Save</span>
@@ -104,13 +104,14 @@ export function EditorSection() {
           <div className="relative h-12 rounded-[10px] bg-black/40 ring-1 ring-white/10">
             {Array.from({ length: 40 }, (_, i) => <span key={i} className="absolute top-1/2 h-[46%] w-[1.6%] -translate-y-1/2 rounded-[2px] bg-white/10" style={{ left: `${1 + i * 2.45}%` }} />)}
             <span className="absolute inset-y-0 left-[12%] right-[22%] rounded-[8px] border-2 border-lime bg-lime/[.06]" />
-            <span className="absolute inset-y-1 left-[30%] w-[7%] rounded-[4px] bg-[repeating-linear-gradient(135deg,rgba(255,92,122,.45)_0_4px,transparent_4px_8px)]" />
+            {cut.length > 0 && <span className="absolute inset-y-1 left-[30%] w-[7%] rounded-[4px] bg-[repeating-linear-gradient(135deg,rgba(255,92,122,.45)_0_4px,transparent_4px_8px)]" />}
             <span className="absolute -bottom-0.5 left-[12%] h-[110%] w-1.5 -translate-x-1/2 rounded-full bg-lime" />
             <span className="absolute -bottom-0.5 right-[22%] h-[110%] w-1.5 translate-x-1/2 rounded-full bg-lime" />
             <span className="absolute inset-y-0 left-[12%] right-[22%]"><span className={`${s.playhead} absolute -top-1 bottom-[-4px] w-0.5 bg-white`} style={{ ["--t" as string]: "9s" }} /></span>
           </div>
         </div>
       </div>
+      <Credits items={[clip]} className="mt-3" />
     </Section>
   );
 }

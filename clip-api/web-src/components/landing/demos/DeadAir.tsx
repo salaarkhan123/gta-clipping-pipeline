@@ -1,5 +1,7 @@
 "use client";
-import { Caption } from "./Caption";
+import { Caption, sampleWords } from "./Caption";
+
+const SAMPLE = sampleWords(["I'm", "going", "for", "the", "bridge", "no", "way"]);
 import { SplitClip } from "./Frames";
 import { useReducedMotion, useTicker } from "./motion";
 import s from "./demos.module.css";
@@ -27,7 +29,7 @@ export function DeadAir({ play }: { play: boolean }) {
         <div className="relative aspect-[9/16] h-[300px] shrink-0 overflow-hidden rounded-[14px] ring-1 ring-white/10 narrow:hidden">
           <SplitClip game="gta" />
           <span className="absolute inset-x-2 top-[33%] -translate-y-1/2 text-center text-[17px]">
-            <Caption style="pop" words={["I'M", "GOING", "FOR", "THE", "BRIDGE", "NO", "WAY"]} at={reduced ? 1 : tick} />
+            <Caption style="pop" words={SAMPLE} at={reduced ? 1 : tick % SAMPLE.length} />
           </span>
         </div>
       </div>
