@@ -58,9 +58,35 @@ def test_route_exists_with_its_fields(route):
         assert not missing, f"{_route_id(route)} no longer takes query {missing}"
 
 
+def _sub(schema: dict, name: str, depth: int = 0) -> dict:
+    # The schema of property `name` inside `schema`, through $ref and anyOf/allOf/oneOf (nullable objects).
+    if not schema or depth > 8:
+        return {}
+    if "$ref" in schema:
+        return _sub(SCHEMAS[schema["$ref"].rsplit("/", 1)[-1]], name, depth + 1)
+    if name in schema.get("properties", {}):
+        return schema["properties"][name]
+    for key in ("allOf", "anyOf", "oneOf"):
+        for part in schema.get(key, []):
+            found = _sub(part, name, depth + 1)
+            if found:
+                return found
+    return {}
+
+
 def _body(route: dict) -> set[str]:
+    # Top-level body fields plus dotted nested ones ("edit.words"), so optional_body can name either.
     op = OPS.get((route["method"], _shape(route["path"])))
-    return _props(op.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema", {})) if op else set()
+    if not op:
+        return set()
+    schema = op.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema", {})
+    out = set(_props(schema))
+    for field in route.get("optional_body", []):
+        if "." in field:
+            parent, child = field.split(".", 1)
+            if child in _props(_sub(schema, parent)):
+                out.add(field)
+    return out
 
 
 def test_optional_fields_arrive_together():
@@ -117,4 +143,7 @@ def test_clip_object_has_the_fields_the_site_reads():
 
 def test_edit_options_match_the_edit_model():
     # lib/edit.ts sends only these in `edit.options`; the API rejects any other name with 422.
-    assert sorted(CONTRACT["edit_options"]) == sorted(LayoutOptions.model_fields)
+    # Names in edit_options_optional (a newer API's, such as caption_look) may be missing from this API's model.
+    optional = set(CONTRACT.get("edit_options_optional", []))
+    assert set(CONTRACT["edit_options"]) - optional == set(LayoutOptions.model_fields) - optional
+    assert optional <= set(CONTRACT["edit_options"])
