@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from app import ledger, worker
 from app.config import get_settings
 from app.db import new_session
-from app.exports import export_items
+from app.exports import export_items, rendered_cut
 from app.models import Clip, CreditLedger, Export, Job, new_id, utcnow
 from app.storage import get_storage
 from tests.test_api import balance, upload
@@ -319,3 +319,23 @@ def test_an_export_keeps_the_jobs_hook_choice_unless_it_sends_its_own(client, us
         assert r.status_code == 202, r.text
         assert r.json()["options"]["hook_overlay"] is burned, (job["options"].get("hook_overlay"), sent)
         cancel(client, headers, r.json()["job_id"])
+
+
+# ---------- an export renders what it was priced on (Codex, #218) ----------
+def test_an_edit_saved_after_the_export_was_asked_for_is_not_what_it_renders(client, none_job, tmp_path):
+    """Asked for with no saved edit, the export renders the job's own cut even if an edit is saved before the
+    worker gets to it: that is what the quote and the reservation were worked out on."""
+    headers, job, clip = none_job
+    r = post(client, headers, "/v1/clips/export", {"job_id": job["job_id"], "clips": [clip["id"]]})
+    assert r.status_code == 202, r.text
+    edit = {"trim": {"start": clip["start_sec"], "end": clip["start_sec"] + 10.0}, "cuts": []}
+    assert client.patch(f"/v1/clips/{clip['id']}", json={"edit": edit}, headers=headers).status_code == 200
+    with new_session() as db:
+        export_job = db.get(Job, r.json()["job_id"])
+        captured = export_job.options["edits"]
+        assert captured == {clip["id"]: None}
+        item, = export_items(db, [clip["id"]], get_storage(), tmp_path, captured)
+        assert item.segments == rendered_cut(db.get(Clip, clip["id"]))[0]
+        now, = export_items(db, [clip["id"]], get_storage(), tmp_path)        # without the capture: the saved edit
+        assert now.segments == [[clip["start_sec"], clip["start_sec"] + 10.0]]
+    cancel(client, headers, r.json()["job_id"])

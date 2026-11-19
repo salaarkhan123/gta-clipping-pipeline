@@ -235,9 +235,12 @@ def export_items(db: Session, clip_ids: list[str], storage, work: Path, edits: d
             continue                    # deleted after the export was asked for: not rendered, not charged
         if edits is not None and clip_id in edits:
             edit = ClipEditDoc.model_validate(edits[clip_id]) if edits[clip_id] else None
+            # No edit when the export was asked for: the job's own cut, as it was priced, even if an edit was
+            # saved since (clip_cut would read that saved edit).
+            segments, flash, zooms = clip_cut(clip, edit) if edit is not None else rendered_cut(clip)
         else:
             edit = edit_of(clip)
-        segments, flash, zooms = clip_cut(clip, edit)
+            segments, flash, zooms = clip_cut(clip, edit)
         words = None
         if edit is not None and (edit.caption_lines or edit.words is not None):
             words = remap_words(edit.caption_words(), segments)
