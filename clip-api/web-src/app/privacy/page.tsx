@@ -106,8 +106,8 @@ const sections = [
       [<Ext key="rs" href="https://resend.com/docs/knowledge-base/account-quotas-and-limits">Resend</Ext>, "Sending account email",
         "Your email address, the subject and the message text", "30 days"],
     ]} />
-    <p>When you import a link, we contact the site it points to (for example Twitch, Kick, YouTube, Google Drive or Dropbox) to download the
-      video. If you set a webhook, we send the job id and status to your own server. If you send us a copyright counter-notice, the owner forwards it by email,
+    <p>When you import a link, we contact the site it points to (the video platform or file-sharing service that hosts the public video
+      link you provide) to download the video. That site receives the request from our server, not from you. If you set a webhook, we send the job id and status to your own server. If you send us a copyright counter-notice, the owner forwards it by email,
       with the name and address in it, to the person who complained (see the <Link href="/copyright/">Copyright and DMCA Policy</Link>).
       Otherwise we disclose information only when the law requires it or to defend legal claims.</p>
   </> },

@@ -16,9 +16,9 @@ const files = (dir) => readdirSync(join(root, dir)).flatMap((n) => {
 
 // Every import platform the backend knows (app/ingest/sources.py), by the name the copy would use.
 const PLATFORMS = ["Twitch", "Kick", "YouTube", "Google Drive", "Dropbox"];
-// Not marketing copy about link imports: the privacy notice and terms (legal text, changed only with the owner), the
-// link chooser's label for a link already pasted, and the coming-soon posting destinations ("YouTube Shorts").
-const NOT_COPY = ["app/privacy/page.tsx", "app/terms/page.tsx", "components/dash/LinkChooser.tsx"];
+// Not copy about link imports: the link chooser's label for a link already pasted, and the coming-soon posting
+// destinations ("YouTube Shorts"). The privacy notice and terms follow the rule too (owner decision).
+const NOT_COPY = ["components/dash/LinkChooser.tsx"];
 
 test("the copy names only verified platforms (none today)", () => {
   assert.deepEqual([...VERIFIED_PLATFORMS], []);
