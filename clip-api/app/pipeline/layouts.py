@@ -37,7 +37,6 @@ NEEDS_CAMERA = ("split", "split2", "pip", "screen_first", "gameplay_a", "gamepla
 TWO_PANEL = ("split2", "screen_first", "gameplay_a", "gameplay_b")
 CAMERA_SIDES = ("top", "bottom")          # which panel the camera is: the first one (top, or left in a wide frame)
 SPLIT_RATIO = (0.25, 0.75)                # the first panel's share of the frame: of the height, or of a wide frame's width
-CAPTION_POSITIONS = ("auto", "seam", "lower", "center")
 SCENES = ("gameplay_cam", "camera", "gameplay")
 
 ASPECTS = {"9:16": (1080, 1920), "4:5": (1080, 1350), "1:1": (1080, 1080), "16:9": (1920, 1080)}
@@ -57,9 +56,6 @@ MAX_AVOID_ZOOM = 1.35  # a gameplay panel may zoom in this much further when tha
 HEAD_PAD = (0.15, 0.35, 0.10)    # hair, a headset and the chin around a detected face box: sides, top, bottom (of the face size)
 PIP_SHAPE = (0.8, 1.9)           # the inset keeps the camera's own shape, within these width / height limits
 PIP_BORDER = 4                   # pixels of white edge around the inset, on the 1080 canvas
-LOWER_THIRD = 0.70               # where a caption sits when there is no line between panels to sit on
-SAFE_ROWS = (0.05, 0.92)         # a caption stays between these shares of the height (clear of the apps' own buttons)
-FACE_GAP = 14                    # pixels kept between a caption and the head, on a 1920-high canvas
 BLIND_HEAD = 0.85                # no face known: the head is taken to be anywhere in the camera picture but its lowest 15%
 
 Rect = tuple[float, float, float, float]     # x, y, width, height
@@ -578,41 +574,6 @@ def _person_on_canvas(c: _Ctx, panels) -> tuple[float, float, float, float] | No
             x0, y0 = p.out[0] + (box[0] - p.src[0]) * kx, p.out[1] + (box[1] - p.src[1]) * ky
             return x0, y0, x0 + box[2] * kx, y0 + BLIND_HEAD * box[3] * ky
     return None
-
-
-def caption_y(oh: int, position: str, half: float, seam: int | None = None, head=None,
-              reach: tuple[float, float] | None = None) -> int:
-    """The row (pixels from the top of a frame `oh` tall) of the middle of a one-line caption that is `half`
-    pixels tall above and below it.
-
-    "seam": on the line between two stacked panels (`seam`), or the lower third when there is no such line;
-    "lower": the lower third; "center": the middle of the frame; "auto": the seam when there is one, else the
-    lower third. Wherever that is, the caption never covers `head` (x0, y0, x1, y1): it moves the least distance
-    that clears it, up or down. `reach` is the part of the width (x0, x1, in pixels) the widest caption covers.
-    """
-    if position not in CAPTION_POSITIONS:
-        raise PipelineError("bad_options", f"Unknown caption_position. Use one of: {', '.join(CAPTION_POSITIONS)}.")
-    want = oh * (0.5 if position == "center" else LOWER_THIRD)
-    if position in ("auto", "seam") and seam is not None:
-        want = seam
-    lo, hi = SAFE_ROWS[0] * oh + half, SAFE_ROWS[1] * oh - half
-    y = _clamp(want, lo, hi)
-    if head is not None and (reach is None or (head[0] < reach[1] - 1 and head[2] > reach[0] + 1)):
-        gap = FACE_GAP * oh / 1920
-        top, bottom = head[1] - gap, head[3] + gap
-        if y + half > top and y - half < bottom:
-            ways = [v for v in (top - half, bottom + half) if lo <= v <= hi]
-            # No room above or below the head inside the safe rows: as far from the middle of it as the frame allows.
-            y = min(ways, key=lambda v: abs(v - y)) if ways else max((lo, hi), key=lambda v: abs(v - (top + bottom) / 2))
-    return int(round(y))
-
-
-def caption_center(plan: LayoutPlan, position: str, half: float, fill: float = 1.0) -> int:
-    """caption_y for a layout plan, in the plan's canvas pixels. `fill` is the share of the text span the widest
-    caption covers."""
-    ow, oh = plan.size
-    mid, width = (plan.text_span[0] + plan.text_span[1]) / 2 * ow, (plan.text_span[1] - plan.text_span[0]) * ow * fill
-    return caption_y(oh, position, half, plan.seam, plan.head, (mid - width / 2, mid + width / 2))
 
 
 def _text_off_the_face(c: _Ctx, parts: dict) -> dict:

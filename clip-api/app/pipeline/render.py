@@ -4,8 +4,9 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from . import layouts
+from . import layouts, placement
 from .captions import FONT_DIR, HOOK_SECONDS, IMPACT_FILE, IMPACT_FILL, build_ass, impact_size
+from .placement import HOOK_ROOM, TEXT_GAP  # noqa: F401 (re-exported: tests import them from here)
 from .ff import SAFE_IN, Deadline, PipelineError, PipelineTimeout, run
 # The geometry lives in layouts.py; these names are re-exported because callers and tests import them from here.
 from .layouts import (ASPECTS, EDGE, FACECAM_PAD, FACECAM_REGIONS, FULL_FRAME, MAX_DODGE, LayoutPlan,  # noqa: F401
@@ -244,30 +245,19 @@ def segments_graph(segments: list[tuple[float, float]], lo: float, has_audio: bo
     return ";".join(parts)
 
 
-HOOK_ROOM = 200      # pixels a hook may take from its top on the 1080 canvas: two lines and the box around them
-TEXT_GAP = 16        # pixels kept between the hook and an impact caption
-
-
 def impact_rows(plan: LayoutPlan | None, oh: int, position: str, under: int, below_video: int | None = None,
-                k: float = 1.0) -> tuple[int, int]:
-    """(the row of the middle of an impact caption, the hook's top) in a frame `oh` tall. With a layout plan the
-    caption goes where the plan says for `position` and never on the person's head. Without one (the source's
-    own frame, or the classic layout, where `below_video` is where the old captions start under the picture)
-    there is no line between panels and no known person. `under` is where the hook would sit; it steps under
-    the caption (or over it) when the two would overlap. `k` scales the hook's size for a frame that is not the
-    1080 canvas."""
-    half = impact_size(oh).half
-    if plan is not None:
-        center = layouts.caption_center(plan, position, half, IMPACT_FILL)
-    else:
-        center = layouts.caption_y(oh, position, half, None if below_video is None else int(below_video + half))
-    top, bottom = center - half - TEXT_GAP * k, center + half + TEXT_GAP * k
-    if under - 14 * k < bottom and under + HOOK_ROOM * k > top:
-        if bottom + 24 * k + HOOK_ROOM * k <= 0.94 * oh:
-            under = int(bottom + 24 * k)
-        elif top - 24 * k - HOOK_ROOM * k >= 20 * k:
-            under = int(top - 24 * k - HOOK_ROOM * k)
-    return center, under
+                k: float = 1.0, boxes: dict | None = None) -> tuple[int, int]:
+    """(the row of the middle of an impact caption, the hook's top) in a frame `oh` tall (placement.place).
+    `boxes` is the clip's reframe_boxes dict: the caption and the hook keep off everything in its keep_out (the
+    head, a webcam in the picture, the game's HUD). Without it, the plan's own (its head), or for the source's
+    own frame or the classic layout (`below_video`: where the old captions start under the picture) nothing.
+    `under` is where the hook would sit; `k` scales the hook for a frame that is not the 1080 canvas."""
+    if boxes is None:
+        if plan is not None:
+            boxes = layouts.reframe_boxes(plan, src=plan.source or (1920, 1080))
+        else:
+            boxes = {"canvas": [round(oh * (9 / 16 if below_video is not None else 16 / 9)), oh]}
+    return placement.place(boxes, position, impact_size(oh).half, IMPACT_FILL, under, k, below_video)
 
 
 HOOK_POSITIONS = ("beginning", "end")
@@ -289,10 +279,12 @@ def hook_window(length: float, position: str = "beginning", ms: int | None = Non
 def text_track(path: Path, words, *, src_w: int, src_h: int, vertical: bool, zoom: float, chat: str,
                plan: LayoutPlan | None, aspect: str, font: str, style: str, position: str = "auto",
                accent: str | None = None, hook: str | None = None,
-               hook_at: tuple[float, float] | None = None, game: str | None = None) -> int:
+               hook_at: tuple[float, float] | None = None, game: str | None = None, facecam=None) -> int:
     """Write the clip's captions and hook (an ASS file) for the frame render_clip draws: `plan` when reframing
-    with one, the classic layout when reframing without one, the source's own frame when not reframing.
-    Returns the number of captions. scripts/caption_checks.py measures exactly this file."""
+    with one, the classic layout when reframing without one, the source's own frame when not reframing (where
+    `facecam`, as render_clip takes it, is the webcam in the picture). `game` adds the game's HUD to what the
+    impact captions and the hook keep off. Returns the number of captions. scripts/caption_checks.py measures
+    exactly this file."""
     ow, oh = ASPECTS.get(aspect, ASPECTS["9:16"]) if vertical else (src_w, src_h)
     if not vertical:
         top, under, span = 0, int(1080 * 0.1), (0.0, 1.0)
@@ -304,8 +296,15 @@ def text_track(path: Path, words, *, src_w: int, src_h: int, vertical: bool, zoo
     if style == "impact":
         # Measured in the frame's own pixels (the old styles write a source frame as if it were 1920x1080).
         k = 1.0 if vertical else oh / 1080
+        if not vertical:
+            box, face, _scene = _camera(facecam)
+            boxes = layouts.reframe_boxes(None, src=(src_w, src_h), cam=box, face=face, game=game)
+        elif plan is not None:
+            boxes = layouts.reframe_boxes(plan, src=plan.source or (src_w, src_h), game=game)
+        else:
+            boxes = {"canvas": [ow, oh]}
         center, under = impact_rows(plan, oh, position, under if vertical else int(oh * 0.1),
-                                    top if vertical and plan is None else None, k)
+                                    top if vertical and plan is None else None, k, boxes)
     # Always written for the 1080 canvas: the subtitle renderer scales it to whatever size the clip is.
     return build_ass(words, path, vertical, top, font, style, play=(ow, oh), hook=hook, hook_top=under,
                      span=span, center=center, accent=accent, hook_at=hook_at, game=game)
@@ -356,7 +355,8 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
             length = sum(e - s for s, e in segments) if segments else end - start
             text_track(tmp / "cap.ass", words, src_w=src_w, src_h=src_h, vertical=vertical, zoom=zoom, chat=chat,
                        plan=plan, aspect=aspect, font=font, style=style, position=position, accent=accent,
-                       hook=hook, hook_at=hook_window(length, hook_position, hook_ms) if hook else None, game=game)
+                       hook=hook, hook_at=hook_window(length, hook_position, hook_ms) if hook else None, game=game,
+                       facecam=facecam)
             cap_filter = f"ass=filename={tmp / 'cap.ass'}"
             if style == "impact":
                 # The renderer is handed our own font file, so the text never depends on what the machine has
