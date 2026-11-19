@@ -139,8 +139,8 @@ To keep the safe harbour we must:
 - AI thumbnails (#140) edit a frame that contains a face. The Acceptable Use Policy bans deceptive impersonation and
   synthetic content of a real person without consent; the likeness report path (#145) handles complaints.
 - Provider rules we pass through: Google bans impersonation "without explicit disclosure, in order to deceive";
-  BFL requires "verified, documented, and informed consent" for realistic depictions of real people in misleading
-  uses.
+  the first premium thumbnail of a clip needs the user's confirmation that they are the streamer or have their
+  permission, and each confirmation is recorded (#152).
 
 ## 9. Link imports and platform terms
 
@@ -158,9 +158,9 @@ non-DRM videos the user says they own or may clip, never evade a block, and log 
 | Anthropic (Claude API) | Processor | Inputs and outputs deleted within 30 days; flagged content up to 2 years ([privacy center](https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data)). The developer docs say prompts are not retained by default except for some models; we state 30 days unless a zero-retention agreement is signed | No ([commercial terms](https://www.anthropic.com/legal/commercial-terms)) | SCCs in the [DPA](https://www.anthropic.com/legal/data-processing-addendum); storage at rest in the US |
 | Stripe | Processor for payments; independent controller for fraud, AML and its own purposes ([DPA](https://stripe.com/legal/dpa)) | As long as it provides the service, longer for legal duties ([privacy](https://stripe.com/privacy)) | n/a | DPF, SCCs, UK IDTA |
 | Sentry (optional) | Processor | 30 days (Developer) or 90 days (Team) for errors ([docs](https://docs.sentry.io/security-legal-pii/security/data-retention-periods/)) | No | DPF, SCCs |
-| Email provider | Processor | Not chosen. Postmark 45 days, Resend 30 days by default | — | — |
-| Google Gemini (#140, off) | Processor | 55 days for abuse monitoring ([policy](https://aistudio.google.com/docs/usage-policies)) | Not on the paid tier | Google DPA |
-| Black Forest Labs (#140, off) | Processor/controller | "As long as reasonably necessary" ([privacy](https://bfl.ai/legal/privacy-policy)) | **Yes by default**; opt out by email to privacy@blackforestlabs.ai | SCCs |
+| Resend (email) | Processor | 30 days on every plan ([docs](https://resend.com/docs/knowledge-base/account-quotas-and-limits)) | — | DPA to accept: owner action (launch checklist) |
+| Google Gemini, paid tier (#152, off) | Processor | 55 days for abuse monitoring ([policy](https://aistudio.google.com/docs/usage-policies)); requests sent with `store: false` | Not on the paid tier ([terms](https://aistudio.google.com/docs/terms)). The free tier trains on inputs: never used | Google DPA |
+| Black Forest Labs | **Not used** (removed in #152) | "As long as reasonably necessary" ([privacy](https://bfl.ai/legal/privacy-policy)) | **Yes by default**, with no API flag or account setting to turn it off | — |
 | Twitch, Kick, YouTube | Sources of imported videos | n/a: we receive data from them | — | — |
 
 ## 11. Owner decisions
@@ -175,6 +175,6 @@ non-DRM videos the user says they own or may clip, never evade a block, and log 
 | 6 | Require terms acceptance from API clients (`REQUIRE_TERMS_ACCEPTANCE`) | Off; the website always sends it |
 | 7 | Retention durations (#150) | Proposed in #150 |
 | 8 | Zero-data-retention agreement with Anthropic | Not signed; policy states 30 days |
-| 9 | BFL training opt-out before #140 ships | Opt out (email) before enabling |
+| 9 | Image providers for premium thumbnails | Decided (owner, 2026-11-18): Gemini paid tier only, `store: false`; no provider that trains on API inputs. BFL removed |
 | 10 | Keep YouTube link import | Unchanged (best effort, "may fail") pending counsel |
 | 11 | Quebec privacy impact assessments, provider DPAs accepted | Owner action |
