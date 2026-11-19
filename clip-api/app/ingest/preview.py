@@ -12,8 +12,10 @@ caller rate-limits lookups per account (LOOKUPS_PER_MINUTE); answers are cached 
 CACHE_TTL_SEC (FAILURE_TTL_SEC for a site that refused), so a cached answer makes no request and is not counted.
 """
 import logging
+import re
 import threading
 import time
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from pathlib import PurePosixPath
@@ -21,7 +23,7 @@ from typing import Any, Callable
 from urllib.parse import unquote, urlsplit
 
 from ..config import get_settings
-from . import UPLOAD_INSTEAD, Refused
+from . import UPLOAD_INSTEAD, Refused, Span, fit_span
 from .sources import DIRECT, MAX_URL_LEN, Source
 
 log = logging.getLogger("clipapi.ingest")
@@ -49,40 +51,133 @@ def _https(value: Any) -> str | None:
     return value if isinstance(value, str) and value.startswith("https://") and len(value) <= 2000 else None
 
 
-def _thumbnail(info: dict) -> str | None:
-    """The thumbnail the site's public metadata names, as given (https only). Never fetched or proxied by us."""
+def _thumbnail(source: Source | None, info: dict, state: str | None) -> str | None:
+    """The thumbnail the site's public metadata names (https only). Never fetched or proxied by us.
+    The metadata is read without choosing formats, so yt-dlp has not picked "the" thumbnail: the best listed one
+    is taken here (highest `preference`, then the largest; yt-dlp lists them worst first). Twitch names its
+    thumbnails by size: the full-size original is swapped for 640x360. A Twitch recording in progress has no
+    thumbnail of its own yet (Twitch shows a "processing" placeholder), so the channel's live preview image
+    stands in."""
     url = _https(info.get("thumbnail"))
     if url is None:
-        thumbs = [t for t in info.get("thumbnails") or [] if isinstance(t, dict) and _https(t.get("url"))]
-        url = thumbs[-1]["url"] if thumbs else None           # yt-dlp lists them worst first
+        thumbs = [(t.get("preference") or 0, (t.get("width") or 0) * (t.get("height") or 0), n, t["url"])
+                  for n, t in enumerate(info.get("thumbnails") or []) if isinstance(t, dict) and _https(t.get("url"))]
+        url = max(thumbs)[3] if thumbs else None
+    if source is not None and source.platform == "twitch":
+        if url is not None:
+            url = re.sub(r"-(?:0x0|\d+x\d+)(\.\w+)$", r"-640x360\1", url)
+        elif state == "recording" and re.fullmatch(r"[a-z0-9_]{3,25}", str(info.get("uploader_id") or "")):
+            url = f"https://static-cdn.jtvnw.net/previews-ttv/live_user_{info['uploader_id']}-640x360.jpg"
     return url
 
 
-def _kind(source: Source | None, info: dict) -> str | None:
+def _is_clip(source: Source) -> bool:
+    return source.url.startswith("https://clips.twitch.tv/") or "/clips/" in source.url
+
+
+def _video_type(source: Source | None, info: dict, state: str | None) -> str | None:
+    """video | short | live_recording (a finished YouTube broadcast) | vod (a Twitch or Kick recording) | clip |
+    ongoing_recording (a VOD whose stream is still live) | live_stream | upcoming | file (a direct, Drive or
+    Dropbox link). A channel page (live_channel) never gets here: it is refused by its URL."""
     if source is None:
         return None
-    if info.get("live_status") == "is_upcoming":
+    if source.downloader == DIRECT:
+        return "file"
+    if state == "upcoming":
         return "upcoming"
-    if info.get("is_live") or info.get("live_status") in ("is_live", "post_live"):
-        return "live"
-    if source.url.startswith("https://clips.twitch.tv/") or "/clips/" in source.url:
+    if _is_clip(source):
         return "clip"
-    return "video"
+    if state == "live":
+        return "live_stream"
+    if source.platform in ("twitch", "kick"):
+        return "ongoing_recording" if state == "recording" else "vod"
+    if state is None:
+        return None                         # YouTube, and the site did not answer
+    if state == "was_live":
+        return "live_recording"
+    return "short" if info.get("media_type") == "short" else "video"
+
+
+def _kind(source: Source | None, state: str | None) -> str | None:
+    """The first version of `video_type`, kept for clients that read it: video | clip | live | upcoming."""
+    if source is None:
+        return None
+    if state == "upcoming":
+        return "upcoming"
+    if state in ("live", "recording"):
+        return "live"
+    return "clip" if _is_clip(source) else "video"
+
+
+def _category(info: dict) -> str | None:
+    """The game or category the site lists: Twitch and Kick name the game; YouTube names a broad category.
+    A Twitch VOD that moved between games lists each as a chapter: the one played longest is given."""
+    listed = [c for c in info.get("categories") or [] if isinstance(c, str) and c.strip()]
+    if listed:
+        return _text(listed[0], 100)
+    chapters = [c for c in info.get("chapters") or [] if isinstance(c, dict) and isinstance(c.get("title"), str)]
+    if not chapters:
+        return None
+    longest = max(chapters, key=lambda c: (c.get("end_time") or 0) - (c.get("start_time") or 0))
+    return _text(longest["title"], 100)
+
+
+def _channel_url(source: Source | None, info: dict) -> str | None:
+    url = _https(info.get("channel_url") or info.get("uploader_url"))
+    login = str(info.get("uploader_id") or "")
+    if url is None and source is not None and not _is_clip(source) and re.fullmatch(r"[A-Za-z0-9_-]{2,60}", login):
+        if source.platform == "twitch":
+            url = f"https://www.twitch.tv/{login}"
+        elif source.platform == "kick":
+            url = f"https://kick.com/{login}"
+    return url
+
+
+def _started_at(info: dict) -> str | None:
+    stamp = info.get("release_timestamp") or info.get("timestamp")
+    if not isinstance(stamp, (int, float)) or stamp <= 0:
+        return None
+    return datetime.fromtimestamp(stamp, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _range_download(source: Source, info: dict) -> str:
+    """"partial": a chosen range is downloaded on its own (the site serves the video as a list of segments);
+    "full": the whole video is downloaded and the range is cut from it."""
+    listed = any(isinstance(f, dict) and str(f.get("protocol") or "").startswith("m3u8")
+                 and f.get("vcodec") != "none" for f in info.get("formats") or [])
+    return "partial" if listed else "full"
 
 
 def answer(url: str, source: Source | None, info: dict | None = None, refusal: Refused | None = None) -> dict:
     """The response body. `url` is the canonical link when the link is one we import from."""
     info = info if isinstance(info, dict) else {}
+    about = getattr(refusal, "about", None) or {}          # a channel page: refused by its URL, but named
     duration = info.get("duration")
+    duration = float(duration) if isinstance(duration, (int, float)) and duration >= 0 else None
+    state = None
+    if source is not None and source.downloader != DIRECT and info:
+        from .platforms import live_state
+        state = live_state(info)
+    if refusal is not None and refusal.code == "upcoming":      # the site says so in place of any metadata
+        state = "upcoming"
+    ok = refusal is None
     return {
-        "url": source.url if source else url.strip()[:MAX_URL_LEN],
-        "platform": source.platform if source else None,
-        "supported": refusal is None,
+        "url": source.url if source else about.get("url") or url.strip()[:MAX_URL_LEN],
+        "platform": source.platform if source else about.get("platform"),
+        "supported": ok,
         "title": _text(info.get("title")),
-        "channel": _text(info.get("channel") or info.get("uploader")),
-        "duration_sec": float(duration) if isinstance(duration, (int, float)) and duration >= 0 else None,
-        "thumbnail_url": _thumbnail(info),
-        "kind": _kind(source, info),
+        "channel": _text(info.get("channel") or info.get("uploader")) or about.get("channel"),
+        "channel_url": _channel_url(source, info) or about.get("url"),
+        "category": _category(info),
+        "duration_sec": duration,
+        "available_sec": duration,          # an ongoing recording: the seconds published so far
+        "started_at": _started_at(info),
+        "thumbnail_url": _thumbnail(source, info, state),
+        "video_type": about.get("video_type") or _video_type(source, info, state),
+        "live_status": state,
+        "kind": about.get("kind") or _kind(source, state),
+        "options": {"import": ok, "clip": ok and bool(duration), "range": ok,
+                    "range_download": (_range_download(source, info) if ok and source else None)},
         "refusal": {"code": refusal.code, "message": refusal.message} if refusal else None,
     }
 
@@ -145,22 +240,39 @@ def _lookup(source: Source) -> dict:
             return answer(source.url, source, {"title": name})
         return answer(source.url, source)
     from . import platforms
+    # No length limit here: a video longer than the limit can still be imported one range at a time, so "too
+    # long" is decided for the part that is asked for (fit), not for the link.
     limits = platforms.Limits(max_bytes=min(s.import_max_bytes, s.max_upload_bytes),
-                              max_duration_sec=min(s.import_max_duration_sec, s.max_duration_sec),
-                              timeout_sec=LOOKUP_TIMEOUT_SEC)
+                              max_duration_sec=float("inf"), timeout_sec=LOOKUP_TIMEOUT_SEC)
     info, refusal = platforms.preview(source.platform, source.fetch_url, limits, SOCKET_TIMEOUT_SEC)
-    duration = (info or {}).get("duration")
-    if refusal is None and isinstance(duration, (int, float)) and duration < s.min_duration_sec:
-        refusal = Refused("video_too_short", f"Minimum video length is {s.min_duration_sec} seconds.")
     return answer(source.url, source, info, refusal)
 
 
+def fit(body: dict, span: Span) -> tuple[Span | None, Refused | None]:
+    """The part of a previewed video that `span` takes, checked against the import's length limits: (the span an
+    import would take, None), or (None, why not). A link whose length is not known before the download (a direct,
+    Drive or Dropbox link) is checked when it is imported."""
+    s = get_settings()
+    try:
+        return fit_span(span, body.get("duration_sec"), s.min_duration_sec,
+                        min(s.import_max_duration_sec, s.max_duration_sec),
+                        open_end=body.get("live_status") == "recording"), None
+    except Refused as e:
+        if e.code == "video_too_long" and body.get("platform") == "youtube":
+            from .platforms import YOUTUBE_REFUSES
+            return None, Refused(e.code, f"{YOUTUBE_REFUSES}. ({e.message})")
+        return None, e
+
+
 def look(source: Source) -> dict:
-    """The preview of a link that passed sources.classify. Makes the outbound request(s) and caches the answer."""
+    """The preview of a link that passed sources.classify. Makes the outbound request(s) and caches the answer.
+    `lookup_ms`: how long the site took to answer."""
+    started = time.monotonic()
     try:
         body = _bounded(source.platform, lambda: _lookup(source))
-        ttl = CACHE_TTL_SEC
+        ttl = CACHE_TTL_SEC if body["live_status"] != "recording" else FAILURE_TTL_SEC   # it grows by the minute
     except Refused as e:
         body, ttl = answer(source.url, source, refusal=e), FAILURE_TTL_SEC
+    body["lookup_ms"] = int((time.monotonic() - started) * 1000)
     _remember(source.url, body, ttl)
     return body
