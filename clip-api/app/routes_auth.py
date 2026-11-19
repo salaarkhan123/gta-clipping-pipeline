@@ -63,6 +63,9 @@ def account_json(db: Session, a: Account) -> dict:
             # true: a current policy version is not accepted yet (POST /v1/me/consents)
             "consent_required": bool(missing), "consents_missing": missing,
             "credits": ledger.balance(db, a.id), "created_at": a.created_at.isoformat() + "Z",
+            # true: a ClutchClips admin (scripts/admin.py make-admin). The website shows the admin screens only then;
+            # the admin routes check it themselves.
+            "is_admin": bool(a.is_admin),
             # What Stripe last reported: null without a subscription; "past_due" means the last payment failed.
             "subscription_status": a.subscription_status,
             "subscription_cancel_at": a.subscription_cancel_at.isoformat() + "Z" if a.subscription_cancel_at else None}
