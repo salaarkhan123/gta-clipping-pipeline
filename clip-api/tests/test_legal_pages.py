@@ -47,3 +47,23 @@ def test_the_deployed_site_shows_no_owner_placeholder():
         assert "data-owner-placeholder" not in html and "[OWNER" not in html, f"{p.path} shows a placeholder"
     pkg = (WEB / "package.json").read_text()
     assert '"build": "next build && node scripts/check-legal.mjs out"' in pkg
+
+
+def test_footer_has_one_legal_list_and_links_the_report_form():
+    footer = (WEB / "components" / "Chrome.tsx").read_text()
+    assert footer.count("POLICIES.map") == 1, "the footer lists the policies once (a merge had left an unstyled copy)"
+    assert 'href="/takedown/"' in footer
+
+
+def test_a_stub_names_the_contact_for_its_subject_and_the_copyright_stub_links_the_form():
+    page = (WEB / "components" / "LegalPage.tsx").read_text()
+    assert "copyright: CONTACT.copyright" in page and "terms: CONTACT.support" in page
+    assert 'href="/takedown/"' in page
+
+
+def test_the_terms_name_the_tools_as_the_product_does():
+    tools = (WEB / "lib" / "tools.ts").read_text()
+    terms = (WEB / "app" / "terms" / "page.tsx").read_text()
+    for name in re.findall(r"\(such as ([^)]+)\)", terms):
+        for tool in re.split(r" and |, ", name):
+            assert f'name: "{tool}"' in tools, f"the Terms name a tool that does not exist: {tool}"

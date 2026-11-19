@@ -12,7 +12,7 @@ const sections = [
   { id: "summary", title: "In short", body: <>
     <ul>
       <li>Only upload or import videos you own or have permission to clip.</li>
-      <li>If you own the copyright in something on ClutchClips and did not allow it, send a notice by email to the contact below.</li>
+      <li>If you own the copyright in something on ClutchClips and did not allow it, use the <Link href="/takedown/">report form</Link> or send a notice by email to the contact below.</li>
       <li>The owner of ClutchClips reads and reviews every notice by hand. Nothing is removed automatically.</li>
       <li>If your content was removed by mistake, you can send a counter-notice by email.</li>
     </ul>

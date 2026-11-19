@@ -66,7 +66,12 @@ export function Table({ head, rows }: { head: string[]; rows: React.ReactNode[][
 // stub instead, so a page with an [OWNER …] placeholder is never deployed; scripts/check-legal.mjs enforces it.
 export const PREVIEW = process.env.LEGAL_PREVIEW === "1";
 
-function Stub({ title }: { title: string }) {
+// Who answers while a page is a stub: the address the owner set for that subject (CONTACT in lib/legal.ts).
+const STUB_CONTACT: Record<string, string> = { copyright: CONTACT.copyright, terms: CONTACT.support, refunds: CONTACT.support,
+  "acceptable-use": CONTACT.support };
+
+function Stub({ id, title }: { id: string; title: string }) {
+  const to = STUB_CONTACT[id] || CONTACT.privacy;
   return (
     <>
       <Nav />
@@ -75,7 +80,8 @@ function Stub({ title }: { title: string }) {
           <div className="container">
             <span className="pill"><span className="dot" />LEGAL</span>
             <h1>{title}</h1>
-            <p>This policy is being finalised. Contact <a className="text-lime underline" href={`mailto:${CONTACT.privacy}`}>{CONTACT.privacy}</a>.</p>
+            <p>This policy is being finalised. Contact <a className="text-lime underline" href={`mailto:${to}`}>{to}</a>.
+              {id === "copyright" && <> To report content on ClutchClips, use the <Link className="text-lime underline" href="/takedown/">report form</Link>.</>}</p>
           </div>
         </header>
       </main>
@@ -86,7 +92,7 @@ function Stub({ title }: { title: string }) {
 
 export function LegalPage({ id, intro, sections }: { id: string; intro: React.ReactNode; sections: Section[] }) {
   const p = policy(id);
-  if (!PREVIEW) return <Stub title={p.title} />;
+  if (!PREVIEW) return <Stub id={id} title={p.title} />;
   return (
     <>
       <Nav />
