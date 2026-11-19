@@ -439,5 +439,5 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
 
 
 def render_thumb(clip: Path, out: Path, deadline: Deadline | None = None) -> None:
-    run(["ffmpeg", "-loglevel", "error", "-y", "-ss", "1", "-i", clip, "-frames:v", "1",
+    run(["ffmpeg", "-loglevel", "error", "-y", "-ss", "1", *SAFE_IN, "-i", clip, "-frames:v", "1",
          "-vf", "scale=360:-2", out], deadline, cap=60)
