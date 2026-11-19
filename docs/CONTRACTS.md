@@ -245,7 +245,7 @@ Errors (nothing is reserved, imported or logged):
 
 | `status` | `stage` | Show |
 |---|---|---|
-| `WAITING` | `importing` | "Importing": `import.progress` (0 to 100) as the bar; `import.stage` is null (waiting for a worker), `starting`, `importing` (downloading), `checking` or `storing`. |
+| `WAITING` | `importing` | "Importing": `import.progress` (0 to 100) as the bar; `import.stage` is null (waiting for a worker), `reading`, `downloading` (with `import.bytes_done` of `import.bytes_total`), `copying`, `merging`, `checking` or `storing`. |
 | `QUEUED` | null | "Waiting for a worker". `import.status` is `SUCCEEDED`, and `upload_id` is the stored video. |
 | `RUNNING` | the clip job's stages (`downloading`, `transcribing`, ... `uploading`) | `progress` (0 to 100) as the bar. `clips` fill in as each clip is ready. |
 | `SUCCEEDED` | `done` | The clips. `credits_charged` is what was charged: at most `credits_reserved`, less when the video was shorter than its metadata said. |
@@ -264,6 +264,91 @@ Works at every stage and returns the job. `WAITING` or `QUEUED`: cancelled and r
 - The price is `price_clips` in `app/routes_media.py`, the function behind `POST /v1/clips` and `POST /v1/clips/quote`, on the metadata's length (or the stored upload's, when the account has the video).
 - When the import has stored the video, the job is priced again on the real length: charged that if it is less, never more than the reservation.
 - Failed, refused, timed-out or cancelled imports, a crash at any point (the worker's sweeps finish or refund the job), a cancel, a takedown, and a failed clip job all end in a full refund.
+
+## Link metadata, ranges and reuse (ingestion, 2026-11-18)
+
+Additions to the URL clipping contract above. Everything is additive: no field or code that was there is renamed, with the exceptions listed under "Changed values". Code: `app/ingest/platforms.py` (metadata and download), `app/ingest/preview.py` (the answer), `app/ingest/copies.py` (reuse), `app/ingest/runner.py` (progress). No schema change.
+
+### Preview: `POST /v1/imports/preview`
+
+Request: `{url, options?, start_sec?, end_sec?}`. `start_sec` / `end_sec` (seconds of the source video, numbers, 0 or more) choose a part of it; left out, the whole video. Re-ask as the customer moves the range: the site's answer is cached, so only the first ask makes a request.
+
+The answer is metadata only. Nothing is downloaded, stored, logged or charged. Fields added:
+
+| Field | Values |
+|---|---|
+| `video_type` | `video`, `short` (YouTube Short), `live_recording` (a finished YouTube broadcast), `vod` (a Twitch or Kick recording), `clip`, `ongoing_recording` (a VOD whose stream is still live), `live_stream` (a broadcast that is live now and has no recording to read), `live_channel` (a channel page: `twitch.tv/<name>`, `kick.com/<name>`), `upcoming`, `file` (a direct, Drive or Dropbox link), or null when the site gave nothing |
+| `live_status` | `not_live`, `was_live`, `recording`, `live`, `upcoming`, or null (a channel page, a file link, or no answer). Whether a channel is live right now is never looked up. |
+| `channel`, `channel_url` | The creator's display name and page. For a Twitch clip, `channel` is the broadcaster, not the person who made the clip. |
+| `category` | The game or category the site names (Twitch and Kick: the game, the one played longest when a VOD has several; YouTube: its broad category such as "Gaming"), or null. No id. |
+| `started_at` | When the video was published or the stream began, ISO 8601 UTC, or null. There is no end time: the sites do not give one. |
+| `duration_sec`, `available_sec` | The length. For `ongoing_recording` both are the seconds published so far (they grow; the answer is cached for 1 minute instead of 5). |
+| `thumbnail_url` | https, served by the site, never by us. Null when the site has none (a Twitch VOD just after the stream ended): show a placeholder. |
+| `options` | `{"import": bool, "clip": bool, "range": bool, "range_download": "partial" | "full" | null}`. `import` / `clip`: the buttons to enable for what was asked. `range`: a part of this video can be chosen, also when the whole video is refused as too long. `range_download`: `partial` means only the chosen part is downloaded; `full` means the whole video is downloaded and the part is cut from it (the price is the part's either way). |
+| `range` | `{"start_sec", "end_sec"}`: the part an import would take, clamped to the video (`end_sec` null: to the end), or null for the whole video. For `ongoing_recording` it always has an end: what exists now. |
+| `lookup_ms` | How long the site took to answer; 0 when the answer came from the cache. |
+| `kind` | Kept: `video`, `clip`, `live` (also for `ongoing_recording`), `upcoming`, and new `channel`. Prefer `video_type`. |
+
+`estimate` is priced on `range` when there is one (the same price function, on the part's length). A video longer than the import limit (6 hours) answers `supported: false`, `refusal.code: "video_too_long"`, `options.range: true`: ask again with a range that fits.
+
+```json
+{"url": "https://www.twitch.tv/videos/2932305259", "platform": "twitch", "supported": true,
+ "title": "PLAYING GTA 6 FOR THE FIRST TIME", "channel": "KaiCenat", "channel_url": "https://www.twitch.tv/kaicenat",
+ "category": "Grand Theft Auto VI", "duration_sec": 39840.0, "available_sec": 39840.0,
+ "started_at": "2026-11-18T12:59:57Z",
+ "thumbnail_url": "https://static-cdn.jtvnw.net/previews-ttv/live_user_kaicenat-640x360.jpg",
+ "video_type": "ongoing_recording", "live_status": "recording", "kind": "live",
+ "options": {"import": true, "clip": true, "range": true, "range_download": "partial"},
+ "range": {"start_sec": 3600.0, "end_sec": 5400.0}, "lookup_ms": 913, "refusal": null,
+ "estimate": {"credits": 30, "basis": "source_minutes", "duration_sec": 1800.0, "balance": 300, "enough": true, "note": "..."}}
+```
+
+### Refusal codes
+
+Every message says what to do instead (upload the file). New codes in bold.
+
+| Code | When |
+|---|---|
+| **`live_channel`** | A channel page. Decided from the address alone; the site is not asked anything. |
+| `live_stream` | A broadcast that is live with no recording to read (YouTube live). |
+| **`upcoming`** | A stream or premiere that has not started. |
+| **`private_video`** | The video is private. |
+| **`age_restricted`** | The site wants a signed-in viewer to confirm their age. |
+| **`members_only`** | Channel members or subscribers only. |
+| `login_required` | Any other sign-in wall. |
+| `drm_protected` | DRM. Now also said by the preview, not only by the import. |
+| **`expired`** | Twitch or Kick no longer has the recording (expired or deleted). |
+| `not_found` | Unavailable or removed (YouTube). |
+| `geo_blocked`, `source_refused`, `source_failed`, `preview_timeout` | As before. `source_refused` now includes a bot check. |
+| `no_format` | The video has no stream with a picture. |
+| `file_too_large` | No version fits the size limit, even at the lowest resolution. The message suggests a shorter range. |
+| `video_too_long`, `video_too_short` | Of the part asked for. |
+| **`bad_range`** | `start_sec` / `end_sec` are not a range, or lie outside the video. |
+| **`unsupported_media`** | The downloaded streams could not be joined into one file (import only). |
+
+### Range on import and on clips from a link
+
+`POST /v1/imports {url, consent, start_sec?, end_sec?}` and `POST /v1/clips/from-url {url, consent, start_sec?, end_sec?, options, webhook_url?}`. Only that part is imported, and the clip job is priced on its length. Clip times in the results count from the start of the imported part; add `import.range.start_sec` for the time in the source video. `options.range` (analyse only a part of an upload) is a different thing and still applies inside the imported part.
+
+### Import status: `GET /v1/imports/{import_id}` and the `import` part of a job
+
+| Field | Meaning |
+|---|---|
+| `stage` | null (waiting for a worker), `reading` (asking the site what the link is), `downloading`, `copying` (taking the part from a copy the account already has: no download), `merging` (joining picture and sound, cutting the range), `checking`, `storing`, `done`. |
+| `progress` | 0 to 100. |
+| `bytes_done`, `bytes_total` | While `downloading`: bytes so far, and the bytes expected (null when the site does not say). Null in other stages. |
+| `range` | `{"start_sec", "end_sec"}` the import takes, or null for the whole video. |
+| `reused` | True when the account already had exactly this part of this link stored: nothing was downloaded. |
+
+### Never the same video twice
+
+For one account and one link: the same part asked for again hands back the stored upload (`reused: true`); a part inside a stored copy (the whole video, or a longer range) is cut from that copy without a download; the same part already being imported is joined, not started again. A repeated `POST /v1/clips/from-url` with the same link, range and options returns the job that is already waiting or running (`200`), and a repeated `Idempotency-Key` returns the job it started: one reservation either way.
+
+### Changed values (tell your tests)
+
+- `import.stage`: `importing` is now `reading` then `downloading`. The clip job's own `stage` while it waits is still `importing`.
+- A bot check on YouTube is `source_refused`, not `login_required`. A subscriber-only Twitch VOD is `members_only`, not `login_required`. A Twitch VOD that does not exist is `expired`, not `not_found`. An upcoming stream is `upcoming`, not `live_stream`. A channel page is `live_channel`, not `unsupported_link`.
+- A Twitch VOD that is still being recorded is no longer refused: it is `ongoing_recording` and `supported: true`.
 
 ## Schema: revision 0005 (shipped by the orchestrator, additive)
 
