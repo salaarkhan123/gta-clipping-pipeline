@@ -8,6 +8,7 @@
   suspend EMAIL / unsuspend EMAIL               block or unblock an account
   stuck                                         list WAITING/QUEUED/RUNNING jobs
   make-admin EMAIL / revoke-admin EMAIL         let an account use the admin routes (/v1/admin/...) from its login
+  ops-status                                    queue and worker health as key=value lines (read-only; ops.sh status)
   send-test-email --to ADDRESS                  send one email through the configured SMTP (exit 2: not configured, 1: failed)
   bump-token-epoch                              void every password-reset and email-verification link already sent
   selftest                                      load every model and tool once (run in the worker container)
@@ -29,7 +30,7 @@ from sqlalchemy import select  # noqa: E402
 
 from app import ledger  # noqa: E402
 from app.db import init_db, new_session  # noqa: E402
-from app.models import Account, ApiKey, CreditLedger, Job, new_id  # noqa: E402
+from app.models import Account, ApiKey, CreditLedger, Job, new_id, utcnow  # noqa: E402
 from app.security import hash_password, new_api_key  # noqa: E402
 
 
@@ -155,6 +156,35 @@ def db_status() -> int:
     return 0 if now == latest else 1
 
 
+def ops_status() -> int:
+    """Read-only queue and config health for monitoring. Ages in whole minutes; -1 when there is nothing to measure.
+    Config lines are 1/0 for "is it set": names only, never a value."""
+    from sqlalchemy import func
+
+    from app.config import get_settings
+    from app.emailer import missing_smtp_keys
+
+    def minutes(t) -> int:
+        return -1 if t is None else int((utcnow() - t).total_seconds() // 60)
+
+    with new_session() as db:
+        counts = dict(db.execute(select(Job.status, func.count()).where(Job.status.in_(("QUEUED", "RUNNING")))
+                                 .group_by(Job.status)).all())
+        oldest = db.execute(select(func.min(Job.created_at)).where(Job.status == "QUEUED")).scalar_one()
+        stalest = db.execute(select(func.min(Job.heartbeat_at)).where(Job.status == "RUNNING")).scalar_one()
+        last = db.execute(select(func.max(Job.started_at))).scalar_one()
+    print(f"jobs_running={counts.get('RUNNING', 0)}")
+    print(f"jobs_queued={counts.get('QUEUED', 0)}")
+    print(f"oldest_queued_min={minutes(oldest)}")
+    print(f"stalest_heartbeat_min={minutes(stalest)}")
+    print(f"last_claim_min={minutes(last)}")
+    s = get_settings()
+    print(f"email_configured={int(not missing_smtp_keys())}")
+    print(f"stripe_configured={int(bool(s.stripe_secret_key))}")
+    print(f"stripe_webhook_configured={int(bool(s.stripe_webhook_secret))}")
+    return 0
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -167,6 +197,7 @@ def main() -> None:
     c = sub.add_parser("make-admin"); c.add_argument("email")
     c = sub.add_parser("revoke-admin"); c.add_argument("email")
     sub.add_parser("stuck")
+    sub.add_parser("ops-status")
     sub.add_parser("selftest")
     sub.add_parser("db-status")
     sub.add_parser("migrate")
@@ -188,6 +219,8 @@ def main() -> None:
         sys.exit(0)
     if args.cmd == "db-status":
         sys.exit(db_status())
+    if args.cmd == "ops-status":
+        sys.exit(ops_status())
     if args.cmd == "migrate":
         from app.db import get_engine
         from app.migrate import migrate

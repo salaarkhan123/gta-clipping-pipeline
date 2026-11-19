@@ -1,0 +1,139 @@
+name: rollback
+
+# Code-only rollback to an earlier commit on main. Same approval gate and checks as deploy.yml; the database is
+# never restored or downgraded here (a restore stays a manual, approved step: docs/devops/setup.md).
+run-name: "rollback to ${{ inputs.sha }}${{ inputs.dry_run && ' (dry run)' || '' }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Full 40-character commit on main to go back to (an earlier deploy)"
+        type: string
+        required: true
+      confirm:
+        description: "Owner only: the first 7 characters of the target commit (the approval when PROD_APPROVAL is not 'environment')"
+        type: string
+        required: false
+        default: ""
+      dry_run:
+        description: "Run every check and print the plan; change nothing"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      checks: read
+      pull-requests: read
+    outputs:
+      sha: ${{ steps.gate.outputs.sha }}
+      pr: ${{ steps.gate.outputs.pr }}
+      evidence: ${{ steps.gate.outputs.evidence }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Full sha, on main, CI passed on its exact tree
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ inputs.sha }}
+          REPO: ${{ github.repository }}
+          APPROVAL: ${{ vars.PROD_APPROVAL }}
+          DRY: ${{ inputs.dry_run && 'yes' || 'no' }}
+          CONFIRM: ${{ inputs.confirm }}
+          OWNER: ${{ vars.OPS_OWNER || github.repository_owner }}
+        run: |
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::sha must be the full 40-character lowercase commit"; exit 1; }
+          flags=(); [ "$DRY" = yes ] && flags+=(--dry-run)
+          python3 .github/ops/opsctl.py gate --ref "$SHA" --repo "$REPO" --approval "$APPROVAL" \
+            --event "$GITHUB_EVENT_NAME" --actor "$GITHUB_ACTOR" --owner "$OWNER" --confirm "$CONFIRM" "${flags[@]}"
+
+  rollback:
+    needs: gate
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      TARGET: ${{ needs.gate.outputs.sha }}
+      DRY_RUN: ${{ inputs.dry_run && 'yes' || 'no' }}
+      PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+      PROD_HOST: ${{ secrets.PROD_HOST }}
+      PROD_KNOWN_HOSTS: ${{ secrets.PROD_KNOWN_HOSTS }}
+      PROD_SSH_USER: ${{ vars.PROD_SSH_USER }}
+      PROD_SSH_PORT: ${{ vars.PROD_SSH_PORT }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Prepare
+        run: |
+          echo "OPS_DIR=$RUNNER_TEMP/ops" >> "$GITHUB_ENV"
+          echo "BACKUP_KEEP=$(jq -r .backups.keep .github/ops/config.json)" >> "$GITHUB_ENV"
+
+      - name: Preflight on the server (the old code must be able to start on the current schema)
+        id: preflight
+        timeout-minutes: 5
+        run: .github/ops/ssh_ops.sh preflight preflight "$TARGET"
+
+      - name: Rollback moves back only
+        env:
+          RELATION: ${{ steps.preflight.outputs.target_relation }}
+        run: |
+          [ "$RELATION" = older ] || { echo "::error::target is '$RELATION' relative to the checkout; use deploy.yml"; exit 1; }
+
+      - name: Plan (dry run)
+        if: env.DRY_RUN == 'yes'
+        env:
+          BEFORE: ${{ steps.preflight.outputs.commit }}
+          REV: ${{ steps.preflight.outputs.db_revision }}
+        run: echo "Would back up the database, check out $TARGET (from $BEFORE), rebuild and restart api and worker; DB stays at $REV."
+
+      - name: Back up the database first
+        if: env.DRY_RUN == 'no'
+        timeout-minutes: 30
+        run: .github/ops/ssh_ops.sh backup backup db "$BACKUP_KEEP"
+
+      - name: Roll back the code
+        id: rollback
+        if: env.DRY_RUN == 'no'
+        timeout-minutes: 40
+        run: .github/ops/ssh_ops.sh rollback rollback "$TARGET"
+
+      - name: Verify
+        if: env.DRY_RUN == 'no'
+        timeout-minutes: 10
+        env:
+          HEALTH_URL: ${{ vars.PROD_HEALTH_URL }}
+        run: |
+          rc=0
+          .github/ops/ssh_ops.sh verify verify "$TARGET" rollback || rc=$?
+          if [ -n "$HEALTH_URL" ]; then
+            if curl -fsS --max-time 10 "$HEALTH_URL" | grep -Eq '"ok": *true'; then echo "public /health ok"
+            else echo "::error::public $HEALTH_URL is not ok"; rc=1; fi
+          fi
+          exit "$rc"
+
+      - name: Report
+        if: always()
+        env:
+          EVIDENCE: ${{ needs.gate.outputs.evidence }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          mkdir -p "$OPS_DIR"
+          flags=(); [ "$DRY_RUN" = yes ] && flags+=(--dry-run)
+          python3 .github/ops/opsctl.py report --kind rollback --dir "$OPS_DIR" --target "$TARGET" \
+            --evidence "$EVIDENCE" --run-url "$RUN_URL" "${flags[@]}" >> "$GITHUB_STEP_SUMMARY"
