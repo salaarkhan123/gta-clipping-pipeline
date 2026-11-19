@@ -6,6 +6,7 @@ import { ExportFull } from "./ExportFull";
 import { Icon, IconName } from "./Icon";
 import { BACKDROP, CARD_ROW, MEDIA, Shape, thumbVar, useShape } from "./ProjectCard";
 import { useDash } from "./Shell";
+import { scoreLabel } from "@/lib/scores";
 
 export async function downloadSubtitles(clipId: string, format = "srt") {
   const res = await fetch(`${API}/v1/clips/${clipId}/subtitles?format=${format}`, { headers: { Authorization: `Bearer ${getToken()}` } });
@@ -175,7 +176,6 @@ export function useSteadyOrder(clips: any[], sort: ClipSort, filter: ClipFilter,
 }
 
 const TIER_NAMES: Record<string, string> = { top: "Top pick", strong: "Strong", solid: "Solid", long_shot: "Long shot" };
-const PART_NAMES: Record<string, string> = { hook: "Hook", flow: "Flow", story: "Story", value: "Value", trend: "Trend", engagement: "Engagement", reach: "Reach" };
 const SIGNAL_NAMES: Record<string, string> = { audio: "Loud reaction", chat_motion: "Chat activity", transcript: "What was said" };
 
 // The score on the card: "N /100" once the API sends a calibrated `display_score`, the rank and tier until then.
@@ -209,7 +209,7 @@ export function ScoreBadge({ clip }: { clip: any }) {
       <span role="tooltip" id={tip} className="score-tip">
         {rated
           ? <><strong>{raw !== null ? `AI rating ${raw} of 100` : "Rated by the AI"}{rank ? ` · #${rank}${clip.rank_of ? ` of ${clip.rank_of}` : ""}` : ""}</strong>
-              {parts.length > 0 && <span className="parts">{parts.map(([k, n]) => <span key={k}>{PART_NAMES[k] || k} <b>{n}</b></span>)}</span>}</>
+              {parts.length > 0 && <span className="parts">{parts.map(([k, n]) => <span key={k}>{scoreLabel(k)} <b>{n}</b></span>)}</span>}</>
           : <strong>Ranked by how strongly this moment stood out in the video. It has no AI rating.</strong>}
         {shown !== null && <span>The {shown} on the card is the AI rating scaled across this video's clips, so the best one lands in the 90s. The order is the AI's own.</span>}
         {signals.length > 0 && <span>Picked for: {signals.map(([k, share]) => `${SIGNAL_NAMES[k] || k} ${Math.round((share as number) * 100)}%`).join(", ")}</span>}

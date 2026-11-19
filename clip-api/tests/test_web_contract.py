@@ -71,6 +71,31 @@ def test_response_has_the_fields_the_site_reads(route, client, user):
     assert not missing, f"{_route_id(route)} no longer returns {missing}"
 
 
+def test_clip_object_has_the_fields_the_site_reads():
+    # A clip as the API serializes it everywhere (app/routes_media.py clip_json), here one the AI judged.
+    from app import ai
+    from app.models import Clip
+    from app.routes_media import clip_json
+
+    v2 = hasattr(ai, "SCORING_VERSION")
+    meta = {"source": "ai", "virality": {"score": 81}, "title": "A clip", "hook": "No way"}
+    if v2:
+        meta.update(scores={k: 80 for k in ai.SCORES}, scoring_version=ai.SCORING_VERSION)
+
+    class Files:
+        @staticmethod
+        def url(key):
+            return f"/files/{key}" if key else None
+
+    clip = Clip(id="clip_contract", job_id="job_contract", idx=1, start_sec=1.0, end_sec=20.0, score=0.5, signals={}, meta=meta)
+    out = clip_json(clip, Files())
+    wanted = set(CONTRACT["clip_fields"]) - (set() if v2 else {"scores", "scoring_version"})
+    missing = sorted(wanted - set(out))
+    assert not missing, f"a clip no longer carries {missing}"
+    if v2:
+        assert set(out["scores"]) == set(ai.SCORES) and out["scoring_version"] == ai.SCORING_VERSION
+
+
 def test_edit_options_match_the_edit_model():
     # lib/edit.ts sends only these in `edit.options`; the API rejects any other name with 422.
     assert sorted(CONTRACT["edit_options"]) == sorted(LayoutOptions.model_fields)
