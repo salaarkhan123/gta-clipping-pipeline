@@ -58,6 +58,25 @@ def test_route_exists_with_its_fields(route):
         assert not missing, f"{_route_id(route)} no longer takes query {missing}"
 
 
+def _body(route: dict) -> set[str]:
+    op = OPS.get((route["method"], _shape(route["path"])))
+    return _props(op.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema", {})) if op else set()
+
+
+def test_optional_fields_arrive_together():
+    # Fields of a newer API version (link ranges): absent everywhere is fine (an older API), but once any listed
+    # route takes them, every listed route that this API serves must take them all.
+    groups: dict[tuple, list] = {}
+    for r in CONTRACT["routes"]:
+        if r.get("optional_body"):
+            groups.setdefault(tuple(sorted(r["optional_body"])), []).append(r)
+    for fields, routes in groups.items():
+        served = [r for r in routes if OPS.get((r["method"], _shape(r["path"])))]
+        has = {_route_id(r): set(fields) <= _body(r) for r in served}
+        if any(has.values()):
+            assert all(has.values()), f"{list(fields)} only on part of the routes: {has}"
+
+
 READS = [r for r in CONTRACT["routes"] if r["method"] == "GET" and r.get("response") and "{" not in r["path"]]
 
 
