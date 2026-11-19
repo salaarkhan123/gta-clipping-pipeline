@@ -630,6 +630,7 @@ def judge_hero(work: Path, out: Path, public: Path, model_name: str) -> int:
     log_path = work / "judge-log.json"
     calls = json.loads(log_path.read_text()) if log_path.exists() else []
     spent = sum(c["cost_usd"] for c in calls)
+    run_start = len(calls)            # the log keeps earlier runs; an auth error counts only in this one
     current: dict = {}
 
     def record(response: httpx.Response) -> None:
@@ -642,7 +643,14 @@ def judge_hero(work: Path, out: Path, public: Path, model_name: str) -> int:
                       "price_per_mtok": [price_in, price_out], "pricing_source": "claude-api skill table, cached "
                       "2026-11-03, checked 2026-11-18"})
 
-    ai = ClaudeAI(settings.anthropic_api_key, model, client=httpx.Client(timeout=45, event_hooks={"response": [record]}))
+    def refuse_after_auth_error(request: httpx.Request) -> None:
+        # A rejected key fails every call the same way: after one 401/403, nothing more is sent (the judge's own
+        # retry included) and the run stops.
+        if any(x["status"] in (401, 403) for x in calls[run_start:]):
+            raise RuntimeError("the API key was rejected; not sending more requests")
+
+    ai = ClaudeAI(settings.anthropic_api_key, model, client=httpx.Client(
+        timeout=45, event_hooks={"request": [refuse_after_auth_error], "response": [record]}))
     stt = transcriber(model_name)
     section = "hero-vertical-clips"
     cands_path = out / section / "candidates.json"
@@ -668,6 +676,10 @@ def judge_hero(work: Path, out: Path, public: Path, model_name: str) -> int:
             meta = ai.clip_meta(text, {"length": m["end"] - m["start"], "signals": m["signals"]}, thumb)
             spent = sum(x["cost_usd"] for x in calls)
             print(f"{cid}: {len(calls) - before} call(s), total ${spent:.5f}", flush=True)
+            if any(x["status"] in (401, 403) for x in calls[before:]):
+                print("the API key was rejected (401/403): run stopped, nothing rated", file=sys.stderr)
+                log_path.write_text(json.dumps(calls, indent=1) + "\n")
+                return 1
             if meta and isinstance(meta.get("virality"), dict):
                 rated[cid] = meta
             else:
