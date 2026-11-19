@@ -129,8 +129,9 @@ def footage(job: dict, estimate: dict, trail: dict) -> None:
                f"{' (' + str(span.get('start_sec')) + ' to ' + str(span.get('end_sec')) + ' s)' if span else ' (the whole video)'}"
                f", {job.get('credits_reserved')} credit(s) reserved")
     if not isinstance(fetched, dict):
-        say("footage", f"{charged} | downloaded: this API does not report it (no import.fetched); "
-                       f"see the stages and bytes above")
+        why = ("the import did not finish, so there is no final count" if imp.get("status") != "SUCCEEDED"
+               else "this API does not report it (no import.fetched)")
+        say("footage", f"{charged} | downloaded: {why}; see the stages and bytes above")
         return
     how = {"segments": "only the segments that hold the range", "whole_file": "the whole file, then cut",
            "stored_copy": "nothing: cut from a copy the account already had",
