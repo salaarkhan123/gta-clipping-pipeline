@@ -556,10 +556,12 @@ def download(platform: str, url: str, dest_dir: Path, limits: Limits,
     def hook(status: dict) -> None:
         got = int(status.get("downloaded_bytes") or 0)
         done = before[0] + got
-        if status.get("status") == "finished":
-            before[0] = done
+        # The cap is checked against the streams already finished plus this one (what it has, or what it says it
+        # will have), before this stream joins the finished ones, so a finished stream is never counted twice.
         if done > limits.max_bytes or before[0] + (status.get("total_bytes") or 0) > limits.max_bytes:
             raise Refused("file_too_large", f"Maximum import size is {limits.max_bytes // 1024 ** 2} MB.")
+        if status.get("status") == "finished":
+            before[0] = done
         if time.monotonic() - started > limits.timeout_sec:
             raise Refused("import_timeout", f"The download took longer than {int(limits.timeout_sec // 60)} "
                                             f"minutes and was stopped. {UPLOAD_INSTEAD}")

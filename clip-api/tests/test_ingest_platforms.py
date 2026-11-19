@@ -263,6 +263,19 @@ def test_size_and_time_caps_stop_a_download_in_progress(fake_ydl, tmp_path):
     assert e.value.code == "import_timeout"
 
 
+def test_a_finished_stream_is_counted_once_against_the_size_cap(fake_ydl, tmp_path, video):
+    """yt-dlp's `finished` event carries the stream's own total: a file of S bytes under a cap between S and 2 S
+    fits (Codex, #218: it was counted twice and refused as file_too_large); a cap under S still refuses it."""
+    size = video.stat().st_size
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    fits = Limits(size + size // 2, ROOMY.max_duration_sec, ROOMY.timeout_sec)
+    assert platforms.download("twitch", TWITCH, tmp_path / "a", fits).path.stat().st_size > 0
+    with pytest.raises(Refused) as e:
+        platforms.download("twitch", TWITCH, tmp_path / "b", Limits(size - 1, ROOMY.max_duration_sec, ROOMY.timeout_sec))
+    assert e.value.code == "file_too_large"
+
+
 def test_a_transport_stream_is_repackaged_as_mp4_with_our_own_guarded_ffmpeg(tmp_path, video):
     """HLS downloads are MPEG-TS under an .mp4 name. The repackaging is the one ffmpeg call in the import, and it
     is ours: local file in, protocol whitelist on, a timeout."""
