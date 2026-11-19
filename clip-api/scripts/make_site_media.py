@@ -260,6 +260,26 @@ def render_shot(shot: dict, seg_file: Path, seg: dict, tmp: Path, stt, budget: f
     return clip.video_path, words, clip
 
 
+def plan_boxes(video: Path, layout_shots: list) -> dict:
+    """What the engine's layout plans (facecam.resolve_plan, the plan render_clip draws) take from this 16:9
+    source, as fractions of the frame: the detected camera box, and per layout shot the gameplay crop."""
+    from app.pipeline.facecam import resolve_plan
+    info = probe(video)
+    out = {"facecam": None, "crop": {}}
+    for s in layout_shots:
+        plan = resolve_plan(video, info, options_for(s))
+        if plan is None:
+            continue
+        game = next((p for p in plan.panels if p.kind == "gameplay"), None)
+        if game:
+            x, y, w, h = game.src
+            out["crop"][s["variant"]] = [round(x / info.width, 4), round(y / info.height, 4),
+                                         round(w / info.width, 4), round(h / info.height, 4)]
+        if plan.cam and out["facecam"] is None:
+            out["facecam"] = [round(float(v), 4) for v in plan.cam]
+    return out
+
+
 def encode_loop(src: Path, out: Path, start: float, seconds: float, size: tuple[int, int]) -> dict:
     """<out>.mp4 (muted) under MAX_BYTES, <out>.webm when VP9 fits under it too (the site treats it as optional),
     and <out>.webp poster. Returns the file names."""
@@ -450,6 +470,10 @@ def render(sources: dict, shots: list, work: Path, out: Path, only: set | None, 
                            "start_sec": round(seg["start"] + inner, 2),
                            "end_sec": round(seg["start"] + inner + seconds, 2)},
             }.items() if v is not None})
+            if shot.get("boxes"):
+                item["boxes"] = plan_boxes(seg_file, [s for s in shots if s["section"] == section
+                                                      and s["source"] == sid and s.get("moment") == shot.get("moment")
+                                                      and s.get("variant") in shot["boxes"]])
             if shot.get("duration") == "source":
                 item["duration_sec"] = scouts.get(sid, {}).get("duration_sec") or src.get("duration_sec")
                 item["loop_sec"] = round(seconds, 2)
@@ -613,6 +637,11 @@ def judge_hero(work: Path, out: Path, public: Path, model_name: str) -> int:
     fails on keeps its signal-only rating."""
     import httpx
     from app.ai import ClaudeAI
+    try:
+        from app.ai import rating_of        # the one reader of a judge reply (scoring v2, PR #153)
+    except ImportError:
+        print("this engine has no app.ai.rating_of: run the judge from the scoring-v2 code (PR #153)", file=sys.stderr)
+        return 1
     from app.config import get_settings
     from app.pipeline.render import render_thumb
     from app.pipeline.transcribe import extract_wav
@@ -680,21 +709,21 @@ def judge_hero(work: Path, out: Path, public: Path, model_name: str) -> int:
                 print("the API key was rejected (401/403): run stopped, nothing rated", file=sys.stderr)
                 log_path.write_text(json.dumps(calls, indent=1) + "\n")
                 return 1
-            if meta and isinstance(meta.get("virality"), dict):
-                rated[cid] = meta
+            score = rating_of(meta) if meta else None
+            if score and score.get("scores"):          # five sub-scores, or it is not a v2 rating
+                rated[cid] = (meta, score)
             else:
                 print(f"  judge gave no rating for {cid}: it stays signal-only", file=sys.stderr)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
             log_path.write_text(json.dumps(calls, indent=1) + "\n")
-    shown = display_scores([rated[c]["virality"]["score"] for c in rated])
-    for (cid, meta), display in zip(rated.items(), shown):
-        v = meta["virality"]
-        by_cid[cid].update(rating=display, rating_raw=v["score"], rating_source="ai", ai_model=model,
-                           ai_scores={k: v[k] for k in ("hook", "flow", "value", "trend")},
+    shown = display_scores([score["rating"] for _meta, score in rated.values()])
+    for (cid, (meta, score)), display in zip(rated.items(), shown):
+        by_cid[cid].update(rating=display, rating_raw=score["rating"], rating_source="ai", ai_model=model,
+                           ai_scores=score["scores"], scoring_version=score["scoring_version"],
                            ai_reason=meta.get("reason"), ai_kind=meta.get("kind"),
                            ai_calls=[x for x in calls if x["cid"] == cid])
-        print(f"  {cid}: display {display}, raw {v['score']}, {by_cid[cid]['ai_scores']}")
+        print(f"  {cid}: display {display}, raw {score['rating']}, {score['scores']}")
     write_candidates(cands_path, section, by_cid, CONFIRMED, {})
     print(f"rated {len(rated)} of {len(hero)}; {len(calls)} calls; "
           f"{sum(x['input_tokens'] for x in calls)} in / {sum(x['output_tokens'] for x in calls)} out tokens; "
