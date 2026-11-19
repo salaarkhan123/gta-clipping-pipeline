@@ -597,6 +597,99 @@ def publish(featured: Path, out: Path, public: Path) -> int:
     return 0
 
 
+# The AI judge: the app's own (app.ai.ClaudeAI.clip_meta, the call the worker makes for a rendered clip with no
+# judge meta), run on published hero clips. USD per million tokens, input / output, for prompts up to 100K tokens.
+# Source: Anthropic's price table as shipped in the claude-api skill (cached 2026-11-03), checked 2026-11-18.
+PRICES = {"claude-haiku-5-5": (0.10, 0.50)}
+JUDGE_CAP_USD = 0.50
+CALL_CEILING_TOKENS = (20_000, 1024)      # the most one call could use: a generous input bound, and MAX_TOKENS out
+
+
+def judge_hero(work: Path, out: Path, public: Path, model_name: str) -> int:
+    """Rate each published hero clip with the app's judge: the clip's spoken words, its length and signal shares,
+    and a frame of the rendered clip. Stores the four sub-scores, the raw score and the display rating (app.scoring
+    across these clips, as across one job's clips) on the candidate, with rating_source "ai". Every API response is
+    logged with its tokens and cost; no call starts that could take the total past JUDGE_CAP_USD. A clip the judge
+    fails on keeps its signal-only rating."""
+    import httpx
+    from app.ai import ClaudeAI
+    from app.config import get_settings
+    from app.pipeline.render import render_thumb
+    from app.pipeline.transcribe import extract_wav
+
+    settings = get_settings()                 # the app's own settings loading supplies the key; never printed
+    if not settings.anthropic_api_key:
+        print("no ANTHROPIC_API_KEY configured: nothing rated", file=sys.stderr)
+        return 1
+    model = settings.ai_model
+    if model not in PRICES:
+        print(f"no price on file for {model}: nothing rated", file=sys.stderr)
+        return 1
+    price_in, price_out = PRICES[model]
+    worst = (CALL_CEILING_TOKENS[0] * price_in + CALL_CEILING_TOKENS[1] * price_out) / 1e6
+    log_path = work / "judge-log.json"
+    calls = json.loads(log_path.read_text()) if log_path.exists() else []
+    spent = sum(c["cost_usd"] for c in calls)
+    current: dict = {}
+
+    def record(response: httpx.Response) -> None:
+        response.read()
+        usage = (response.json() or {}).get("usage", {}) if response.headers.get("content-type", "").startswith(
+            "application/json") else {}
+        tin, tout = int(usage.get("input_tokens") or 0), int(usage.get("output_tokens") or 0)
+        calls.append({"cid": current["cid"], "model": model, "status": response.status_code, "input_tokens": tin,
+                      "output_tokens": tout, "cost_usd": round((tin * price_in + tout * price_out) / 1e6, 6),
+                      "price_per_mtok": [price_in, price_out], "pricing_source": "claude-api skill table, cached "
+                      "2026-11-03, checked 2026-11-18"})
+
+    ai = ClaudeAI(settings.anthropic_api_key, model, client=httpx.Client(timeout=45, event_hooks={"response": [record]}))
+    stt = transcriber(model_name)
+    section = "hero-vertical-clips"
+    cands_path = out / section / "candidates.json"
+    by_cid = read_candidates(cands_path, section)
+    hero = [i["candidate"] for i in load(public / section / "manifest.json")["items"]]
+    rated = {}
+    for cid in hero:
+        if spent + 2 * worst > JUDGE_CAP_USD:          # clip_meta may retry once: two calls at most
+            print(f"stopped before {cid}: ${spent:.4f} spent, the next call could pass ${JUDGE_CAP_USD}")
+            break
+        c = by_cid[cid]
+        sid, rank = c["source"]["id"], c["rank"]
+        m = moment_of(work, sid, rank)
+        seg = load(work / "seg" / f"{sid}-m{rank}.json")
+        tmp = Path(tempfile.mkdtemp(prefix="judge-", dir=work))
+        try:
+            wav, thumb = tmp / "clip.wav", tmp / "thumb.jpg"
+            extract_wav(work / "seg" / f"{sid}-m{rank}.mp4", m["start"] - seg["start"], m["end"] - m["start"], wav)
+            text = " ".join(w[2] for w in stt.transcribe(wav).words)
+            render_thumb(out / section / c["src"], thumb)
+            current["cid"] = cid
+            before = len(calls)
+            meta = ai.clip_meta(text, {"length": m["end"] - m["start"], "signals": m["signals"]}, thumb)
+            spent = sum(x["cost_usd"] for x in calls)
+            print(f"{cid}: {len(calls) - before} call(s), total ${spent:.5f}", flush=True)
+            if meta and isinstance(meta.get("virality"), dict):
+                rated[cid] = meta
+            else:
+                print(f"  judge gave no rating for {cid}: it stays signal-only", file=sys.stderr)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+            log_path.write_text(json.dumps(calls, indent=1) + "\n")
+    shown = display_scores([rated[c]["virality"]["score"] for c in rated])
+    for (cid, meta), display in zip(rated.items(), shown):
+        v = meta["virality"]
+        by_cid[cid].update(rating=display, rating_raw=v["score"], rating_source="ai", ai_model=model,
+                           ai_scores={k: v[k] for k in ("hook", "flow", "value", "trend")},
+                           ai_reason=meta.get("reason"), ai_kind=meta.get("kind"),
+                           ai_calls=[x for x in calls if x["cid"] == cid])
+        print(f"  {cid}: display {display}, raw {v['score']}, {by_cid[cid]['ai_scores']}")
+    write_candidates(cands_path, section, by_cid, CONFIRMED, {})
+    print(f"rated {len(rated)} of {len(hero)}; {len(calls)} calls; "
+          f"{sum(x['input_tokens'] for x in calls)} in / {sum(x['output_tokens'] for x in calls)} out tokens; "
+          f"${spent:.5f}")
+    return 0 if len(rated) == len(hero) else 1
+
+
 def clean(work: Path) -> None:
     for sub in ("seg", "raw"):
         shutil.rmtree(work / sub, ignore_errors=True)
@@ -606,7 +699,7 @@ def clean(work: Path) -> None:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("step", choices=("scout", "fetch", "render", "more", "requests", "publish", "clean"))
+    p.add_argument("step", choices=("scout", "fetch", "render", "more", "requests", "publish", "judge", "clean"))
     p.add_argument("--sources", type=Path)
     p.add_argument("--shots", type=Path)
     p.add_argument("--work", type=Path, required=True)
@@ -632,13 +725,17 @@ def main(argv=None) -> int:
     if a.step == "scout":
         scout(sources, work, only, "base.en" if a.whisper != "none" else "none")
         return 0
-    if a.step != "publish" and not a.shots:
+    if a.step not in ("publish", "judge") and not a.shots:
         p.error("--shots is required")
     if a.step == "requests" and not a.featured:
         p.error("requests needs --featured")
     if a.step != "fetch" and not a.out:
         p.error("--out is required")
     out = a.out.expanduser() if a.out else None
+    if a.step == "judge":
+        if not a.public:
+            p.error("judge needs --out and --public")
+        return judge_hero(work, out, a.public.expanduser(), a.whisper)
     if a.step == "publish":
         if not (a.featured and a.public):
             p.error("publish needs --featured and --public")
