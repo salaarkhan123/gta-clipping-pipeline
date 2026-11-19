@@ -18,6 +18,10 @@
   {
    "creator": "TmarTn2",
    "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
+  },
+  {
+   "creator": "NICKMERCS",
+   "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
   }
  ],
  "items": [
@@ -288,6 +292,36 @@
     "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU",
     "start_sec": 8790.71,
     "end_sec": 8796.71
+   }
+  },
+  {
+   "id": "shooter-gameplay",
+   "candidate": "shooter-gameplay--cod-nick-m1",
+   "label": "Shooter: full screen (Call of Duty)",
+   "kind": "video",
+   "src": "shooter-gameplay.mp4",
+   "webm": "shooter-gameplay.webm",
+   "poster": "shooter-gameplay.webp",
+   "width": 540,
+   "height": 960,
+   "duration_sec": 6.0,
+   "game": "Call of Duty: Warzone",
+   "aspect": "9:16",
+   "layout": "full",
+   "caption_style": "impact",
+   "template": "shooter-gameplay",
+   "rank": 1,
+   "rating": 99,
+   "rating_source": "signals",
+   "credit": "Footage: NICKMERCS",
+   "commercial_permission": "owner-confirmed 2026-11-18",
+   "source": {
+    "id": "cod-nick",
+    "creator": "NICKMERCS",
+    "title": "THIS MIGHT BE THE BEST VERSION OF WARZONE",
+    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c",
+    "start_sec": 869.1,
+    "end_sec": 875.1
    }
   }
  ]
