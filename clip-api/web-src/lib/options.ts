@@ -8,34 +8,8 @@ export type Option = { type?: string; values?: any[]; default?: any; minimum?: n
   nullable?: boolean; by_aspect?: Record<string, string[]> };
 export type Listed = Record<string, Option>;
 
-// The options the API accepted when this was written. Used only when the list cannot be fetched, so the form
-// still shows the controls that exist today and never one the API might refuse.
-const LAYOUTS = ["auto", "full", "fit", "split2", "pip", "screen_first", "gameplay_a", "gameplay_b", "split", "fill", "classic"];
-const SQUARE = ["auto", "full", "fit", "split", "fill", "classic"], WIDE = LAYOUTS.filter((l) => !l.startsWith("gameplay_"));
-export const TODAY: Listed = {
-  vertical: { type: "boolean" },
-  aspect: { type: "string", values: ["9:16", "4:5", "1:1", "16:9"] },
-  chat_region: { type: "string", values: ["none", "top-right", "top-center", "top-left", "bottom-right", "bottom-left"] },
-  zoom: { type: "number", minimum: 1, maximum: 1.6 },
-  captions: { type: "boolean" },
-  caption_style: { type: "string", values: ["pop", "bold", "neon", "boxed", "clean"] },
-  censor: { type: "boolean" },
-  layout: { type: "string", values: LAYOUTS, by_aspect: { "9:16": LAYOUTS, "4:5": LAYOUTS, "1:1": SQUARE, "16:9": WIDE } },
-  resolution: { type: "string", values: ["480", "720", "1080", "2k", "4k"] },
-  facecam_region: { type: "string", values: ["auto", "top-left", "top-right", "bottom-left", "bottom-right"], nullable: true },
-  max_clips: { type: "integer", minimum: 1, maximum: 10 },
-  clip_length: { type: "integer", minimum: 10, maximum: 60 },
-  duration: { type: "string", values: ["0-30", "0-90", "30-60", "60-90", "90-180", "180-300"], nullable: true },
-  limit: { type: "integer", minimum: 1, maximum: 50, nullable: true },
-  range: { type: "object", nullable: true },
-  tighten: { type: "boolean" },
-  punch_zoom: { type: "boolean" },
-  flash_forward: { type: "boolean" },
-  hook_overlay: { type: "boolean" },
-  template: { type: "string", nullable: true },
-};
-
-// Asked once per visit and shared by every form. A failed request is not remembered, so the next form tries again.
+// Asked once per visit and shared by every form. A failed request is not remembered, so the next try asks again.
+// There is no built-in fallback list: a form waits ("Loading the options…") rather than show options the API may refuse.
 let asked: Promise<Listed> | null = null;
 export function clipOptions(): Promise<Listed> {
   if (!asked) {
@@ -46,13 +20,18 @@ export function clipOptions(): Promise<Listed> {
     });
     asked.catch(() => { asked = null; });
   }
-  return asked.catch(() => TODAY);
+  return asked;
 }
 
 // null while loading. A form waits for it, so no control appears and then disappears.
 export function useClipOptions(): Listed | null {
   const [listed, setListed] = useState<Listed | null>(null);
-  useEffect(() => { let on = true; clipOptions().then((l) => on && setListed(l)); return () => { on = false; }; }, []);
+  useEffect(() => {
+    let on = true, retry: ReturnType<typeof setTimeout> | undefined;
+    const get = () => clipOptions().then((l) => { if (on) setListed(l); }, () => { if (on) retry = setTimeout(get, 5000); });
+    get();
+    return () => { on = false; clearTimeout(retry); };
+  }, []);
   return listed;
 }
 
