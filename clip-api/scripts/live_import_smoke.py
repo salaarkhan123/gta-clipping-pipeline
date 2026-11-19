@@ -27,6 +27,8 @@ given by the person running this. Without it nothing is sent.
 It spends real credits on the account when it succeeds (the clip job, then the export). A failed or refused import
 must cost nothing: step 9 runs on failure too and prints the net, and the exit code says which it was.
 
+A job that outlasts --timeout is cancelled (a cancel refunds it in full) unless --leave-running is given.
+
 Exit codes: 0 all steps passed; 1 a step failed (the line starting `FAILED` says where); 2 bad arguments or no
 token; 3 a failed run did not come back to its starting balance (credits were lost: tell the owner).
 
@@ -368,6 +370,8 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=1800, help="seconds to wait for each job (default 1800)")
     ap.add_argument("--every", type=float, default=2.0, help="seconds between polls (default 2)")
     ap.add_argument("--no-export", action="store_true", help="stop after the clips: no export, download or verify")
+    ap.add_argument("--leave-running", action="store_true",
+                    help="when a job outlasts --timeout, leave it running (default: cancel it, which refunds it)")
     ap.add_argument("--i-have-the-rights", action="store_true",
                     help="you own this video or have permission to clip it (the consent the API requires)")
     args = ap.parse_args()
@@ -394,11 +398,37 @@ def main() -> int:
     except Failed as e:
         failure = e
         print(f"FAILED stage={clean(e.stage)} code={clean(e.code)} message={clean(e.message)}", flush=True)
+    in_flight = []
+    if failure is not None and failure.code == "smoke_timeout":
+        # A job that outlasted the wait still holds its credits. Cancel it (a cancel refunds in full) unless asked
+        # not to, so the test account is left as it was found.
+        for job_id in jobs:
+            try:
+                job = api.call("cancel", "GET", f"/v1/jobs/{job_id}")
+                if job.get("status") in FINAL:
+                    continue
+                if args.leave_running:
+                    in_flight.append(job_id)
+                    say("cancel", f"job {job_id} is still {job.get('status')}: left running, its credits stay reserved")
+                    continue
+                api.call("cancel", "POST", f"/v1/jobs/{job_id}/cancel")
+                for _ in range(30):
+                    job = api.call("cancel", "GET", f"/v1/jobs/{job_id}")
+                    if job.get("status") in FINAL:
+                        break
+                    time.sleep(2)
+                say("cancel", f"job {job_id} cancelled: now {job.get('status')}")
+                if job.get("status") not in FINAL:
+                    in_flight.append(job_id)
+            except Failed as e:
+                in_flight.append(job_id)
+                say("cancel", f"could not cancel job {job_id}: {e.code}: {e.message}")
     net = money(api, before, jobs)
     if failure is None:
         print("PASSED every step", flush=True)
         return 0
-    spent_on_a_failed_import = failure.stage.startswith(("preview", "start", "import")) and net not in (0, None)
+    spent_on_a_failed_import = (failure.stage.startswith(("preview", "start", "import")) and net not in (0, None)
+                                and not in_flight)
     if spent_on_a_failed_import:
         print(f"CREDITS LOST: a run that failed at {clean(failure.stage)} ended {net:+d} credits from where it started.",
               flush=True)
