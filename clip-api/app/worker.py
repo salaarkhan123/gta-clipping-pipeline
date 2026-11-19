@@ -30,12 +30,13 @@ from .models import Account, Clip, Job, Upload, WebhookDelivery, new_id, utcnow
 from .pipeline import Deadline, PipelineError, PipelineOptions, Timer, run_pipeline
 from .pipeline.tools import RenderOptions, run_export, run_find, run_render
 from .exports import export_items, finish_export, new_export_id
-from .pipeline.stt import provider_for
-from .pipeline.transcribe import FasterWhisperTranscriber, Transcriber, Transcript, in_language
+from .pipeline.heard import Heard
+from .pipeline.stt import complete, extract_audio, provider_for
+from .pipeline.transcribe import FasterWhisperTranscriber, Transcriber, in_language
 from .pipeline.translate import detect_language, run_text_job, transcript_language, translate_captions
 from .pipeline.visual import FastembedClip
 from .security import is_public_https_url
-from .storage import get_storage, transcript_key, vindex_key
+from .storage import get_storage, transcript_key, transcript_parts_key, vindex_key
 
 log = logging.getLogger("clipapi.worker")
 
@@ -111,6 +112,59 @@ def spoken_language(upload_id: str, asked: str | None, has_audio: bool, src: Pat
             db.get(Upload, upload_id).language = found
             db.commit()
     return found, found is not None
+
+
+def timing_words(transcriber):
+    """The transcriber that makes a stored whole transcript: the same model, timing every word."""
+    timed = getattr(transcriber, "timing_words", None)
+    return timed() if timed is not None else transcriber
+
+
+def _read_json(storage, key: str, dest: Path) -> dict | None:
+    if not storage.exists(key):
+        return None
+    storage.fetch(key, dest)
+    try:
+        return json.loads(dest.read_text())
+    finally:
+        dest.unlink(missing_ok=True)
+
+
+def _read_parts(storage, upload_id: str, work: Path) -> dict | None:
+    """The stored pieces, or None. They are only a saving: a file that cannot be read is treated as missing."""
+    try:
+        return _read_json(storage, transcript_parts_key(upload_id), work / "transcript-parts.json")
+    except ValueError:
+        log.warning("unreadable transcript pieces for %s; transcribing again", upload_id)
+        return None
+
+
+def load_heard(storage, upload_id: str, language: str, work: Path) -> tuple[Heard, dict | None]:
+    """(U1) What this upload already has transcribed in `language`: its whole transcript and the pieces earlier
+    clip jobs transcribed. Also returns the whole transcript as stored (None when there is none)."""
+    whole = _read_json(storage, transcript_key(upload_id), work / "transcript.json")
+    parts = _read_parts(storage, upload_id, work)
+    try:
+        return Heard.load(language, whole, parts), whole
+    except (KeyError, TypeError, ValueError):
+        log.warning("malformed transcript pieces for %s; transcribing again", upload_id)
+        return Heard.load(language, whole, None), whole
+
+
+def save_parts(storage, upload_id: str, heard: Heard, work: Path) -> None:
+    """Add the pieces this job transcribed to the ones stored for the upload. The stored file is read again first,
+    so pieces another job saved meanwhile are kept (a piece lost to a race is only transcribed again later).
+    Keeping them is only a saving for later jobs, so a failure here never fails the job."""
+    if not heard.added:
+        return
+    try:
+        stored = Heard.load(heard.language, None, _read_parts(storage, upload_id, work))
+        for p in heard.added:
+            stored.add(p.start, p.end, p.model, p.transcript)
+        (work / "transcript-parts.json").write_text(json.dumps(stored.parts_doc()))
+        storage.put(transcript_parts_key(upload_id), work / "transcript-parts.json")
+    except Exception:
+        log.exception("could not keep the transcript pieces of %s", upload_id)
 
 
 def default_embedder():
@@ -286,14 +340,12 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
         if tool in ("transcript", "summary"):
             # (languages, agent F) The whole video's transcript (stored once per upload, shared with Video Finder),
             # its translation, or its summary.
-            tkey, cached = transcript_key(upload_id), None
-            if storage.exists(tkey):
-                storage.fetch(tkey, work / "transcript.json")
-                cached = json.loads((work / "transcript.json").read_text())
-            tr = indexer or transcriber
+            tkey = transcript_key(upload_id)
+            heard, cached = load_heard(storage, upload_id, language or "en", work)
+            tr = timing_words(indexer or transcriber)
             stt = provider_for(s.transcription_provider, tr, s.transcribe_chunk_sec, s.transcribe_parallel)
             new_t, result = run_text_job(tool, src, video_sec, language, target, cached, stt, languages.translator(ai),
-                                         languages.summarizer(ai), work / "out", progress, deadline, detected)
+                                         languages.summarizer(ai), work / "out", progress, deadline, detected, heard)
             if new_t is not None:
                 (work / "transcript.json").write_text(json.dumps(new_t))
                 storage.put(tkey, work / "transcript.json")
@@ -331,12 +383,10 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             query, max_results = options.pop("query"), options.pop("max_results")
             make_clips, clip_length = options.pop("make_clips"), options.pop("clip_length")
             mode = options.pop("mode", "auto")
-            tkey, vkey, cached_t, cached_v = transcript_key(upload_id), vindex_key(upload_id), None, None
-            if storage.exists(tkey):
-                storage.fetch(tkey, work / "transcript.json")
-                cached_t = json.loads((work / "transcript.json").read_text())
-                if transcript_language(cached_t) != (language or "en"):
-                    cached_t = None                 # (languages) made in another language: transcribe again
+            tkey, vkey, cached_v = transcript_key(upload_id), vindex_key(upload_id), None
+            heard, cached_t = load_heard(storage, upload_id, language or "en", work)
+            if cached_t is not None and transcript_language(cached_t) != (language or "en"):
+                cached_t = None                     # (languages) made in another language: transcribe again
             if storage.exists(vkey):
                 import numpy as np
                 storage.fetch(vkey, work / "vindex.npz")
@@ -346,8 +396,8 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 src, query, max_results, make_clips, clip_length,
                 RenderOptions(caption_font=s.caption_font, **options), work / "out", progress, transcriber,
                 deadline, cached_t, mode=mode, embedder=embedder, vindex=cached_v, indexer=indexer,
-                provider=provider_for(s.transcription_provider, indexer or transcriber, s.transcribe_chunk_sec,
-                                      s.transcribe_parallel))
+                provider=provider_for(s.transcription_provider, timing_words(indexer or transcriber),
+                                      s.transcribe_chunk_sec, s.transcribe_parallel), heard=heard)
             # Keep both indexes so later searches on this upload skip the expensive part.
             if new_t is not None:
                 new_t.update(language=language or "en", language_detected=detected)
@@ -359,22 +409,38 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 storage.put(vkey, work / "vindex.npz")
         else:
             opts = PipelineOptions(caption_font=s.caption_font, source_lang=language, target_lang=target,
-                                   moment_layout=s.provisional_layouts, **options)   # (render, agent B)
+                                   moment_layout=s.provisional_layouts, quality_floor=s.clip_quality_floor,
+                                   **options)   # (render, agent B; U4 quality floor)
             # The pipeline's judge takes (text, frame, context); the AI client takes (text, context, frame).
             extra = ({"judge": lambda text, frame, ctx: ai.clip_meta(text, {**ctx, **lang_ctx}, frame),
                       "fast_transcriber": indexer} if ai is not None else {})
-            # A transcript this upload already has (Video Finder made one) replaces the rough pass.
-            saved = None
-            if ai is not None and indexer is not None and storage.exists(transcript_key(upload_id)):
-                storage.fetch(transcript_key(upload_id), work / "transcript.json")
-                saved = json.loads((work / "transcript.json").read_text())
-                if transcript_language(saved) != (language or "en"):
-                    saved = None                    # (languages) made in another language: not reused
-            if saved is not None:
-                extra["transcript"] = Transcript(words=[tuple(w) for w in saved.get("words", [])],
-                                                 segments=[(x["start"], x["end"], x["text"]) for x in saved.get("segments", [])])
+            if ai is not None and s.llm_pass and hasattr(ai, "propose_moments"):
+                extra["proposer"] = ai.propose_moments          # (U3) reads the whole transcript, when there is one
+            if ai is not None and hasattr(ai, "rewrite_hook"):  # (U4) a hook that repeats another clip's is rewritten
+                extra["hook_writer"] = lambda text, taken, ctx: ai.rewrite_hook(text, taken, {**ctx, **lang_ctx})
+            # (U1) What this upload already has transcribed (a whole transcript, pieces of earlier clip jobs) is read
+            # instead of transcribed again, and what this job transcribes is kept for the next one.
+            heard, whole = load_heard(storage, upload_id, language or "en", work)
+            if (s.transcribe_whole and has_audio and (indexer or transcriber) is not None
+                    and (whole is None or transcript_language(whole) != (language or "en"))):
+                progress("transcribing", 5)
+                # One decode gives the WAV for the whole transcript and the loudness the pipeline needs.
+                with timer.stage("audio_signal"):
+                    audio = extract_audio(src, work / "source-audio.wav", deadline)
+                stt = provider_for(s.transcription_provider, timing_words(indexer or transcriber),
+                                   s.transcribe_chunk_sec, s.transcribe_parallel)
+                with timer.stage("transcribe_whole"):
+                    doc = complete(heard, audio.path, video_sec, stt, work, deadline,
+                                   lambda k, m: progress("transcribing", 5 + int(20 * k / m)))
+                timer.count("transcribed_whole_sec", round(sum(min(p.end, video_sec) - p.start for p in heard.added), 1))
+                doc.update(language=language or "en", language_detected=detected)
+                (work / "transcript.json").write_text(json.dumps(doc))
+                storage.put(transcript_key(upload_id), work / "transcript.json")
+                heard, _ = load_heard(storage, upload_id, language or "en", work)     # the whole one, then the pieces
+                extra["source_audio"] = audio
             results = pipeline(src, opts, work / "out", progress, transcriber, deadline, timer=timer,
-                               on_clip=lambda r: save_clip(r, r.index), **extra)
+                               on_clip=lambda r: save_clip(r, r.index), transcript=heard, **extra)
+            save_parts(storage, upload_id, heard, work)
 
         progress("uploading", 99)
         for i, r in enumerate(results, 1):          # tools that hand their clips over at the end
@@ -514,6 +580,7 @@ def sweep_expired() -> int:
                                                   Upload.id.not_in(active_uploads)).limit(200)).scalars():
             storage.delete(up.storage_key)
             storage.delete(transcript_key(up.id))
+            storage.delete(transcript_parts_key(up.id))
             storage.delete(vindex_key(up.id))
             up.deleted_at = now
             n += 1

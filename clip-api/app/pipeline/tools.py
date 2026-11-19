@@ -18,8 +18,10 @@ from .censor import mask, mask_words
 from .edit import remap_words
 from .facecam import resolve_facecam
 from .render import CHAT_REGIONS, render_clip, render_thumb
-from .stt import LocalProvider, extract_audio
+from .stt import LocalProvider
 from .transcribe import Transcriber, Transcript, extract_wav
+from .translate import whole_transcript
+from .heard import model_of
 from .visual import build_visual_index, search_visual
 
 log = logging.getLogger("clipapi.tools")
@@ -268,11 +270,12 @@ def run_find(src: Path, query: str, max_results: int, make_clips: bool, clip_len
              options: RenderOptions, out_dir: Path, progress_cb=None, transcriber: Transcriber | None = None,
              deadline: Deadline | None = None, transcript: dict | None = None, mode: str = "auto",
              embedder=None, vindex: dict | None = None, indexer: Transcriber | None = None,
-             provider=None):
+             provider=None, heard=None):
     """Search an upload by what was said (transcript) and what is on screen (CLIP frame index).
 
     mode: "auto" uses whatever is available, "speech" or "visual" require that one.
-    Pass cached `transcript` / `vindex` to skip rebuilding them.
+    Pass cached `transcript` / `vindex` to skip rebuilding them, and `heard` (heard.Heard) so a new transcript
+    reuses the pieces earlier jobs transcribed.
     Returns (clips, result, new_transcript_or_None, new_vindex_or_None).
     """
     progress = progress_cb or (lambda stage, pct: None)
@@ -289,16 +292,9 @@ def run_find(src: Path, query: str, max_results: int, make_clips: bool, clip_len
             progress("transcribing", 5)
             # Decode the audio once, then let the provider transcribe the whole file (chunks cut at quiet points,
             # several at once where the machine allows). Default: the local model, one chunk at a time.
-            stt = provider or LocalProvider(tr)
-            audio = out_dir / "source-audio.wav"
-            try:
-                t = stt.transcribe_file(extract_audio(src, audio, deadline).path, out_dir, deadline,
-                                        lambda k, m: progress("transcribing", 5 + int(35 * k / m)))
-            finally:
-                audio.unlink(missing_ok=True)
-            transcript = new_t = {"duration": round(info.duration, 3),
-                                  "segments": [{"start": s, "end": e, "text": x} for s, e, x in t.segments],
-                                  "words": [[s, e, w] for s, e, w in t.words]}
+            # Only what earlier jobs on this upload did not transcribe (`heard`) is transcribed now.
+            transcript = new_t = whole_transcript(src, info.duration, provider or LocalProvider(tr), out_dir, deadline,
+                                                  lambda k, m: progress("transcribing", 5 + int(35 * k / m)), heard)
         elif mode == "speech":
             if not info.has_audio:
                 raise PipelineError("no_audio", "This video has no audio track to search.")
@@ -345,7 +341,10 @@ def run_find(src: Path, query: str, max_results: int, make_clips: bool, clip_len
     clips = []
     if make_clips and picked:
         layout, facecam = _layout(src, info, options, deadline)
-        all_words = [tuple(w) for w in (transcript or {}).get("words", [])]
+        # Captions are the caption model's words: the search transcript's own words only when that model made it.
+        caption_model = model_of(transcriber) if transcriber is not None else None
+        all_words = ([tuple(w) for w in (transcript or {}).get("words", [])]
+                     if (transcript or {}).get("model") == caption_model else [])
         for i, m in enumerate(picked, 1):
             progress("rendering", 70 + int(28 * (i - 1) / len(picked)))
             lead = 3.0 if m["kind"] == "speech" else 5.0
@@ -356,7 +355,7 @@ def run_find(src: Path, query: str, max_results: int, make_clips: bool, clip_len
             if options.captions and info.has_audio:
                 if all_words:
                     words = _relative(all_words, start, end)
-                elif transcriber is not None:   # the search index has no word timings: caption just this clip
+                elif transcriber is not None:   # the caption model did not make the index: caption just this clip
                     words = _relative(transcribe_range(src, start, end, transcriber, out_dir, deadline).words, start, end)
             video, thumb, caps = _render_one(src, info, start, end, i, words, options, layout, facecam,
                                              out_dir, deadline)

@@ -90,9 +90,17 @@ class Settings(BaseSettings):
     stripe_price_scale_month: str = ""
     stripe_price_scale_year: str = ""
 
-    # AI titles, hashtags and virality scores (optional; off when the key is empty)
+    # AI titles, hashtags and the AI rating of each clip (optional; off when the key is empty). The rating is the
+    # model's opinion of the clip, 0-100, never a probability or prediction of views or virality.
     anthropic_api_key: str = ""
     ai_model: str = "claude-haiku-5-5"
+    # (U3) With the AI key and a whole transcript of the upload, an LLM reads the transcript in 5-minute chunks and
+    # proposes moments for the judge (app/pipeline/llm_pass.py). Costs tokens per job (measured in the U3 PR);
+    # false: candidates are nominated from the signals only, as before.
+    llm_pass: bool = True
+    # (U4) Automatic discovery (a clip-length bucket and no clip count): the AI rating (0-100) a moment needs to become
+    # a clip. No quota: a video gets as many clips as it has moments this good, never filler. Tune on tuning videos.
+    clip_quality_floor: int = Field(40, ge=0, le=100)
 
     # Pipeline
     whisper_model: str = "small.en"   # captions. "none" disables transcription and captions
@@ -103,6 +111,11 @@ class Settings(BaseSettings):
     transcription_provider: str = "local"
     transcribe_parallel: int = Field(1, ge=1, le=8)
     transcribe_chunk_sec: int = Field(300, ge=60, le=1800)
+    # Clip Maker transcribes the whole recording first (with word timings) and keeps it for every later job on the
+    # upload, instead of transcribing candidate windows only. Off by default: on the 4 vCPU droplet the local model
+    # makes a 2-hour job slower (see DEPLOY.md, "Transcription settings"); turn it on with a hosted provider or a
+    # bigger machine.
+    transcribe_whole: bool = False
     # Languages (agent F; app/languages.py). English always uses the two models above, exactly as before. Speech in
     # any other language uses the multilingual model of the same size: empty = worked out from the model above
     # (small.en -> small, base.en -> base). They are public models and are downloaded on first use unless the

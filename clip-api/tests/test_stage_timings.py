@@ -57,8 +57,10 @@ def test_the_judge_path_times_frames_ai_and_the_second_transcription(three_burst
     def judge(text, frame, ctx):
         time.sleep(0.05)
         return {"title": "t", "virality": {"score": 80}}
+    fast = Talker()
+    fast.model_name = "base.en"           # another model: its text is not the caption model's (U1)
     run_pipeline(three_bursts, PipelineOptions(max_clips=1, clip_length=20), tmp_path / "o", transcriber=Talker(), judge=judge,
-                 fast_transcriber=Talker(), timer=timer)
+                 fast_transcriber=fast, timer=timer)
     d = timer.as_dict()
     assert {"judge_frames", "judge_ai", "transcribe_rough", "transcribe_final"} <= set(d["stages"])
     assert d["stages"]["judge_ai"] >= 0.05 and d["counts"]["judged"] == d["counts"]["candidates"] >= 1

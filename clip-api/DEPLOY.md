@@ -58,8 +58,45 @@ uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-cl
   Finder's index today). Leave it at 1 on the 4 vCPU droplet: one model already uses every core. On a machine
   with 8 or more cores try 2 to 4 and compare with `scripts/job_timings.py`. Each extra one adds memory.
 - `TRANSCRIBE_CHUNK_SEC` (default 300): the chunk length.
-- A transcript that Video Finder made for an upload is reused by Clip Maker for its first, rough pass, so that
-  pass costs nothing on the second job. Captions are still made by the caption model.
+- **One transcript per upload (U1).** Every job on an upload reads what earlier jobs transcribed and keeps what
+  it transcribes, so nothing is transcribed twice:
+  - `transcripts/<upload>.json` is the whole transcript (Video Finder, Transcripts, Summaries, whole mode below):
+    segments, words with start and end, the model that made it. Speakers appear only when the provider identified
+    them; the local Whisper models do not, so there are none (never guessed).
+  - `transcripts/<upload>.parts.json` keeps the pieces a Clip Maker job transcribed (its candidate windows).
+    A re-run on the same upload reads them instead of transcribing again; Video Finder or a transcript job later
+    transcribes only the rest. A whole transcript only exists once all of it was transcribed, so Video Finder's
+    pricing (which checks for one) is unchanged.
+  - A rough pass (what the judge reads) takes text from any model; captions only from the caption model's own
+    text. Both files go with the upload at retention and takedown.
+- `TRANSCRIBE_WHOLE` (default `false`): Clip Maker transcribes the whole recording first, with word timings, and
+  every candidate reads it. Off by default because the local model makes a 2-hour job slower on the droplet
+  (numbers in the U1 PR); turn it on with a hosted provider or a bigger machine. It helps only with the AI judge
+  (without one, candidates are transcribed by the caption model anyway).
+- `LLM_PASS` (default `true`, U3): with `ANTHROPIC_API_KEY` set and a whole transcript of the upload (whole mode
+  above, or an earlier Video Finder or transcript job), the AI reads the transcript in 5-minute chunks (1 minute
+  overlap, 8 at a time) and proposes moments; the judge rates them mixed with the strongest signal windows, the
+  same number of candidates as before. Without a whole transcript, or when the AI fails (3 tries per chunk,
+  60 s each, 150 s for the whole pass), candidates come from the signals exactly as before. A job's counts
+  show what happened: `llm_chunks`, `llm_chunks_failed`, `llm_tokens_in`, `llm_tokens_out`, `llm_pass_skipped`,
+  `llm_pass_failed`. `false` turns it off. **U1's transcript reuse and this pass only run with
+  `TRANSCRIBE_WHOLE=true`**: set it in the Step 2 deploy, or make it the default once hosted transcription lands
+  (the local model is the bottleneck on CPU).
+- `CLIP_QUALITY_FLOOR` (default 40, U4): with a clip-length bucket and no clip count (automatic discovery), a moment
+  becomes a clip only when the AI rates it at least this (0-100; an ordinary clip is about 50). There is no quota: a
+  long video gets as many clips as it has moments this good, at most 50, and none becomes filler; a job with none is
+  `no_moments` and refunded. Tune it on the tuning videos only.
+
+## Moment signals (U2)
+
+- Moments are scored per second from loudness (`audio`, 0.7), how fast the sound changes (`audio_flux`, 0.35) and
+  laughter-like bursts (`audio_bursts`, 0.35), plus on-screen chat motion when a chat region is set. The two new
+  signals come from the loudness decode (one ffmpeg process, two outputs), so audio is still decoded once; they
+  add about 17 CPU-seconds per 2-hour video for their FFTs. `pipeline/timeline.py` has them.
+- `scene` (picture change between key frames) is built but off (weight 0): it costs a key-frame decode.
+- Standby: a candidate whose picture stands still with nobody talking for 90% of its seconds never becomes a clip
+  (starting-soon and BRB screens, an empty chair, a menu left open). Each clip records `features.standby`, the
+  share. It decodes only the key frames inside each candidate.
 
 ## Provisional layouts
 
