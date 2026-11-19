@@ -38,6 +38,10 @@ log = logging.getLogger("clipapi.media")
 router = APIRouter()
 ALLOWED_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi", ".flv", ".ts"}
 ACTIVE = ("QUEUED", "RUNNING")
+# A clip job started from a link waits (WAITING, stage "importing") until its import has stored the video; the
+# import then queues it or refunds it (app/url_clips.py). WAITING jobs are never claimed by a worker.
+WAITING = "WAITING"
+IN_FLIGHT = (WAITING, *ACTIVE)
 
 
 RANGE_SLACK = 1.0      # a range may end this many seconds past the video (players round the length up); it is clipped
@@ -257,6 +261,9 @@ def job_json(db: Session, job: Job, with_clips: bool = True) -> dict:
            "credits_reserved": job.credits_reserved, "credits_charged": job.credits_charged,
            "error": {"code": job.error_code, "message": job.error_message} if job.error_code else None,
            "created_at": iso(job.created_at), "finished_at": iso(job.finished_at), "expires_at": iso(job.expires_at)}
+    if (job.options or {}).get("link"):              # started from a link: the import it waits for or came from
+        from .url_clips import link_json
+        out["import"] = link_json(db, job)
     if with_clips:
         storage = get_storage()
         clips = db.execute(select(Clip).where(Clip.job_id == job.id, Clip.deleted_at.is_(None))
@@ -317,20 +324,37 @@ def submit_job(db: Session, p: Principal, upload_id: str, webhook_url: str | Non
 
     upload = own_upload(db, p, upload_id)
     options, processed_sec, cost = plan(upload)
+    job = open_job(db, p, upload.id, options, processed_sec, cost, webhook_url, idempotency_key)
+    db.commit()
+    return job_json(db, job, with_clips=False)
 
-    active = db.execute(select(func.count()).select_from(Job).where(      # premium thumbnails (thm_) have their own cap
-        Job.account_id == p.account.id, Job.status.in_(ACTIVE), ~Job.id.startswith("thm_", autoescape=True))).scalar_one()
-    if active >= s.max_concurrent_jobs_per_account:
+
+def active_jobs(db: Session, account_id: str) -> int:
+    """Jobs of this account waiting or running. An import started for a link clip job is not counted: the clip
+    job it feeds is, so a clip from a link counts once."""
+    rows = db.execute(select(Job.id, Job.options).where(Job.account_id == account_id,
+                                                        Job.status.in_(IN_FLIGHT))).all()
+    return sum(1 for _id, options in rows if not (options or {}).get("chained") and not _id.startswith("thm_"))
+
+
+def open_job(db: Session, p: Principal, upload_id: str, options: dict, processed_sec: float, cost: int,
+             webhook_url: str | None, idempotency_key: str | None, status: str = "QUEUED",
+             stage: str | None = None) -> Job:
+    """Check the account's room and the day's capacity, add the job and reserve its credits (`reserve:<job_id>`).
+    The caller holds the account lock and commits. 402 (everything in the transaction rolled back) when the
+    balance is short."""
+    s = get_settings()
+    if active_jobs(db, p.account.id) >= s.max_concurrent_jobs_per_account:
         raise ApiError(429, "too_many_jobs", "Wait for a running job to finish before starting another.")
 
     day_start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     used_sec = db.execute(select(func.coalesce(func.sum(Job.duration_sec), 0)).where(
-        Job.created_at >= day_start, Job.status.in_(("QUEUED", "RUNNING", "SUCCEEDED")))).scalar_one()
+        Job.created_at >= day_start, Job.status.in_((*IN_FLIGHT, "SUCCEEDED")))).scalar_one()
     if (used_sec + processed_sec) / 60 > s.daily_minutes_cap:
         raise ApiError(503, "capacity", "The service is at capacity for today. Try again tomorrow.")
 
-    job = Job(id=new_id("job"), account_id=p.account.id, upload_id=upload.id, options=options,
-              duration_sec=processed_sec, credits_reserved=cost, webhook_url=webhook_url,
+    job = Job(id=new_id("job"), account_id=p.account.id, upload_id=upload_id, options=options,
+              duration_sec=processed_sec, credits_reserved=cost, webhook_url=webhook_url, status=status, stage=stage,
               idempotency_key=idempotency_key, expires_at=utcnow() + timedelta(days=s.retention_days))
     db.add(job)
     db.flush()
@@ -340,8 +364,7 @@ def submit_job(db: Session, p: Principal, upload_id: str, webhook_url: str | Non
         db.rollback()
         raise ApiError(402, "insufficient_credits",
                        f"This job needs {e.cost} credits and you have {e.balance}.") from None
-    db.commit()
-    return job_json(db, job, with_clips=False)
+    return job
 
 
 @router.post("/v1/uploads", status_code=201)
@@ -409,21 +432,27 @@ def list_uploads(limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge
     return {"uploads": [upload_json(u) for u in rows]}
 
 
+def price_clips(options: ClipOptions, duration_sec: float, has_audio: bool = True,
+                analyzed: bool = False) -> tuple[dict, float, int]:
+    """The one price of a clip job: (stored options, seconds processed, credits reserved) for `options` on a video
+    this long. POST /v1/clips, its quote, the link preview's estimate and POST /v1/clips/from-url all use it."""
+    if not has_audio and options.chat_region == "none":
+        raise ApiError(422, "no_signal",
+                       "This video has no audio track. Set chat_region so on-screen chat can be used.")
+    check_span(options, duration_sec)
+    basis = {}
+    if analyzed and get_settings().charge_once_per_upload:   # already paid for once: charge only what is rendered
+        cost = credits_for(rerun_seconds(options, duration_sec))     # the worst case is reserved
+        basis = {"charge_basis": "rendered"}           # and the job settles on the seconds it rendered
+    else:
+        cost = credits_for(duration_sec)
+    return {"tool": "clips", **basis, **with_tuning(options.model_dump())}, duration_sec, cost
+
+
 def clip_plan(body: "ClipRequest"):
     """What POST /v1/clips stores, processes and reserves for `body` (submit_job's `plan`)."""
     def plan(upload: Upload):
-        if not upload.has_audio and body.options.chat_region == "none":
-            raise ApiError(422, "no_signal",
-                           "This video has no audio track. Set chat_region so on-screen chat can be used.")
-        check_span(body.options, upload.duration_sec)
-        s = get_settings()
-        basis = {}
-        if upload.analyzed and s.charge_once_per_upload:   # already paid for once: charge only what is rendered
-            cost = credits_for(rerun_seconds(body.options, upload.duration_sec))     # the worst case is reserved
-            basis = {"charge_basis": "rendered"}           # and the job settles on the seconds it rendered
-        else:
-            cost = credits_for(upload.duration_sec)
-        return {"tool": "clips", **basis, **with_tuning(body.options.model_dump())}, upload.duration_sec, cost
+        return price_clips(body.options, upload.duration_sec, upload.has_audio, bool(upload.analyzed))
     return plan
 
 
@@ -469,9 +498,15 @@ def cancel_job(job_id: str, p: Principal = Depends(current_principal), db: Sessi
                      .with_for_update()).scalar_one_or_none()
     if not job:
         raise ApiError(404, "not_found", "No such job.")
-    if job.status == "QUEUED":
+    if job.status == WAITING:
+        from .url_clips import cancel_waiting
+        cancel_waiting(db, job)         # refunded now; its import is stopped when nothing else waits for it
+    elif job.status == "QUEUED":
         job.status, job.finished_at = "CANCELED", utcnow()
         ledger.settle(db, job, success=False)
+        if job.id.startswith("imp_"):
+            from .url_clips import resolve
+            resolve(db, job)            # link clip jobs waiting for this import: cancelled and refunded
     elif job.status == "RUNNING":
         job.cancel_requested = True  # the worker stops at the next stage boundary and refunds
     db.commit()

@@ -97,7 +97,7 @@ def _take_down(db, storage, upload: Upload, dry_run: bool) -> Removed:
     jobs = db.execute(select(Job).where(Job.upload_id == upload.id).order_by(Job.created_at)
                       .with_for_update()).scalars().all()
     for job in jobs:
-        if job.status == "QUEUED":
+        if job.status in ("QUEUED", "WAITING"):            # WAITING: a link clip job waiting for its import
             out.cancelled.append((job.id, job.credits_reserved))
             if not dry_run:
                 job.status, job.finished_at = "CANCELED", now

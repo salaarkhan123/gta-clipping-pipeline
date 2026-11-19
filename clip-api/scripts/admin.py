@@ -6,7 +6,7 @@
   grant EMAIL CREDITS [--note TEXT]             add (or with a negative number, remove) credits
   balance EMAIL                                 show balance and recent ledger rows
   suspend EMAIL / unsuspend EMAIL               block or unblock an account
-  stuck                                         list QUEUED/RUNNING jobs
+  stuck                                         list WAITING/QUEUED/RUNNING jobs
   send-test-email --to ADDRESS                  send one email through the configured SMTP (exit 2: not configured, 1: failed)
   selftest                                      load every model and tool once (run in the worker container)
   db-status                                     schema revision and differences from the models (read-only)
@@ -226,7 +226,7 @@ def main() -> None:
             db.commit()
             print(f"{account.email}: {account.status}")
         elif args.cmd == "stuck":
-            jobs = db.execute(select(Job).where(Job.status.in_(("QUEUED", "RUNNING"))).order_by(Job.created_at)).scalars()
+            jobs = db.execute(select(Job).where(Job.status.in_(("WAITING", "QUEUED", "RUNNING"))).order_by(Job.created_at)).scalars()
             for j in jobs:
                 print(f"{j.id} {j.status:8} stage={j.stage} progress={j.progress} created={j.created_at:%m-%d %H:%M} "
                       f"heartbeat={j.heartbeat_at}")

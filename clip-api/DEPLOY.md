@@ -213,8 +213,16 @@ reads metadata only, is free, and stores nothing except a log line (`clipapi.ing
 are capped at 10 a minute per account and 15 seconds each; answers are cached in memory for 5 minutes per link.
 `IMPORTS_ENABLED=false` switches it off too.
 
+`POST /v1/clips/from-url {url, consent: true, options}` does both steps in one call: it reserves the quoted
+credits on a clip job (status `WAITING`, stage `importing`), queues a normal import (logged the same way), and
+when the import has stored the video the worker queues the clip job in the same transaction. A failed or
+cancelled import refunds the job. If a worker dies between the two, the worker's one-minute sweep finishes or
+refunds the job; `python scripts/admin.py stuck` lists `WAITING` jobs too. Contract: `docs/CONTRACTS.md`,
+"URL clipping".
+
 - **Switch imports off:** set `IMPORTS_ENABLED=false` and restart `api` and `worker`. New imports are refused
-  with "upload the file instead"; imports already queued fail the same way. Uploads keep working.
+  with "upload the file instead"; imports already queued fail the same way (and the link clip jobs waiting for
+  them are refunded). Uploads keep working.
 - **Caps** (defaults in brackets): `IMPORT_MAX_BYTES` (8 GB), `IMPORT_MAX_DURATION_SEC` (6 hours),
   `IMPORT_TIMEOUT_SEC` (1800, the whole download). The upload limits (`MAX_UPLOAD_BYTES`, `MAX_DURATION_SEC`,
   `MIN_DURATION_SEC`) apply too; the lower value wins.
