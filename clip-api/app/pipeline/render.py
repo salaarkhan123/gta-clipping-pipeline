@@ -289,7 +289,7 @@ def hook_window(length: float, position: str = "beginning", ms: int | None = Non
 def text_track(path: Path, words, *, src_w: int, src_h: int, vertical: bool, zoom: float, chat: str,
                plan: LayoutPlan | None, aspect: str, font: str, style: str, position: str = "auto",
                accent: str | None = None, hook: str | None = None,
-               hook_at: tuple[float, float] | None = None) -> int:
+               hook_at: tuple[float, float] | None = None, game: str | None = None) -> int:
     """Write the clip's captions and hook (an ASS file) for the frame render_clip draws: `plan` when reframing
     with one, the classic layout when reframing without one, the source's own frame when not reframing.
     Returns the number of captions. scripts/caption_checks.py measures exactly this file."""
@@ -308,7 +308,7 @@ def text_track(path: Path, words, *, src_w: int, src_h: int, vertical: bool, zoo
                                     top if vertical and plan is None else None, k)
     # Always written for the 1080 canvas: the subtitle renderer scales it to whatever size the clip is.
     return build_ass(words, path, vertical, top, font, style, play=(ow, oh), hook=hook, hook_top=under,
-                     span=span, center=center, accent=accent, hook_at=hook_at)
+                     span=span, center=center, accent=accent, hook_at=hook_at, game=game)
 
 
 def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, src_h: int,
@@ -320,12 +320,13 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
                 plan: LayoutPlan | None = None, resolution: str | None = None, preview: bool = False,
                 position: str = "auto", accent: str | None = None, camera: str | None = None,
                 split_ratio: float | None = None, hook_position: str = "beginning",
-                hook_ms: int | None = None) -> None:
+                hook_ms: int | None = None, game: str | None = None) -> None:
     """Cut [start, end] from src and render it. `words` are clip-relative (start, end, text) or empty.
 
     `style` is a caption style from captions.CAPTION_STYLES. For "impact", `position` ("auto", "seam", "lower",
     "center") is where the caption sits and `accent` (#RRGGBB) the keyword's colour; the other styles ignore
-    both. `camera` ("top" | "bottom") and `split_ratio` (the top panel's share, 0.25 to 0.75) adjust a two-panel
+    both; `game` (a templates.GAMES id) adds that game's terms to the words impact emphasises. `camera`
+    ("top" | "bottom") and `split_ratio` (the top panel's share, 0.25 to 0.75) adjust a two-panel
     layout made here from `layout`; a `plan` already has them.
 
     With `segments` (source seconds, in playing order) those pieces are played back to back instead, and `words`
@@ -355,7 +356,7 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
             length = sum(e - s for s, e in segments) if segments else end - start
             text_track(tmp / "cap.ass", words, src_w=src_w, src_h=src_h, vertical=vertical, zoom=zoom, chat=chat,
                        plan=plan, aspect=aspect, font=font, style=style, position=position, accent=accent,
-                       hook=hook, hook_at=hook_window(length, hook_position, hook_ms) if hook else None)
+                       hook=hook, hook_at=hook_window(length, hook_position, hook_ms) if hook else None, game=game)
             cap_filter = f"ass=filename={tmp / 'cap.ass'}"
             if style == "impact":
                 # The renderer is handed our own font file, so the text never depends on what the machine has

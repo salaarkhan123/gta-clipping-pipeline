@@ -99,6 +99,8 @@ def test_one_or_two_words_at_a_time_and_a_third_only_when_all_three_are_short():
     assert lines("damn that clutch") == ["DAMN THAT", "CLUTCH"]               # 14 characters: the third waits
     assert lines("no way, bro. run!") == ["NO WAY", "BRO", "RUN!"]            # punctuation ends a caption and is dropped
     assert lines("he is gone now", pauses=(2,)) == ["HE IS", "GONE NOW"]      # so does a pause
+    # A slow speaker: no word waits on screen more than IMPACT_LEAD before it is said.
+    assert lines("set me for it", length=0.42, gap=0.0) == ["SET ME", "FOR IT"]
     for text in ("a b c d e f g", "supercalifragilistic is a word I know", "it is what it is and that is that"):
         for chunk in C.group_impact(timed(text)):
             assert 1 <= len(chunk) <= 3
@@ -109,14 +111,24 @@ def test_one_or_two_words_at_a_time_and_a_third_only_when_all_three_are_short():
     assert [len(c) for c in narrow] == [1, 1]
 
 
-def test_the_keyword_is_the_longest_word_that_is_not_a_stop_word():
+def test_the_keyword_is_a_number_a_name_a_game_term_an_exclamation_or_else_the_longest_word():
     assert C.keyword(["I", "JUST", "FOUND"]) == 2
     assert C.keyword(["THE", "ULTIMATE"]) == 1
     assert C.keyword(["I", "JUST"]) is None and C.keyword(["OH", "NO"]) is None and C.keyword([]) is None
     assert C.keyword(["I'M", "SO", "JEALOUS"]) == 2 and C.keyword(["DON’T", "MOVE"]) == 1
     assert C.keyword(["DAMN", "GAME"]) == 0                                    # equal length: the first
-    assert C.keyword(["RUN!", "NOW"]) == 0 and C.keyword(["100", "KILLS"]) == 1 and C.keyword(["!!!"]) is None
+    assert C.keyword(["RUN!", "NOW"]) == 0 and C.keyword(["!!!"]) is None
     assert {"the", "i'm", "just", "don't"} <= C.STOP_WORDS and not {"game", "money", "today"} & C.STOP_WORDS
+    # In order: a number, a name, a game term, a word said with "!", then the longest word.
+    assert C.keyword(["absolutely", "100", "kills"]) == 1 and C.keyword(["thirty", "eliminations"]) == 0
+    assert C.keyword(["absolutely", "Shroud"], [False, True]) == 1
+    assert C.keyword(["absolutely", "clutched", "headshot"]) == 2
+    assert C.keyword(["absolutely", "move!"]) == 1
+    assert C.keyword(["absolutely", "spike"]) == 0 and C.keyword(["absolutely", "spike"], game="valorant") == 1
+    assert C.keyword(["f***ing", "car"]) == 1                                  # a masked swear never is
+    names = C.proper_names([(0, 1, "Then"), (1, 2, "Lamar"), (2, 3, "said."), (3, 4, "Where"), (4, 5, "I"),
+                            (5, 6, "went")])
+    assert names == [False, True, False, False, False, False]                  # not a sentence's first word, not "I"
 
 
 def test_the_ass_file_upper_case_bundled_font_size_outline_shadow_and_one_keyword_per_caption(tmp_path):
@@ -135,13 +147,19 @@ def test_the_ass_file_upper_case_bundled_font_size_outline_shadow_and_one_keywor
     shadow = next(line for line in text.splitlines() if line.startswith("Style: CapShadow,"))
     assert "&HFF000000,&HFF000000,&HFF000000,&H50000000" in shadow and shadow.endswith(f",1,11,{m.shadow},5,0,0,0,1")
     caps, shadows = events(tmp_path / "i.ass"), events(tmp_path / "i.ass", "CapShadow")
-    assert n == len(caps) == len(shadows) == 5
-    assert [shown(e[9]) for e in caps] == ["OH  NO", "I  JUST  FOUND", "THE  ULTIMATE", "MONEY  GLITCH", "TODAY"]
-    assert [shown(e[9]) for e in shadows] == [shown(e[9]) for e in caps]
-    lime = "{\\c&H3CFFB8&}"
-    assert [e[9].count(lime) for e in caps] == [0, 1, 1, 1, 1]                 # one keyword at most, none among stop words
-    assert lime + "FOUND{\\c&HFFFFFF&}" in caps[1][9] and lime + "ULTIMATE" in caps[2][9] and lime + "GLITCH" in caps[3][9]
-    assert lime + "TODAY" in caps[4][9]
+    assert n == 5 and len(caps) == len(shadows) == len(words) == 10          # one event pair per word said
+    lines = [shown(e[9]) for e in caps]
+    assert list(dict.fromkeys(lines)) == ["OH  NO", "I  JUST  FOUND", "THE  ULTIMATE", "MONEY  GLITCH", "TODAY"]
+    assert [shown(e[9]) for e in shadows] == lines
+    assert [e[4] for e in caps] == [f"w{i}" for i in range(10)]               # each marks the word being said ...
+    assert [e[1] for e in caps] == [C.ass_time(s) for s, _, _ in words]      # ... from the moment it is said
+    lime = "\\c&H3CFFB8&"
+    assert [e[9].count(lime) for e in caps] == [0, 0, 1, 1, 1, 1, 1, 1, 1, 1]  # one keyword at most, none among stop words
+    assert lime + "\\1a&H00&\\fscx" in caps[4][9] and caps[4][9].endswith("FOUND")
+    # The word being said grows in; the words not said yet are see-through; said ones are solid.
+    first = caps[2][9]                                                         # "I" of "I JUST FOUND"
+    assert first.count("\\t(0,90,") == 1 and first.count("\\1a" + C.UPCOMING) == 2
+    assert caps[4][9].count("\\1a" + C.UPCOMING) == 0 and caps[4][9].count("\\t(0,90,") == 1
     for cap, sh in zip(caps, shadows):
         assert (cap[1], cap[2]) == (sh[1], sh[2]) and "\\blur" in sh[9] and "\\c&" not in sh[9]
         assert "\\pos(540," in cap[9] and "\\q2" in cap[9] and "\\fscx100\\fscy100" in cap[9]
@@ -153,7 +171,7 @@ def test_the_ass_file_upper_case_bundled_font_size_outline_shadow_and_one_keywor
 
     C.build_ass(words, tmp_path / "red.ass", True, 0, "DejaVu Sans", "impact", accent="#FF4D6D")
     red = events(tmp_path / "red.ass")
-    assert "{\\c&H6D4DFF&}FOUND" in red[1][9] and "\\c&H3CFFB8&" not in (tmp_path / "red.ass").read_text()
+    assert "\\c&H6D4DFF&" in red[4][9] and red[4][9].endswith("FOUND") and "\\c&H3CFFB8&" not in (tmp_path / "red.ass").read_text()
     assert f"\\pos(540,{round(0.70 * 1920 - (C.ANTON_ASCENT - C.ANTON_DESCENT - C.ANTON_CAP) / 2 * m.em)})" in red[0][9]
     with pytest.raises(ValueError):
         C.build_ass(words, tmp_path / "bad.ass", True, 0, "DejaVu Sans", "impact", accent="lime")
@@ -179,13 +197,14 @@ def test_a_caption_never_runs_off_the_frame_long_words_are_drawn_smaller(tmp_pat
         assert len(caps) >= 5
         for e in caps:
             texts = shown(e[9]).split(C.WORD_GAP)
-            pct = int(re.search(r"\\t\(0,\d+,\\fscx(\d+)", e[9]).group(1))
+            pct = int(re.search(r"\\q2\\fscx(\d+)", e[9]).group(1))
+            big = int(re.search(r"\\t\(0,\d+,\\fscx(\d+)", e[9]).group(1))      # the word being said, grown
             letters = C.impact_width(texts, m.em) - 2 * m.outline
-            assert letters * pct / 100 + 2 * m.outline <= room + 0.5, (play, texts)     # inside the width it is centred in
+            assert letters * big / 100 + 2 * m.outline <= room + 0.5, (play, texts)     # inside the width it is centred in
             assert pct == 100 or len(texts) == 1                                # only a single long word is ever shrunk
             assert f"\\pos({round((span[0] + span[1]) / 2 * play[0])}," in e[9]
         if play[1] > play[0]:
-            assert any("\\fscx100" not in e[9].split("\\t(")[1] for e in caps)  # the 34-letter word was
+            assert any("\\q2\\fscx100" not in e[9] for e in caps)               # the 34-letter word was
         assert all("\\N" not in e[9] and "\\q2" in e[9] for e in caps)          # one line, never wrapped
 
 
