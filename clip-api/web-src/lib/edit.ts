@@ -1,4 +1,5 @@
 import { api, API, ApiError, getToken } from "./api";
+import CONTRACT from "./api-contract.json";
 import { deadAir } from "./deadair";
 
 // An edit of one clip, as the editor keeps it. Every time is in seconds of the SOURCE video, so an edit means the
@@ -16,7 +17,12 @@ export type Edit = { trim: { start: number; end: number }; cuts: Span[]; caption
   options: Record<string, unknown> };
 export type Word = { start: number; end: number; text: string };
 
-export const forApi = (e: Edit) => ({ trim: e.trim, cuts: e.cuts, caption_lines: e.caption_lines, hook_text: e.hook_text, options: e.options });
+// An edit carries only the look options the API's edit takes (lib/api-contract.json `edit_options`, checked against
+// the API by clip-api/tests/test_web_contract.py); any other name is a 422. Clip-time options such as tighten,
+// punch_zoom or flash_forward stay on the job that made the clip.
+const EDIT_OPTIONS = new Set<string>(CONTRACT.edit_options);
+export const editOptions = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => EDIT_OPTIONS.has(k)));
+export const forApi = (e: Edit) => ({ trim: e.trim, cuts: e.cuts, caption_lines: e.caption_lines, hook_text: e.hook_text, options: editOptions(e.options) });
 
 export const round = (t: number) => Math.round(t * 100) / 100;
 // The shortest clip the editor lets the trim make: the API's shortest clip.

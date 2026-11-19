@@ -103,4 +103,3 @@ export const clock = (s: number) => {
   const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${m}:${String(sec).padStart(2, "0")}`;
 };
-export const FREE_CREDITS = 100; // keep in sync with FREE_SIGNUP_CREDITS on the server

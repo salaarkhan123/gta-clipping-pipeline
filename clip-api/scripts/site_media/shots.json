@@ -1,0 +1,69 @@
+{
+ "about": "Shot list for make_site_media.py. `moment` is a rank (or a list of ranks) from the engine's scout of that source, best = 1; each rank is one candidate. Sections captions, reframe, templates and setup need a `variant`. Defaults: layout auto (facecam detected), impact captions, an 8 s loop from the clip's start.",
+ "shots": [
+  {"section": "hero-long-video", "label": "The long video", "source": "tgg", "moment": [1, 2], "kind": "source", "duration": "source"},
+  {"section": "hero-long-video", "label": "The long video", "source": "xqc", "moment": [1], "kind": "source", "duration": "source"},
+
+  {"section": "hero-vertical-clips", "label": "GTA VI", "source": "tgg", "moment": [1, 2, 3]},
+  {"section": "hero-vertical-clips", "label": "GTA VI", "source": "xqc", "moment": [1, 2, 3]},
+  {"section": "hero-vertical-clips", "label": "Fortnite", "source": "ninja", "moment": [1, 2, 3]},
+  {"section": "hero-vertical-clips", "label": "Valorant", "source": "timmy", "moment": [1, 2, 3]},
+  {"section": "hero-vertical-clips", "label": "Forza Horizon 5", "source": "forza", "moment": [1, 2, 3]},
+  {"section": "hero-vertical-clips", "variant": "wide", "label": "Forza Horizon 5 (16:9)", "source": "forza", "moment": 1, "options": {"aspect": "16:9"}, "rating_from": "forza-m1"},
+
+  {"section": "captions", "variant": "plain", "label": "No captions (words for a live overlay)", "source": "xqc", "moment": 1, "options": {"captions": false}, "words_from": "impact"},
+  {"section": "captions", "variant": "impact", "label": "Impact", "source": "xqc", "moment": 1, "options": {"caption_style": "impact"}, "words": true},
+  {"section": "captions", "variant": "pop", "label": "Pop", "source": "xqc", "moment": 1, "options": {"caption_style": "pop"}},
+  {"section": "captions", "variant": "bold", "label": "Bold", "source": "xqc", "moment": 1, "options": {"caption_style": "bold"}},
+  {"section": "captions", "variant": "neon", "label": "Neon", "source": "xqc", "moment": 1, "options": {"caption_style": "neon"}},
+  {"section": "captions", "variant": "boxed", "label": "Boxed", "source": "xqc", "moment": 1, "options": {"caption_style": "boxed"}},
+  {"section": "captions", "variant": "clean", "label": "Clean", "source": "xqc", "moment": 1, "options": {"caption_style": "clean"}},
+  {"section": "captions", "variant": "bounce", "label": "Bounce", "source": "xqc", "moment": 1, "options": {"caption_style": "bounce"}},
+  {"section": "captions", "variant": "karaoke", "label": "Karaoke", "source": "xqc", "moment": 1, "options": {"caption_style": "karaoke"}},
+  {"section": "captions", "variant": "reveal", "label": "Reveal", "source": "xqc", "moment": 1, "options": {"caption_style": "reveal"}},
+  {"section": "captions", "variant": "outline", "label": "Outline", "source": "xqc", "moment": 1, "options": {"caption_style": "outline"}},
+  {"section": "captions", "variant": "subtitle", "label": "Subtitle", "source": "xqc", "moment": 1, "options": {"caption_style": "subtitle"}},
+  {"section": "captions", "variant": "tag", "label": "Tag", "source": "xqc", "moment": 1, "options": {"caption_style": "tag"}},
+
+  {"section": "reframe", "variant": "original", "label": "Original 16:9", "source": "forza", "moment": 1, "kind": "source", "boxes": ["split2", "full", "pip", "screen_first"]},
+  {"section": "reframe", "variant": "full", "label": "Fill", "source": "forza", "moment": 1, "options": {"layout": "full", "captions": false, "facecam_region": null}},
+  {"section": "reframe", "variant": "split2", "label": "Facecam split", "source": "forza", "moment": 1, "options": {"layout": "split2", "captions": false}},
+  {"section": "reframe", "variant": "pip", "label": "Picture in picture", "source": "forza", "moment": 1, "options": {"layout": "pip", "captions": false}},
+  {"section": "reframe", "variant": "screen_first", "label": "Screen first", "source": "forza", "moment": 1, "options": {"layout": "screen_first", "captions": false}},
+
+  {"section": "hook", "label": "Hook text over the opening", "source": "ninja", "moment": [1, 2], "hook": "WAIT FOR IT"},
+  {"section": "hook", "label": "Hook text over the opening", "source": "timmy", "moment": [1], "hook": "WAIT FOR IT"},
+
+  {"section": "editor", "label": "Transcript editor", "source": "xqc", "moment": [1, 5, 10], "words": true, "seconds": 15},
+
+  {"section": "clip-finding", "label": "Found moment", "source": "timmy", "moment": [2, 3], "kind": "source", "seconds": 10},
+  {"section": "clip-finding", "label": "Found moment", "source": "forza", "moment": [2, 3], "kind": "source", "seconds": 10},
+  {"section": "clip-finding", "label": "Found moment", "source": "ninja", "moment": [2, 3], "kind": "source", "seconds": 10},
+
+  {"section": "templates", "variant": "gta-rp-reaction", "label": "GTA RP reaction", "source": "xqc", "moment": 1, "template": "gta-rp-reaction", "seconds": 6},
+  {"section": "templates", "variant": "gta-online-chaos", "label": "GTA Online chaos", "source": "xqc", "moment": 1, "template": "gta-online-chaos", "seconds": 6},
+  {"section": "templates", "variant": "car-chase", "label": "Car chase", "source": "xqc", "moment": 1, "template": "car-chase", "seconds": 6},
+  {"section": "templates", "variant": "heist-moments", "label": "Heist moments", "source": "xqc", "moment": 1, "template": "heist-moments", "seconds": 6},
+  {"section": "templates", "variant": "funny-fails", "label": "Funny fails", "source": "xqc", "moment": 1, "template": "funny-fails", "seconds": 6},
+  {"section": "templates", "variant": "gta5-street-race", "label": "GTA street race", "source": "xqc", "moment": 1, "template": "gta5-street-race", "seconds": 6},
+  {"section": "templates", "variant": "valorant-clutch", "label": "Valorant clutch", "source": "timmy", "moment": 1, "template": "valorant-clutch", "seconds": 6},
+  {"section": "templates", "variant": "fortnite-build-fight", "label": "Fortnite build fight", "source": "ninja", "moment": 1, "template": "fortnite-build-fight", "seconds": 6},
+  {"section": "templates", "variant": "racing-gameplay", "label": "Racing", "source": "forza", "moment": 1, "template": "racing-gameplay", "seconds": 6},
+
+  {"section": "setup", "variant": "source-16x9", "label": "Source preview", "source": "tgg", "moment": 1, "kind": "source", "output": "still", "size": [1280, 720]},
+  {"section": "setup", "variant": "strip-16x9", "label": "Filmstrip", "source": "tgg", "moment": 1, "kind": "source", "output": "strip", "size": [160, 90], "frames": 10},
+  {"section": "setup", "variant": "layout-full", "label": "Full", "source": "forza", "moment": 1, "output": "still", "size": [270, 480], "options": {"layout": "full", "captions": false, "facecam_region": null}},
+  {"section": "setup", "variant": "layout-fit", "label": "Fit", "source": "forza", "moment": 1, "output": "still", "size": [270, 480], "options": {"layout": "fit", "captions": false}},
+  {"section": "setup", "variant": "layout-split2", "label": "Split 2", "source": "forza", "moment": 1, "output": "still", "size": [270, 480], "options": {"layout": "split2", "captions": false}},
+  {"section": "setup", "variant": "layout-screen_first", "label": "Screen first", "source": "forza", "moment": 1, "output": "still", "size": [270, 480], "options": {"layout": "screen_first", "captions": false}},
+  {"section": "setup", "variant": "layout-pip", "label": "PiP", "source": "forza", "moment": 1, "output": "still", "size": [270, 480], "options": {"layout": "pip", "captions": false}},
+  {"section": "setup", "variant": "layout-gameplay_a", "label": "Gameplay A", "source": "forza", "moment": 1, "output": "still", "size": [270, 480], "options": {"layout": "gameplay_a", "captions": false}},
+  {"section": "setup", "variant": "layout-gameplay_b", "label": "Gameplay B", "source": "forza", "moment": 1, "output": "still", "size": [270, 480], "options": {"layout": "gameplay_b", "captions": false}},
+  {"section": "setup", "variant": "layout-classic", "label": "Classic", "source": "forza", "moment": 1, "output": "still", "size": [270, 480], "options": {"layout": "classic", "captions": false}},
+  {"section": "setup", "variant": "hook-1", "label": "Hook background", "source": "tgg", "moment": 1, "output": "still", "size": [270, 480], "options": {"layout": "full", "captions": false}},
+  {"section": "setup", "variant": "hook-2", "label": "Hook background", "source": "timmy", "moment": 2, "output": "still", "size": [270, 480], "options": {"layout": "full", "captions": false}},
+  {"section": "setup", "variant": "hook-3", "label": "Hook background", "source": "forza", "moment": 1, "output": "still", "size": [270, 480], "options": {"layout": "full", "captions": false}},
+  {"section": "setup", "variant": "hook-4", "label": "Hook background", "source": "ninja", "moment": 1, "output": "still", "size": [270, 480], "options": {"layout": "full", "captions": false}},
+  {"section": "setup", "variant": "caption-bg", "label": "Caption tile background", "source": "xqc", "moment": 1, "kind": "source", "output": "still", "size": [320, 200], "vf": ",eq=brightness=-0.08"}
+ ]
+}

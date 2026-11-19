@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
+import { ComingSoonBadge } from "@/components/ComingSoonBadge";
 import { Icon } from "@/components/dash/Icon";
 import { ProjectGrid } from "@/components/dash/ProjectCard";
 import { useDash } from "@/components/dash/Shell";
@@ -13,8 +14,8 @@ import { isBuilt, ToolEntry, TOOLS } from "@/lib/tools";
 
 const RECENT = 10;
 // One literal per class: Tailwind finds classes by reading the source, so a class may not be split across strings.
-const HERO = "w-[min(100%,560px)] rounded-16 border border-solid border-[rgba(184,255,60,.16)] px-6 py-[26px] text-center narrow:px-4 narrow:py-5 [background:radial-gradient(ellipse_at_15%_0%,rgba(184,255,60,.22),transparent_60%),radial-gradient(ellipse_at_95%_110%,rgba(60,240,255,.16),transparent_55%),repeating-linear-gradient(115deg,transparent_0_22px,rgba(255,255,255,.018)_22px_44px),#0b0f0c]";
-const TILE = "relative grid w-full cursor-pointer content-start justify-items-center gap-2 rounded-12 border-0 bg-transparent px-[2px] py-[6px] text-center text-text [font:inherit]";
+const HERO = "grid w-[min(100%,760px)] justify-items-center pt-6 text-center narrow:pt-2";
+const TILE = "relative grid w-full cursor-pointer content-start justify-items-center gap-[10px] rounded-16 border-0 bg-transparent px-[2px] pb-2 pt-[6px] text-center text-text [font:inherit]";
 const BADGE = "absolute left-[calc(50%+10px)] top-0 rounded-full border border-solid px-[7px] py-px font-body text-[10px] font-bold leading-[1.5]";
 
 // Home: one input for a link or a file, the tools, and the latest projects.
@@ -27,7 +28,7 @@ function Home() {
   const [projects, setProjects] = useState<any[] | null>(null);
   const [pending, setPending] = useState<File | null>(null);
   const chooser = useVideoChooser(projects);
-  const open = (id: string) => router.push(`/dashboard/project/?id=${id}`);
+  const open = (id: string, query = "") => router.push(`/dashboard/project/?id=${id}${query}`);
 
   const load = useCallback(() => api("/v1/projects").then((r) => setProjects(r.projects)).catch(fail), [fail]);
   useEffect(() => { load(); setPending(takePendingFile()); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -46,28 +47,28 @@ function Home() {
   }, [projects === null, query]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="mx-auto grid w-full max-w-home justify-items-center gap-11 pt-[18px] narrow:gap-8 narrow:pt-1">
+    <div className="mx-auto grid w-full max-w-home grid-cols-[minmax(0,1fr)] justify-items-center gap-12 pt-[18px] narrow:gap-9 narrow:pt-1">
       <h1 className="sr-only">Home</h1>
       <section className="grid w-full justify-items-center gap-[22px]" aria-label="Start a project">
         <div className={HERO}>
-          <p className="font-display text-[24px] font-bold leading-[1.2] narrow:text-[20px]">Drop the stream. <span className="text-lime">Keep the clutch.</span></p>
-          <p className="mt-[6px] text-[14px] text-soft">Ranked clips with your facecam and captions, ready to post.</p>
+          <p className="font-display text-[44px] font-semibold leading-[1.08] tracking-[-0.03em] narrow:text-[30px]">Drop the stream. Keep the clutch.</p>
+          <p className="mt-3 text-[17px] text-muted narrow:text-[15px]">One long VOD in, ranked clips out, with your facecam, captions and an AI rating on each.</p>
         </div>
         <SourceBar onUploaded={open} pending={pending} />
       </section>
 
       <section aria-labelledby="tools-title" className="w-full">
         <h2 id="tools-title" className="sr-only">Tools</h2>
-        <ul className="mx-auto grid max-w-[720px] list-none grid-cols-6 gap-x-2 gap-y-[18px] narrow:grid-cols-4 narrow:gap-x-1 narrow:gap-y-4">
+        <ul className="mx-auto grid max-w-[760px] list-none grid-cols-6 gap-x-2 gap-y-[18px] narrow:grid-cols-4 narrow:gap-x-1 narrow:gap-y-4">
           {TOOLS.map((t) => {
             const built = isBuilt(t, on);
             const body = <>
-              <span className={`grid h-[52px] w-[52px] place-items-center rounded-full border border-solid transition-[border-color,color,background,transform] duration-200 ease-[ease] narrow:h-12 narrow:w-12 ${built
-                ? "border-line bg-card text-text group-hover:-translate-y-[2px] group-hover:border-lime group-hover:bg-lime-wash group-hover:text-lime"
+              <span className={`grid h-14 w-14 place-items-center rounded-16 border border-solid transition-[border-color,color,background,transform] duration-200 ease-[ease] narrow:h-12 narrow:w-12 ${built
+                ? "border-line-soft bg-card text-text group-hover:-translate-y-[2px] group-hover:border-[rgba(255,255,255,.22)] group-hover:bg-card-2"
                 : "border-dashed border-line bg-transparent text-dim"}`}><Icon name={t.icon} size={22} /></span>
               <span className={`max-w-[11ch] font-body text-[13px] font-medium leading-[1.25] narrow:text-[12px] ${built ? "" : "text-muted"}`}>{t.name}</span>
               {built ? t.badge === "new" && <small className={`${BADGE} border-[rgba(184,255,60,.35)] bg-[#1c2a0e] text-lime`}>New</small>
-                : <small className={`${BADGE} border-line bg-card-2 text-muted`}>Soon</small>}
+                : <ComingSoonBadge short className="absolute left-[calc(50%+6px)] top-[-4px] bg-bg" />}
             </>;
             return (
               <li key={t.id} className="grid">

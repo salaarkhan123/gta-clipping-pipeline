@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useDash } from "@/components/dash/Shell";
 import { BALANCE, PAGE_HEAD, PAGE_TITLE } from "@/components/dash/ui";
 import { api } from "@/lib/api";
+import { tidy } from "@/lib/templates";
 
 const KINDS: Record<string, string> = { grant: "Credits added", topup: "Credits bought", reserve: "Job started", release: "Refund", adjust: "Adjustment" };
 const UNPAID = ["past_due", "unpaid"];
@@ -13,7 +14,8 @@ export default function Billing() {
   const [history, setHistory] = useState<any[] | null>(null);
   useEffect(() => { api("/v1/credits").then((r) => setHistory(r.history)).catch(fail); }, [fail]);
   const portal = () => api("/v1/billing/portal", { body: {} }).then((r) => { window.location.href = r.portal_url; }).catch(fail);
-  const plan = me.plan[0].toUpperCase() + me.plan.slice(1);
+  // Plan ids carry a version ("pro_v2"): shown as the plan's name ("Pro").
+  const plan = tidy(String(me.plan).replace(/_v\d+$/, ""));
   // Shown only when the account says so (`subscription_status`, `subscription_cancel_at`); an account without
   // those fields shows nothing.
   const ends = typeof me.subscription_cancel_at === "string" && !Number.isNaN(Date.parse(me.subscription_cancel_at)) ? new Date(me.subscription_cancel_at) : null;
