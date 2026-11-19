@@ -180,6 +180,34 @@ def impact_width(texts: list[str], em: float, face: Face | None = None) -> float
     return (letters + IMPACT_SPACING * max(0, len(line) - 1)) * em + 2 * max(2, round(IMPACT_OUTLINE * em))
 
 
+class Word(str):
+    """A caption word's text with what the editor set on it (text-based editing, exports.EditWord): `highlight`, a
+    #RRGGBB colour for this word; `emoji`, drawn after it; `brk`, a new caption starts at this word. Being a str,
+    it rides through the (start, end, text) word lists unchanged (cuts, remapping, masking keep it)."""
+    highlight: str | None = None
+    emoji: str | None = None
+    brk: bool = False
+
+    @classmethod
+    def of(cls, text: str, highlight: str | None = None, emoji: str | None = None, brk: bool = False) -> "Word":
+        w = cls(text)
+        w.highlight, w.emoji, w.brk = highlight, emoji, brk
+        return w
+
+    def like(self, text: str) -> "Word":
+        """Other text, the same marks (a masked swear stays highlighted)."""
+        return Word.of(text, self.highlight, self.emoji, self.brk)
+
+
+EMOJI_FONT = "Noto Emoji"        # app/fonts/NotoEmoji.ttf (SIL OFL 1.1): one colour, drawn in the caption's colour
+EMOJI_FILE = "NotoEmoji.ttf"
+EMOJI_WIDTH = 1.27               # an emoji's advance, in em of the emoji font
+
+
+def _mark(word) -> tuple[str | None, str | None, bool]:
+    return (getattr(word, "highlight", None), getattr(word, "emoji", None), bool(getattr(word, "brk", False)))
+
+
 def _bare_key(text: str) -> str:
     return re.sub(r"[^a-z0-9']", "", text.lower().replace("’", "'")).strip("'")
 
@@ -243,7 +271,7 @@ def group_impact(words, fits=lambda texts: True) -> list[list]:
         if cur:
             prev = cur[-1]
             hard = (w[0] - prev[1] >= PAUSE or prev[2].strip()[-1:] in PUNCT
-                    or w[0] - cur[0][0] > IMPACT_LEAD)
+                    or w[0] - cur[0][0] > IMPACT_LEAD or _mark(w[2])[2] or bool(_mark(prev[2])[1]))
             texts = [impact_text(t) for _, _, t in cur] + [impact_text(w[2])]
             room = len(cur) < 2 or (len(cur) == 2 and sum(len(t) for t in texts) <= IMPACT_SHORT)
             if hard or not room or not fits(texts):
@@ -319,8 +347,14 @@ def build_impact(words, path: Path, vertical: bool, font: str, play: tuple[int, 
         if ci + 1 < len(chunks):
             end = min(end, chunks[ci + 1][0][0])
         texts = [impact_text(t, upper) for _, _, t in chunk]
+        marks = [_mark(t) for _, _, t in chunk]
+        emoji_em = sum(EMOJI_WIDTH + 0.3 for _h, e, _b in marks if e)
+        if emoji_em:            # an emoji is measured as a word of its own width (the caption font has no glyph)
+            texts_w = texts + ["I" * max(1, round(emoji_em / 0.23))]
+        else:
+            texts_w = texts
         # A word too long for the line at full size is drawn smaller, never wrapped and never off the frame.
-        pct = min(100, int(100 * (room - 2 * m.outline) / max(1.0, impact_width(texts, m.em, face) * grow - 2 * m.outline)))
+        pct = min(100, int(100 * (room - 2 * m.outline) / max(1.0, impact_width(texts_w, m.em, face) * grow - 2 * m.outline)))
         # \an5 hangs the line by the middle of the font's whole line; the capitals sit a little under that.
         asc, desc, capr = (face.ascent, face.descent, face.cap) if face else (ANTON_ASCENT, ANTON_DESCENT, ANTON_CAP)
         row = y - (asc - desc - capr) / 2 * m.em * pct / 100
@@ -334,11 +368,13 @@ def build_impact(words, path: Path, vertical: bool, font: str, play: tuple[int, 
             b = chunk[j + 1][0] if j + 1 < len(chunk) else end
             drawn, shadow = [], []
             for n, t in enumerate(texts):
-                colour = accent_on if n == key else white
+                hl, emoji, _brk = marks[n]
+                colour = "\\c" + ass_colour(hl) if hl else accent_on if n == key else white
                 alpha = "\\1a" + (UPCOMING if n > j else "&H00&")
                 size = pop if n == j else back
-                drawn.append(f"{{{colour}{alpha}{size}}}{t}")
-                shadow.append(f"{{{size}}}{t}")
+                tail = f"{{\\fn{EMOJI_FONT}}} {_clean(emoji, False)}{{\\fn{family}}}" if emoji else ""
+                drawn.append(f"{{{colour}{alpha}{size}}}{t}{tail}")
+                shadow.append(f"{{{size}}}{t}{tail}")
             when = f"{ass_time(a)},{ass_time(max(b, a + 0.05))}"
             lines.append(f"Dialogue: 0,{when},CapShadow,,0,0,0,,{{{place}\\blur{m.blur}}}{WORD_GAP.join(shadow)}")
             lines.append(f"Dialogue: 1,{when},Cap,w{i},0,0,0,,{{{place}}}{WORD_GAP.join(drawn)}")
