@@ -620,9 +620,16 @@ def default_picks(out: Path, exclude: set) -> dict:
             for tier in range(max(map(len, seen), default=0)):
                 cands += [v[tier] for v in seen if tier < len(v)]
         if section == "hero-vertical-clips":
-            top = cands[:HERO_CLIPS]
-            if all(c.get("rating_source") == "ai" for c in top):
-                top = sorted(top, key=lambda c: -c["rating"])
+            # Six different games where there are six: each game's best AI-rated clip, best first; then the
+            # best of what is left when there are fewer games.
+            rated = sorted((c for c in cands if c.get("rating_source") == "ai"), key=lambda c: -c["rating"])
+            top, games = [], set()
+            for c in rated:
+                if c.get("game") not in games:
+                    top.append(c)
+                    games.add(c.get("game"))
+            top += [c for c in rated if c not in top]
+            top = sorted(top[:HERO_CLIPS], key=lambda c: -c["rating"]) if len(rated) >= HERO_CLIPS else cands[:HERO_CLIPS]
             cands = top + extra
         pick = {"clips": [c["cid"] for c in cands]}
         if pick["clips"]:
@@ -792,6 +799,7 @@ def judge_hero(work: Path, out: Path, public: Path, model_name: str, section: st
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
             log_path.write_text(json.dumps(calls, indent=1) + "\n")
+    by_cid = read_candidates(cands_path, section)    # again: a render may have added candidates meanwhile
     for cid, (meta, score) in rated.items():
         by_cid[cid].update(rating_raw=score["rating"], rating_source="ai", ai_model=model,
                            ai_scores=score["scores"], scoring_version=score["scoring_version"],

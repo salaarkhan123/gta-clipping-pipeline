@@ -57,6 +57,7 @@
    "rating": 76,
    "rating_source": "signals",
    "credit": "Footage: xQc",
+   "commercial_permission": "owner-confirmed 2026-11-18",
    "source": {
     "id": "xqc",
     "creator": "xQc",
@@ -64,8 +65,7 @@
     "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU",
     "start_sec": 1573.0,
     "end_sec": 1588.0
-   },
-   "commercial_permission": "owner-confirmed 2026-11-18"
+   }
   },
   {
    "id": "editor-3",
@@ -87,6 +87,7 @@
    "rating": 62,
    "rating_source": "signals",
    "credit": "Footage: xQc",
+   "commercial_permission": "owner-confirmed 2026-11-18",
    "source": {
     "id": "xqc",
     "creator": "xQc",
@@ -94,8 +95,7 @@
     "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU",
     "start_sec": 11287.07,
     "end_sec": 11301.46
-   },
-   "commercial_permission": "owner-confirmed 2026-11-18"
+   }
   }
  ]
 }
