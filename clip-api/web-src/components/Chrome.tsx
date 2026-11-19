@@ -142,11 +142,7 @@ export function Footer() {
         <nav aria-label="Legal">
           <h3 className={FOOT_HEAD}>Legal</h3>
           {POLICIES.map((p) => <Link key={p.id} href={p.path} className={FOOT_LINK}>{p.title}</Link>)}
-          <a href="mailto:support@clutchclips.io?subject=Takedown%20request" className={FOOT_LINK}>Takedown requests</a>
-        </nav>
-        <nav>
-          <h4>Legal</h4>
-          {POLICIES.map((p) => <Link key={p.id} href={p.path}>{p.title}</Link>)}
+          <Link href="/takedown/" className={FOOT_LINK}>Report content</Link>
         </nav>
       </div>
       <p className="mx-auto mt-12 max-w-site border-0 border-t border-solid border-line pt-6 text-[13px] text-fg-3">© {new Date().getFullYear()} ClutchClips</p>

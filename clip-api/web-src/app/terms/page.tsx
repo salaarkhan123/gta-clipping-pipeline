@@ -63,8 +63,8 @@ const sections = [
       <li>1 credit is 1 minute of source video, rounded up to the next whole minute. A 2-hour video uses 120 credits.</li>
       <li>The price is shown before you start a job. Starting a job reserves its credits. If the job fails, times out or is cancelled, every
         reserved credit comes back automatically.</li>
-      <li>Tools that analyse a whole video (such as Clip Maker and Video Finder) use 1 credit per minute of the video. Exports, re-renders
-        and tools that render part of a video (such as Reframe and Captions) use 1 credit per started minute they render.</li>
+      <li>Tools that analyse a whole video (such as AI Clipping and Find Moments) use 1 credit per minute of the video. Exports, re-renders
+        and tools that render part of a video (such as AI Reframe and AI Captions) use 1 credit per started minute they render.</li>
       <li>After a video&apos;s first full-price run, later runs on the same upload charge only for the minutes they render. They reserve up to
         the full amount and give back what they did not use.</li>
       <li>Credits don&apos;t expire while your account exists.</li>
