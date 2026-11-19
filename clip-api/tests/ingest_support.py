@@ -4,10 +4,11 @@
 and "private" hosts exist without the internet), and a connection to a checked public address is delivered to
 the local server. A connection to anything that is not a public address fails the test: the import code must
 refuse before it connects.
-`fake_ydl`: a stand-in for yt-dlp's YoutubeDL that records the options it was given.
+`fake_ydl`: yt-dlp's YoutubeDL with its three network seams replaced; it records what it was given.
 """
 import datetime
 import http.server
+import io
 import shutil
 import socket
 import ssl
@@ -21,6 +22,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 from sqlalchemy import update
+from yt_dlp import YoutubeDL as RealYoutubeDL
 
 from app.db import new_session
 from app.ingest import fetch, platforms
@@ -204,41 +206,61 @@ def web(video, tmp_path, monkeypatch):
     server.close()
 
 
-class FakeYDL:
-    """Stands in for yt_dlp.YoutubeDL: records its options, and "downloads" the test video."""
+ONE_FILE = {"format_id": "source", "url": "https://media.test/source.mp4", "ext": "mp4", "height": 360,
+            "vcodec": "avc1.4D401E", "acodec": "mp4a.40.2", "protocol": "https"}
+
+
+class FakeYDL(RealYoutubeDL):
+    """Stands in for yt_dlp.YoutubeDL at its three network seams: the metadata request (extract_info), a segment
+    list (urlopen) and a stream download (dl). Everything else is yt-dlp's own code: the options it is built from
+    and the format selector that picks the streams. It records what it was given and "downloads" the test video."""
     instances: list["FakeYDL"] = []
     video: Path | None = None
     info: dict = {}
+    formats: list[dict] | None = None       # the streams the site lists; default: one file with picture and sound
+    files: dict[str, Path] = {}             # format_id -> the file its download produces (default: the test video)
+    playlists: dict[str, str] = {}          # address -> the text of that segment list
     refuse_extract: str | None = None       # yt-dlp's error text when the site refuses the metadata request
     refuse_download: str | None = None
     report_bytes: int | None = None         # what the progress hook is told has been downloaded
 
     def __init__(self, params: dict):
-        self.params, self.urls = params, []
+        self.given = dict(params)           # yt-dlp normalises some of its options in place
+        super().__init__(params)
+        self.urls, self.opened, self.fetched = [], [], []
         FakeYDL.instances.append(self)
 
-    def extract_info(self, url, download=False):
-        assert download is False
+    def extract_info(self, url, download=True, process=True, **kwargs):
+        assert download is False and process is False      # metadata only, and no format is chosen
         self.urls.append(url)
         if FakeYDL.refuse_extract:
             raise platforms.DownloadError(FakeYDL.refuse_extract)
-        return {"id": "v1", "title": "Ranked grind: part 3 / finale!", "duration": 40.0, "ext": "mp4", **FakeYDL.info}
+        return {"id": "v1", "title": "Ranked grind: part 3 / finale!", "duration": 40.0, "extractor": "twitch:vod",
+                "extractor_key": "TwitchVod", "webpage_url": url,
+                "formats": [dict(f) for f in (FakeYDL.formats or [ONE_FILE])], **FakeYDL.info}
 
-    def process_ie_result(self, info, download=True):
-        assert download is True
+    def urlopen(self, req):
+        self.opened.append(req)
+        if req not in FakeYDL.playlists:
+            raise OSError(f"no such test playlist: {req}")
+        return io.BytesIO(FakeYDL.playlists[req].encode())
+
+    def dl(self, name, info, subtitle=False, test=False):
+        self.fetched.append((Path(name).name, info))
         if FakeYDL.refuse_download:
             raise platforms.DownloadError(FakeYDL.refuse_download)
-        dest = Path(self.params["outtmpl"] % {"ext": "mp4"})
-        shutil.copyfile(FakeYDL.video, dest)
-        size = dest.stat().st_size
+        shutil.copyfile(FakeYDL.files.get(info["format_id"], FakeYDL.video), name)
+        size = Path(name).stat().st_size
         for hook in self.params.get("progress_hooks", []):
             hook({"status": "downloading", "downloaded_bytes": FakeYDL.report_bytes or size, "total_bytes": None})
-        return info
+            hook({"status": "finished", "downloaded_bytes": FakeYDL.report_bytes or size, "total_bytes": size})
+        return True, True
 
 
 @pytest.fixture
 def fake_ydl(video, monkeypatch):
     FakeYDL.instances, FakeYDL.video, FakeYDL.info = [], video, {}
+    FakeYDL.formats, FakeYDL.files, FakeYDL.playlists = None, {}, {}
     FakeYDL.refuse_extract = FakeYDL.refuse_download = FakeYDL.report_bytes = None
     monkeypatch.setattr(platforms, "YoutubeDL", FakeYDL)
     return FakeYDL
