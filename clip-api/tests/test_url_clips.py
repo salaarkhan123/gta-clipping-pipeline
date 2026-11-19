@@ -4,6 +4,7 @@ Every failure path ends in a refund, shown by the ledger: one `reserve:<job>` ro
 job, and the balance back where it started. Platforms come from the yt-dlp stand-in, direct links from the fake
 DNS; no network."""
 import subprocess
+import uuid
 from datetime import timedelta
 
 import pytest
@@ -497,3 +498,26 @@ def test_jobs_that_end_without_a_worker_send_their_webhook(client, user, fake_yd
     job = go(client, headers).json()
     worker.run_once()
     assert job["job_id"] in sent
+
+
+# ---- one account's link work never reaches another (#218) ----
+
+def test_another_account_pasting_the_same_link_gets_its_own_import_job_and_key(client, user, fake_ydl):
+    """B pastes A's link with A's Idempotency-Key: B gets a new job and a new import, never A's stored video, A's
+    job replayed or A's reuse pricing; A's job is a 404 for B."""
+    a, _ = user
+    first = go(client, a, key="same-key").json()
+    worker.run_once()
+    assert worker.run_once(pipeline=no_clips) == "SUCCEEDED"
+    a_upload = get(client, a, first["job_id"])["upload_id"]
+    signed = client.post("/v1/auth/signup", json={"email": f"b{uuid.uuid4().hex[:10]}@example.org",
+                                                  "password": "correct-horse-9"})
+    b = {"Authorization": f"Bearer {signed.json()['token']}"}
+    assert preview(client, b, TWITCH)["estimate"]["basis"] != "rendered"     # B has not analysed this video
+    r = go(client, b, key="same-key")
+    assert r.status_code == 202, r.text
+    job = r.json()
+    assert job["job_id"] != first["job_id"] and (job["import"] or {}).get("reused") is not True
+    assert a_upload not in r.text and first["job_id"] not in r.text
+    assert client.get(f"/v1/jobs/{first['job_id']}", headers=b).status_code == 404
+    assert client.get(f"/v1/uploads", headers=b).json()["uploads"] == []
