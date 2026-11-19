@@ -19,7 +19,10 @@ from app.pipeline.windows import fits, pick_windows
 from tests.test_launch import three_bursts  # noqa: F401  (fixture: 60 s, loud at 10-13, 30-33 and 48-51)
 
 BURSTS = (260, 360, 160, 460, 560, 60)      # where the `long` video is loud, loudest first
-FAST = {"vertical": False, "captions": False, "punch_zoom": False, "tighten": False}
+# Loudness alone ranks these synthetic videos: every tone burst starts the same way, so the U2 sound-change
+# signals rate them alike and "the loudest moment" would no longer be the strongest.
+FAST = {"vertical": False, "captions": False, "punch_zoom": False, "tighten": False,
+        "weights": {"audio_flux": 0, "audio_bursts": 0}}
 
 
 def make_video(path: Path, seconds: int, volume: str, picture: str = "testsrc2=size=320x180:rate=10",
