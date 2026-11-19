@@ -1,12 +1,13 @@
+import { scoreLabel, V1_SCORES, V2_SCORES } from "../../lib/scores.ts";
 // What the results page shows about clips and jobs, worked out from the API's own fields only (GET /v1/projects/{id},
-// clip_json and job_json in app/routes_media.py). No imports, so `node --test` runs it as it is.
+// clip_json and job_json in app/routes_media.py). Its one import is a relative .ts path, so `node --test` runs it as it is.
 
 // ---- AI rating ----------------------------------------------------------------------------------------------
 
 // The five sub-scores of judge v2 (`clip.scores`, app/ai.py SCORES), in the order the AI gives them.
-const V2_PARTS: Record<string, string> = { hook: "Hook", payoff: "Payoff", clarity: "Clarity", emotion: "Emotion", pacing: "Pacing" };
+const V2_PARTS = Object.fromEntries(V2_SCORES.map((k) => [k, scoreLabel(k)]));
 // Judge v1's four (`clip.virality`, app/ai.py PARTS): clips rated before judge v2 carry these instead.
-const V1_PARTS: Record<string, string> = { hook: "Hook", flow: "Flow", value: "Value", trend: "Trend" };
+const V1_PARTS = Object.fromEntries(V1_SCORES.map((k) => [k, scoreLabel(k)]));
 
 export type Part = { key: string; label: string; value: number };
 export type Rating = {
@@ -56,7 +57,7 @@ export function kindsIn(clips: any[]): { kind: string; count: number }[] {
 
 // ---- Sorting and filters --------------------------------------------------------------------------------------
 
-export type Sort = "rating" | "time";
+export type Sort = "rating" | "duration" | "time";
 export type Mark = "all" | "kept" | "liked" | "bookmarked" | "discarded";
 export type View = { sort: Sort; kind: string | null; mark: Mark };
 
@@ -67,11 +68,13 @@ const MARKS: Record<Mark, (c: any) => boolean> = {
 export const MARK_NAMES: Record<Mark, string> = { all: "All", kept: "Kept", liked: "Liked", bookmarked: "Bookmarked", discarded: "Discarded" };
 
 // The best clip first by AI rating. Clips the AI did not rate follow, by the API's own score (how strongly the moment
-// stood out). Ties keep the earlier moment first. "time": where the moment is in the source video.
+// stood out). Ties keep the earlier moment first. "duration": longest clip first (as rendered). "time": where the
+// moment is in the source video.
 const ratingKey = (c: any) => (num(c.display_score) ? c.display_score : -1);
 export function arrange(clips: any[], v: View): any[] {
   const out = clips.filter((c) => MARKS[v.mark](c) && (v.kind === null || c.kind === v.kind));
   if (v.sort === "time") return out.sort((a, b) => a.start_sec - b.start_sec);
+  if (v.sort === "duration") return out.sort((a, b) => lengthOf(b) - lengthOf(a) || a.start_sec - b.start_sec);
   return out.sort((a, b) => ratingKey(b) - ratingKey(a) || (b.score ?? 0) - (a.score ?? 0) || a.start_sec - b.start_sec);
 }
 
