@@ -1,5 +1,5 @@
 "use client";
-import { Credits, Footage, useItem, useWords, Word } from "./Footage";
+import { Credits, Footage, useItem, usePeaks, useWords, Word } from "./Footage";
 import s from "./demos.module.css";
 
 // Dead air out: every clip loses its silences over 0.6 s and its filler words (the `tighten` option, on by default,
@@ -21,6 +21,9 @@ function bitsOf(words: Word[]): Bit[] {
 export function DeadAir({ play }: { play: boolean }) {
   const clip = useItem("editor", "editor-1"), words = useWords("editor", clip);
   const bits = bitsOf(words), span = words.length ? words[words.length - 1].end - words[0].start : 0;
+  // With the clip's own audio levels: its waveform, and the silences that get cut shaded over it.
+  const peaks = usePeaks("editor", clip), len = clip?.duration_sec ?? 0;
+  const silences = words.flatMap((w, i) => (i && w.start - words[i - 1].end >= SILENCE ? [[words[i - 1].end, w.start]] : []));
   return (
     <div className={`${s.demo} flex h-full flex-col justify-center gap-5 narrow:gap-4`} data-play={play}>
       <div className="flex items-center gap-8">
@@ -34,13 +37,23 @@ export function DeadAir({ play }: { play: boolean }) {
         </div>
       </div>
 
-      {/* The clip's timeline from its word timings: speech as blocks, silences as a flat line that closes up. */}
-      <div className="relative flex h-14 items-center rounded-[12px] bg-black/35 px-3 ring-1 ring-white/10" aria-hidden="true">
-        {span > 0 && bits.map((b, i) => "gap" in b
-          ? <span key={i} className={`${s.gap} h-px shrink-0 bg-white/30`} style={{ ["--w" as string]: `${(b.gap / span) * 100}%`, flexBasis: `${(b.gap / span) * 100}%` }} />
-          : <span key={i} className={`h-5 shrink-0 rounded-[3px] border-r border-black/40 ${b.cut ? "bg-white/25" : "bg-lime/80"}`}
-              style={{ flexBasis: `${(Math.max(0.05, b.word.end - b.word.start) / span) * 100}%` }} />)}
-      </div>
+      {peaks && len > 0 ? (
+        <div className="relative h-14 rounded-[12px] bg-black/35 ring-1 ring-white/10" aria-hidden="true">
+          <div className="absolute inset-x-3 inset-y-1 flex items-center gap-px">
+            {peaks.map((p, i) => <span key={i} className="flex-1 rounded-full bg-lime/80" style={{ height: `${Math.max(6, p * 90)}%` }} />)}
+            {silences.map(([a, b]) => <span key={a} className={`${s.strike} absolute inset-y-0 rounded-[6px] bg-[repeating-linear-gradient(135deg,rgba(255,92,122,.4)_0_4px,transparent_4px_8px)] ring-1 ring-danger/60`}
+              style={{ left: `${(a / len) * 100}%`, width: `${((b - a) / len) * 100}%` }} />)}
+          </div>
+        </div>
+      ) : (
+        /* The clip's timeline from its word timings: speech as blocks, silences as a flat line that closes up. */
+        <div className="relative flex h-14 items-center rounded-[12px] bg-black/35 px-3 ring-1 ring-white/10" aria-hidden="true">
+          {span > 0 && bits.map((b, i) => "gap" in b
+            ? <span key={i} className={`${s.gap} h-px shrink-0 bg-white/30`} style={{ ["--w" as string]: `${(b.gap / span) * 100}%`, flexBasis: `${(b.gap / span) * 100}%` }} />
+            : <span key={i} className={`h-5 shrink-0 rounded-[3px] border-r border-black/40 ${b.cut ? "bg-white/25" : "bg-lime/80"}`}
+                style={{ flexBasis: `${(Math.max(0.05, b.word.end - b.word.start) / span) * 100}%` }} />)}
+        </div>
+      )}
       <div className="-mt-2 flex flex-wrap items-center justify-between gap-2">
         <p className="text-[12px] text-white/55">Silences over 0.6 s and filler words come out of every clip. Turn it off per job.</p>
         <Credits items={[clip]} />
