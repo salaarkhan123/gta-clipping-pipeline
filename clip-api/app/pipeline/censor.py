@@ -28,4 +28,4 @@ def mask(word: str) -> str:
 
 def mask_words(words) -> list:
     """Mask the text of (start, end, text) words; times unchanged."""
-    return [(s, e, mask(t)) for s, e, t in words]
+    return [(s, e, t.like(mask(t)) if hasattr(t, "like") else mask(t)) for s, e, t in words]

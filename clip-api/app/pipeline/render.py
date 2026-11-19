@@ -6,7 +6,7 @@ from pathlib import Path
 
 from . import fonts, layouts, placement
 from .fonts import Face
-from .captions import FONT_DIR, HOOK_SECONDS, IMPACT_FILE, IMPACT_FILL, build_ass, impact_size
+from .captions import EMOJI_FILE, FONT_DIR, HOOK_SECONDS, IMPACT_FILE, IMPACT_FILL, build_ass, impact_size
 from .placement import HOOK_ROOM, TEXT_GAP  # noqa: F401 (re-exported: tests import them from here)
 from .ff import SAFE_IN, Deadline, PipelineError, PipelineTimeout, run
 # The geometry lives in layouts.py; these names are re-exported because callers and tests import them from here.
@@ -389,6 +389,8 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
                     raise PipelineError("captions_unavailable", "The caption font is missing on this server.")
                 (tmp / "fonts").mkdir()
                 shutil.copy(font_file, tmp / "fonts" / font_file.name)
+                if any(getattr(w[2], "emoji", None) for w in words or ()):     # (captions) an editor's emoji
+                    shutil.copy(FONT_DIR / EMOJI_FILE, tmp / "fonts" / EMOJI_FILE)
                 cap_filter += f":fontsdir={tmp / 'fonts'}"
         size = output_size(src_w, src_h, vertical, aspect, resolution, preview, max_side)
         # A chosen resolution or a preview is drawn at its own size (sharper above 1080, far less work below it).
