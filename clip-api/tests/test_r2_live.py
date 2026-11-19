@@ -60,6 +60,25 @@ def test_the_site_may_read_signed_links(bucket, tmp_path):
     assert other.headers.get("access-control-allow-origin") is None
 
 
+def test_direct_upload_on_r2(client, user, video, bucket):
+    """The browser's path: signed part PUTs from the site's origin, a wrong-sized part refused, then complete."""
+    store, prefix, rules = bucket
+    headers, account = user
+    up = client.post("/v1/uploads/multipart", json={"filename": "live.mp4", "size_bytes": video.stat().st_size},
+                     headers=headers).json()
+    token = {"upload_token": up["upload_token"]}
+    (part,) = client.post("/v1/uploads/multipart/parts", json=token, headers=headers).json()["parts"]
+    data = video.read_bytes()
+    pre = httpx.options(part["url"], headers={"Origin": ORIGIN, "Access-Control-Request-Method": "PUT"}, timeout=60)
+    assert pre.headers.get("access-control-allow-origin") in (ORIGIN, "*"), "the CORS rules need PUT (DEPLOY.md)"
+    assert httpx.put(part["url"], content=data + b"x", timeout=120).status_code == 403      # size is signed
+    assert httpx.put(part["url"], content=data, headers={"Origin": ORIGIN}, timeout=120).status_code == 200
+    r = client.post("/v1/uploads/multipart/complete", json=token, headers=headers)
+    assert r.status_code in (200, 201), r.text
+    store.delete_prefix(f"uploads/{account['id']}/")
+    assert rules.violations == []
+
+
 def test_migration_and_check_script_on_r2(bucket, tmp_path, capsys):
     store, prefix, rules = bucket
     root = tmp_path / "storage"

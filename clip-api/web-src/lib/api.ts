@@ -1,4 +1,6 @@
 // Thin client for the public ClutchClips API. The website uses the same endpoints customers do.
+import { directUpload } from "./directUpload";
+
 export const API = (process.env.NEXT_PUBLIC_API_URL || "https://api.clutchclips.io").replace(/\/$/, "");
 
 export class ApiError extends Error {
@@ -31,8 +33,39 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   return data as T;
 }
 
-// Upload with progress. The file is sent as the raw request body.
+// Upload with progress: straight to the bucket in resumable parts when the server stores files in one
+// (lib/directUpload.ts), otherwise through the API as one request body.
 export function uploadFile(file: File, onProgress: (fraction: number) => void): { promise: Promise<any>; abort: () => void } {
+  let current = directUpload(file, onProgress, {
+    call: (path, body) => api(path, { body }),
+    put: putPart,
+    error: (code, message) => new ApiError(0, code, message),
+    saved: typeof window === "undefined" ? undefined : window.localStorage,
+  });
+  let cancelled = false;
+  const promise = current.promise.catch((e) => {
+    if (cancelled || !(e instanceof ApiError && e.code === "direct_upload_unavailable")) throw e;
+    current = uploadThroughApi(file, onProgress);
+    return current.promise;
+  });
+  return { promise, abort: () => { cancelled = true; current.abort(); } };
+}
+
+// One part's bytes to its signed URL. Content-Length is part of the signature; the browser sets it from the body.
+function putPart(url: string, body: Blob, onProgress: (loaded: number) => void) {
+  const xhr = new XMLHttpRequest();
+  const promise = new Promise<void>((resolve, reject) => {
+    xhr.open("PUT", url);
+    xhr.upload.onprogress = (e) => onProgress(e.loaded);
+    xhr.onerror = xhr.onabort = () => reject(new Error("part not sent"));
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`part HTTP ${xhr.status}`)));
+    xhr.send(body);
+  });
+  return { promise, abort: () => xhr.abort() };
+}
+
+// The file as the raw request body of POST /v1/uploads (local storage).
+function uploadThroughApi(file: File, onProgress: (fraction: number) => void): { promise: Promise<any>; abort: () => void } {
   const xhr = new XMLHttpRequest();
   const promise = new Promise<any>((resolve, reject) => {
     xhr.open("POST", `${API}/v1/uploads?filename=${encodeURIComponent(file.name)}`);
