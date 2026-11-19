@@ -19,6 +19,7 @@ Three options change what is selected (all optional; without them nothing change
 - `range`: only this part of the source is measured, transcribed and clipped. Clip times stay source times.
 """
 import json
+import logging
 import math
 import time
 from contextlib import nullcontext
@@ -37,8 +38,10 @@ from .timing import Timer
 from .stt import SourceAudio, slice_wav
 from .heard import Heard, model_of
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
-from .timeline import AUDIO as TIMELINE_AUDIO, STANDBY_REJECT, audio_timeline, keyframes, scene_changes, \
-    standby_seconds, wav_timeline
+from .events import EVENT_LEAD, EVENT_TAIL, Banner, BannerReader, available as can_read, event_seconds, game_of
+from .frames import Picture, picture, runs, spans
+from .layouts import FACECAM_REGIONS as CAMERA_PRESETS
+from .timeline import AUDIO as TIMELINE_AUDIO, STANDBY_REJECT, audio_timeline, wav_timeline
 from .transcribe import Transcriber, Transcript, exclamation_hits, extract_wav, in_language, snap_to_speech
 from .edit import FLASH_LEN, KEEP_PAUSE, MAX_REMOVED, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, select_cuts, with_flash_forward, zoom_expr, zoom_peaks
 from .moments import BUCKETS, MAX_CLIPS, NOMINAL, Moment
@@ -47,7 +50,13 @@ from .windows import fits, pick_spread, pick_windows
 
 # Hand-set; the learned ranker replaces these later. The timeline signals (timeline.py) are computed only when their
 # weight is above 0; their defaults come from the U2 check against the labelled tuning moments.
-WEIGHTS = {"chat_motion": 1.0, "audio": 0.7, "audio_flux": 0.35, "audio_bursts": 0.35, "scene": 0.0}
+REACTION_WEIGHT = 0.0                          # set from the tuning check; see the PR
+GAME_EVENT_WEIGHT = 0.7                        # a result banner ("WON", "WASTED", "VICTORY ROYALE") counts like loudness
+WEIGHTS = {"chat_motion": 1.0, "audio": 0.7, "audio_flux": 0.35, "audio_bursts": 0.35, "scene": 0.0,
+           "reaction": REACTION_WEIGHT, "game_event": GAME_EVENT_WEIGHT}
+MENU_PAD = 3                                   # seconds around a menu or shop banner that are not nominated
+DEAD_RUN = 30                                  # seconds: a still or repeated stretch this long is never nominated
+REPEAT_REJECT = 0.9                            # share of a candidate on an already-shown screen at which it is dropped
 TRANSCRIPT_BONUS = 0.15                        # max re-rank bonus from exclamation phrases
 PAD = 4.0                                      # seconds of audio transcribed either side of a candidate
 JUDGE_PAD = 8.0                                # ... when a judge chooses the cut: room to grow a 30 s window to 45 s
@@ -249,6 +258,14 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         timer.count("analysed_sec", round(t1 - t0, 1))
     with timer.stage("facecam_detect"):
         layout, facecam = resolve_facecam(input_path, info, options, deadline)
+    # The picture signals: the key frames are decoded once, in a thread of their own, while the audio is decoded.
+    # The same decode feeds the banner reader (game events, menus), whose OCR also runs in that thread.
+    cam_box = _camera_box(facecam)
+    game = game_of(options.template)
+    reader = BannerReader() if can_read() else None
+    watcher = ThreadPoolExecutor(1)
+    watching = watcher.submit(_watch, input_path, n, base, deadline, cam_box, part, reader, game)
+    watcher.shutdown(wait=False)
 
     # 1. Cheap signals over the analysed part of the source.
     weights = {**WEIGHTS, **(options.weights or {})}
@@ -285,9 +302,20 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
             series[name] = _scored(extra.get(name) or [], n)
         if ranged:      # the edit stage reads loudness by source second: put the measured part back in its place
             db = [SILENT_DB] * base + list(db)
-    if weights.get("scene", 0) > 0:
-        with timer.stage("scene"):
-            series["scene"] = _scored(scene_changes(input_path, deadline, **part), n)
+    with timer.stage("frame_pass"):                # only the wait that is left after the audio decode
+        seen, banners = watching.result()
+    timer.count("frame_pass_sec", round(seen.seconds, 1))
+    timer.count("keyframes", seen.keyframes)
+    if banners:
+        timer.count("game_events", sum(b.kind == "event" for b in banners))
+        timer.count("menu_banners", sum(b.kind == "menu" for b in banners))
+        if weights.get("game_event", 0) > 0 and any(b.kind == "event" for b in banners):
+            series["game_event"] = event_seconds(banners, "event", base, n, EVENT_LEAD, EVENT_TAIL)
+    if seen.keyframes:
+        if weights.get("scene", 0) > 0:
+            series["scene"] = _scored(seen.change.tolist(), n)
+        if weights.get("reaction", 0) > 0 and cam_box is not None:
+            series["reaction"] = _scored(seen.reaction.tolist(), n)
     if not series:
         raise PipelineError("no_signal", "This video has no audio track and no chat region was set, "
                                          "so there is nothing to score moments with.")
@@ -295,6 +323,14 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     total = np.zeros(n)
     for name, vals in series.items():
         total += weights[name] * vals
+    # Long stretches where nothing happens on screen (a starting-soon card, a loading screen) or where a screen
+    # comes back that was shown before (a lobby, a menu, a respawn loop) are not nominated at all, so their
+    # candidate slots go to moments. Shorter ones are judged per candidate below.
+    dead = runs(seen.still > 0, DEAD_RUN) | runs(seen.repeat > 0, DEAD_RUN)
+    dead |= event_seconds(banners, "menu", base, n, MENU_PAD, MENU_PAD) > 0
+    if dead.any() and (total[~dead] > 0).any():
+        total[dead] = 0.0
+        timer.count("dead_sec", int(dead.sum()))
 
     # 2. Candidate windows. Over-generate when we can re-rank with the transcript.
     use_asr = transcriber is not None and info.has_audio
@@ -364,9 +400,12 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
 
     timer.count("candidates", len(candidates))
     # Standby footage (starting-soon and BRB screens, an empty chair, a menu left open) never becomes a clip.
-    with timer.stage("standby"):
-        series["standby"] = np.zeros(n)        # 0/1 per second; known inside the candidates, 0 elsewhere
-        candidates = _without_standby(candidates, input_path, deadline, use_asr, timer, series["standby"], base)
+    series["standby"], series["repeat"] = seen.still.copy(), seen.repeat.copy()      # 0/1 per second, whole part
+    candidates = _without_standby(candidates, seen, base, use_asr, timer, series["standby"])
+    for c in candidates:            # the banners each candidate holds (and the one just after it), for the judge
+        near = [b for b in banners if c.start - 2 <= b.t <= c.end + EVENT_TAIL + 3]
+        if near:
+            c.features["game_events"] = [{"t": round(b.t, 1), "kind": b.kind, "phrase": b.phrase} for b in near]
     if not candidates:
         raise PipelineError("no_moments", "Only standby footage (a still screen with nobody talking) was found in "
                                           "this video.")
@@ -488,36 +527,61 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     return sorted(results, key=lambda r: r.index)
 
 
-def _without_standby(candidates: list[_Candidate], src: Path, deadline, heard_words: bool, timer: Timer,
-                      per_second: np.ndarray | None = None, base: int = 0) -> list[_Candidate]:
-    """The standby contract (shared with the judge and U3): every candidate gets `features.standby_share`, the share
-    of its seconds where the picture stands still and (when it was transcribed) nobody speaks, and
-    `features.standby`, True only at STANDBY_REJECT or more. Those are dropped. `per_second` (second i is source
-    second base + i) gets 1 for every standby second found inside a candidate."""
-    def seconds(c: _Candidate):
-        frames = keyframes(src, c.start, c.end - c.start, deadline)
-        speech = [(s + c.offset, e + c.offset) for s, e, _w in c.transcript.words] if heard_words else None
-        if heard_words and not c.transcript.words:        # no word timings: a segment is speech too
-            speech = [(s + c.offset, e + c.offset) for s, e, _t in c.transcript.segments]
-        return standby_seconds(frames, c.start, c.end, speech)
-
-    with ThreadPoolExecutor(JUDGE_THREADS) as pool:
-        found = list(pool.map(seconds, candidates))
+def _without_standby(candidates: list[_Candidate], seen: Picture, base: int, heard_words: bool, timer: Timer,
+                     standby: np.ndarray) -> list[_Candidate]:
+    """The standby contract (shared with the judge, U3 and captions). Every candidate gets:
+    - `features.standby_share`: the share of its seconds where the picture stands still and (when it was
+      transcribed) nobody speaks; `features.standby`: True only at STANDBY_REJECT or more;
+    - `features.standby_spans`: those seconds as [[start, end], ...] in source seconds;
+    - `features.repeat_share`: the share of its seconds on a screen that was already shown at least two minutes
+      earlier; `features.repeat`: True only at REPEAT_REJECT or more.
+    Candidates with either flag are dropped. `standby` (the per-second series, second i = source second base + i)
+    loses the seconds inside a candidate where someone speaks."""
     kept = []
-    for c, sec in zip(candidates, found):
-        share = 0.0 if sec is None else round(float(sec.mean()), 3)
-        c.features["standby_share"] = share
-        c.features["standby"] = share >= STANDBY_REJECT
-        if sec is not None and per_second is not None:
-            a = int(c.start) - base
-            for k in np.flatnonzero(sec):
-                if 0 <= a + k < len(per_second):
-                    per_second[a + k] = 1.0
+    for c in candidates:
+        a, b = max(0, int(c.start) - base), max(0, int(math.ceil(c.end)) - base)
+        sec = seen.still[a:b] > 0
+        if heard_words and sec.any():
+            said = c.transcript.words or c.transcript.segments        # no word timings: a segment is speech too
+            for s, e, _text in said:
+                lo, hi = int(s + c.offset) - base - a, int(math.ceil(e + c.offset)) - base - a
+                sec[max(0, lo):max(0, hi)] = False
+            standby[a:b] = sec
+        share = round(float(sec.mean()), 3) if len(sec) else 0.0
+        again = round(float((seen.repeat[a:b] > 0).mean()), 3) if b > a else 0.0
+        c.features.update(standby_share=share, standby=share >= STANDBY_REJECT, standby_spans=spans(sec, base + a),
+                          repeat_share=again, repeat=again >= REPEAT_REJECT)
         if c.features["standby"]:
             timer.count("standby_rejected")
+        elif c.features["repeat"]:
+            timer.count("repeat_rejected")
         else:
             kept.append(c)
     return kept
+
+
+def _watch(src: Path, n: int, base: int, deadline, cam, part: dict, reader: BannerReader | None,
+           game: str | None) -> tuple[Picture, list[Banner]]:
+    """The frame thread: the key-frame pass, then the banner reads (OCR of the few strongest)."""
+    seen = picture(src, n, base, deadline, cam=cam, on_frame=reader.on_frame if reader else None, **part)
+    banners: list[Banner] = []
+    if reader is not None and seen.keyframes:
+        try:
+            banners = reader.read(deadline, game)
+        except PipelineTimeout:
+            raise
+        except Exception:      # noqa: BLE001  (game events are an addition: a failed read never fails the run)
+            logging.getLogger("clipapi.pipeline").exception("banner reading failed; continuing without game events")
+    return seen, banners
+
+
+def _camera_box(facecam) -> list[float] | None:
+    """The camera the layout step found or was given, as [x, y, w, h] fractions of the frame; None without one."""
+    if isinstance(facecam, str):
+        facecam = CAMERA_PRESETS.get(facecam)
+    if isinstance(facecam, (list, tuple)) and len(facecam) == 4:
+        return [float(v) for v in facecam]
+    return None
 
 
 def _scored(vals: list[float], n: int) -> np.ndarray:

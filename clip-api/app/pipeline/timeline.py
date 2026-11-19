@@ -2,21 +2,25 @@
 
 Every series has one value per second of the analysed part (value i is source second `start + i`). The pipeline
 scores each against its own rolling baseline (signals.baseline_z) and adds it to the moment score with its weight
-(pipeline.WEIGHTS). A detector with weight 0 is not computed at all, so it costs nothing.
+(pipeline.WEIGHTS). The audio signals come from the loudness decode (this module); the picture signals come from
+one decode of the key frames that runs at the same time (frames.py).
 
 | Signal | Made from | What it measures |
 |---|---|---|
-| audio_flux | the loudness decode (no second decode) | how fast the sound's spectrum changes: impacts, shouts, laughs starting |
+| audio_flux | the loudness decode | how fast the sound's spectrum changes: impacts, shouts, laughs starting |
 | audio_bursts | the loudness decode | loudness pulsing 3 to 7 times a second, the rhythm of laughter |
-| scene | key frames, one every 2 s (an extra decode) | how much the picture changes between key frames |
-| standby | the key frames inside each candidate, and its words | seconds where nothing happens: the picture does not change and nobody speaks (starting-soon and BRB screens, an empty chair, menus left open) |
+| reaction | key frames, inside the camera box the layout step found | how much the streamer moves |
+| scene | key frames | how much the whole picture changes between key frames |
+| standby | key frames, and a candidate's words | 0/1: the picture does not change and nobody speaks (starting-soon and BRB screens, an empty chair, menus left open, loading screens) |
+| repeat | key frames | 0/1: this screen was already shown at least two minutes earlier (a lobby, a menu, a respawn or loading screen coming back) |
 
-A candidate that is standby for STANDBY_REJECT of its seconds or more never becomes a clip (pipeline: its
-`features.standby` is that share). `standby_share` is the one place this is decided; it takes frames from any
-caller, so the thumbnail picker can use the same rule.
+A candidate that is standby for STANDBY_REJECT of its seconds or more never becomes a clip (pipeline:
+`features.standby_share`, `features.standby`); the same for a repeated screen (`features.repeat_share`,
+`features.repeat`). `keyframes` + `standby_share` here answer the standby question for any one window, for callers
+outside the pipeline.
 
-Each detector was checked against the labelled moments of the tuning videos in eval/; the U2 PR has the numbers and
-the detectors that were tried and dropped (voice brightness for shouting, speech rate, GTA HUD colour checks).
+Each detector was checked against the labelled moments of the tuning videos in eval/, and by eye on the game
+videos; the PRs (#154 and the one after it) have the numbers and the detectors that were tried and dropped.
 Overlapping speakers need speaker turns, which no configured provider gives (U1), so there is no such signal.
 """
 import re
@@ -31,8 +35,6 @@ from .ff import SAFE_IN, Deadline, PipelineError, PipelineTimeout
 
 RATE = 8000                     # samples per second of the decoded audio, as signals.audio_rms_db
 AUDIO = ("audio_flux", "audio_bursts")
-FRAMES = ("scene",)
-SCENE_STEP = 2.0                # seconds between the frames the scene signal compares
 STILL = 1.0                     # mean grey-level change (0-255) between key frames below which nothing moved
 STANDBY_REJECT = 0.9            # share of a candidate's seconds that are standby at which it is never a clip
 THUMB_W, THUMB_H = 160, 90      # the size key frames are compared at
@@ -149,22 +151,6 @@ class Features:
         if len(self.rest):
             self.feed(np.zeros(0, np.float32), last=True)
         return self.out
-
-
-def scene_changes(path: Path, deadline: Deadline | None = None, start: float = 0.0,
-                  length: float | None = None) -> list[float]:
-    """How much the picture changes, per second: the mean grey-level difference between key frames SCENE_STEP
-    apart (each value repeated for the seconds it covers)."""
-    from .visual import iter_frames
-    diffs, prev = [], None
-    for batch in iter_frames(path, SCENE_STEP, True, deadline):
-        for frame in batch:
-            g = frame.astype(np.float32).mean(axis=2)
-            diffs.append(0.0 if prev is None else float(np.abs(g - prev).mean()))
-            prev = g
-    per_sec = np.repeat(np.asarray(diffs), int(SCENE_STEP)).tolist()
-    a = int(start)
-    return per_sec[a:] if length is None else per_sec[a:a + int(np.ceil(length))]
 
 
 def keyframes(path: Path, start: float, length: float, deadline: Deadline | None = None) -> list[tuple[float, np.ndarray]]:

@@ -68,11 +68,10 @@ def test_a_signal_with_weight_zero_costs_nothing(video, tmp_path, monkeypatch):
     def no(*a, **k):
         raise AssertionError("decoded for a signal that does not count")
     monkeypatch.setattr(pipeline, "audio_timeline", no)
-    monkeypatch.setattr(pipeline, "scene_changes", no)
     clips = run_pipeline(video, PipelineOptions(max_clips=1, clip_length=10, tighten=False,
                                                 weights={"audio_flux": 0, "audio_bursts": 0}), tmp_path / "o")
     assert clips and set(clips[0].signals) == {"audio"}
-    assert WEIGHTS["scene"] == 0                                            # off by default: an extra frame decode
+    assert WEIGHTS["scene"] == 0
 
 
 def test_the_default_moment_score_uses_the_new_signals(video, tmp_path):
