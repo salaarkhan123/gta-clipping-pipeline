@@ -1,0 +1,101 @@
+{
+ "section": "editor",
+ "version": 1,
+ "permission": "owner-confirmed 2026-11-18",
+ "credits": [
+  {
+   "creator": "xQc",
+   "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU"
+  }
+ ],
+ "items": [
+  {
+   "id": "editor-1",
+   "candidate": "xqc-m1",
+   "label": "Transcript editor",
+   "kind": "video",
+   "src": "editor-1.mp4",
+   "poster": "editor-1.webp",
+   "width": 540,
+   "height": 960,
+   "duration_sec": 14.12,
+   "words": "editor-1.words.json",
+   "game": "GTA VI",
+   "aspect": "9:16",
+   "layout": "auto",
+   "caption_style": "impact",
+   "rank": 1,
+   "rating": 99,
+   "rating_source": "signals",
+   "credit": "Footage: xQc",
+   "source": {
+    "id": "xqc",
+    "creator": "xQc",
+    "title": "xQc Plays GRAND THEFT AUTO VI (Part 1)",
+    "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU",
+    "start_sec": 8790.71,
+    "end_sec": 8804.83
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "editor-2",
+   "candidate": "xqc-m5",
+   "label": "Transcript editor",
+   "kind": "video",
+   "src": "editor-2.mp4",
+   "poster": "editor-2.webp",
+   "width": 540,
+   "height": 960,
+   "duration_sec": 15.0,
+   "words": "editor-2.words.json",
+   "game": "GTA VI",
+   "aspect": "9:16",
+   "layout": "auto",
+   "caption_style": "impact",
+   "rank": 5,
+   "rating": 76,
+   "rating_source": "signals",
+   "credit": "Footage: xQc",
+   "source": {
+    "id": "xqc",
+    "creator": "xQc",
+    "title": "xQc Plays GRAND THEFT AUTO VI (Part 1)",
+    "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU",
+    "start_sec": 1573.0,
+    "end_sec": 1588.0
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "editor-3",
+   "candidate": "xqc-m10",
+   "label": "Transcript editor",
+   "kind": "video",
+   "src": "editor-3.mp4",
+   "webm": "editor-3.webm",
+   "poster": "editor-3.webp",
+   "width": 540,
+   "height": 960,
+   "duration_sec": 14.39,
+   "words": "editor-3.words.json",
+   "game": "GTA VI",
+   "aspect": "9:16",
+   "layout": "auto",
+   "caption_style": "impact",
+   "rank": 10,
+   "rating": 62,
+   "rating_source": "signals",
+   "credit": "Footage: xQc",
+   "source": {
+    "id": "xqc",
+    "creator": "xQc",
+    "title": "xQc Plays GRAND THEFT AUTO VI (Part 1)",
+    "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU",
+    "start_sec": 11287.07,
+    "end_sec": 11301.46
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  }
+ ]
+}
