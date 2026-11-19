@@ -1,6 +1,7 @@
 """All configuration comes from environment variables (see .env.example)."""
 import json
 from functools import lru_cache
+from typing import Literal
 from pathlib import Path
 
 from pydantic import Field
@@ -94,12 +95,23 @@ class Settings(BaseSettings):
     # Pipeline
     whisper_model: str = "small.en"   # captions. "none" disables transcription and captions
     whisper_index_model: str = "base.en"   # full-video search index: smaller and several times faster
-    # Whole-recording transcription. "local" runs the Whisper models above; hosted providers are added with
-    # their adapters. TRANSCRIBE_PARALLEL chunks run at once: leave it at 1 on a 4 vCPU server (one model already
+    # Whole-recording transcription. "local" runs the Whisper models above. "groq", "deepgram" or "assemblyai"
+    # send the audio to that service (app/pipeline/hosted_stt.py; costs money per audio hour, see
+    # docs/transcription/provider-comparison.md) with the local model as the fallback when it fails, times out,
+    # or has no key. TRANSCRIBE_PARALLEL chunks run at once: leave it at 1 on a 4 vCPU server (one model already
     # uses every core) and raise it on a machine with 8 or more (see DEPLOY.md, "Measuring speed").
     transcription_provider: str = "local"
     transcribe_parallel: int = Field(1, ge=1, le=8)
     transcribe_chunk_sec: int = Field(300, ge=60, le=1800)
+    groq_api_key: str = Field("", repr=False)
+    deepgram_api_key: str = Field("", repr=False)
+    assemblyai_api_key: str = Field("", repr=False)
+    groq_model: str = "whisper-large-v3-turbo"        # or whisper-large-v3
+    deepgram_model: str = "nova-3"
+    assemblyai_model: str = "assemblyai-stt-3-7"      # or universal-2
+    assemblyai_region: Literal["us", "eu"] = "us"
+    transcription_timeout_sec: int = Field(900, ge=30, le=7200)    # one hosted attempt at the whole file
+    transcription_diarize: bool = True                             # speaker turns, where the service has them
     # Languages (agent F; app/languages.py). English always uses the two models above, exactly as before. Speech in
     # any other language uses the multilingual model of the same size: empty = worked out from the model above
     # (small.en -> small, base.en -> base). They are public models and are downloaded on first use unless the

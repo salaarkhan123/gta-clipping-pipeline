@@ -95,8 +95,8 @@ def test_provider_stops_at_the_deadline_and_unknown_providers_are_refused(tmp_pa
     time.sleep(0.01)
     with pytest.raises(PipelineTimeout):
         LocalProvider(Counting(), chunk_sec=300).transcribe_file(wav, tmp_path, deadline=gone)
-    with pytest.raises(PipelineError, match="'deepgram' is not available"):
-        provider_for("deepgram", Counting())
+    with pytest.raises(PipelineError, match="'whisperx' is not available"):
+        provider_for("whisperx", Counting())
     assert provider_for("local", None) is None and isinstance(provider_for("local", Counting(), 120, 2), LocalProvider)
     for bad in (0, 9):
         with pytest.raises(ValidationError):

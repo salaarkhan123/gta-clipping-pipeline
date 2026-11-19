@@ -7,7 +7,7 @@
 - `slice_wav` cuts a piece out of that WAV by seeking in the file: no ffmpeg, no second decode.
 - A provider turns the whole WAV into a `Transcript` with absolute times. `LocalProvider` runs the local Whisper
   model over chunks that are cut at quiet points, several at once when the machine has the cores for it.
-  Hosted providers plug in behind the same method.
+  Hosted providers (hosted_stt.py) plug in behind the same method, with the local model as their fallback.
 """
 import re
 import wave
@@ -141,15 +141,25 @@ class LocalProvider:
         return out
 
 
-PROVIDERS = ("local",)      # hosted providers are added here with their adapters
+PROVIDERS = ("local", "groq", "deepgram", "assemblyai")
 
 
-def provider_for(name: str, transcriber: Transcriber | None, chunk_sec: float = 300.0, parallel: int = 1):
-    """The configured provider, or None when there is nothing to transcribe with."""
+def provider_for(name: str, transcriber: Transcriber | None, chunk_sec: float = 300.0, parallel: int = 1,
+                 hosted=None, timer=None):
+    """The configured provider, or None when there is nothing to transcribe with.
+
+    A hosted name (groq, deepgram, assemblyai) with its settings in `hosted` (hosted_stt.HostedConfig) gives that
+    service with the local model behind it (hosted_stt.WithFallback). Without settings, for instance no API key,
+    the local model transcribes, as with "local". An unknown name is an error, so a typo stops the worker at
+    start instead of silently changing what transcribes."""
     if name not in PROVIDERS:
         raise PipelineError("transcription_unavailable",
                             f"Transcription provider '{name}' is not available on this server (available: {', '.join(PROVIDERS)}).")
-    return LocalProvider(transcriber, chunk_sec, parallel) if transcriber is not None else None
+    local = LocalProvider(transcriber, chunk_sec, parallel) if transcriber is not None else None
+    if name == "local" or hosted is None:
+        return local
+    from .hosted_stt import HOSTED, WithFallback
+    return WithFallback(HOSTED[name](hosted), local, timer)
 
 
 def window(full: Transcript, start: float, end: float) -> tuple[Transcript, float]:
