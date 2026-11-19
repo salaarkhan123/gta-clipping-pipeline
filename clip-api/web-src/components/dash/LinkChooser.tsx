@@ -22,6 +22,7 @@ import { useDash } from "./Shell";
 import { BackTitle } from "./ui";
 import { captionStyles, firstStyle, framing } from "./ToolPanel";
 import { ACCEPT, UploadProgress, useUpload } from "./Upload";
+import { importStep } from "@/lib/imports";
 
 type Kind = "clips" | "find" | "captions" | "reframe" | "transcripts" | "summary";
 // POST /v1/imports/preview: always 200; a link it will not import has `supported: false` and a `refusal`. A refusal for
@@ -213,7 +214,7 @@ export function LinkChooser() {
         const ready = await api(`/v1/projects/${job.upload_id}`).then(() => true).catch(() => false);
         if (ready) { router.push(`/dashboard/project/?id=${job.upload_id}`); return; }
       }
-      setStep({ text: STEP[job.stage] || "Getting the video", pct: typeof job.progress === "number" ? job.progress : undefined });
+      setStep({ text: job.import ? importStep(job.import) : STEP[job.stage] || "Getting the video", pct: typeof job.progress === "number" ? job.progress : undefined });
       await new Promise((res) => setTimeout(res, 2000));
       try { job = await api(`/v1/jobs/${job.job_id}`); } catch (e) { setStep(null); fail(e); return; }
     }
@@ -229,7 +230,7 @@ export function LinkChooser() {
     try { imp = await api("/v1/imports", { body: { url, consent: true, ...importRange() } }); }
     catch (e) { setStep(null); if (e instanceof ApiError && e.status === 422) setProblem(e.message); else fail(e); return; }
     while (imp.status === "QUEUED" || imp.status === "RUNNING") {
-      setStep({ text: imp.status === "QUEUED" ? "Waiting to start the import" : imp.stage === "checking" ? "Checking the video" : imp.stage === "storing" ? "Saving the video" : "Downloading the video", pct: imp.progress || 0 });
+      setStep({ text: importStep(imp, "Downloading the video"), pct: imp.progress || 0 });
       await new Promise((r) => setTimeout(r, 2000));
       try { imp = await api(`/v1/imports/${imp.import_id}`); } catch (e) { setStep(null); fail(e); return; }
     }
