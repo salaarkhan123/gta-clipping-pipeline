@@ -153,6 +153,30 @@ def test_delete_content_only_after_a_verified_removal_and_it_removes_every_file(
     assert visible(client, owned) == (False, 404)
 
 
+def test_delete_content_also_removes_the_clean_frame_and_the_thumbnail_gallery(client, mail, admin, owned, tmp_path):
+    """delete_content on a clip leaves no image of it behind: its thumbnail's clean frame (#138) and the files of
+    its other thumbnails (#140) go with the video (Codex, #218)."""
+    from app.models import ClipThumbnail, new_id
+    from app.thumbnails import frame_key_of
+    storage = get_storage()
+    with new_session() as db:
+        clip = db.get(Clip, owned["clip"])
+        frame = frame_key_of(clip.features)
+        thumb_id = new_id("thb")
+        gallery = [f"thumbs/{clip.id}/{thumb_id}.clean.jpg", f"thumbs/{clip.id}/{thumb_id}.jpg"]
+        db.add(ClipThumbnail(id=thumb_id, clip_id=clip.id, account_id=owned["account"]["id"], kind="premium",
+                             style="cinematic", clean_key=gallery[0], image_key=gallery[1], show_text=True))
+        db.commit()
+    (tmp_path / "x.jpg").write_bytes(b"\xff\xd8 not really a jpeg")
+    for key in gallery:
+        storage.put(key, tmp_path / "x.jpg")
+    assert frame and storage.exists(frame) and all(storage.exists(k) for k in gallery)
+    ref, _ = report(client, owned["clip"])
+    decide(client, admin[0], ref, "remove")
+    assert decide(client, admin[0], ref, "delete_content", note="verified").status_code == 200
+    assert not storage.exists(frame) and not any(storage.exists(k) for k in gallery)
+
+
 def test_each_decision_adds_exactly_one_admin_event_with_actor_and_time(client, mail, admin, owned):
     ref, _ = report(client, owned["clip"])
     for action, extra in (("review", {}), ("request_info", {"message": "Which stream?"}), ("note", {"note": "x"}),

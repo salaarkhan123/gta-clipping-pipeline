@@ -23,7 +23,9 @@ from sqlalchemy.orm import Session
 from . import ledger
 from .config import get_settings
 from .models import Account, CaseEvent, CaseTarget, Clip, Export, Job, TrustCase, Upload, utcnow
-from .storage import get_storage, transcript_key, vindex_key
+from .storage import get_storage, transcript_key, transcript_parts_key, vindex_key
+from .thumbnail_jobs import thumbnail_keys
+from .thumbnails import frame_key_of
 
 Action = Literal["review", "request_info", "forward_notice", "disable", "remove", "reject", "withdraw", "restore",
                  "delete_content", "terminate", "note", "close"]
@@ -164,12 +166,16 @@ def delete_files(db: Session, case: TrustCase) -> list[str]:
         if t.kind == "upload":
             up = db.get(Upload, t.target_id)
             if up is not None:
-                keys += [k for k in (up.storage_key, transcript_key(up.id), vindex_key(up.id)) if k]
+                keys += [k for k in (up.storage_key, transcript_key(up.id), transcript_parts_key(up.id),
+                                     vindex_key(up.id)) if k]
         elif t.kind == "clip":
             clip = db.get(Clip, t.target_id)
             if clip is not None:
+                # Every image of the clip too: the thumbnail's clean frame (#138) and its gallery (#140), as the
+                # import takedown (app/ingest/takedown.py) removes them. The expiry sweep skips taken-down clips.
                 keys += [k for k in (clip.video_key, clip.thumb_key, clip.captions_key, clip.preview_key,
-                                     clip.export_key) if k]
+                                     clip.export_key, frame_key_of(clip.features)) if k]
+                keys += thumbnail_keys(db, [clip.id])
                 for ex in db.execute(select(Export).where(Export.clip_id == clip.id,
                                                           Export.storage_key.is_not(None))).scalars():
                     keys.append(ex.storage_key)
