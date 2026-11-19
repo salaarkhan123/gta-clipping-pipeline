@@ -31,11 +31,13 @@ from .pipeline import Deadline, PipelineError, PipelineOptions, Timer, run_pipel
 from .pipeline.tools import RenderOptions, run_export, run_find, run_render
 from .exports import export_items, finish_export, new_export_id
 from .pipeline.stt import provider_for
+from .pipeline.thumbs import canvas_of, write_thumbnail
 from .pipeline.transcribe import FasterWhisperTranscriber, Transcriber, Transcript, in_language
 from .pipeline.translate import detect_language, run_text_job, transcript_language, translate_captions
 from .pipeline.visual import FastembedClip
 from .security import is_public_https_url
 from .storage import get_storage, transcript_key, vindex_key
+from .thumbnails import frame_key_of, words_for
 
 log = logging.getLogger("clipapi.worker")
 
@@ -225,13 +227,28 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
         translation = {"status": None if not target or target == (language or "en")
                        else ("pending" if caption_translator else "not_configured")}
 
+        def titled(r, meta) -> None:
+            """The AI wrote this clip's hook and title after it was rendered: set them on its thumbnail now (the
+            frame was chosen already; only the text is drawn). A thumbnail without text is still a thumbnail."""
+            record = (getattr(r, "features", None) or {}).get("thumbnail") or {}
+            frame, canvas = getattr(r, "frame_path", None), canvas_of(record)
+            text = words_for(meta, options)
+            if not text or record.get("text") or canvas is None or not (frame and frame.exists() and r.thumb_path):
+                return
+            try:
+                with timer.stage("thumbnail"):
+                    record["text"] = write_thumbnail(frame, r.thumb_path, text, canvas, options.get("caption_accent"))
+            except Exception:
+                log.exception("could not set the title on a thumbnail of %s", job_id)
+
         def save_clip(r, idx: int) -> None:
             """Store one finished clip and make it visible now, while the job is still running."""
             meta = getattr(r, "meta", None)             # the judge already rated it, or:
             if meta is None and ai is not None and tool in ("clips", "find"):
                 with timer.stage("titles"):
                     meta = ai.clip_meta(clip_text(r), {"length": r.end - r.start, "signals": r.signals, **lang_ctx},
-                                        r.thumb_path)
+                                        getattr(r, "frame_path", None) or r.thumb_path)
+                titled(r, meta)
             if caption_translator is not None and r.captions_path and r.captions_path.exists():
                 # (languages) the clip's subtitle lines in the target language, kept in its captions file. Like the
                 # AI's copy this is optional: a clip whose translation failed is still a finished clip.
@@ -263,6 +280,13 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                     thumb_key = f"{base}.jpg"
                     storage.put(thumb_key, r.thumb_path)
                     stored.append(thumb_key)
+                    frame = getattr(r, "frame_path", None)
+                    record = (getattr(r, "features", None) or {}).get("thumbnail")
+                    if frame and frame.exists() and isinstance(record, dict):
+                        # The frame without text: the thumbnail is drawn again from it when the title is edited.
+                        storage.put(f"{base}.frame.jpg", frame)
+                        stored.append(f"{base}.frame.jpg")
+                        record["frame_key"] = f"{base}.frame.jpg"
                 if r.captions_path and r.captions_path.exists():
                     caps_key = f"{base}.captions.json"
                     storage.put(caps_key, r.captions_path)
@@ -485,7 +509,8 @@ def sweep_stale_jobs() -> int:
             ledger.settle(db, job, success=False)
             # Clips the dead worker had already stored: hide them and remove their files.
             for clip in db.execute(select(Clip).where(Clip.job_id == job.id, Clip.deleted_at.is_(None))).scalars():
-                orphans += [k for k in (clip.video_key, clip.thumb_key, clip.captions_key, clip.preview_key) if k]
+                orphans += [k for k in (clip.video_key, clip.thumb_key, clip.captions_key, clip.preview_key,
+                                        frame_key_of(clip.features)) if k]
                 clip.deleted_at = utcnow()
             n += 1
         db.commit()
@@ -513,7 +538,8 @@ def sweep_expired() -> int:
         expired_jobs = select(Job.id).where(Job.expires_at <= now)
         for clip in db.execute(select(Clip).where(Clip.deleted_at.is_(None),
                                                   Clip.job_id.in_(expired_jobs)).limit(500)).scalars():
-            for key in (clip.video_key, clip.thumb_key, clip.captions_key, clip.preview_key, clip.export_key):
+            for key in (clip.video_key, clip.thumb_key, clip.captions_key, clip.preview_key, clip.export_key,
+                        frame_key_of(clip.features)):
                 if key:
                     storage.delete(key)
             clip.deleted_at = now

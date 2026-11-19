@@ -133,6 +133,18 @@ Panel sizes are a public template field, `panels: {"camera": "top" | "bottom" | 
 - Position `auto`: centred on the line between the panels in split layouts, in the lower third (about 70% down) otherwise.
 - It is the default `caption_style`. The five existing styles stay.
 
+## Thumbnails (U7)
+
+`thumb_url` on every clip (job, project, library and clip responses; a signed link like `video_url`) is the clip's thumbnail: a JPEG with the clip's own shape and layout, 720 px on its short side (never above the source), about 70–150 KB. `null` only when no frame could be drawn. Made by `app/pipeline/thumbs.py`, free, no AI:
+
+- The frame: the keyframes inside the clip (about one every 2 s) are scored on the streamer's face (whole in the camera, how far from their resting face), action, loudness, sharpness and nearness to the judge's peak. Frames that are standby (a "be right back", "starting soon" or intro screen, an empty chair: the picture frozen between its neighbouring keyframes with no face in the camera box, or with nobody talking), dark, flat, blurred, a menu or results card (or next to one), a transition, on a cut or in removed dead air lose to any frame that is none of these.
+- The text: the clip's `hook`, else its `title` (swears masked when `censor` is on), upper case in Anton, the keyword in `caption_accent` (default lime), white with a dark outline and shadow. As large as fits (capitals 10% of the short side, down to 5.5%), wrapped to at most three balanced lines, cut short with "…" rather than overflowing. Inside 6% side margins and the safe rows (13%–87% of the height in 9:16, the 3:4 crop profile grids show; 7%–93% otherwise). On the line between stacked panels when there is one, else the upper third, then the lower third; never on the person's head or an inset camera. Text in a script our fonts lack (Anton, then DejaVu Sans Bold: CJK, Devanagari and Thai for now) gives the frame alone.
+- Option `thumbnail_text` (render options, every tool, listed by `GET /v1/options`; default `true`): `false` gives the frame alone. It is independent of `hook_overlay`, which is only the hook burned into the video.
+- When the title arrives after the clip (the find tool, or a clip the judge could not rate), the worker sets it on the same frame then. The AI is always shown the frame without text.
+- The frame without text is stored with the clip (`clips/<job>/<clip>.frame.jpg`, its key in `features.thumbnail.frame_key`) and deleted with it (expiry, lost jobs, takedown). `PATCH /v1/clips/{id}` takes `title` and/or `hook` (max 48 characters, one line, at most six words: the AI's own rules). When the words the thumbnail carries change, it is drawn again on that frame inside the request (about 0.1 s, no video read, free) and stored over the same key, so `thumb_url` links already on a page show the new picture (a browser may need a reload). A hook burned into the video does not change. Clips made before frames were kept keep their thumbnail.
+- `features.thumbnail` records the choice: `at` (source second), `frames` looked at, `score`, `face`, `failed` (checks the frame failed, when every frame failed some), `text` (whether text was drawn), `standby` (the share of the clip's keyframes that looked like standby, 0 to 1), `frame_key` and `canvas` (where text may go, so the text can be set again later).
+- AI-generated thumbnails are a separate paid option, priced in their own ticket. Not built.
+
 ## Score calibration (A)
 
 `display_score` is computed per job when clips are read, never stored. With raw AI scores `s` (0 to 100) for the job's rated clips, `hi = max(s)`, `lo = min(s)`:

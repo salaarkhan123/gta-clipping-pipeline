@@ -1,6 +1,7 @@
 """Uploads, clip jobs, results and credits."""
 import hashlib
 import json
+import logging
 import math
 import re
 import uuid
@@ -16,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import ledger
-from .ai import MomentPrompt
+from .ai import MomentPrompt, _hook as hook_text   # the AI's own hook rules: one line, 6 words, 48 characters
 from .config import get_settings
 from .languages import LanguageCode, SourceLanguage
 from .db import get_db
@@ -31,7 +32,9 @@ from .exports import ClipEditDoc
 from .scoring import display_scores
 from .storage import LocalStorage, get_storage
 from .templates import TEMPLATES, with_tuning
+from .thumbnails import redraw, words_for
 
+log = logging.getLogger("clipapi.media")
 router = APIRouter()
 ALLOWED_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi", ".flv", ".ts"}
 ACTIVE = ("QUEUED", "RUNNING")
@@ -487,41 +490,57 @@ def clip_feedback(clip_id: str, body: Feedback, p: Principal = Depends(current_p
 class ClipEdit(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str | None = Field(default=None, min_length=1, max_length=80)
+    hook: str | None = Field(default=None, min_length=1, max_length=48)   # (U7) the thumbnail's words (one line)
     # (render, agent B) the editor's edit (app/exports.py ClipEditDoc: source seconds); null forgets it
     edit: ClipEditDoc | None = None
 
     @model_validator(mode="after")
     def check(self):
-        if not self.model_fields_set & {"title", "edit"}:
-            raise ValueError("send title, edit or both")
-        if "title" in self.model_fields_set and self.title is None:
-            raise ValueError("title cannot be null")
+        if not self.model_fields_set & {"title", "hook", "edit"}:
+            raise ValueError("send title, hook, edit or any of them together")
+        for name in ("title", "hook"):
+            if name in self.model_fields_set and getattr(self, name) is None:
+                raise ValueError(f"{name} cannot be null")
         return self
 
 
 @router.patch("/v1/clips/{clip_id}")
 def edit_clip(clip_id: str, body: ClipEdit, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
-    """Choose the clip's title (one of its `titles`, or your own words) and save the editor's `edit`. Free:
-    nothing is re-rendered; POST /v1/clips/export renders the edit."""
+    """Choose the clip's title (one of its `titles`, or your own words) and its hook, and save the editor's `edit`.
+    Free: nothing is re-rendered; POST /v1/clips/export renders the edit. When the words the thumbnail carries
+    change, it is drawn again on its stored frame now (a fraction of a second). A hook already burned into the
+    video stays as it is there."""
     clip = db.get(Clip, clip_id)
     if not clip or clip.deleted_at:
         raise ApiError(404, "not_found", "No such clip.")
-    own_job(db, p, clip.job_id)
+    job = own_job(db, p, clip.job_id)
     if "edit" in body.model_fields_set:
         stored = None
         if body.edit is not None:
             from .routes_export import check_edit
             stored = check_edit(db, clip, body.edit).model_dump()     # without cuts: the job's dead air is cut
         clip.edit = stored
-    if body.title is None:
-        db.commit()
-        return with_display_scores(db, with_ranks(db, [clip_json(clip, get_storage())]))[0]
-    title = " ".join(body.title.split())
-    if not title:
-        raise ApiError(422, "validation_error", "The title is empty.")
-    clip.meta = {**(clip.meta or {}), "title": title}      # a new dict, so the JSON column is saved
+    changes = {}
+    if body.title is not None:
+        changes["title"] = " ".join(body.title.split())
+        if not changes["title"]:
+            raise ApiError(422, "validation_error", "The title is empty.")
+    if body.hook is not None:
+        changes["hook"] = hook_text(body.hook)
+        if not changes["hook"]:
+            raise ApiError(422, "validation_error", "The hook is empty.")
+    options = job.options if isinstance(job.options, dict) else {}
+    before = words_for(clip.meta, options)
+    if changes:
+        clip.meta = {**(clip.meta or {}), **changes}        # a new dict, so the JSON column is saved
+    storage = get_storage()
+    if words_for(clip.meta, options) != before:
+        try:
+            redraw(clip, options, storage)
+        except Exception:                                   # the words are saved either way
+            log.exception("could not draw the thumbnail of %s again", clip.id)
     db.commit()
-    return with_display_scores(db, with_ranks(db, [clip_json(clip, get_storage())]))[0]
+    return with_display_scores(db, with_ranks(db, [clip_json(clip, storage)]))[0]
 
 
 def _stamp(t: float, sep: str) -> str:

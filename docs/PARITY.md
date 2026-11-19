@@ -37,7 +37,7 @@
 | Per clip: title, description, tags | One each | Title (3 options), description, hashtags | done | A | – |
 | Per clip: score | 0–100 | Raw 0–100 from the AI, plus `display_score`: calibrated per job on every read (best clip 90 to 99, none under 55, order kept), in the job, project, library and clip-edit responses. The website still shows rank and tier | partial | A · U4/U5; D shows it | – |
 | Score breakdown | Five dimensions (Hook, Story, Value, Engagement, Reach) with grades and explanations on paid plans | Four parts (hook, flow, value, trend), one reason | partial | A · U4 | – |
-| Per clip: thumbnail | Image URL | Frame from the clip | done | B | – |
+| Per clip: thumbnail | Image URL | `thumb_url`: the clip's best frame (face, action, loudness; never a menu, a cut or a blurred frame) in the clip's own layout and aspect, with its hook (or title) set on it, 720 on the short side. Free. AI-generated thumbnails are a separate paid option, not built | done | U7 | – |
 | Per clip: download link | Only when rendered; new link on every read, valid 24 h | Signed link, valid for a configured time | partial | B | – |
 | Result expiry, cost used | Reported per task | Expiry reported; credits charged reported | done | – | – |
 | Markers on the source timeline | Results show where each clip came from | Not shown | missing | D | – |
