@@ -35,7 +35,7 @@ type Preview = { url?: string; platform?: string; supported?: boolean; title?: s
   video_type?: VideoType | null; live_status?: "not_live" | "was_live" | "recording" | "live" | "upcoming" | null; channel_url?: string | null;
   category?: string | null; started_at?: string | null; available_sec?: number | null;
   options?: { import?: boolean; clip?: boolean; range?: boolean; range_download?: "partial" | "full" | null } | null;
-  range?: { start_sec: number; end_sec: number } | null };
+  range?: { start_sec: number; end_sec: number } | null; lookup_ms?: number };
 const OFF = "Link import is switched off for now. Upload the file instead.";
 const CONSENT = "I own this video or have permission to clip it";
 const AUTO = "0-90";
@@ -131,7 +131,9 @@ export function LinkChooser() {
   const length = preview?.video_type === "ongoing_recording" && typeof preview.available_sec === "number" ? preview.available_sec : preview?.duration_sec;
   const duration = typeof length === "number" && length > 0 ? length : null;
   const live = !!preview && (LIVE.includes(preview.video_type || "") || LIVE.includes(typeof preview.refusal === "object" ? preview.refusal?.code || "" : ""));
-  const refused = off || live || (!!preview && (preview.supported === false || !!refusalText(preview.refusal)));
+  // Too long to import whole, but a part of it can be: the setup screen stays, and the user picks a part (re-priced).
+  const tooLong = !!preview && typeof preview.refusal === "object" && preview.refusal?.code === "video_too_long" && !!preview.options?.range;
+  const refused = off || live || (!!preview && !tooLong && (preview.supported === false || !!refusalText(preview.refusal)));
   const quoted = preview?.estimate && typeof preview.estimate.credits === "number" ? preview.estimate : null;
   const chosen = picked?.kind === "template" ? [...templates.presets, ...templates.games].find((t) => t.id === picked.id) : undefined;
 
@@ -144,12 +146,13 @@ export function LinkChooser() {
       set({ duration: item.duration });
   }
 
-  // The part of the video picked on the job-setup screen. When the API downloads only that part ("partial"), the
-  // import takes it (start_sec, end_sec) and the clip job searches the whole imported file.
+  // The part of the video picked on the job-setup screen, sent to the import as start_sec and end_sec.
   const partial = preview?.options?.range_download === "partial";
   const picked_range = (setup.current?.range as { start: number; end: number } | null | undefined) || null;
-  const importRange = () => (partial && picked_range ? { start_sec: picked_range.start, end_sec: picked_range.end } : {});
-  const clipOptions = (o: Record<string, unknown>) => (partial && picked_range ? { ...o, range: null } : o);
+  // The API cuts the import to the range either way (partial downloads only it, full downloads all and cuts), so the
+  // clip job then searches the whole imported part. Clip times count from the part's start (import.range.start_sec).
+  const importRange = () => (picked_range ? { start_sec: picked_range.start, end_sec: picked_range.end } : {});
+  const clipOptions = (o: Record<string, unknown>) => (picked_range ? { ...o, range: null } : o);
   // The price follows the range: the preview is asked again with it (the API prices the range), never worked out here.
   const [rangeKey, setRangeKey] = useState("");
   useEffect(() => {
@@ -307,7 +310,8 @@ export function LinkChooser() {
         : { state: "unknown", text: "No price for this link yet, so it can't be started from here. Upload the file instead, or try again in a moment." }}
       onOptions={(opts) => { setup.current = opts; const r = opts.range as { start: number; end: number } | null; setRangeKey(r ? `${r.start}-${r.end}` : "0-0"); }}
       onCreate={(opts) => { setup.current = opts; go(); }} onRemove={() => router.push("/dashboard/")}
-      consent={{ checked: consent, onChange: setConsent, text: CONSENT }} step={step} problem={problem}
+      consent={{ checked: consent, onChange: setConsent, text: CONSENT }} step={step}
+      problem={problem || (tooLong && !quoted ? `${refusalText(preview!.refusal)} Pick a part of it under Adjust range to get a price.` : "")}
       header={toolChips} />
   );
 
