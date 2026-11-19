@@ -13,10 +13,18 @@ import { deadAir } from "./deadair";
 export type Span = [number, number];
 export type Line = { start: number; end: number; text: string };
 export type Edit = { trim: { start: number; end: number }; cuts: Span[]; caption_lines: Line[]; hook_text: string | null;
-  options: Record<string, unknown> };
+  options: Record<string, unknown>; words?: EditWord[] | null };
 export type Word = { start: number; end: number; text: string };
+// One caption word in the text-based editor (#215, exports.EditWord), in source seconds, keeping its spoken time.
+// hidden: the caption leaves, the video stays. cut: the caption and its stretch of video leave. highlight: #RRGGBB.
+// emoji: up to two, drawn after the word. break_before: a new caption starts at this word (split).
+export type EditWord = { start: number; end: number; text: string; hidden: boolean; cut: boolean; highlight: string | null;
+  emoji: string | null; break_before: boolean };
+export const loadEditWords = (clipId: string) => api<{ edited: boolean; words: EditWord[] }>(`/v1/clips/${clipId}/words`);
 
-export const forApi = (e: Edit) => ({ trim: e.trim, cuts: e.cuts, caption_lines: e.caption_lines, hook_text: e.hook_text, options: e.options });
+// `words` (#215): when set, the API draws them instead of `caption_lines`. Sent only when the editor has them.
+export const forApi = (e: Edit) => ({ trim: e.trim, cuts: e.cuts, caption_lines: e.caption_lines, hook_text: e.hook_text, options: e.options,
+  ...(e.words ? { words: e.words } : {}) });
 
 export const round = (t: number) => Math.round(t * 100) / 100;
 // The shortest clip the editor lets the trim make: the API's shortest clip.

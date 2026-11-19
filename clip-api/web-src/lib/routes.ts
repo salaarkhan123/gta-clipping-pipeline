@@ -35,13 +35,36 @@ export async function route(method: "post" | "patch", path: string): Promise<Rou
   return { fields: Object.keys(props), nested };
 }
 
+// Caption look (#213): the fields of `caption_look` as this API's schema states them, or null when it has none.
+export type CaptionLookSpec = { fonts: string[]; weights: string[]; cases: string[]; size: [number, number]; y: [number, number] };
+// Every enum value of a property, through $ref, anyOf and allOf (a nullable enum is an anyOf of an anyOf).
+const enumOf = (s: Spec, prop: any): string[] => {
+  const x = prop?.$ref ? s.components?.schemas?.[String(prop.$ref).split("/").pop()!] : prop;
+  if (!x) return [];
+  return [...new Set([...(Array.isArray(x.enum) ? x.enum : []), ...(typeof x.const === "string" ? [x.const] : []),
+    ...[...(x.anyOf || []), ...(x.allOf || [])].flatMap((y: any) => enumOf(s, y))])];
+};
+const rangeOf = (prop: any, lo: number, hi: number): [number, number] => {
+  const all = [prop, ...(prop?.anyOf || [])];
+  return [all.find((x: any) => typeof x?.minimum === "number")?.minimum ?? lo, all.find((x: any) => typeof x?.maximum === "number")?.maximum ?? hi];
+};
+export async function captionLook(): Promise<CaptionLookSpec | null> {
+  const s = await spec(), look = s.components?.schemas?.CaptionLook;
+  if (!look?.properties) return null;
+  const p = look.properties;
+  return { fonts: enumOf(s, p.font), weights: enumOf(s, p.weight), cases: enumOf(s, p.case), size: rangeOf(p.size, 50, 200), y: rangeOf(p.y, 0.05, 0.92) };
+}
+// Text-based caption editing (#215): the API serves a clip's words.
+export const hasWordsRoute = async () => !!(await spec()).paths?.["/v1/clips/{clip_id}/words"]?.get;
+
 // The routes the editor, the job form and the results grid look for.
 export const QUOTE = "/v1/clips/quote", EXPORT = "/v1/clips/export", EXPORT_QUOTE = "/v1/clips/export/quote", CLIP = "/v1/clips/{clip_id}";
-export type Routes = { quote: Route | null; exportRoute: Route | null; exportQuote: Route | null; patchClip: Route | null };
+export type Routes = { quote: Route | null; exportRoute: Route | null; exportQuote: Route | null; patchClip: Route | null;
+  words: boolean; captionLook: CaptionLookSpec | null };
 let all: Promise<Routes> | null = null;
 export function routes(): Promise<Routes> {
-  if (!all) all = Promise.all([route("post", QUOTE), route("post", EXPORT), route("post", EXPORT_QUOTE), route("patch", CLIP)])
-    .then(([quote, exportRoute, exportQuote, patchClip]) => ({ quote, exportRoute, exportQuote, patchClip }));
+  if (!all) all = Promise.all([route("post", QUOTE), route("post", EXPORT), route("post", EXPORT_QUOTE), route("patch", CLIP), hasWordsRoute(), captionLook()])
+    .then(([quote, exportRoute, exportQuote, patchClip, words, look]) => ({ quote, exportRoute, exportQuote, patchClip, words, captionLook: look }));
   return all;
 }
 
