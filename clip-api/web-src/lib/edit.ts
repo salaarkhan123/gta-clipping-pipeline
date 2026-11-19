@@ -27,8 +27,15 @@ export type Word = { start: number; end: number; text: string };
 // punch_zoom or flash_forward stay on the job that made the clip.
 const EDIT_OPTIONS = new Set<string>(CONTRACT.edit_options);
 export const editOptions = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => EDIT_OPTIONS.has(k)));
-export const forApi = (e: Edit) => ({ trim: e.trim, cuts: e.cuts, caption_lines: e.caption_lines, hook_text: e.hook_text,
-  ...(Array.isArray(e.words) ? { words: e.words } : {}), options: editOptions(e.options) });
+// Saved `words` win over caption lines in the API (ClipEditDoc.caption_words). This editor changes caption text as
+// lines (caption_lines is non-empty only when a line was changed here), so a line change sends the lines and no
+// words, keeping each word that was cut with its video as a cut; otherwise the saved words go back as they were.
+export function forApi(e: Edit) {
+  const lines = e.caption_lines.length > 0, words = Array.isArray(e.words) ? e.words : null;
+  const cuts = lines && words ? words.filter((w) => w.cut).reduce((all, w) => addCut(all, [w.start, w.end]), e.cuts) : e.cuts;
+  return { trim: e.trim, cuts, caption_lines: e.caption_lines, hook_text: e.hook_text,
+    ...(words ? { words: lines ? null : words } : {}), options: editOptions(e.options) };
+}
 
 export const round = (t: number) => Math.round(t * 100) / 100;
 // The shortest clip the editor lets the trim make: the API's shortest clip.
