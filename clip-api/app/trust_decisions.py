@@ -89,11 +89,24 @@ def _stop_jobs(db: Session, upload_id: str) -> None:
             job.cancel_requested = True
 
 
+HELD = ("disabled", "deleted")        # a target in one of these states keeps its content hidden
+
+
+def held_elsewhere(db: Session, case: TrustCase, kind: str, target_id: str) -> bool:
+    """Whether another case's decision is keeping this upload or clip hidden. Restoring one case must not bring
+    back content that another case removed."""
+    return db.execute(select(CaseTarget.id).where(CaseTarget.kind == kind, CaseTarget.target_id == target_id,
+                                                  CaseTarget.case_id != case.id, CaseTarget.state.in_(HELD))
+                      .limit(1)).first() is not None
+
+
 def hide(db: Session, case: TrustCase) -> int:
-    """Hide every live target (an upload's clips and a job's clips with it). Returns how many rows were hidden."""
+    """Hide every live target (an upload's clips and a job's clips with it). Returns how many rows were hidden.
+    A clip another case already hides is held by this case too (state disabled), so it stays hidden until every
+    case holding it is restored; a clip its owner deleted is `gone`."""
     now, hidden = utcnow(), 0
     for t in [t for t in targets(db, case) if t.state == "live"]:
-        clips: list[Clip] = []
+        found: list[Clip] = []
         if t.kind == "upload":
             up = db.get(Upload, t.target_id)
             if up is not None and up.deleted_at is None:
@@ -101,17 +114,19 @@ def hide(db: Session, case: TrustCase) -> int:
                 hidden += 1
                 _stop_jobs(db, up.id)
             job_ids = select(Job.id).where(Job.upload_id == t.target_id)
-            clips = list(db.execute(select(Clip).where(Clip.job_id.in_(job_ids), Clip.deleted_at.is_(None))).scalars())
+            found = list(db.execute(select(Clip).where(Clip.job_id.in_(job_ids))).scalars())
         elif t.kind == "job":
-            clips = list(db.execute(select(Clip).where(Clip.job_id == t.target_id, Clip.deleted_at.is_(None))).scalars())
+            found = list(db.execute(select(Clip).where(Clip.job_id == t.target_id)).scalars())
         elif t.kind in ("clip", "export"):
             clip_id = t.target_id if t.kind == "clip" else getattr(db.get(Export, t.target_id), "clip_id", None)
             clip = db.get(Clip, clip_id) if clip_id else None
-            clips = [clip] if clip is not None and clip.deleted_at is None else []
+            found = [clip] if clip is not None else []
+        clips = [c for c in found if c.deleted_at is None or held_elsewhere(db, case, "clip", c.id)]
         t.state = "disabled" if (clips or t.kind == "upload") else "gone"
         for clip in clips:
-            clip.deleted_at = now
-            hidden += 1
+            if clip.deleted_at is None:
+                clip.deleted_at = now
+                hidden += 1
             if clip.id != t.target_id:
                 _clip_target(db, case, clip, t.account_id).state = "disabled"
     db.flush()
@@ -119,19 +134,20 @@ def hide(db: Session, case: TrustCase) -> int:
 
 
 def unhide(db: Session, case: TrustCase) -> int:
-    """Bring back what this case hid, unless its retention ran out or its files are gone."""
+    """Bring back what this case hid, unless its retention ran out, its files are gone, or another case still
+    holds it (held_elsewhere: this case lets go, the content stays hidden until that case does too)."""
     now, storage, shown = utcnow(), get_storage(), 0
     for t in [t for t in targets(db, case) if t.state == "disabled"]:
         if t.kind == "upload":
             up = db.get(Upload, t.target_id)
             ok = up is not None and up.expires_at > now and storage.exists(up.storage_key)
-            if ok:
+            if ok and not held_elsewhere(db, case, "upload", up.id):
                 up.deleted_at = None
         elif t.kind == "clip":
             clip = db.get(Clip, t.target_id)
             job = db.get(Job, clip.job_id) if clip else None
             ok = clip is not None and job.expires_at > now and storage.exists(clip.video_key)
-            if ok:
+            if ok and not held_elsewhere(db, case, "clip", clip.id):
                 clip.deleted_at = None
         else:
             ok = True                   # a job or export target: its clips are targets of their own
