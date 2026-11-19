@@ -15,6 +15,7 @@ from sqlalchemy import select
 from app import routes_billing
 from app.db import new_session
 from app.models import Account, CreditLedger, Payment
+from tests.billing_fixtures import CATALOG, checkout_receipt
 from tests.test_api import balance
 
 T0 = 1_800_000_000
@@ -22,7 +23,7 @@ RUN = {"n": ""}
 
 
 @pytest.fixture(autouse=True)
-def fresh_ids():
+def fresh_ids(stripe_catalog):
     """Stripe ids are unique per test: ledger keys are global and the test database outlives one test."""
     RUN["n"] = uuid.uuid4().hex[:8]
 
@@ -57,7 +58,7 @@ def payment(ref):
 def buy_pack(client, account, session=None, intent=None, pack="pack_300", amount=499):
     session, intent = session or i("cs_1"), intent or i("pi_1")
     r = send(client, "checkout.session.completed", {
-        "id": session, "mode": "payment", "payment_status": "paid", "payment_intent": intent, "amount_total": amount,
+        "id": session, "status": "complete", "currency": "usd", "client_reference_id": account["id"], "mode": "payment", "payment_status": "paid", "payment_intent": intent, "amount_total": amount,
         "customer": f"cus_{account['id']}", "metadata": {"account_id": account["id"], "pack_id": pack}})
     assert r.status_code == 200
 
@@ -65,15 +66,21 @@ def buy_pack(client, account, session=None, intent=None, pack="pack_300", amount
 def subscribe(client, account, sub=None, plan="starter_v2", created=T0):
     sub = sub or i("sub_1")
     meta = {"account_id": account["id"], "plan_id": plan, "interval": "month"}
-    assert send(client, "checkout.session.completed", {
-        "id": f"cs_{sub}", "mode": "subscription", "subscription": sub, "customer": f"cus_{account['id']}",
-        "metadata": meta}, created).status_code == 200
+    assert send(client, "checkout.session.completed", checkout_receipt(account, sub, meta), created).status_code == 200
     return meta
 
 
 def invoice(account, meta, inv=None, sub=None, **extra):
     inv, sub = inv or i("in_1"), sub or i("sub_1")
-    return {"id": inv, "customer": f"cus_{account['id']}", "amount_paid": 900, "subscription": sub,
+    plan, interval = meta.get("plan_id"), meta.get("interval", "month")
+    price, cents = CATALOG.get(plan, {}).get(interval, ("price_1OldInlinePrice", extra.get("total", 0)))
+    lines = extra.pop("lines", {"data": [{"price": {"id": price}}]})
+    for row in lines["data"]:
+        actual_price = (row.get("price") or {}).get("id") or ((row.get("pricing") or {}).get("price_details") or {}).get("price")
+        cents = next((amount for offers in CATALOG.values() for sku, amount in offers.values() if sku == actual_price), cents)
+        row.update({"quantity": 1, "currency": "usd", "amount": cents})
+    return {"id": inv, "customer": f"cus_{account['id']}", "amount_paid": cents, "total": cents, "currency": "usd",
+            "status": "paid", "billing_reason": "subscription_cycle", "subscription": sub, "lines": lines,
             "subscription_details": {"metadata": meta}, **extra}
 
 
@@ -98,14 +105,14 @@ def test_a_full_refund_takes_back_the_pack_once(client, user):
 
 def test_partial_refunds_take_back_in_proportion_and_never_more_than_was_granted(client, user):
     headers, account = user
-    buy_pack(client, account, amount=500)
-    send(client, "charge.refunded", charge(amount=500, refunded=100, full=False))                     # a fifth
+    buy_pack(client, account)
+    send(client, "charge.refunded", charge(amount=499, refunded=100, full=False))                     # a fifth
     assert balance(client, headers) == 270 and payment(i("cs_1")).status == "partial"
-    send(client, "charge.refunded", charge(amount=500, refunded=250, full=False))                     # now half in total
+    send(client, "charge.refunded", charge(amount=499, refunded=250, full=False))                     # now half in total
     assert balance(client, headers) == 180
-    send(client, "charge.refunded", charge(amount=500, refunded=100, full=False))                     # the first one, late
+    send(client, "charge.refunded", charge(amount=499, refunded=100, full=False))                     # the first one, late
     assert balance(client, headers) == 180
-    send(client, "charge.refunded", charge(amount=500, refunded=500, full=True))
+    send(client, "charge.refunded", charge(amount=499, refunded=499, full=True))
     send(client, "charge.dispute.created", {"id": i("dp_1"), "payment_intent": i("pi_1")})                  # and then a dispute
     assert balance(client, headers) == 30 and payment(i("cs_1")).credits_removed == 300
 
@@ -234,7 +241,8 @@ def test_a_failed_payment_without_a_subscription_does_nothing(client, user):
 
 def sub_obj(account, meta, sub=None, **fields):
     sub = sub or i("sub_1")
-    return {"id": sub, "customer": f"cus_{account['id']}", "status": "active", "metadata": meta, **fields}
+    price = CATALOG.get(meta.get("plan_id"), {}).get(meta.get("interval", "month"), ("price_unknown", 0))[0]
+    return {"id": sub, "items": {"data": [{"price": {"id": price}}]}, "customer": f"cus_{account['id']}", "status": "active", "metadata": meta, **fields}
 
 
 def test_cancel_at_period_end_is_shown_and_can_be_undone(client, user):

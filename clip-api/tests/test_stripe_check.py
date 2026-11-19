@@ -21,6 +21,7 @@ def fake_stripe(monkeypatch, wrong: str | None = None, refused: bool = False):
             if (plan.get(f"price_{interval}_cents") or 0) > 0:
                 pid = stripe_price_id(plan, interval)
                 by_id[pid] = {"id": pid, "active": True, "type": "recurring", "currency": "usd",
+                              "product": {"id": "prod_" + plan["id"], "name": "Clutch Clips " + plan["name"], "active": True},
                               "unit_amount": plan[f"price_{interval}_cents"] + (1 if pid == wrong else 0),
                               "recurring": {"interval": interval, "interval_count": 1}}
 
@@ -29,7 +30,7 @@ def fake_stripe(monkeypatch, wrong: str | None = None, refused: bool = False):
             raise stripe.AuthenticationError(f"Invalid API Key provided: {api_key}")
         return Obj(id="acct_example")
     monkeypatch.setattr(stripe.Account, "retrieve", staticmethod(account))
-    monkeypatch.setattr(stripe.Price, "retrieve", staticmethod(lambda pid, api_key: by_id[pid]))
+    monkeypatch.setattr(stripe.Price, "retrieve", staticmethod(lambda pid, api_key, expand: by_id[pid]))
 
 
 def run(monkeypatch, capsys, key=KEY, secret="whsec_test"):

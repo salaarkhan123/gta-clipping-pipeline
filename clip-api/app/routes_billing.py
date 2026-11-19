@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import ledger
+from . import billing_receipts, ledger
 from .config import get_settings
 from .db import get_db
 from .deps import ApiError, Principal, session_principal
@@ -73,28 +73,32 @@ def checkout(body: CheckoutRequest, p: Principal = Depends(session_principal)):
     import stripe
     who = {"customer": p.account.stripe_customer_id} if p.account.stripe_customer_id else {"customer_email": p.account.email}
     session = stripe.checkout.Session.create(
-        api_key=key, mode="payment", **who,
+        api_key=key, mode="payment", expand=["line_items"], **who,
         line_items=[{"quantity": 1, "price_data": {
             "currency": s.currency, "unit_amount": int(pack["price_cents"]),
             "product_data": {"name": pack["name"]}}}],
         client_reference_id=p.account.id,
-        metadata={"account_id": p.account.id, "pack_id": pack["id"]},
+        metadata={"account_id": p.account.id, "pack_id": pack["id"], "receipt_version": "1"},
         success_url=f"{s.public_web_url}/dashboard?purchase=success",
         cancel_url=f"{s.public_web_url}/pricing?purchase=cancelled",
     )
+    # Inline Prices are unique to each Checkout. Bind the generated IDs before handing out the URL.
+    price = session.line_items.data[0].price
+    stripe.checkout.Session.modify(session.id, api_key=key, metadata={
+        "pack_price_id": price.id, "pack_product_id": price.product})
     return {"checkout_url": session.url}
 
 
-def _check_price(price, plan: dict, interval: str, cents: int, currency: str) -> None:
+def _check_price(price, plan: dict, interval: str, currency: str) -> None:
     """The Stripe Price must charge exactly what the plan config shows, or nobody can buy it: a typo in Stripe
     must never charge a different amount from the one on the pricing page."""
     price = price if isinstance(price, dict) else price.to_dict()     # stripe-python 12+ objects are not dicts
-    recurring = price.get("recurring") or {}
-    problems = [name for name, ok in (
-        ("active", price.get("active") is True), ("amount", price.get("unit_amount") == cents),
-        ("currency", (price.get("currency") or "").lower() == currency.lower()),
-        ("interval", recurring.get("interval") == interval and (recurring.get("interval_count") or 1) == 1),
-        ("type", price.get("type", "recurring") == "recurring")) if not ok]
+    product = price.get("product") or {}
+    problems = []
+    if not price.get("active") or not isinstance(product, dict) or not product.get("active"):
+        problems.append("inactive price or product")
+    if not billing_receipts.matches_plan_price(price, plan, interval, currency):
+        problems.append("catalog mismatch")
     if problems:
         log.error("Stripe Price %s does not match plan %s/%s (%s): refusing checkout", price.get("id"), plan["id"],
                   interval, ", ".join(problems))
@@ -116,7 +120,7 @@ def subscribe(body: SubscribeRequest, p: Principal = Depends(session_principal))
         log.error("no Stripe Price ID configured for plan %s/%s", plan["id"], body.interval)
         raise ApiError(503, "plan_unavailable", "This plan cannot be bought right now. Please try again later.")
     import stripe
-    _check_price(stripe.Price.retrieve(price_id, api_key=key), plan, body.interval, int(cents), s.currency)
+    _check_price(stripe.Price.retrieve(price_id, api_key=key, expand=["product"]), plan, body.interval, s.currency)
     meta = {"account_id": p.account.id, "plan_id": plan["id"], "interval": body.interval}
     who = {"customer": p.account.stripe_customer_id} if p.account.stripe_customer_id else {"customer_email": p.account.email}
     session = stripe.checkout.Session.create(
@@ -161,29 +165,20 @@ def _period_end(sub: dict):
     return sub.get("current_period_end") or max((e for e in ends if e), default=None)
 
 
-def _price_ids(obj: dict) -> list[str]:
-    """The Stripe Price IDs on an invoice's lines or a subscription's items, in every API version's shape."""
-    rows = ((obj.get("lines") or {}).get("data") or []) + ((obj.get("items") or {}).get("data") or [])
-    found = []
-    for row in rows:
-        price = row.get("price") or ((row.get("pricing") or {}).get("price_details") or {}).get("price")
-        price = price.get("id") if isinstance(price, dict) else price
-        if price:
-            found.append(price)
-    return found
-
-
-def _subscribed_plan(obj: dict, meta: dict, fallback_plan_id: str | None = None) -> tuple[dict | None, str]:
-    """(plan, interval) that a paid invoice or a subscription is for. One of our Stripe Prices on it decides (that
-    is what Stripe charges, also after a plan change in the portal). Otherwise it is a subscription started before
-    the Price IDs, so its own metadata names the plan, which may be a legacy one: grandfathered at that plan's
-    credits. Never a number from the event."""
-    for price_id in _price_ids(obj):
-        hit = plan_for_price(price_id)
-        if hit:
-            return hit
-    plan = find_plan(meta.get("plan_id") or fallback_plan_id)
-    return plan, "year" if meta.get("interval") == "year" else "month"
+def _subscription_plan(subscription: dict, account):
+    items = subscription.get("items") or {}
+    rows = items.get("data") or []
+    if len(rows) == 1 and not items.get("has_more"):
+        price = rows[0].get("price") or {}
+        offer = plan_for_price(price.get("id") if isinstance(price, dict) else price)
+        if offer:
+            return offer[0]
+    # A grandfathered subscription retains only the plan already bound to it in our database.
+    if account and account.stripe_subscription_id == subscription.get("id"):
+        plan = find_plan(account.plan)
+        if plan and plan not in PLANS:
+            return plan
+    return None
 
 
 def _yearly_payment(db: Session, acct: Account, plan: dict, inv: dict, event: dict) -> Payment:
@@ -315,21 +310,32 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         meta = obj.get("metadata") or {}
         acct = _account(db, meta.get("account_id"), None)
         if not acct:
-            log.error("stripe event %s references an unknown account: %s", event.get("id"), meta)
+            log.error("stripe event %s references an unknown account", event.get("id"))
         else:
-            if obj.get("customer"):
-                acct.stripe_customer_id = obj["customer"]
+            if acct.stripe_customer_id and obj.get("customer") and obj["customer"] != acct.stripe_customer_id:
+                log.warning("Checkout customer does not match account")
+                return {"received": True}
             if obj.get("mode") == "subscription":
-                plan = find_plan(meta.get("plan_id"))
+                plan = billing_receipts.checkout_plan(obj)
                 # Not when a newer subscription event was applied: a late (or resent) copy of this event must not
                 # bring back a subscription that has since ended.
-                if obj.get("subscription") and plan and plan.get("monthly_credits") and _fresh(acct, event, mark=False):
+                if (plan and acct.stripe_subscription_id in (None, obj["subscription"])
+                        and _fresh(acct, event, mark=False)):
                     if acct.stripe_subscription_id != obj["subscription"] or not acct.subscription_status:
                         acct.subscription_status = "active"   # a new subscription, also after an old one ended
+                    if obj.get("customer"):
+                        acct.stripe_customer_id = obj["customer"]
                     acct.stripe_subscription_id, acct.plan = obj["subscription"], plan["id"]
             elif obj.get("payment_status") == "paid":
                 pack = find_pack(meta.get("pack_id", ""))
-                if pack:   # keyed on the Checkout Session id, so redelivered events never grant twice
+                if pack and billing_receipts.pack_paid(obj, pack):
+                    ledger.lock_account(db, acct.id)
+                    intent = obj["payment_intent"]
+                    intent_id = intent.get("id") if isinstance(intent, dict) else intent
+                    if db.scalar(select(Payment.id).where(Payment.payment_intent == intent_id)):
+                        return {"received": True}
+                    if obj.get("customer"):
+                        acct.stripe_customer_id = obj["customer"]
                     ledger.grant(db, acct.id, int(pack["credits"]), "topup", f"stripe:{obj['id']}",
                                  f"Purchased {pack['name']}")
                     _record_payment(db, acct.id, "pack", obj["id"], int(pack["credits"]), obj.get("amount_total"),
@@ -338,13 +344,14 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     elif kind == "invoice.paid":
         meta = _invoice_meta(obj)
         acct = _account(db, meta.get("account_id"), obj.get("customer"))
-        plan, interval = _subscribed_plan(obj, meta, acct.plan if acct else None)
-        reason = obj.get("billing_reason") or ""
-        if acct and not _invoice_subscription(obj) and reason and not reason.startswith("subscription"):
-            # A one-off invoice ("manual", "quote_accept", ...): both signals agree it is not a plan renewal.
-            log.info("invoice %s is not for a subscription (%s); no plan credits", obj.get("id"), reason)
-        elif acct and plan and plan.get("monthly_credits"):
-            acct.plan = plan["id"]
+        offer = billing_receipts.paid_invoice_offer(obj, acct, _invoice_subscription(obj))
+        if offer:
+            plan, interval = offer
+            ledger.lock_account(db, acct.id)
+            if db.scalar(select(Payment.id).where(Payment.stripe_ref == obj["id"])):
+                return {"received": True}
+            if acct.stripe_subscription_id in (None, _invoice_subscription(obj)) and _fresh(acct, event, mark=False):
+                acct.plan = plan["id"]
             if obj.get("customer"):
                 acct.stripe_customer_id = obj["customer"]
             if is_monthly_drip(plan, interval):
@@ -360,8 +367,8 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 acct.subscription_status = "active"      # a payment went through: clears "past_due"
             db.commit()
             log.info("invoice paid account=%s plan=%s granted=%s", acct.id, plan["id"], granted)
-        elif not acct:
-            log.error("invoice %s could not be matched to an account", obj.get("id"))
+        else:
+            log.warning("invoice %s did not match a billable offer", obj.get("id"))
     elif kind == "invoice.payment_failed":
         # No credits move: nothing was granted for an unpaid invoice. Stripe retries the card; if it gives up, the
         # subscription ends and arrives as customer.subscription.deleted (or "unpaid" in an update).
@@ -375,12 +382,12 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         meta = obj.get("metadata") or {}
         acct = _account(db, meta.get("account_id"), obj.get("customer"))
         status = obj.get("status")
-        plan, _interval = _subscribed_plan(obj, meta)
+        plan = _subscription_plan(obj, acct)
         known_plan = bool(plan) and bool(plan.get("monthly_credits"))
         mine = bool(acct) and (acct.stripe_subscription_id == obj.get("id") or (
             # This event beat checkout.session.completed: a live subscription for a plan we sell, on an account without one.
             not acct.stripe_subscription_id and status in ("active", "trialing") and known_plan))
-        if mine and _fresh(acct, event):                          # an event older than the newest applied changes nothing
+        if mine and acct.stripe_customer_id in (None, obj.get("customer")) and _fresh(acct, event):                          # an event older than the newest applied changes nothing
             acct.stripe_subscription_id = obj.get("id")
             if status in ("canceled", "incomplete_expired"):      # over: same as customer.subscription.deleted
                 acct.plan, acct.stripe_subscription_id = "free", None
@@ -397,12 +404,12 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             db.commit()
     elif kind == "customer.subscription.deleted":
         acct = _account(db, (obj.get("metadata") or {}).get("account_id"), obj.get("customer"))
-        if acct and (not acct.stripe_subscription_id or acct.stripe_subscription_id == obj.get("id")):
+        if (acct and acct.stripe_customer_id in (None, obj.get("customer"))
+                and (not acct.stripe_subscription_id or acct.stripe_subscription_id == obj.get("id")) and _fresh(acct, event)):
             acct.plan, acct.stripe_subscription_id = "free", None
             if acct.subscription_status:
                 acct.subscription_status = "canceled"
             acct.subscription_cancel_at = None
-            _fresh(acct, event)
             db.commit()
     elif kind == "charge.refunded":
         # Take back the credits this payment granted, in proportion to how much of it has been refunded so far.

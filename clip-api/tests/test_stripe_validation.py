@@ -15,6 +15,7 @@ from app.plan_grants import sweep_yearly_grants
 from app import routes_billing
 from tests.test_api import balance
 from tests.test_plans import line, prices, set_account  # noqa: F401
+from tests.billing_fixtures import checkout_receipt
 from tests.test_stripe_events import (T0, buy_pack, charge, fresh_ids, i, invoice, me, payment, rows, send,  # noqa: F401
                                       sub_obj, subscribe)
 from tests.test_yearly_grants import END, START, add_months, yearly_invoice
@@ -32,6 +33,7 @@ def sign(payload: str, ts: int, secret: bytes = b"whsec_test") -> str:
 def pack_event(account, session=None, event_id="evt_sig") -> str:
     return json.dumps({"id": event_id, "type": "checkout.session.completed", "created": T0, "data": {"object": {
         "id": session or i("cs_sig"), "mode": "payment", "payment_status": "paid", "payment_intent": i("pi_sig"),
+        "status": "complete", "currency": "usd", "client_reference_id": account["id"],
         "amount_total": 499, "metadata": {"account_id": account["id"], "pack_id": "pack_300"}}}})
 
 
@@ -110,6 +112,7 @@ def test_without_a_webhook_secret_nothing_is_processed(client, user, monkeypatch
 def test_a_pack_paid_in_both_checkout_events_grants_once(client, user):
     headers, account = user
     obj = {"id": i("cs_1"), "mode": "payment", "payment_status": "unpaid", "payment_intent": i("pi_1"),
+           "status": "complete", "currency": "usd", "client_reference_id": account["id"],
            "amount_total": 499, "metadata": {"account_id": account["id"], "pack_id": "pack_300"}}
     send(client, "checkout.session.completed", obj, event_id="evt_a")                       # bank debit: not paid yet
     assert balance(client, headers) == 30
@@ -125,9 +128,7 @@ def test_the_same_invoice_in_several_events_grants_once(client, user, prices):
     inv = invoice(account, meta, lines={"data": [line("price_st_m")]})
     for event_id in ("evt_a", "evt_a", "evt_b"):              # a redelivery, then a Dashboard resend of a copy
         assert send(client, "invoice.paid", inv, T0 + 5, event_id=event_id).status_code == 200
-    send(client, "checkout.session.completed", {"id": f"cs_{i('sub_1')}", "mode": "subscription",
-         "subscription": i("sub_1"), "invoice": i("in_1"), "payment_status": "paid",
-         "customer": f"cus_{account['id']}", "metadata": meta}, T0 + 6, event_id="evt_c")
+    send(client, "checkout.session.completed", checkout_receipt(account, i("sub_1"), meta), T0 + 6, event_id="evt_c")
     assert balance(client, headers) == 530
     assert [r for r in rows(account["id"]) if r[0] == "grant"][-1] == ("grant", 500, f"stripe-inv:{i('in_1')}")
 
@@ -168,8 +169,7 @@ def test_a_late_checkout_event_cannot_bring_back_a_cancelled_subscription(client
     headers, account = user
     meta = subscribe(client, account)
     send(client, "customer.subscription.deleted", sub_obj(account, meta, status="canceled"), T0 + 50)
-    send(client, "checkout.session.completed", {"id": f"cs_{i('sub_1')}", "mode": "subscription",
-         "subscription": i("sub_1"), "customer": f"cus_{account['id']}", "metadata": meta}, T0, event_id="evt_late")
+    send(client, "checkout.session.completed", checkout_receipt(account, i("sub_1"), meta), T0, event_id="evt_late")
     got = me(client, headers)
     assert (got["plan"], got["subscription_status"]) == ("free", "canceled")
     with new_session() as db:
@@ -248,3 +248,47 @@ def test_a_dispute_on_a_plan_invoice_is_matched_through_stripe(client, user, mon
     assert balance(client, headers) == 30 and payment(i("in_1")).status == "disputed"
     send(client, "charge.refunded", charge(intent=i("pi_sub"), amount=1599, refunded=1599))     # nothing more to take
     assert balance(client, headers) == 30
+
+
+@pytest.mark.parametrize("field,value", [
+    ("amount_total", 1), ("currency", "eur"), ("status", "open"), ("payment_status", "unpaid"),
+    ("client_reference_id", "other"), ("payment_intent", None),
+])
+def test_pack_receipt_requires_complete_payment_at_the_catalog_amount(field, value, monkeypatch):
+    from app.billing_receipts import pack_paid
+    from tests.billing_fixtures import pack_line
+    session = json.loads(pack_event({"id": "account"}))["data"]["object"]
+    monkeypatch.setattr("app.billing_receipts.checkout_lines", lambda session_id: {"data": [pack_line()]})
+    assert pack_paid(session, routes_billing.find_pack("pack_300"))
+    assert not pack_paid({**session, field: value}, routes_billing.find_pack("pack_300"))
+
+
+@pytest.mark.parametrize("field,value", [("pack_price_id", "other_price"), ("pack_product_id", "other_product")])
+def test_pack_receipt_requires_the_price_and_product_bound_at_checkout(field, value, monkeypatch):
+    from app.billing_receipts import pack_paid
+    from tests.billing_fixtures import pack_line
+    session = json.loads(pack_event({"id": "account"}))["data"]["object"]
+    meta = session["metadata"]
+    meta.update(receipt_version="1", pack_price_id="price_pack_300", pack_product_id="prod_pack_300")
+    monkeypatch.setattr("app.billing_receipts.checkout_lines", lambda session_id: {"data": [pack_line()]})
+    assert pack_paid(session, routes_billing.find_pack("pack_300"))
+    meta[field] = value
+    assert not pack_paid(session, routes_billing.find_pack("pack_300"))
+
+
+def test_checkout_binds_generated_pack_sku_before_returning_url(client, user, monkeypatch):
+    import stripe
+    from tests.billing_fixtures import pack_line
+    headers, account = user
+    monkeypatch.setattr(get_settings(), "stripe_secret_key", "sk_test_x")
+    price = pack_line()["price"]
+    calls = []
+    def create(**kwargs):
+        assert kwargs["metadata"] == {"account_id": account["id"], "pack_id": "pack_300", "receipt_version": "1"}
+        assert kwargs["line_items"][0]["price_data"]["unit_amount"] == 499
+        return stripe.StripeObject.construct_from({"id": "cs_fixture", "url": "https://checkout.example",
+            "line_items": {"data": [{"price": {**price, "product": price["product"]["id"]}}]}}, None)
+    monkeypatch.setattr(stripe.checkout.Session, "create", create)
+    monkeypatch.setattr(stripe.checkout.Session, "modify", lambda session, **kw: calls.append((session, kw["metadata"])))
+    assert client.post("/v1/billing/checkout", json={"pack_id": "pack_300"}, headers=headers).status_code == 200
+    assert calls == [("cs_fixture", {"pack_price_id": price["id"], "pack_product_id": price["product"]["id"]})]

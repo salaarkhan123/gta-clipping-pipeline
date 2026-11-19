@@ -11,6 +11,7 @@ from app import worker
 from app.db import new_session
 from app.models import CreditLedger, Payment
 from app.plan_grants import add_months, sweep_yearly_grants
+from tests.billing_fixtures import legacy_subscription
 from tests.test_api import balance
 from tests.test_plans import prices, set_account  # noqa: F401
 from tests.test_stripe_events import T0, charge, fresh_ids, i, invoice, me, payment, send, sub_obj, subscribe  # noqa: F401
@@ -152,12 +153,13 @@ def test_a_yearly_renewal_starts_a_new_twelve(client, pro_yearly):
     assert f"grant:{i('sub_1')}:{ts(END)}:0" in grant_keys(account["id"])
 
 
-def test_a_legacy_yearly_subscriber_still_gets_the_year_up_front(client, user, prices):
+def test_a_legacy_yearly_subscriber_still_gets_the_year_up_front(client, user, prices, legacy_subscription):
     headers, account = user
     set_account(account["id"], plan="pro", stripe_subscription_id=i("sub_1"), stripe_customer_id=f"cus_{account['id']}")
     meta = {"account_id": account["id"], "plan_id": "pro", "interval": "year"}
+    legacy_subscription(account, i("sub_1"), "Pro", "year", 23400)
     line = {"price": {"id": "price_1OldInlinePrice"}, "period": {"start": T0, "end": ts(END)}}
-    send(client, "invoice.paid", invoice(account, meta, lines={"data": [line]}))
+    send(client, "invoice.paid", invoice(account, meta, total=23400, lines={"data": [line]}))
     assert balance(client, headers) == 30 + 1500 * 12 and payment(i("in_1")).kind == "plan"
     sweep_yearly_grants(add_months(START, 6))
     assert balance(client, headers) == 30 + 18000

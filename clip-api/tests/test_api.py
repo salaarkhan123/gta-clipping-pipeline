@@ -190,14 +190,15 @@ def test_webhook_url_must_be_public_https(client, user, video):
 
 def stripe_event(account_id: str, session_id: str, pack_id: str = "pack_300", paid: bool = True):
     payload = json.dumps({"id": "evt_1", "type": "checkout.session.completed", "data": {"object": {
-        "id": session_id, "payment_status": "paid" if paid else "unpaid",
+        "id": session_id, "status": "complete", "client_reference_id": account_id, "mode": "payment",
+        "currency": "usd", "amount_total": 499, "payment_intent": "pi_" + session_id, "payment_status": "paid" if paid else "unpaid",
         "metadata": {"account_id": account_id, "pack_id": pack_id, "credits": "999999"}}}})
     ts = int(time.time())
     sig = hmac.new(b"whsec_test", f"{ts}.{payload}".encode(), hashlib.sha256).hexdigest()
     return payload, {"stripe-signature": f"t={ts},v1={sig}", "content-type": "application/json"}
 
 
-def test_stripe_webhook_grants_once_from_server_side_pack(client, user):
+def test_stripe_webhook_grants_once_from_server_side_pack(client, user, stripe_catalog):
     headers, account = user
     payload, sig = stripe_event(account["id"], f"cs_test_{account['id']}")
     assert client.post("/webhooks/stripe", content=payload, headers=sig).status_code == 200

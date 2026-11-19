@@ -25,6 +25,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.db import init_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.pipeline.transcribe import Transcript  # noqa: E402
+from tests.billing_fixtures import stripe_catalog  # noqa: E402,F401
 from tests.secret_scan import RECORDER  # noqa: E402
 
 logging.getLogger().addHandler(RECORDER)      # after app.main's basicConfig, so the root logger keeps its INFO level

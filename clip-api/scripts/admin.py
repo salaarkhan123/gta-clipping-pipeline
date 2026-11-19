@@ -143,7 +143,7 @@ def stripe_check() -> int:
                 print(f"FAIL  {name}: no Price ID configured")
                 continue
             try:
-                _check_price(stripe.Price.retrieve(price_id, api_key=key), plan, interval, int(cents), s.currency)
+                _check_price(stripe.Price.retrieve(price_id, api_key=key, expand=["product"]), plan, interval, s.currency)
                 print(f"OK    {name}: {price_id}")
             except ApiError:
                 failed += 1

@@ -174,7 +174,9 @@ reviewed PR. The `PLANS` environment variable is no longer read: delete its line
 Stripe Price that you create; the API only needs its ID.
 
 1. In Stripe (test mode first, then live mode), create one product per plan, each with two recurring Prices in
-   USD, per unit, billed every 1 month or every 1 year:
+   USD, per unit, billed every 1 month or every 1 year. Use the product names
+   `Clutch Clips Starter`, `Clutch Clips Pro` and `Clutch Clips Scale`. Both Checkout and invoice
+   processing check the product against the plan. Confirm the names before changing a live catalog.
 
    | Plan | Monthly Price | Yearly Price |
    |---|---|---|
