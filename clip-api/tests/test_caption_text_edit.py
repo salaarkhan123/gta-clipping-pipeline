@@ -1,10 +1,17 @@
 """Text-based caption editing (exports.EditWord, GET /v1/clips/{id}/words): edit words, hide a caption, cut a word
 with its video, highlight, add emoji, split; saved in the clip's edit and rendered exactly by the export."""
+import json
+import tempfile
+from pathlib import Path
+
 import numpy as np
 import pytest
 from pydantic import ValidationError
 
 from app import worker
+from app.db import new_session
+from app.models import Clip
+from app.storage import get_storage
 from app.exports import ClipEditDoc
 from app.pipeline import captions as C
 from app.pipeline.censor import mask_words
@@ -93,3 +100,29 @@ def test_edit_words_through_the_api_and_the_export(client, user, video, transcri
     out = client.get(f"/v1/jobs/{job['job_id']}", headers=headers).json()["clips"][0]
     _w, _h, length = short_side(client, out["export_url"], tmp_path)
     assert abs(length - (end - start - 2.0)) < 0.5                           # the cut word's 2 s are gone
+
+
+def test_the_words_the_editor_is_given_can_be_saved_back_even_a_word_timed_with_no_length(client, user, video,
+                                                                                         transcriber):
+    """Whisper times some short words with no length ("I" at 10.22-10.22; seen on a real import, #218). GET words
+    gives them the shortest length, so the editor's Save of the words it was given is not a 422."""
+    headers, _ = user
+    up = upload(client, headers, video)
+    job = run_clips(client, headers, up["upload_id"], {"max_clips": 1, "clip_length": 10, "render": "none"}, transcriber)
+    clip = job["clips"][0]
+    storage = get_storage()
+    with new_session() as db:
+        key = db.get(Clip, clip["id"]).captions_key
+    with tempfile.TemporaryDirectory() as tmp:
+        storage.fetch(key, Path(tmp) / "c.json")
+        data = json.loads((Path(tmp) / "c.json").read_text())
+        data["words"] = [{"start": 1.0, "end": 1.3, "text": "so"}, {"start": 1.3, "end": 1.3, "text": "I"},
+                         {"start": 1.3, "end": 1.6, "text": "went"}]
+        (Path(tmp) / "c.json").write_text(json.dumps(data))
+        storage.put(key, Path(tmp) / "c.json")
+    got = client.get(f"/v1/clips/{clip['id']}/words", headers=headers).json()["words"]
+    assert [w["text"] for w in got] == ["so", "I", "went"] and all(w["end"] > w["start"] for w in got)
+    start, end = clip["segments"][0][0], clip["segments"][-1][1]
+    edit = {"trim": {"start": start, "end": end}, "cuts": [], "words": [{**got[1], "text": "we"}, got[0], got[2]]}
+    r = client.patch(f"/v1/clips/{clip['id']}", json={"edit": edit}, headers=headers)
+    assert r.status_code == 200, r.text

@@ -16,6 +16,7 @@ from .routes_media import own_clip
 from .storage import get_storage
 
 router = APIRouter()
+MIN_WORD_SEC = 0.01        # the length a word timed with none is given
 
 
 @router.get("/v1/clips/{clip_id}/words")
@@ -34,6 +35,9 @@ def clip_words(clip_id: str, p: Principal = Depends(current_principal), db: Sess
             saved = json.loads((Path(tmp) / "c.json").read_text()).get("words") or []
         segments, flash, _z = rendered_cut(clip)
         words = source_words([(w["start"], w["end"], w["text"]) for w in saved], segments, flash)
+    # Whisper can time a short word with no length ("I" at 10.22-10.22). An edit's word must end after it starts
+    # (exports.EditWord), so such a word gets the shortest length, 10 ms; otherwise the editor could not save back
+    # the words this route gave it.
     return {"clip_id": clip.id, "edited": False,
-            "words": [{"start": s, "end": e, "text": t, "hidden": False, "cut": False, "highlight": None,
-                       "emoji": None, "break_before": False} for s, e, t in words]}
+            "words": [{"start": s, "end": max(e, round(s + MIN_WORD_SEC, 3)), "text": t, "hidden": False, "cut": False,
+                       "highlight": None, "emoji": None, "break_before": False} for s, e, t in words]}
