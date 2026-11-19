@@ -1,7 +1,7 @@
 "use client";
 import { useRef } from "react";
 import { AiRating } from "../demos/Bits";
-import { aiRated, Credits, Footage, Item, useItem, useItems } from "../demos/Footage";
+import { aiRated, Credits, Footage, Item, useItem, useItems, useSignals } from "../demos/Footage";
 import { useInView } from "../demos/motion";
 import { BeforeFrame } from "../demos/Reframe";
 import s from "../demos/demos.module.css";
@@ -19,6 +19,12 @@ type Sourced = Item & { aspect?: string; source?: { id?: string; start_sec?: num
 // the best-rated of them. With no media yet the card stays empty.
 function FinderVisual({ play }: { play: boolean }) {
   const vod = useItem("hero-long-video", "vod") as Sourced | null;
+  // The engine's own highlight score along the stream, as bars (the loudest point in each stretch).
+  const signals = useSignals("hero-long-video", vod), BARS = 96;
+  const bars = signals ? Array.from({ length: BARS }, (_, b) => {
+    const v = signals.values, a = Math.floor((b * v.length) / BARS), z = Math.max(a + 1, Math.floor(((b + 1) * v.length) / BARS));
+    return Math.max(...v.slice(a, z));
+  }) : [];
   const all = [...useItems("hero-vertical-clips"), ...useItems("editor"), ...useItems("clip-finding")] as Sourced[];
   const len = vod?.duration_sec ?? 0, from = vod?.source?.id;
   const picked = len && from ? all.filter((i) => i.source?.id === from && typeof i.source?.start_sec === "number" && i.source.start_sec < len) : [];
@@ -35,6 +41,8 @@ function FinderVisual({ play }: { play: boolean }) {
             <span className="h-[42px] rounded-[10px] bg-black/35 ring-1 ring-white/15" />
           </div>
           <div className="relative h-14 rounded-[10px] bg-black/35 ring-1 ring-white/10">
+            {bars.length > 0 && <span className="absolute inset-x-1 bottom-1 top-2 flex items-end gap-px" aria-hidden="true">
+              {bars.map((v, b) => <span key={b} className="flex-1 rounded-t-[1px] bg-white/20" style={{ height: `${Math.max(4, v * 100)}%` }} />)}</span>}
             {marks.map((m) => {
               const on = m === best || (best && m.source?.start_sec === best.source?.start_sec);
               return <span key={m.id} className={`absolute inset-y-2 w-[3px] rounded-full ${on ? `${s.glow} bg-lime` : "bg-white/50"}`}

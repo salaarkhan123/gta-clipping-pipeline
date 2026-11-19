@@ -93,6 +93,8 @@ test("the dead-air and moment-finder cards draw only real data: no sample transc
   assert.match(dead, /useWords\("editor", clip\)/);
   assert.doesNotMatch(dead, /const (SAID|WAVE|SAMPLE)\b/);
   assert.match(models, /i\.source\?\.id === from/);               // marks are clips cut from that same stream
+  assert.match(models, /useSignals\("hero-long-video", vod\)/);     // bars are the engine's own highlight score
+  assert.match(dead, /usePeaks\("editor", clip\)/);                // waveform is the clip's own audio levels
   assert.doesNotMatch(models, /PEAKS|Police chases|"heist"/);
 });
 
