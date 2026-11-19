@@ -4,6 +4,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from .fonts import WEIGHTS, Face, text_width
+
 # hl = highlight colour of the word being spoken (ASS &HBBGGRR&), scale = size of that word in percent,
 # words / chars = the most words and characters on one caption line. `impact` is drawn by its own code below
 # (build_impact): its keyword colour is the accent, and its lines are measured, not counted in characters.
@@ -152,24 +154,30 @@ class ImpactSize:
     half: float                  # from the middle of the capitals to the outer edge of the outline
 
 
-def impact_size(play_h: int) -> ImpactSize:
-    cap = IMPACT_CAP * play_h
-    em = cap / ANTON_CAP
+def impact_size(play_h: int, face: Face | None = None, scale: float = 1.0) -> ImpactSize:
+    """`face`: the font (None: the bundled Anton); `scale`: the caption_look size, 1.0 = the style's own."""
+    cap = IMPACT_CAP * play_h * scale
+    em = cap / (face.cap if face else ANTON_CAP)
     outline = max(2, round(IMPACT_OUTLINE * em))
-    return ImpactSize(size=round(em * (ANTON_ASCENT + ANTON_DESCENT)), em=em, cap=cap, outline=outline,
+    line = (face.ascent + face.descent) if face else (ANTON_ASCENT + ANTON_DESCENT)
+    return ImpactSize(size=round(em * line), em=em, cap=cap, outline=outline,
                       shadow=max(2, round(0.045 * em)), blur=max(2, round(0.05 * em)), half=cap / 2 + outline)
 
 
-def impact_text(word: str) -> str:
-    """A word as the impact style shows it: upper case, no control characters, no punctuation at its ends."""
-    return _clean(word, True).strip().strip(_TRIM).strip()
+def impact_text(word: str, upper: bool = True) -> str:
+    """A word as the impact style shows it: upper case (or as typed), no control characters, no punctuation at its
+    ends."""
+    return _clean(word, upper).strip().strip(_TRIM).strip()
 
 
-def impact_width(texts: list[str], em: float) -> float:
+def impact_width(texts: list[str], em: float, face: Face | None = None) -> float:
     """How wide these words are on one line at full size, outline included, in pixels."""
     line = WORD_GAP.join(texts)
-    letters = sum(ANTON_WIDTHS.get(ch, ANTON_OTHER) for ch in line) + IMPACT_SPACING * max(0, len(line) - 1)
-    return letters * em + 2 * max(2, round(IMPACT_OUTLINE * em))
+    if face is None:
+        letters = sum(ANTON_WIDTHS.get(ch, ANTON_OTHER) for ch in line)
+    else:
+        letters = text_width(face, line)
+    return (letters + IMPACT_SPACING * max(0, len(line) - 1)) * em + 2 * max(2, round(IMPACT_OUTLINE * em))
 
 
 def _bare_key(text: str) -> str:
@@ -261,13 +269,22 @@ def _hook_style(font: str, size: int, left: int, right: int, hook_top: int, k: f
 
 def build_impact(words, path: Path, vertical: bool, font: str, play: tuple[int, int], hook: str | None, hook_top: int,
                  span: tuple[float, float], center: int | None, accent: str | None,
-                 hook_at: tuple[float, float] | None = None, game: str | None = None) -> int:
-    """The impact style: see build_ass. Each caption is one event pair per word in it (a soft shadow, and the
+                 hook_at: tuple[float, float] | None = None, game: str | None = None,
+                 look: dict | None = None, face: Face | None = None) -> int:
+    """The impact style: see build_ass. `look` (render_options.CaptionLook as a dict) and `face` (its font, read
+    by the caller) change the font, weight, slant, underline, colours, size and case. Each caption is one event pair per word in it (a soft shadow, and the
     words over it), from the moment that word is said: the word being said grows in (ACTIVE_POP), the words not
     said yet are see-through (UPCOMING), the keyword is in the accent colour. A Cap event is named w<i>, the
     index in `words` of the word it marks as being said (scripts/caption_checks.py times them)."""
     play_w, play_h = play
-    m = impact_size(play_h)
+    look = look or {}
+    m = impact_size(play_h, face, (look.get("size") or 100) / 100)
+    upper = look.get("case", "upper") != "as_typed"
+    family = face.family if face else IMPACT_FONT
+    fill = ass_colour(look["colour"])[2:8] if look.get("colour") else "FFFFFF"
+    edge = ass_colour(look["outline_colour"])[2:8] if look.get("outline_colour") else "000000"
+    flags = f"{WEIGHTS[look['weight']] if look.get('weight') else 0},{-1 if look.get('italic') else 0}," \
+            f"{-1 if look.get('underline') else 0},0"
     room = (span[1] - span[0]) * play_w * IMPACT_FILL
     x = round((span[0] + span[1]) / 2 * play_w)
     y = round(LOWER_THIRD * play_h) if center is None else center
@@ -277,21 +294,21 @@ def build_impact(words, path: Path, vertical: bool, font: str, play: tuple[int, 
         "[Script Info]\nScriptType: v4.00+\n"
         f"PlayResX: {play_w}\nPlayResY: {play_h}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n"
         "[V4+ Styles]\n" + STYLE_FORMAT +
-        f"Style: Cap,{IMPACT_FONT},{m.size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,"
+        f"Style: Cap,{family},{m.size},&H00{fill},&H00{fill},&H00{edge},&H00000000,{flags},"
         f"100,100,{spacing},0,1,{m.outline},0,5,0,0,0,1\n"
         # The same letters with nothing visible but their shadow, blurred: a soft shadow under a crisp outline.
-        f"Style: CapShadow,{IMPACT_FONT},{m.size},&HFF000000,&HFF000000,&HFF000000,&H50000000,0,0,0,0,"
+        f"Style: CapShadow,{family},{m.size},&HFF000000,&HFF000000,&HFF000000,&H50000000,{flags},"
         f"100,100,{spacing},0,1,{m.outline},{m.shadow},5,0,0,0,1\n"
         + _hook_style(font, round((78 if vertical and play_h >= play_w else 64) * k), int(span[0] * play_w),
                       int((1 - span[1]) * play_w), hook_top, k)
         + "\n[Events]\n" + EVENT_FORMAT)
     names = proper_names(words)
-    shown = [(i, w) for i, w in enumerate(words) if impact_text(w[2])]
+    shown = [(i, w) for i, w in enumerate(words) if impact_text(w[2], upper)]
     grow = ACTIVE_POP[1]
     # Room for the word being said at its grown size, wherever it is in the line.
-    chunks = group_impact([w for _, w in shown], lambda texts: impact_width(texts, m.em) * grow <= room)
+    chunks = group_impact([w for _, w in shown], lambda texts: impact_width(texts, m.em, face) * grow <= room)
     index = iter(i for i, _ in shown)
-    accent_on, white = "\\c" + ass_colour(accent or ACCENT), "\\c&HFFFFFF&"
+    accent_on, white = "\\c" + ass_colour(accent or ACCENT), f"\\c&H{fill}&"
     lines = []
     if hook:
         a, b = hook_at or (0, HOOK_SECONDS)
@@ -301,11 +318,12 @@ def build_impact(words, path: Path, vertical: bool, font: str, play: tuple[int, 
         end = chunk[-1][1] + CAPTION_HOLD
         if ci + 1 < len(chunks):
             end = min(end, chunks[ci + 1][0][0])
-        texts = [impact_text(t) for _, _, t in chunk]
+        texts = [impact_text(t, upper) for _, _, t in chunk]
         # A word too long for the line at full size is drawn smaller, never wrapped and never off the frame.
-        pct = min(100, int(100 * (room - 2 * m.outline) / max(1.0, impact_width(texts, m.em) * grow - 2 * m.outline)))
+        pct = min(100, int(100 * (room - 2 * m.outline) / max(1.0, impact_width(texts, m.em, face) * grow - 2 * m.outline)))
         # \an5 hangs the line by the middle of the font's whole line; the capitals sit a little under that.
-        row = y - (ANTON_ASCENT - ANTON_DESCENT - ANTON_CAP) / 2 * m.em * pct / 100
+        asc, desc, capr = (face.ascent, face.descent, face.cap) if face else (ANTON_ASCENT, ANTON_DESCENT, ANTON_CAP)
+        row = y - (asc - desc - capr) / 2 * m.em * pct / 100
         place = f"\\pos({x},{row:.0f})\\q2\\fscx{pct}\\fscy{pct}"
         key = keyword([w[2] for w in chunk], [names[i] for i in ids], game)
         small, big, ms = round(pct * ACTIVE_POP[0]), round(pct * grow), ACTIVE_POP[2]
@@ -331,7 +349,8 @@ def build_impact(words, path: Path, vertical: bool, font: str, play: tuple[int, 
 def build_ass(words, path: Path, vertical: bool, caption_top: int, font: str, style: str = "pop",
               play: tuple[int, int] = (1080, 1920), hook: str | None = None, hook_top: int = 0,
               span: tuple[float, float] = (0.0, 1.0), *, center: int | None = None, accent: str | None = None,
-              hook_at: tuple[float, float] | None = None, game: str | None = None) -> int:
+              hook_at: tuple[float, float] | None = None, game: str | None = None, look: dict | None = None,
+              face: Face | None = None) -> int:
     """A few words at a time. Returns the number of captions.
     `hook` is one line of text shown in a box for the first HOOK_SECONDS, `hook_top` pixels from the top.
     `span` is the part of the frame's width (fractions, left and right) the text is centred in: the gameplay
@@ -348,7 +367,8 @@ def build_ass(words, path: Path, vertical: bool, caption_top: int, font: str, st
     The STYLED styles (bounce, karaoke, reveal, outline, subtitle, tag) sit where the word-highlight ones do.
     `hook_at` is when the hook is on screen, (from, to) seconds on the clip's timeline; None: the first HOOK_SECONDS."""
     if style == "impact":
-        return build_impact(words, path, vertical, font, play, hook, hook_top, span, center, accent, hook_at, game)
+        return build_impact(words, path, vertical, font, play, hook, hook_top, span, center, accent, hook_at, game,
+                            look, face)
     if style in STYLED:
         return build_styled(words, path, vertical, caption_top, font, STYLED[style], play, hook, hook_top, span,
                             hook_at)

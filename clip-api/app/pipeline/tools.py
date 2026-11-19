@@ -43,6 +43,8 @@ class RenderOptions:
     caption_font: str = "DejaVu Sans"
     caption_position: str = "auto"    # impact only: auto | seam | lower | center
     caption_accent: str | None = None # impact only: the keyword's colour, #RRGGBB; None = the brand lime
+    caption_look: dict | None = None      # (captions) render_options.CaptionLook as a dict: font, weight, colours...
+    caption_font_file: str | None = None  # (captions) local file of caption_look's "custom:<id>" font (the worker fetches it)
     censor: bool = False
     thumbnail_text: bool = True       # the worker sets the AI's title on the thumbnail (thumbs.py); false: frame only
     resolution: str | None = None     # "480" | "720" | "1080" | "2k" | "4k"; None renders at the size it always did
@@ -132,6 +134,7 @@ def run_export(src: Path, items: list[ExportItem], options: RenderOptions, out_d
                     punch=zoom_expr(list(item.zoom_at)) if options.vertical else "1", has_audio=info.has_audio,
                     hook=hook, flash=item.flash, resolution=options.resolution, position=options.caption_position,
                     accent=options.caption_accent, camera=options.camera, split_ratio=options.split_ratio,
+                    look=options.caption_look, custom_font=_font_file(options),
                     hook_position=options.hook_position, hook_ms=options.hook_duration_ms)
         seconds = planned_seconds(segments)
         if timer is not None:
@@ -180,7 +183,8 @@ def _render_one(src, info, start, end, idx, words, options, layout, facecam, out
                 layout=layout, facecam=facecam, style=options.caption_style, aspect=options.aspect,
                 max_side=options.max_side, deadline=deadline, resolution=options.resolution, preview=options.preview,
                 position=options.caption_position, accent=options.caption_accent, camera=options.camera,
-                split_ratio=options.split_ratio)
+                split_ratio=options.split_ratio,
+                    look=options.caption_look, custom_font=_font_file(options))
     thumb = None
     try:
         # No text yet: these clips have no hook. The worker sets the title on it when the AI writes one.
@@ -377,3 +381,8 @@ def run_find(src: Path, query: str, max_results: int, make_clips: bool, clip_len
     progress("done", 100)
     result = {"query": query, "mode": mode, "matches": picked, "transcript_cached": had_t, "visual_cached": had_v}
     return clips, result, new_t, new_v
+
+
+def _font_file(options) -> Path | None:
+    """(captions) The local file of the caption_look's uploaded font, when it has one."""
+    return Path(options.caption_font_file) if getattr(options, "caption_font_file", None) else None

@@ -100,6 +100,8 @@ class PipelineOptions:
     caption_style: str = "pop"            # impact | pop | bold | neon | boxed | clean
     caption_position: str = "auto"        # impact only: auto | seam | lower | center
     caption_accent: str | None = None     # impact only: the keyword's colour, #RRGGBB; None = the brand lime
+    caption_look: dict | None = None      # (captions) render_options.CaptionLook as a dict: font, weight, colours...
+    caption_font_file: str | None = None  # (captions) local file of caption_look's "custom:<id>" font (the worker fetches it)
     camera: str | None = None             # two-panel layouts: "top" | "bottom"; None = the layout's own
     split_ratio: float | None = None      # two-panel layouts: the top panel's share of the height, 0.25 to 0.75
     censor: bool = False                  # mask swears in captions (burned and captions.json)
@@ -540,6 +542,7 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                             deadline=deadline, segments=segments, punch=zoom_expr(zooms), has_audio=info.has_audio,
                             hook=hook, flash=flash, resolution=options.resolution, position=options.caption_position,
                             accent=options.caption_accent, camera=options.camera, split_ratio=options.split_ratio,
+                            look=options.caption_look, custom_font=_font_file(options),
                             preview=options.render == "preview", hook_position=options.hook_position,
                             hook_ms=options.hook_duration_ms)
             c.features["edit"]["render_sec"] = round(time.monotonic() - t0, 2)
@@ -914,3 +917,8 @@ def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path,
 
 __all__ = ["run_pipeline", "PipelineOptions", "ClipResult", "PipelineError", "PipelineTimeout", "Timer",
            "Deadline", "probe", "asdict", "Moment", "BUCKETS"]
+
+
+def _font_file(options) -> Path | None:
+    """(captions) The local file of the caption_look's uploaded font, when it has one."""
+    return Path(options.caption_font_file) if getattr(options, "caption_font_file", None) else None

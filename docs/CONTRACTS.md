@@ -178,6 +178,8 @@ Checks (`scripts/caption_checks.py`, run on the owner's six eval videos with the
 | `caption_overlap_share`, `hook_overlap_share` | share of frames with text on screen in which a caption or the hook covers a keep-out box | 0 |
 | `out_of_frame` | text events drawn past an edge of the frame | 0 |
 
+Caption look (`caption_look`, an option of every tool, stored only when sent; a custom template saves it as a brand look): `font` (`anton`, `bebas`, `bangers`, `luckiest`, `poppins`, or `custom:<font id>` from `GET /v1/fonts`), `weight` (`regular`, `bold`, `black`), `italic`, `underline`, `colour` and `outline_colour` (`#RRGGBB`), `size` (50 to 200, % of the style's size), `case` (`upper`, `as_typed`), `y` (0.05 to 0.92, the caption's row as a share of the height; it still never covers a keep-out box). It restyles `impact` captions; previews and exports draw it with the same renderer. The keyword keeps `caption_accent`.
+
 `measure` exits 1 while a limit is broken. `sheet` renders each eval window as a preview and cuts a contact sheet per game and aspect for the owner (renders are deleted; footage is never committed).
 
 ## Score calibration (A)
