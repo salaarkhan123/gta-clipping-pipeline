@@ -15,6 +15,13 @@ test("a clip with no saved edit opens with its run's dead air as cuts", () => {
   assert.match(source("lib/edit.ts"), /cuts: deadAir\(clip\.segments, trim\.start, trim\.end\)/);
 });
 
+test("a save or export keeps the words text-based editing saved; the hook switch reaches the export (#218 review)", () => {
+  const edit = source("lib/edit.ts");
+  assert.match(edit, /words\?: EditWord\[\] \| null/);                                          // the editor keeps them
+  assert.match(edit, /forApi = [\s\S]*?Array\.isArray\(e\.words\) \? \{ words: e\.words \}/);   // and sends them back
+  assert.match(source("lib/exporting.ts"), /options = \{ \.\.\.options, hook: options\.hook_overlay \}/);
+});
+
 test("new website jobs ask for previews; the export dialogs show the exact price", () => {
   assert.match(source("lib/options.ts"), /export const RENDER = "preview";/);
   assert.match(source("components/dash/setup/JobSetup.tsx"), /render: RENDER/);

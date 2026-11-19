@@ -13,8 +13,13 @@ import { deadAir } from "./deadair";
 // this into what it sends, so only it changes when the stored format lands.
 export type Span = [number, number];
 export type Line = { start: number; end: number; text: string };
+// - words: the caption word by word as text-based editing saved it (API `edit.words`: edited text, hidden words,
+//   highlights, emoji, splits, words cut with their video). Kept as the API sent it: this editor does not change
+//   it, and a save or export that dropped it would undo those edits (PATCH replaces the whole edit).
+export type EditWord = { start: number; end: number; text: string; hidden?: boolean; cut?: boolean;
+  highlight?: string | null; emoji?: string | null; break_before?: boolean };
 export type Edit = { trim: { start: number; end: number }; cuts: Span[]; caption_lines: Line[]; hook_text: string | null;
-  options: Record<string, unknown> };
+  options: Record<string, unknown>; words?: EditWord[] | null };
 export type Word = { start: number; end: number; text: string };
 
 // An edit carries only the look options the API's edit takes (lib/api-contract.json `edit_options`, checked against
@@ -22,7 +27,8 @@ export type Word = { start: number; end: number; text: string };
 // punch_zoom or flash_forward stay on the job that made the clip.
 const EDIT_OPTIONS = new Set<string>(CONTRACT.edit_options);
 export const editOptions = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => EDIT_OPTIONS.has(k)));
-export const forApi = (e: Edit) => ({ trim: e.trim, cuts: e.cuts, caption_lines: e.caption_lines, hook_text: e.hook_text, options: editOptions(e.options) });
+export const forApi = (e: Edit) => ({ trim: e.trim, cuts: e.cuts, caption_lines: e.caption_lines, hook_text: e.hook_text,
+  ...(Array.isArray(e.words) ? { words: e.words } : {}), options: editOptions(e.options) });
 
 export const round = (t: number) => Math.round(t * 100) / 100;
 // The shortest clip the editor lets the trim make: the API's shortest clip.

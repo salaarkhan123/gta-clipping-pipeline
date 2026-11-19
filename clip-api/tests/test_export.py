@@ -190,6 +190,10 @@ def test_an_edit_sent_with_the_export_is_saved_and_priced():
     doc = ClipEditDoc(trim={"start": 10, "end": 40}, cuts=[[5, 12], [20, 25], [24, 30], [39, 50]])
     assert doc.segments() == [[12.0, 20.0], [30.0, 39.0]]                       # cuts clipped to the trim and joined
     assert ClipEditDoc(trim={"start": 0, "end": 5}).segments() == [[0.0, 5.0]]
+    # A cut left beyond the trim after the end was trimmed back keeps nothing past the trim (Codex, #218).
+    assert ClipEditDoc(trim={"start": 10, "end": 20}, cuts=[[25, 27]]).segments() == [[10.0, 20.0]]
+    assert ClipEditDoc(trim={"start": 10, "end": 30}, cuts=[[2, 5], [15, 16], [35, 40]]).segments() == \
+        [[10.0, 15.0], [16.0, 30.0]]
     with pytest.raises(ValueError):
         ClipEditDoc(trim={"start": 0, "end": 400})                              # longer than 300 s
     with pytest.raises(ValueError):

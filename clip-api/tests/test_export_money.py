@@ -302,3 +302,20 @@ def test_provisional_layouts_are_offered_with_the_setting_on(client, none_job, m
     assert PROVISIONAL <= set(layout["values"]) and {"trio", "grid4"} <= set(layout["by_aspect"]["1:1"])
     assert post(client, headers, "/v1/clips/quote", {"upload_id": job["upload_id"], "options": {"layout": "trio"}}).status_code == 200
     assert post(client, headers, "/v1/clips/export/quote", {"job_id": job["job_id"], "options": {"layout": "grid4"}}).status_code == 200
+
+
+# ---------- the hook switch reaches the export (Codex, #218) ----------
+def test_an_export_keeps_the_jobs_hook_choice_unless_it_sends_its_own(client, user, video, transcriber):
+    """A clip made with hook_overlay off is exported without a hook unless the export asks for one (`hook`); a
+    clip made with it on keeps it unless the export turns it off."""
+    headers, _ = user
+    up = upload(client, headers, video)
+    off = run_clips(client, headers, up["upload_id"], {"max_clips": 1, "clip_length": 10, "render": "none",
+                                                      "hook_overlay": False}, transcriber)
+    on = run_clips(client, headers, up["upload_id"], {"max_clips": 1, "clip_length": 11, "render": "none"}, transcriber)
+    for job, sent, burned in ((off, {}, False), (off, {"hook": True}, True), (on, {}, True), (on, {"hook": False}, False)):
+        body = {"job_id": job["job_id"], "clips": [job["clips"][0]["id"]], "options": sent}
+        r = post(client, headers, "/v1/clips/export", body)
+        assert r.status_code == 202, r.text
+        assert r.json()["options"]["hook_overlay"] is burned, (job["options"].get("hook_overlay"), sent)
+        cancel(client, headers, r.json()["job_id"])
