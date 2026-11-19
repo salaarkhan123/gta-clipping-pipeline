@@ -1,6 +1,9 @@
+"use client";
+import { useRef } from "react";
 import { ComingSoonBadge } from "../../ComingSoonBadge";
 import { LinkIcon } from "../demos/Bits";
-import { SplitClip } from "../demos/Frames";
+import { Credits, Footage, useItems } from "../demos/Footage";
+import { useInView } from "../demos/motion";
 import { Section } from "../../site/Section";
 import { EyebrowIcon } from "./EyebrowIcon";
 
@@ -24,15 +27,29 @@ const STEPS = [
     </div> },
   { title: "Auto editing", soon: false, icon: <><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="M14 6l4 4" /></>,
     text: "In one run the AI finds the moments, reframes them to vertical, adds captions and a hook, and cuts the dead air.",
-    visual: <div className="flex items-end gap-2">
-      {[0, 1, 2].map((i) => <span key={i} className="relative aspect-[9/16] overflow-hidden rounded-[9px] ring-1 ring-white/10" style={{ height: 150 - i * 18 }}><SplitClip game={(["gta", "valorant", "fortnite"] as const)[i]} /></span>)}
-    </div> },
+    visual: <EditedClips /> },
   { title: "Auto posting", soon: true, icon: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 10h16M9 3v4M15 3v4" /></>,
     text: "ClutchClips will post the clips you pick to TikTok, YouTube Shorts and Instagram on a schedule you set. Until then, download and post.",
     visual: <div className="grid w-full max-w-[200px] grid-cols-4 gap-1.5 opacity-70">
       {Array.from({ length: 12 }, (_, i) => <span key={i} className="aspect-square rounded-[6px] border border-dashed border-white/25" />)}
     </div> },
 ];
+
+// Three finished clips from three different games, from the media pipeline. Empty frames until it has them.
+function EditedClips() {
+  const box = useRef<HTMLDivElement>(null), seen = useInView(box, "0px");
+  const games = new Set<string>();
+  const clips = useItems("hero-vertical-clips").filter((i) => /^clip-\d+$/.test(i.id) && i.game && !games.has(i.game) && !!games.add(i.game)).slice(0, 3);
+  return (
+    <div ref={box} className="flex flex-col items-center gap-2">
+      <div className="flex items-end gap-2">
+        {[0, 1, 2].map((i) => <span key={clips[i]?.id ?? i} className="relative aspect-[9/16] overflow-hidden rounded-[9px] bg-white/[.04] ring-1 ring-white/10" style={{ height: 130 - i * 14 }}>
+          {clips[i] && <Footage section="hero-vertical-clips" item={clips[i]} play={seen} />}</span>)}
+      </div>
+      <Credits items={clips} />
+    </div>
+  );
+}
 
 export function WorkflowSection() {
   return (
