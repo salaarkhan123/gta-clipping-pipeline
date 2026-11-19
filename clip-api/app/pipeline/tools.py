@@ -17,8 +17,9 @@ import logging
 from .censor import mask, mask_words
 from .edit import remap_words
 from .facecam import resolve_facecam
-from .render import CHAT_REGIONS, render_clip, render_thumb
+from .render import CHAT_REGIONS, render_clip
 from .stt import LocalProvider, extract_audio
+from .thumbs import Thumb, make_thumbnail
 from .transcribe import Transcriber, Transcript, extract_wav
 from .visual import build_visual_index, search_visual
 
@@ -41,6 +42,7 @@ class RenderOptions:
     caption_position: str = "auto"    # impact only: auto | seam | lower | center
     caption_accent: str | None = None # impact only: the keyword's colour, #RRGGBB; None = the brand lime
     censor: bool = False
+    thumbnail_text: bool = True       # the worker sets the AI's title on the thumbnail (thumbs.py); false: frame only
     resolution: str | None = None     # "480" | "720" | "1080" | "2k" | "4k"; None renders at the size it always did
     preview: bool = False             # a fast, small render to look at (540 on the short side)
     camera: str | None = None         # two-panel layouts: "top" | "bottom"; None = the layout's own
@@ -175,18 +177,27 @@ def _render_one(src, info, start, end, idx, words, options, layout, facecam, out
                 max_side=options.max_side, deadline=deadline, resolution=options.resolution, preview=options.preview,
                 position=options.caption_position, accent=options.caption_accent, camera=options.camera,
                 split_ratio=options.split_ratio)
-    thumb = out_dir / f"clip-{idx}.jpg"
+    thumb = None
     try:
-        render_thumb(video, thumb, deadline)
+        # No text yet: these clips have no hook. The worker sets the title on it when the AI writes one.
+        thumb = make_thumbnail(src, info, start, end, out_dir / f"clip-{idx}.jpg", options=options, layout=layout,
+                               facecam=facecam, deadline=deadline)
     except PipelineTimeout:
         raise
     except PipelineError:
-        thumb = None
+        pass
     caps = None
     if words:
         caps = out_dir / f"clip-{idx}.captions.json"
         caps.write_text(json.dumps({"words": [{"start": s, "end": e, "text": t} for s, e, t in words]}))
     return video, thumb, caps
+
+
+def _thumb_fields(thumb: Thumb | None, features: dict) -> dict:
+    """ClipResult fields for a thumbnail (or none), its record kept in `features`."""
+    if thumb is None:
+        return {"features": features}
+    return {"thumb_path": thumb.path, "frame_path": thumb.frame, "features": {**features, "thumbnail": thumb.record}}
 
 
 def _relative(words, start: float, end: float):
@@ -220,8 +231,7 @@ def run_render(src: Path, segments: list, options: RenderOptions, out_dir: Path,
         progress("rendering", 50 + int(48 * (i - 1) / n))
         video, thumb, caps = _render_one(src, info, a, b, i, words, options, layout, facecam, out_dir, deadline)
         results.append(ClipResult(start=round(a, 3), end=round(b, 3), score=1.0, signals={"manual": 1.0},
-                                  features={"words": len(words)}, video_path=video, thumb_path=thumb,
-                                  captions_path=caps))
+                                  video_path=video, captions_path=caps, **_thumb_fields(thumb, {"words": len(words)})))
     if not results:
         raise PipelineError("bad_segment", "None of the requested segments fall inside this video.")
     progress("done", 100)
@@ -361,8 +371,8 @@ def run_find(src: Path, query: str, max_results: int, make_clips: bool, clip_len
             video, thumb, caps = _render_one(src, info, start, end, i, words, options, layout, facecam,
                                              out_dir, deadline)
             clips.append(ClipResult(start=round(start, 3), end=round(end, 3), score=m["score"],
-                                    signals={m["kind"]: 1.0}, features={"query": query, "text": m["text"][:300]},
-                                    video_path=video, thumb_path=thumb, captions_path=caps))
+                                    signals={m["kind"]: 1.0}, video_path=video, captions_path=caps,
+                                    **_thumb_fields(thumb, {"query": query, "text": m["text"][:300]})))
     progress("done", 100)
     result = {"query": query, "mode": mode, "matches": picked, "transcript_cached": had_t, "visual_cached": had_v}
     return clips, result, new_t, new_v

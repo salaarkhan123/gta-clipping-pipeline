@@ -29,7 +29,8 @@ from typing import Callable
 import numpy as np
 
 from .ff import SAFE_IN, Deadline, PipelineError, PipelineTimeout, probe, run  # noqa: F401 (re-exported)
-from .render import CHAT_REGIONS, FACECAM_REGIONS, render_clip, render_thumb, resolve_layout
+from .render import CHAT_REGIONS, FACECAM_REGIONS, render_clip, resolve_layout
+from .thumbs import make_thumbnail, thumb_text
 from .censor import mask, mask_words
 from .facecam import moment_facecam, resolve_facecam
 from .timing import Timer
@@ -84,6 +85,7 @@ class PipelineOptions:
     punch_zoom: bool = True               # subtle punch-in zooms (max 1.15x) on the gameplay at loudness spikes
     flash_forward: bool = True            # open on 1.5 s of the peak when the judge names one, then cut back
     hook_overlay: bool = True             # burn the judge's on-screen hook text over the first 2.5 s
+    thumbnail_text: bool = True           # set the hook (else the title) on the thumbnail; independent of hook_overlay
     template: str | None = None           # the template these options came from (recorded, not interpreted here)
     prompt: str | None = None             # the user's words for the moments they want: handed to the judge as data
     weights: dict | None = None           # per-signal weights overriding WEIGHTS, e.g. {"audio": 1.0}
@@ -114,10 +116,11 @@ class ClipResult:
     signals: dict                 # share of the score from each signal (user-facing "why this clip")
     features: dict                # raw features (training data for the future ranker)
     video_path: Path | None       # None: rendered with render "none" (no video yet)
-    thumb_path: Path | None = None
+    thumb_path: Path | None = None    # the thumbnail: the clip's best frame with its hook text (thumbs.py)
     captions_path: Path | None = None
     meta: dict | None = None      # the judge's title, hashtags and virality for this clip
     index: int = 0                # the clip's number within the job, in the order the moments happen (1 = earliest)
+    frame_path: Path | None = None    # that frame without text (what an AI is shown)
 
 
 @dataclass
@@ -394,13 +397,9 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         # (render, agent B) render "none" stores no video (POST /v1/clips/export makes one later), "preview" a
         # fast small one. With moment_layout on, auto draws each moment for what it shows (facecam.moment_facecam).
         video = out_dir / f"clip-{i}.mp4" if options.render != "none" else None
-        thumb = out_dir / f"clip-{i}.jpg"
         timer.count("clips")
-        if video is None:
-            with timer.stage("thumbnail"):
-                thumb = _frame(input_path, (c.peak if c.peak is not None else c.start + 1.0), thumb, deadline)
-        else:
-            lay, cam = layout, facecam
+        lay, cam = layout, facecam
+        if video is not None:
             if options.moment_layout and options.layout == "auto" and options.vertical and layout != "classic":
                 with timer.stage("moment_scene"):
                     lay, cam = moment_facecam(input_path, info, c.start, c.end, layout, facecam, deadline)
@@ -417,20 +416,28 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                             hook_ms=options.hook_duration_ms)
             c.features["edit"]["render_sec"] = round(time.monotonic() - t0, 2)
             timer.count("rendered_sec", round(kept_duration(segments), 1))
-            try:
-                with timer.stage("thumbnail"):
-                    render_thumb(video, thumb, deadline)
-            except PipelineTimeout:
-                raise
-            except PipelineError:
-                thumb = None
+        # (U7) The thumbnail is drawn from the source in the clip's layout, so a clip with no video yet has one too.
+        thumb = frame = None
+        try:
+            with timer.stage("thumbnail"):
+                on_thumb = thumb_text(c.meta, options.censor) if options.thumbnail_text else None
+                made = make_thumbnail(input_path, info, c.start, c.end, out_dir / f"clip-{i}.jpg", options=options,
+                                      layout=lay, facecam=cam, text=on_thumb, segments=segments, peak=c.peak,
+                                      loudness=db, speech=[(s, e) for s, e, _ in spoken] if use_asr else None,
+                                      deadline=deadline)
+            thumb, frame, c.features["thumbnail"] = made.path, made.frame, made.record
+        except PipelineTimeout:
+            raise
+        except PipelineError:
+            pass
         caps = None
         if words:
             caps = out_dir / f"clip-{i}.captions.json"
             caps.write_text(json.dumps({"words": [{"start": s, "end": e, "text": t} for s, e, t in words]}))
         results.append(ClipResult(start=round(c.start, 3), end=round(c.end, 3), score=round(c.final, 4),
                                   signals=c.signals, features=c.features, video_path=video,
-                                  thumb_path=thumb, captions_path=caps, meta=c.meta, index=i))
+                                  thumb_path=thumb, captions_path=caps, meta=c.meta, index=i,
+                                  frame_path=frame))
         if done == 0:
             timer.count("first_clip_sec", round(time.monotonic() - t_begin, 1))
         if on_clip is not None:

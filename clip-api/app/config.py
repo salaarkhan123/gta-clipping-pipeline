@@ -13,6 +13,24 @@ DEFAULT_PACKS = json.dumps([
     {"id": "pack_5000", "name": "5,000 credits", "credits": 5000, "price_cents": 4999},
 ])
 
+# Premium AI thumbnails (#140): the named looks a user picks from. Each prompt describes a look only; the fixed
+# rules (keep the face, add nothing, no text, brand-safe) are in app/imagegen/prompts.py and always come first.
+# Override with PREMIUM_THUMB_STYLES (the same JSON shape).
+DEFAULT_THUMB_STYLES = json.dumps([
+    {"id": "cinematic", "name": "Cinematic",
+     "prompt": "a cinematic film still: teal and orange color grade, soft volumetric light, gentle haze and depth in "
+               "the background, rich contrast, a subtle vignette"},
+    {"id": "high_energy", "name": "High-energy gaming",
+     "prompt": "a high-energy gaming thumbnail: punchy saturated colors, strong colored rim light on the person, a "
+               "soft glow outline around them, vivid contrast and motion energy in the existing background"},
+    {"id": "clean", "name": "Clean professional",
+     "prompt": "a clean professional look: balanced natural colors, crisp detail, soft even lighting, a slightly "
+               "calmer, less cluttered background"},
+    {"id": "dramatic", "name": "Dramatic",
+     "prompt": "a dramatic look: deep shadows, moody low-key lighting with one strong key light on the person, a "
+               "dark vignette and an intense atmosphere"},
+])
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -77,6 +95,12 @@ class Settings(BaseSettings):
     # Signup without accept_policies=true is refused (422 terms_required). Off by default so API clients written
     # before consent records keep working; the website always sends it. Owner decision (app/legal.py).
     require_terms_acceptance: bool = False
+    # Copyright and likeness reports (app/trust.py). TRUST_ADMIN_EMAIL: where new-report notices go (comma
+    # separated); empty = every active admin account. Limits are per sender IP and per claimant email.
+    trust_admin_email: str = ""
+    trust_reports_per_ip_per_hour: int = 5
+    trust_reports_per_ip_per_day: int = 20
+    trust_reports_per_email_per_day: int = 3
 
     # Stripe
     stripe_secret_key: str = ""
@@ -93,6 +117,17 @@ class Settings(BaseSettings):
     # AI titles, hashtags and virality scores (optional; off when the key is empty)
     anthropic_api_key: str = ""
     ai_model: str = "claude-haiku-5-5"
+
+    # Premium AI thumbnails (#140, paid; owner OK 2026-11-17). Off until real provider testing and a quality check
+    # are done: off, the premium routes answer 404 `premium_thumbnails_off` and /v1/options does not list them. The
+    # free frame-based thumbnail is always made and stays free.
+    premium_thumbnails: bool = False
+    premium_thumb_credits: int = Field(25, ge=1)      # what one premium thumbnail costs: the only price used
+    gemini_api_key: str = ""                          # Gemini Nano Banana 2.1 (image edit); a billing-enabled key only
+    gemini_image_model: str = "gemini-nano-banana-2.1"
+    gemini_image_size: str = "2K"                     # 1K | 2K | 4K (upper-case K)
+    premium_thumb_timeout_sec: float = Field(60.0, ge=5, le=300)   # one provider attempt, end to end
+    premium_thumb_styles: str = DEFAULT_THUMB_STYLES
 
     # Pipeline
     whisper_model: str = "small.en"   # captions. "none" disables transcription and captions
@@ -126,6 +161,10 @@ class Settings(BaseSettings):
     @property
     def packs(self) -> list[dict]:
         return json.loads(self.credit_packs)
+
+    @property
+    def thumb_styles(self) -> list[dict]:
+        return json.loads(self.premium_thumb_styles)
 
     @property
     def work_dir(self) -> Path:

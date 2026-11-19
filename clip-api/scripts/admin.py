@@ -6,6 +6,7 @@
   grant EMAIL CREDITS [--note TEXT]             add (or with a negative number, remove) credits
   balance EMAIL                                 show balance and recent ledger rows
   suspend EMAIL / unsuspend EMAIL               block or unblock an account
+  make-admin EMAIL / revoke-admin EMAIL         let an account use the admin routes (/v1/admin/...) from its login
   stuck                                         list QUEUED/RUNNING jobs
   send-test-email --to ADDRESS                  send one email through the configured SMTP (exit 2: not configured, 1: failed)
   selftest                                      load every model and tool once (run in the worker container)
@@ -158,6 +159,8 @@ def main() -> None:
     c = sub.add_parser("balance"); c.add_argument("email")
     c = sub.add_parser("suspend"); c.add_argument("email")
     c = sub.add_parser("unsuspend"); c.add_argument("email")
+    c = sub.add_parser("make-admin"); c.add_argument("email")
+    c = sub.add_parser("revoke-admin"); c.add_argument("email")
     sub.add_parser("stuck")
     sub.add_parser("selftest")
     sub.add_parser("db-status")
@@ -225,6 +228,11 @@ def main() -> None:
             account.status = "suspended" if args.cmd == "suspend" else "active"
             db.commit()
             print(f"{account.email}: {account.status}")
+        elif args.cmd in ("make-admin", "revoke-admin"):
+            account = find(db, args.email)
+            account.is_admin = args.cmd == "make-admin"
+            db.commit()
+            print(f"{account.email}: {'admin' if account.is_admin else 'not an admin'}")
         elif args.cmd == "stuck":
             jobs = db.execute(select(Job).where(Job.status.in_(("QUEUED", "RUNNING"))).order_by(Job.created_at)).scalars()
             for j in jobs:
