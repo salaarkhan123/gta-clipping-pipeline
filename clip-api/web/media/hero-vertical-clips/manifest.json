@@ -4,31 +4,94 @@
  "permission": "owner-confirmed 2026-11-18",
  "credits": [
   {
-   "creator": "TmarTn2",
-   "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
-  },
-  {
    "creator": "xQc",
    "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU"
   },
   {
-   "creator": "Ninja",
-   "url": "https://www.youtube.com/watch?v=ogbIEh-4rYw"
+   "creator": "TmarTn2",
+   "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
+  },
+  {
+   "creator": "iShowSpeed",
+   "url": "https://www.youtube.com/watch?v=qNOcoUKzt80"
   },
   {
    "creator": "iiTzTimmy",
    "url": "https://www.youtube.com/watch?v=ovyMOe_017I"
+  },
+  {
+   "creator": "NICKMERCS",
+   "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
+  },
+  {
+   "creator": "Ninja",
+   "url": "https://www.youtube.com/watch?v=ogbIEh-4rYw"
   }
  ],
  "items": [
   {
    "id": "clip-1",
+   "candidate": "xqc-m3",
+   "label": "GTA VI",
+   "kind": "video",
+   "src": "clip-1.mp4",
+   "poster": "clip-1.webp",
+   "width": 540,
+   "height": 960,
+   "duration_sec": 8.0,
+   "game": "GTA VI",
+   "aspect": "9:16",
+   "layout": "auto",
+   "caption_style": "impact",
+   "rank": 3,
+   "rating": 85,
+   "rating_source": "ai",
+   "credit": "Footage: xQc",
+   "source": {
+    "id": "xqc",
+    "creator": "xQc",
+    "title": "xQc Plays GRAND THEFT AUTO VI (Part 1)",
+    "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU",
+    "start_sec": 1369.39,
+    "end_sec": 1377.39
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18",
+   "rating_raw": 43,
+   "ai_model": "claude-haiku-5-5",
+   "ai_scores": {
+    "hook": 55,
+    "payoff": 35,
+    "clarity": 40,
+    "emotion": 45,
+    "pacing": 40
+   },
+   "scoring_version": "judge-v2-equal",
+   "ai_reason": "The streamer's loud COMIN' IN is a fun hook, but there is no speech beyond the radio line, the boat arrival is calm, and viewers without context won't know the stakes.",
+   "ai_kind": "reaction",
+   "ai_calls": [
+    {
+     "cid": "xqc-m3",
+     "model": "claude-haiku-5-5",
+     "status": 200,
+     "input_tokens": 2883,
+     "output_tokens": 426,
+     "cost_usd": 0.000501,
+     "price_per_mtok": [
+      0.1,
+      0.5
+     ],
+     "pricing_source": "claude-api skill table, cached 2026-11-03, checked 2026-11-18"
+    }
+   ]
+  },
+  {
+   "id": "clip-2",
    "candidate": "forza-m1",
    "label": "Forza Horizon 5",
    "kind": "video",
-   "src": "clip-1.mp4",
-   "webm": "clip-1.webm",
-   "poster": "clip-1.webp",
+   "src": "clip-2.mp4",
+   "webm": "clip-2.webm",
+   "poster": "clip-2.webp",
    "width": 540,
    "height": 960,
    "duration_sec": 8.0,
@@ -104,79 +167,53 @@
    ]
   },
   {
-   "id": "clip-2",
-   "candidate": "xqc-m1",
-   "label": "GTA VI",
+   "id": "clip-3",
+   "candidate": "fifa-speed-m1",
+   "label": "EA FC 27 pack opening",
    "kind": "video",
-   "src": "clip-2.mp4",
-   "webm": "clip-2.webm",
-   "poster": "clip-2.webp",
+   "src": "clip-3.mp4",
+   "webm": "clip-3.webm",
+   "poster": "clip-3.webp",
    "width": 540,
    "height": 960,
    "duration_sec": 8.0,
-   "game": "GTA VI",
+   "game": "EA SPORTS FC 27",
    "aspect": "9:16",
    "layout": "auto",
    "caption_style": "impact",
    "rank": 1,
-   "rating": 84,
+   "rating": 90,
    "rating_source": "ai",
-   "credit": "Footage: xQc",
-   "source": {
-    "id": "xqc",
-    "creator": "xQc",
-    "title": "xQc Plays GRAND THEFT AUTO VI (Part 1)",
-    "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU",
-    "start_sec": 8790.71,
-    "end_sec": 8798.71
-   },
+   "credit": "Footage: iShowSpeed",
    "commercial_permission": "owner-confirmed 2026-11-18",
-   "rating_raw": 44,
+   "source": {
+    "id": "fifa-speed",
+    "creator": "iShowSpeed",
+    "title": "iShowSpeed's FIRST FC 27 Pack Opening!",
+    "url": "https://www.youtube.com/watch?v=qNOcoUKzt80",
+    "start_sec": 745.1,
+    "end_sec": 753.1
+   },
+   "rating_raw": 49,
    "ai_model": "claude-haiku-5-5",
    "ai_scores": {
-    "hook": 45,
-    "payoff": 50,
+    "hook": 55,
+    "payoff": 45,
     "clarity": 35,
-    "emotion": 40,
+    "emotion": 60,
     "pacing": 50
    },
    "scoring_version": "judge-v2-equal",
-   "ai_reason": "Funny self-correcting line with a visible character doing a workout, but without context the setup is hard to follow and the joke is small.",
-   "ai_kind": "funny",
+   "ai_reason": "Loud excited shouting gives energy, but the frame shows only an Arsenal crest and the outcome is not clear, so a viewer who never saw the stream won't know what the guard call means.",
+   "ai_kind": "reaction",
    "ai_calls": [
     {
-     "cid": "xqc-m1",
-     "model": "claude-haiku-5-5",
-     "status": 401,
-     "input_tokens": 0,
-     "output_tokens": 0,
-     "cost_usd": 0.0,
-     "price_per_mtok": [
-      0.1,
-      0.5
-     ],
-     "pricing_source": "claude-api skill table, cached 2026-11-03, checked 2026-11-18"
-    },
-    {
-     "cid": "xqc-m1",
-     "model": "claude-haiku-5-5",
-     "status": 401,
-     "input_tokens": 0,
-     "output_tokens": 0,
-     "cost_usd": 0.0,
-     "price_per_mtok": [
-      0.1,
-      0.5
-     ],
-     "pricing_source": "claude-api skill table, cached 2026-11-03, checked 2026-11-18"
-    },
-    {
-     "cid": "xqc-m1",
+     "cid": "fifa-speed-m1",
      "model": "claude-haiku-5-5",
      "status": 200,
-     "input_tokens": 2929,
-     "output_tokens": 387,
-     "cost_usd": 0.000486,
+     "input_tokens": 2911,
+     "output_tokens": 413,
+     "cost_usd": 0.000498,
      "price_per_mtok": [
       0.1,
       0.5
@@ -186,13 +223,124 @@
    ]
   },
   {
-   "id": "clip-3",
+   "id": "clip-4",
+   "candidate": "timmy-m3",
+   "label": "Valorant",
+   "kind": "video",
+   "src": "clip-4.mp4",
+   "webm": "clip-4.webm",
+   "poster": "clip-4.webp",
+   "width": 540,
+   "height": 960,
+   "duration_sec": 8.0,
+   "game": "Valorant",
+   "aspect": "9:16",
+   "layout": "auto",
+   "caption_style": "impact",
+   "rank": 3,
+   "rating": 87,
+   "rating_source": "ai",
+   "credit": "Footage: iiTzTimmy",
+   "source": {
+    "id": "timmy",
+    "creator": "iiTzTimmy",
+    "title": "I Might Be Getting TOO Good at Valorant\u2026 (Lowest To Highest Rank Challenge)",
+    "url": "https://www.youtube.com/watch?v=ovyMOe_017I",
+    "start_sec": 2059.5,
+    "end_sec": 2067.5
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18",
+   "rating_raw": 45,
+   "ai_model": "claude-haiku-5-5",
+   "ai_scores": {
+    "hook": 55,
+    "payoff": 40,
+    "clarity": 25,
+    "emotion": 60,
+    "pacing": 45
+   },
+   "scoring_version": "judge-v2-equal",
+   "ai_reason": "The clip is a Valorant spike-plant scene, not GTA, and the outcome is unclear; the streamer's mixed reactions carry the energy but a viewer without context won't follow the play.",
+   "ai_kind": "reaction",
+   "ai_calls": [
+    {
+     "cid": "timmy-m3",
+     "model": "claude-haiku-5-5",
+     "status": 200,
+     "input_tokens": 2945,
+     "output_tokens": 410,
+     "cost_usd": 0.0005,
+     "price_per_mtok": [
+      0.1,
+      0.5
+     ],
+     "pricing_source": "claude-api skill table, cached 2026-11-03, checked 2026-11-18"
+    }
+   ]
+  },
+  {
+   "id": "clip-5",
+   "candidate": "cod-nick-m1",
+   "label": "Call of Duty: Warzone",
+   "kind": "video",
+   "src": "clip-5.mp4",
+   "poster": "clip-5.webp",
+   "width": 540,
+   "height": 960,
+   "duration_sec": 8.0,
+   "game": "Call of Duty: Warzone",
+   "aspect": "9:16",
+   "layout": "auto",
+   "caption_style": "impact",
+   "rank": 1,
+   "rating": 84,
+   "rating_source": "ai",
+   "credit": "Footage: NICKMERCS",
+   "commercial_permission": "owner-confirmed 2026-11-18",
+   "source": {
+    "id": "cod-nick",
+    "creator": "NICKMERCS",
+    "title": "THIS MIGHT BE THE BEST VERSION OF WARZONE",
+    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c",
+    "start_sec": 869.1,
+    "end_sec": 877.1
+   },
+   "rating_raw": 42,
+   "ai_model": "claude-haiku-5-5",
+   "ai_scores": {
+    "hook": 55,
+    "payoff": 35,
+    "clarity": 30,
+    "emotion": 50,
+    "pacing": 40
+   },
+   "scoring_version": "judge-v2-equal",
+   "ai_reason": "The on-screen \"WE MADE IT\" hook and a chase setup are good, but the transcript is vague and the payoff (catching them in the cubbies) is unclear without context.",
+   "ai_kind": "story",
+   "ai_calls": [
+    {
+     "cid": "cod-nick-m1",
+     "model": "claude-haiku-5-5",
+     "status": 200,
+     "input_tokens": 2922,
+     "output_tokens": 397,
+     "cost_usd": 0.000491,
+     "price_per_mtok": [
+      0.1,
+      0.5
+     ],
+     "pricing_source": "claude-api skill table, cached 2026-11-03, checked 2026-11-18"
+    }
+   ]
+  },
+  {
+   "id": "clip-6",
    "candidate": "ninja-m1",
    "label": "Fortnite",
    "kind": "video",
-   "src": "clip-3.mp4",
-   "webm": "clip-3.webm",
-   "poster": "clip-3.webp",
+   "src": "clip-6.mp4",
+   "webm": "clip-6.webm",
+   "poster": "clip-6.webp",
    "width": 540,
    "height": 960,
    "duration_sec": 8.0,
@@ -201,7 +349,7 @@
    "layout": "auto",
    "caption_style": "impact",
    "rank": 1,
-   "rating": 76,
+   "rating": 80,
    "rating_source": "ai",
    "credit": "Footage: Ninja",
    "source": {
@@ -268,290 +416,45 @@
    ]
   },
   {
-   "id": "clip-4",
-   "candidate": "xqc-m2",
-   "label": "GTA VI",
+   "id": "clip-wide",
+   "candidate": "wide--xqc-m3",
+   "label": "GTA VI (16:9)",
    "kind": "video",
-   "src": "clip-4.mp4",
-   "webm": "clip-4.webm",
-   "poster": "clip-4.webp",
-   "width": 540,
-   "height": 960,
+   "src": "clip-wide.mp4",
+   "poster": "clip-wide.webp",
+   "width": 960,
+   "height": 540,
    "duration_sec": 8.0,
    "game": "GTA VI",
-   "aspect": "9:16",
+   "aspect": "16:9",
    "layout": "auto",
    "caption_style": "impact",
-   "rank": 2,
-   "rating": 73,
+   "rank": 3,
+   "rating": 85,
    "rating_source": "ai",
    "credit": "Footage: xQc",
+   "commercial_permission": "owner-confirmed 2026-11-18",
    "source": {
     "id": "xqc",
     "creator": "xQc",
     "title": "xQc Plays GRAND THEFT AUTO VI (Part 1)",
     "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU",
-    "start_sec": 11046.31,
-    "end_sec": 11054.31
+    "start_sec": 1369.39,
+    "end_sec": 1377.39
    },
-   "commercial_permission": "owner-confirmed 2026-11-18",
-   "rating_raw": 34,
+   "rating_raw": 43,
    "ai_model": "claude-haiku-5-5",
    "ai_scores": {
-    "hook": 35,
-    "payoff": 30,
-    "clarity": 30,
-    "emotion": 35,
+    "hook": 55,
+    "payoff": 35,
+    "clarity": 40,
+    "emotion": 45,
     "pacing": 40
    },
    "scoring_version": "judge-v2-equal",
-   "ai_reason": "Quiet underwater search with a small reveal of gold doubloons; the frame shows a murky seabed and on-screen captions that carry most of the context, so the payoff is weak.",
-   "ai_kind": "story",
-   "ai_calls": [
-    {
-     "cid": "xqc-m2",
-     "model": "claude-haiku-5-5",
-     "status": 401,
-     "input_tokens": 0,
-     "output_tokens": 0,
-     "cost_usd": 0.0,
-     "price_per_mtok": [
-      0.1,
-      0.5
-     ],
-     "pricing_source": "claude-api skill table, cached 2026-11-03, checked 2026-11-18"
-    },
-    {
-     "cid": "xqc-m2",
-     "model": "claude-haiku-5-5",
-     "status": 401,
-     "input_tokens": 0,
-     "output_tokens": 0,
-     "cost_usd": 0.0,
-     "price_per_mtok": [
-      0.1,
-      0.5
-     ],
-     "pricing_source": "claude-api skill table, cached 2026-11-03, checked 2026-11-18"
-    },
-    {
-     "cid": "xqc-m2",
-     "model": "claude-haiku-5-5",
-     "status": 200,
-     "input_tokens": 2891,
-     "output_tokens": 404,
-     "cost_usd": 0.000491,
-     "price_per_mtok": [
-      0.1,
-      0.5
-     ],
-     "pricing_source": "claude-api skill table, cached 2026-11-03, checked 2026-11-18"
-    }
-   ]
-  },
-  {
-   "id": "clip-5",
-   "candidate": "timmy-m1",
-   "label": "Valorant",
-   "kind": "video",
-   "src": "clip-5.mp4",
-   "poster": "clip-5.webp",
-   "width": 540,
-   "height": 960,
-   "duration_sec": 8.0,
-   "game": "Valorant",
-   "aspect": "9:16",
-   "layout": "auto",
-   "caption_style": "impact",
-   "rank": 1,
-   "rating": 67,
-   "rating_source": "ai",
-   "credit": "Footage: iiTzTimmy",
-   "source": {
-    "id": "timmy",
-    "creator": "iiTzTimmy",
-    "title": "I Might Be Getting TOO Good at Valorant\u2026 (Lowest To Highest Rank Challenge)",
-    "url": "https://www.youtube.com/watch?v=ovyMOe_017I",
-    "start_sec": 2198.35,
-    "end_sec": 2206.35
-   },
-   "commercial_permission": "owner-confirmed 2026-11-18",
-   "rating_raw": 29,
-   "ai_model": "claude-haiku-5-5",
-   "ai_scores": {
-    "hook": 30,
-    "payoff": 25,
-    "clarity": 35,
-    "emotion": 20,
-    "pacing": 35
-   },
-   "scoring_version": "judge-v2-equal",
-   "ai_reason": "Opinion-only talk about a weapon with no on-screen action shown; the frame is a buy phase screen, so the claim has no visual proof and the game context is unclear to non-players.",
-   "ai_kind": "story",
-   "ai_calls": [
-    {
-     "cid": "timmy-m1",
-     "model": "claude-haiku-5-5",
-     "status": 401,
-     "input_tokens": 0,
-     "output_tokens": 0,
-     "cost_usd": 0.0,
-     "price_per_mtok": [
-      0.1,
-      0.5
-     ],
-     "pricing_source": "claude-api skill table, cached 2026-11-03, checked 2026-11-18"
-    },
-    {
-     "cid": "timmy-m1",
-     "model": "claude-haiku-5-5",
-     "status": 401,
-     "input_tokens": 0,
-     "output_tokens": 0,
-     "cost_usd": 0.0,
-     "price_per_mtok": [
-      0.1,
-      0.5
-     ],
-     "pricing_source": "claude-api skill table, cached 2026-11-03, checked 2026-11-18"
-    },
-    {
-     "cid": "timmy-m1",
-     "model": "claude-haiku-5-5",
-     "status": 200,
-     "input_tokens": 2980,
-     "output_tokens": 422,
-     "cost_usd": 0.000509,
-     "price_per_mtok": [
-      0.1,
-      0.5
-     ],
-     "pricing_source": "claude-api skill table, cached 2026-11-03, checked 2026-11-18"
-    }
-   ]
-  },
-  {
-   "id": "clip-6",
-   "candidate": "ninja-m2",
-   "label": "Fortnite",
-   "kind": "video",
-   "src": "clip-6.mp4",
-   "poster": "clip-6.webp",
-   "width": 540,
-   "height": 960,
-   "duration_sec": 8.0,
-   "game": "Fortnite",
-   "aspect": "9:16",
-   "layout": "auto",
-   "caption_style": "impact",
-   "rank": 2,
-   "rating": 55,
-   "rating_source": "ai",
-   "credit": "Footage: Ninja",
-   "source": {
-    "id": "ninja",
-    "creator": "Ninja",
-    "title": "Ninja Live Stream 15/8/2018 - Game Fortnite",
-    "url": "https://www.youtube.com/watch?v=ogbIEh-4rYw",
-    "start_sec": 1321.37,
-    "end_sec": 1329.37
-   },
-   "commercial_permission": "owner-confirmed 2026-11-18",
-   "rating_raw": 18,
-   "ai_model": "claude-haiku-5-5",
-   "ai_scores": {
-    "hook": 25,
-    "payoff": 15,
-    "clarity": 12,
-    "emotion": 20,
-    "pacing": 18
-   },
-   "scoring_version": "judge-v2-equal",
-   "ai_reason": "The frame shows a Fortnite lobby with a level and XP bar, not GTA, and the transcript is a disjointed chat shout-out about bits and an anniversary, with no clear event or payoff.",
+   "ai_reason": "The streamer's loud COMIN' IN is a fun hook, but there is no speech beyond the radio line, the boat arrival is calm, and viewers without context won't know the stakes.",
    "ai_kind": "reaction",
-   "ai_calls": [
-    {
-     "cid": "ninja-m2",
-     "model": "claude-haiku-5-5",
-     "status": 401,
-     "input_tokens": 0,
-     "output_tokens": 0,
-     "cost_usd": 0.0,
-     "price_per_mtok": [
-      0.1,
-      0.5
-     ],
-     "pricing_source": "claude-api skill table, cached 2026-11-03, checked 2026-11-18"
-    },
-    {
-     "cid": "ninja-m2",
-     "model": "claude-haiku-5-5",
-     "status": 401,
-     "input_tokens": 0,
-     "output_tokens": 0,
-     "cost_usd": 0.0,
-     "price_per_mtok": [
-      0.1,
-      0.5
-     ],
-     "pricing_source": "claude-api skill table, cached 2026-11-03, checked 2026-11-18"
-    },
-    {
-     "cid": "ninja-m2",
-     "model": "claude-haiku-5-5",
-     "status": 200,
-     "input_tokens": 2920,
-     "output_tokens": 410,
-     "cost_usd": 0.000497,
-     "price_per_mtok": [
-      0.1,
-      0.5
-     ],
-     "pricing_source": "claude-api skill table, cached 2026-11-03, checked 2026-11-18"
-    }
-   ]
-  },
-  {
-   "id": "clip-wide",
-   "candidate": "wide--forza-m1",
-   "label": "Forza Horizon 5 (16:9)",
-   "kind": "video",
-   "src": "clip-wide.mp4",
-   "webm": "clip-wide.webm",
-   "poster": "clip-wide.webp",
-   "width": 960,
-   "height": 540,
-   "duration_sec": 8.0,
-   "game": "Forza Horizon 5",
-   "aspect": "16:9",
-   "layout": "auto",
-   "caption_style": "impact",
-   "rank": 1,
-   "rating": 92,
-   "rating_source": "ai",
-   "credit": "Footage: TmarTn2",
-   "commercial_permission": "owner-confirmed 2026-11-18",
-   "source": {
-    "id": "forza",
-    "creator": "TmarTn2",
-    "title": "Forza Horizon 5 - Part 1 - The Beginning",
-    "url": "https://www.youtube.com/watch?v=78kntDlbjMI",
-    "start_sec": 2604.65,
-    "end_sec": 2612.65
-   },
-   "rating_raw": 51,
-   "ai_model": "claude-haiku-5-5",
-   "ai_scores": {
-    "hook": 62,
-    "payoff": 48,
-    "clarity": 42,
-    "emotion": 55,
-    "pacing": 50
-   },
-   "scoring_version": "judge-v2-equal",
-   "ai_reason": "The denial line is funny and the on-screen text sets up a crash, but the car crash is only shown at the end and the context of who pushed whom is unclear without the stream.",
-   "ai_kind": "argument",
-   "rating_of_candidate": "forza-m1"
+   "rating_of_candidate": "xqc-m3"
   }
  ]
 }

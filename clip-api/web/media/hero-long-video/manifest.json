@@ -11,11 +11,10 @@
  "items": [
   {
    "id": "vod",
-   "candidate": "xqc-m1",
+   "candidate": "xqc-m3",
    "label": "The long video",
    "kind": "video",
    "src": "vod.mp4",
-   "webm": "vod.webm",
    "poster": "vod.webp",
    "width": 960,
    "height": 540,
@@ -23,20 +22,21 @@
    "game": "GTA VI",
    "aspect": "16:9",
    "layout": "original",
-   "rank": 1,
-   "rating": 99,
+   "rank": 3,
+   "rating": 90,
    "rating_source": "signals",
    "credit": "Footage: xQc",
+   "commercial_permission": "owner-confirmed 2026-11-18",
    "source": {
     "id": "xqc",
     "creator": "xQc",
     "title": "xQc Plays GRAND THEFT AUTO VI (Part 1)",
     "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU",
-    "start_sec": 8790.67,
-    "end_sec": 8798.67
+    "start_sec": 1369.63,
+    "end_sec": 1377.63
    },
-   "loop_sec": 8.0,
-   "commercial_permission": "owner-confirmed 2026-11-18"
+   "signals": "vod.signals.json",
+   "loop_sec": 8.0
   }
  ]
 }

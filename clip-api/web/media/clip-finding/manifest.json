@@ -14,6 +14,18 @@
   {
    "creator": "Ninja",
    "url": "https://www.youtube.com/watch?v=ogbIEh-4rYw"
+  },
+  {
+   "creator": "NICKMERCS",
+   "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
+  },
+  {
+   "creator": "iShowSpeed",
+   "url": "https://www.youtube.com/watch?v=qNOcoUKzt80"
+  },
+  {
+   "creator": "FP Good Game",
+   "url": "https://www.youtube.com/watch?v=GURcXM3OcPE"
   }
  ],
  "items": [
@@ -102,11 +114,93 @@
   },
   {
    "id": "find-4",
-   "candidate": "timmy-m3",
+   "candidate": "cod-nick-m2",
    "label": "Found moment",
    "kind": "video",
    "src": "find-4.mp4",
    "poster": "find-4.webp",
+   "width": 960,
+   "height": 540,
+   "duration_sec": 10.0,
+   "game": "Call of Duty: Warzone",
+   "aspect": "16:9",
+   "layout": "original",
+   "rank": 2,
+   "rating": 93,
+   "rating_source": "signals",
+   "credit": "Footage: NICKMERCS",
+   "commercial_permission": "owner-confirmed 2026-11-18",
+   "source": {
+    "id": "cod-nick",
+    "creator": "NICKMERCS",
+    "title": "THIS MIGHT BE THE BEST VERSION OF WARZONE",
+    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c",
+    "start_sec": 1789.83,
+    "end_sec": 1799.83
+   }
+  },
+  {
+   "id": "find-5",
+   "candidate": "fifa-speed-m2",
+   "label": "Found moment",
+   "kind": "video",
+   "src": "find-5.mp4",
+   "poster": "find-5.webp",
+   "width": 960,
+   "height": 540,
+   "duration_sec": 10.0,
+   "game": "EA SPORTS FC 27",
+   "aspect": "16:9",
+   "layout": "original",
+   "rank": 2,
+   "rating": 93,
+   "rating_source": "signals",
+   "credit": "Footage: iShowSpeed",
+   "commercial_permission": "owner-confirmed 2026-11-18",
+   "source": {
+    "id": "fifa-speed",
+    "creator": "iShowSpeed",
+    "title": "iShowSpeed's FIRST FC 27 Pack Opening!",
+    "url": "https://www.youtube.com/watch?v=qNOcoUKzt80",
+    "start_sec": 251.0,
+    "end_sec": 261.0
+   }
+  },
+  {
+   "id": "find-6",
+   "candidate": "fc27-fpgg-m1",
+   "label": "Found moment",
+   "kind": "video",
+   "src": "find-6.mp4",
+   "webm": "find-6.webm",
+   "poster": "find-6.webp",
+   "width": 960,
+   "height": 540,
+   "duration_sec": 10.0,
+   "game": "EA SPORTS FC 27",
+   "aspect": "16:9",
+   "layout": "original",
+   "rank": 1,
+   "rating": 99,
+   "rating_source": "signals",
+   "credit": "Footage: FP Good Game",
+   "commercial_permission": "owner-confirmed 2026-11-18",
+   "source": {
+    "id": "fc27-fpgg",
+    "creator": "FP Good Game",
+    "title": "EA Sport FC 27 PS5 Next Gen Gameplay 4K HDR 60FPS",
+    "url": "https://www.youtube.com/watch?v=GURcXM3OcPE",
+    "start_sec": 1171.0,
+    "end_sec": 1181.0
+   }
+  },
+  {
+   "id": "find-7",
+   "candidate": "timmy-m3",
+   "label": "Found moment",
+   "kind": "video",
+   "src": "find-7.mp4",
+   "poster": "find-7.webp",
    "width": 960,
    "height": 540,
    "duration_sec": 10.0,
@@ -128,12 +222,12 @@
    "commercial_permission": "owner-confirmed 2026-11-18"
   },
   {
-   "id": "find-5",
+   "id": "find-8",
    "candidate": "forza-m3",
    "label": "Found moment",
    "kind": "video",
-   "src": "find-5.mp4",
-   "poster": "find-5.webp",
+   "src": "find-8.mp4",
+   "poster": "find-8.webp",
    "width": 960,
    "height": 540,
    "duration_sec": 10.0,
@@ -155,12 +249,12 @@
    }
   },
   {
-   "id": "find-6",
+   "id": "find-9",
    "candidate": "ninja-m3",
    "label": "Found moment",
    "kind": "video",
-   "src": "find-6.mp4",
-   "poster": "find-6.webp",
+   "src": "find-9.mp4",
+   "poster": "find-9.webp",
    "width": 960,
    "height": 540,
    "duration_sec": 10.0,
@@ -180,6 +274,33 @@
     "end_sec": 1798.0
    },
    "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "find-10",
+   "candidate": "cod-nick-m3",
+   "label": "Found moment",
+   "kind": "video",
+   "src": "find-10.mp4",
+   "poster": "find-10.webp",
+   "width": 960,
+   "height": 540,
+   "duration_sec": 10.0,
+   "game": "Call of Duty: Warzone",
+   "aspect": "16:9",
+   "layout": "original",
+   "rank": 3,
+   "rating": 80,
+   "rating_source": "signals",
+   "credit": "Footage: NICKMERCS",
+   "commercial_permission": "owner-confirmed 2026-11-18",
+   "source": {
+    "id": "cod-nick",
+    "creator": "NICKMERCS",
+    "title": "THIS MIGHT BE THE BEST VERSION OF WARZONE",
+    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c",
+    "start_sec": 1168.02,
+    "end_sec": 1178.02
+   }
   }
  ]
 }
