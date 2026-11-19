@@ -24,7 +24,7 @@
   {"section": "captions", "variant": "subtitle", "label": "Subtitle", "source": "xqc", "moment": 1, "options": {"caption_style": "subtitle"}},
   {"section": "captions", "variant": "tag", "label": "Tag", "source": "xqc", "moment": 1, "options": {"caption_style": "tag"}},
 
-  {"section": "reframe", "variant": "original", "label": "Original 16:9", "source": "forza", "moment": 1, "kind": "source"},
+  {"section": "reframe", "variant": "original", "label": "Original 16:9", "source": "forza", "moment": 1, "kind": "source", "boxes": ["split2", "full", "pip", "screen_first"]},
   {"section": "reframe", "variant": "full", "label": "Fill", "source": "forza", "moment": 1, "options": {"layout": "full", "captions": false, "facecam_region": null}},
   {"section": "reframe", "variant": "split2", "label": "Facecam split", "source": "forza", "moment": 1, "options": {"layout": "split2", "captions": false}},
   {"section": "reframe", "variant": "pip", "label": "Picture in picture", "source": "forza", "moment": 1, "options": {"layout": "pip", "captions": false}},
