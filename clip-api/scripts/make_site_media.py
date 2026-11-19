@@ -479,6 +479,11 @@ def render(sources: dict, shots: list, work: Path, out: Path, only: set | None, 
                 item["loop_sec"] = round(seconds, 2)
             path = dest / "candidates.json"
             by_cid = read_candidates(path, section)
+            same = by_cid.get(shot.get("rating_from", ""), {})
+            if same.get("rating_source") == "ai":          # the same moment, already judged: its AI rating
+                item.update({k: same[k] for k in ("rating", "rating_raw", "rating_source", "ai_model", "ai_scores",
+                                                  "scoring_version", "ai_reason", "ai_kind") if k in same},
+                            rating_of_candidate=same["cid"])
             by_cid[cid] = item
             write_candidates(path, section, by_cid, permission, sources)
         except PipelineError as e:
@@ -540,12 +545,15 @@ HERO_CLIPS = 6
 def default_picks(out: Path, exclude: set) -> dict:
     """featured.json's shape for when the owner has saved no picks: every confirmed candidate except `exclude`,
     in the engine's rank order, taking each source's best before any source's second best (so the hero's six
-    clips mix games and creators). Variant sections keep their render order."""
+    clips mix games and creators); the hero's six then go best AI rating first when all six have one. A hero
+    variant (cid "wide--...") is published beside the six as clip-<variant>. Variant sections keep render order."""
     sections = {}
     for path in sorted(out.glob("*/candidates.json")):
         cands = [c for c in load(path)["candidates"] if c["cid"] not in exclude
                  and str(c.get("commercial_permission", "")).startswith(CONFIRMED)]
         section = path.parent.name
+        extra = [c for c in cands if "--" in c["cid"]] if section == "hero-vertical-clips" else []
+        cands = [c for c in cands if c not in extra]
         if section not in VARIANT_SECTIONS:
             order = {}
             for c in cands:
@@ -554,9 +562,12 @@ def default_picks(out: Path, exclude: set) -> dict:
             cands = []
             for tier in range(max(map(len, seen), default=0)):
                 cands += [v[tier] for v in seen if tier < len(v)]
-        pick = {"clips": [c["cid"] for c in cands]}
         if section == "hero-vertical-clips":
-            pick["show"] = HERO_CLIPS
+            top = cands[:HERO_CLIPS]
+            if all(c.get("rating_source") == "ai" for c in top):
+                top = sorted(top, key=lambda c: -c["rating"])
+            cands = top + extra
+        pick = {"clips": [c["cid"] for c in cands]}
         if pick["clips"]:
             sections[section] = pick
     return {"version": 1, "updated_by": "make_site_media.py defaults (no owner picks saved)", "sections": sections}
@@ -587,16 +598,21 @@ def publish(featured: Path, out: Path, public: Path) -> int:
             shutil.rmtree(dest)       # the folder is this step's output: what is not featured any more goes
         dest.mkdir(parents=True)
         items, used = [], set()
-        for n, cid in enumerate(cids, 1):
+        n = 0
+        for cid in cids:
             c = dict(have[cid])
-            if section in VARIANT_SECTIONS:
+            if section not in VARIANT_SECTIONS and "--" in cid:      # a hero variant: clip-wide
+                pid = f"{ORDINAL[section]}-{cid.rpartition('--')[0]}"
+            elif section in VARIANT_SECTIONS:
                 pid = base = cid.rpartition("--")[0]
                 k = 2
                 while pid in used:          # two featured candidates of one variant: impact, impact-2
                     pid, k = f"{base}-{k}", k + 1
             elif section == "hero-long-video":
+                n += 1
                 pid = "vod" if n == 1 else f"vod-{n}"
             else:
+                n += 1
                 pid = f"{ORDINAL[section]}-{n}"
             used.add(pid)
             if c.get("webm") and c.get("src") and \

@@ -9,6 +9,7 @@
   {"section": "hero-vertical-clips", "label": "Fortnite", "source": "ninja", "moment": [1, 2, 3]},
   {"section": "hero-vertical-clips", "label": "Valorant", "source": "timmy", "moment": [1, 2, 3]},
   {"section": "hero-vertical-clips", "label": "Forza Horizon 5", "source": "forza", "moment": [1, 2, 3]},
+  {"section": "hero-vertical-clips", "variant": "wide", "label": "Forza Horizon 5 (16:9)", "source": "forza", "moment": 1, "options": {"aspect": "16:9"}, "rating_from": "forza-m1"},
 
   {"section": "captions", "variant": "plain", "label": "No captions (words for a live overlay)", "source": "xqc", "moment": 1, "options": {"captions": false}, "words_from": "impact"},
   {"section": "captions", "variant": "impact", "label": "Impact", "source": "xqc", "moment": 1, "options": {"caption_style": "impact"}, "words": true},
