@@ -61,25 +61,45 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def fetched_json(mode: str, bytes_: int = 0, seconds: float | None = 0.0, full_bytes: int | None = None,
+                 full_seconds: float | None = None, estimated: bool = False) -> dict:
+    """What an import brought over the network, apart from what it stored or what the job costs. `mode`:
+    "segments" (only the segments that hold the chosen part), "whole_file" (the whole video, cut afterwards when a
+    part was chosen), "stored_copy" (cut from a copy the account already had: nothing downloaded) or "none" (the
+    stored upload was handed back). `bytes` and `seconds`: what was downloaded. `full_bytes` and `full_seconds`:
+    the whole video in the same streams, for comparison: the size the site gives, or, when it gives none
+    (`full_bytes_estimated`), the downloaded part's rate over the whole length; null when neither is known."""
+    return {"mode": mode, "bytes": int(bytes_), "seconds": None if seconds is None else round(float(seconds), 3),
+            "full_bytes": full_bytes, "full_seconds": None if full_seconds is None else round(float(full_seconds), 3),
+            "full_bytes_estimated": bool(estimated)}
+
+
 def _download(source, work: Path, s, span: Span, on_bytes, on_stage):
-    """(path, filename, the part of the source that was taken, whether only that part was downloaded). The
-    downloader is chosen by the allow-list, never by the caller."""
+    """(path, filename, the part of the source that was taken, what was fetched: fetched_json). The downloader is
+    chosen by the allow-list, never by the caller."""
     max_bytes = min(s.import_max_bytes, s.max_upload_bytes)
     max_duration = min(s.import_max_duration_sec, s.max_duration_sec)
     if source.downloader == DIRECT:
         from . import fetch
         on_stage("downloading")
         got = fetch.fetch(source.fetch_url, work, fetch.Limits(max_bytes, s.import_timeout_sec), on_bytes)
+        size = got.path.stat().st_size
+        try:
+            length = probe(got.path).duration
+        except PipelineError:
+            length = None                   # the checks after the download refuse it
+        fetched = fetched_json("whole_file", size, length, size, length)
         if span.whole:
-            return got.path, got.filename, span, False
+            return got.path, got.filename, span, fetched
         on_stage("merging")
         path, span = _cut_local(got.path, span, work, s)
-        return path, f"{Path(got.filename).stem}{path.suffix}", span, False
+        return path, f"{Path(got.filename).stem}{path.suffix}", span, fetched
     from . import platforms
     got = platforms.download(source.platform, source.fetch_url, work,
                              platforms.Limits(max_bytes, max_duration, s.import_timeout_sec, s.min_duration_sec),
                              on_bytes, span, on_stage)
-    return got.path, got.filename, got.span, got.partial
+    return got.path, got.filename, got.span, fetched_json("segments" if got.partial else "whole_file", got.fetched_bytes,
+                                                         got.fetched_sec, got.full_bytes, got.full_sec, got.full_estimated)
 
 
 def _cut_local(path: Path, span: Span, work: Path, s) -> tuple[Path, Span]:
@@ -157,11 +177,12 @@ def run_import(job_id: str) -> str:
             same_id = have.id if have else None
             held = None if have else copies.holding(db, account_id, source.url, span)
             held = (held[0].storage_key, held[0].filename, held[1]) if held else None
-        taken, partial, downloaded = span, False, False
+        taken, fetched = span, fetched_json("none")
         if same_id is None:
             if held is not None:
                 key, name, outer = held
                 progress("copying", 5)
+                fetched = fetched_json("stored_copy")
                 local = work / f"stored{Path(key).suffix.lower()}"
                 storage.fetch(key, local)
                 inner = Span(span.start - outer.start, None if span.end is None else span.end - outer.start)
@@ -169,8 +190,7 @@ def run_import(job_id: str) -> str:
                 taken = Span(outer.start + inner.start, outer.end if inner.end is None else outer.start + inner.end)
                 filename = f"{Path(name).stem}{path.suffix}"
             else:
-                path, filename, taken, partial = _download(source, work, s, span, on_bytes, on_stage)
-                downloaded = True
+                path, filename, taken, fetched = _download(source, work, s, span, on_bytes, on_stage)
 
             progress("checking", 92)
             size, ext = path.stat().st_size, path.suffix.lower()
@@ -218,7 +238,7 @@ def run_import(job_id: str) -> str:
                 upload.deleted_at = None             # visible from here on, like any upload
             job.result = {"upload_id": same_id or upload_id, "reused": same_id is not None,
                           "range": None if taken.whole else taken.as_list(),     # the part of the link it holds
-                          "downloaded": downloaded, "partial": partial}
+                          "fetched": fetched}                                    # what came over the network
             job.status, job.progress, job.stage, job.finished_at = "SUCCEEDED", 100, "done", utcnow()
             if job.credits_reserved:
                 ledger.settle(db, job, success=True)

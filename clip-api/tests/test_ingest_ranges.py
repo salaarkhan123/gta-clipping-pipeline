@@ -190,7 +190,7 @@ def test_a_youtube_video_with_two_streams_previews_and_prices(client, user, fake
     body = ask(client, headers, "https://youtu.be/aqz-KE-bpKQ")
     assert body["supported"] is True and body["title"] and body["channel"] == "Blender"
     assert body["thumbnail_url"].endswith("maxresdefault.jpg") and body["category"] == "Film & Animation"
-    assert body["estimate"]["credits"] == 11 and body["options"]["range_download"] == "full"
+    assert body["estimate"]["credits"] == 11 and body["options"]["range_download"] == "partial"   # by byte range
     assert downloads(fake_ydl) == 0                                     # a preview never downloads
 
 
@@ -215,6 +215,28 @@ def test_importing_a_range_stores_only_that_part(client, user, long_link):
     assert done["range"] == {"start_sec": 20.0, "end_sec": 50.0}
     assert 29.5 <= done["upload"]["duration_sec"] <= 32 and len(stored_files(account["id"])) == 1
     assert balance(client, headers) == 30                               # an import costs nothing
+    # One plain file on the site: all 130 seconds were downloaded to keep 30. `fetched` says so, apart from the range.
+    assert queued["fetched"] is None
+    assert done["fetched"] == {"mode": "whole_file", "bytes": long_link.video.stat().st_size, "seconds": 130.0,
+                               "full_bytes": None, "full_seconds": 130.0, "full_bytes_estimated": False}
+
+
+def test_fetched_says_how_much_was_downloaded_for_a_range_of_a_segment_list(client, user, long_link, tmp_path):
+    """The price follows the range (30 s); `fetched` follows the network: the three 10-second segments that hold
+    it, out of a 130-second video the site sizes at 97.5 MB in the stream that was picked."""
+    headers, _ = user
+    ts = tmp_path / "part.ts"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-ss", "40", "-t", "30", "-i", str(long_link.video), "-c", "copy",
+                    "-f", "mpegts", str(ts)], check=True)
+    long_link.formats, long_link.files = TWITCH_VOD, {"1080p60": ts}
+    long_link.playlists = {f["url"]: segments(13) for f in TWITCH_VOD}
+    made = clip(client, headers, start_sec=45, end_sec=65).json()
+    assert made["credits_reserved"] == 1 and made["import"]["fetched"] is None
+    assert worker.run_once() == "SUCCEEDED"
+    fetched = job(client, headers, made["job_id"])["import"]["fetched"]
+    assert fetched == {"mode": "segments", "bytes": ts.stat().st_size, "seconds": 30.0,
+                       "full_bytes": int(6_000_000 / 8 * 130), "full_seconds": 130.0, "full_bytes_estimated": False}
+    assert len(long_link.instances[-1].fetched[0][1]["fragments"]) == 3      # segments 4, 5 and 6: 40 to 70 s
 
 
 @pytest.mark.parametrize("more, code", [
@@ -281,12 +303,15 @@ def test_a_link_already_stored_is_not_downloaded_again(client, user, long_link):
     assert second["import_id"] != first["import_id"]
     assert worker.run_once() == "SUCCEEDED"
     again = imp(client, headers, second["import_id"])
+    assert again["fetched"] == {"mode": "none", "bytes": 0, "seconds": 0.0, "full_bytes": None, "full_seconds": None,
+                                "full_bytes_estimated": False}
     assert again["upload_id"] == upload_id and again["reused"] is True
     assert downloads(long_link) == 1 and len(long_link.instances) == 1  # not even its metadata was asked for
 
     third = start(client, headers, start_sec=40, end_sec=70).json()     # a part of it: cut from the stored copy
     assert worker.run_once() == "SUCCEEDED"
     part = imp(client, headers, third["import_id"])
+    assert part["fetched"]["mode"] == "stored_copy" and part["fetched"]["bytes"] == 0
     assert part["upload_id"] not in (None, upload_id) and part["reused"] is False
     assert part["range"] == {"start_sec": 40.0, "end_sec": 70.0} and 29.5 <= part["upload"]["duration_sec"] <= 32
     assert downloads(long_link) == 1 and len(long_link.instances) == 1

@@ -37,10 +37,10 @@ const QUICK = ["Funny reactions", "Clutch plays", "Epic fails", "Chases and cras
 const DISPLAY: Record<string, string> = { translation: "Translated only", both: "Both languages" };
 const languageName = (code: string) => { try { return new Intl.DisplayNames(["en"], { type: "language" }).of(code) || code; } catch { return code; } };
 
-export function JobSetup({ source, listed, template, preset, price, onOptions, onCreate, onRemove, consent, step, problem, header, busy }: {
+export function JobSetup({ source, listed, template, preset, price, onOptions, onCreate, onRemove, consent, step, problem, afterProblem, header, busy }: {
   source: SetupSource; listed: Listed; template?: string; preset?: Partial<Look>; price: Price; onOptions: (o: Record<string, unknown>) => void; onCreate: (o: Record<string, unknown>) => void;
   onRemove: () => void; consent?: { checked: boolean; onChange: (on: boolean) => void; text: string }; step?: { text: string; pct?: number } | null;
-  problem?: string; header?: React.ReactNode; busy?: boolean }) {
+  problem?: string; afterProblem?: React.ReactNode; header?: React.ReactNode; busy?: boolean }) {
   const { me } = useDash();
   const langs = useLanguages();
   const has = (k: string) => k in listed;
@@ -115,7 +115,10 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
   const total = price.state === "ok" ? `${price.credits.toLocaleString()} credit${price.credits === 1 ? "" : "s"}` : price.state === "asking" ? "Working it out…"
     : price.state === "failed" ? "No price yet" : "Shown before you start";
 
-  const create = <button type="button" className="btn primary w-full" disabled={!ready} onClick={() => onCreate(options)}>{step ? "Working…" : "Create"}</button>;
+  // After a failed import the way forward is the action under the problem (Upload original video): Create steps back
+  // to an outline button and says it tries the link again.
+  const create = <button type="button" className={`btn w-full ${afterProblem ? "ghost" : "primary"}`} disabled={!ready} onClick={() => onCreate(options)}>
+    {step ? "Working…" : afterProblem ? "Try the link again" : "Create"}</button>;
 
   return (
     <div className="wide mx-auto grid w-full max-w-[1320px] grid-cols-[minmax(0,1fr)] gap-5">
@@ -286,6 +289,7 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
           {price.state === "failed" && <p className="m-0 text-[12.5px] text-warn">No price yet: {price.message}</p>}
           {consent && <label className="check m-0 text-[13.5px] text-label"><input type="checkbox" checked={consent.checked} disabled={!!step} onChange={(e) => consent.onChange(e.target.checked)} /><span>{consent.text}</span></label>}
           {problem && <p className="error m-0" role="alert">{problem}</p>}
+          {afterProblem}
           {step ? <div className="grid gap-2" role="status"><p className="m-0 text-[14px]">{step.text}{typeof step.pct === "number" ? ` ${step.pct}%` : ""}</p>
             {typeof step.pct === "number" && <progress max={100} value={step.pct} aria-label="Progress" />}</div> : create}
           {!consent && <p className="m-0 text-center text-[12.5px] text-muted">You confirmed you own this video, or have permission to clip it, when you uploaded it.</p>}
@@ -297,9 +301,14 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
       </div>
 
       {/* On a phone the total and the button stay in reach. */}
-      <div className="sticky bottom-[calc(var(--app-bottom-bar,theme(spacing.tabbar))+env(safe-area-inset-bottom))] z-30 hidden items-center justify-between gap-3 rounded-16 border border-solid border-line bg-[rgba(20,20,20,.96)] p-3 shadow-bar [backdrop-filter:blur(10px)] narrow:flex">
-        <span className="inline-flex items-center gap-1 text-[15px] font-semibold tabular-nums"><Icon name="bolt" size={16} className="text-lime" />{total}</span>
-        <div className="w-[150px]">{step ? <span className="text-[13px] text-muted">{step.text}</span> : create}</div>
+      {/* A problem (and what to do about it, like Upload original video) shows here too: the summary is far below. */}
+      <div className="sticky bottom-[calc(var(--app-bottom-bar,theme(spacing.tabbar))+env(safe-area-inset-bottom))] z-30 hidden gap-3 rounded-16 border border-solid border-line bg-[rgba(20,20,20,.96)] p-3 shadow-bar [backdrop-filter:blur(10px)] narrow:grid">
+        {problem && <p className="error m-0 text-[13px]" role="alert">{problem}</p>}
+        {afterProblem}
+        <div className="flex items-center justify-between gap-3">
+          <span className="inline-flex items-center gap-1 text-[15px] font-semibold tabular-nums"><Icon name="bolt" size={16} className="text-lime" />{total}</span>
+          <div className="w-[150px]">{step ? <span className="text-[13px] text-muted">{step.text}</span> : create}</div>
+        </div>
       </div>
     </div>
   );

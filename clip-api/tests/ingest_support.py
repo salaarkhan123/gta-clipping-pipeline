@@ -210,6 +210,13 @@ ONE_FILE = {"format_id": "source", "url": "https://media.test/source.mp4", "ext"
             "vcodec": "avc1.4D401E", "acodec": "mp4a.40.2", "protocol": "https"}
 
 
+class Answer(io.BytesIO):
+    """What urlopen hands back: the bytes, and the HTTP status (206 for a byte range that was served)."""
+    def __init__(self, data: bytes, status: int = 200):
+        super().__init__(data)
+        self.status = status
+
+
 class FakeYDL(RealYoutubeDL):
     """Stands in for yt_dlp.YoutubeDL at its three network seams: the metadata request (extract_info), a segment
     list (urlopen) and a stream download (dl). Everything else is yt-dlp's own code: the options it is built from
@@ -220,6 +227,9 @@ class FakeYDL(RealYoutubeDL):
     formats: list[dict] | None = None       # the streams the site lists; default: one file with picture and sound
     files: dict[str, Path] = {}             # format_id -> the file its download produces (default: the test video)
     playlists: dict[str, str] = {}          # address -> the text of that segment list
+    bodies: dict[str, Path] = {}            # address -> the file served there, by byte range (a stream as one file)
+    serve_ranges: bool = True               # False: the server ignores Range and answers 200 with everything
+    refuse_range_after: int | None = None   # byte-range requests answered before the server starts refusing (403)
     refuse_extract: str | None = None       # yt-dlp's error text when the site refuses the metadata request
     refuse_download: str | None = None
     report_bytes: int | None = None         # what the progress hook is told has been downloaded
@@ -227,7 +237,7 @@ class FakeYDL(RealYoutubeDL):
     def __init__(self, params: dict):
         self.given = dict(params)           # yt-dlp normalises some of its options in place
         super().__init__(params)
-        self.urls, self.opened, self.fetched = [], [], []
+        self.urls, self.opened, self.fetched, self.ranges = [], [], [], []
         FakeYDL.instances.append(self)
 
     def extract_info(self, url, download=True, process=True, **kwargs):
@@ -240,10 +250,21 @@ class FakeYDL(RealYoutubeDL):
                 "formats": [dict(f) for f in (FakeYDL.formats or [ONE_FILE])], **FakeYDL.info}
 
     def urlopen(self, req):
-        self.opened.append(req)
-        if req not in FakeYDL.playlists:
-            raise OSError(f"no such test playlist: {req}")
-        return io.BytesIO(FakeYDL.playlists[req].encode())
+        url = getattr(req, "url", req)
+        asked = dict(getattr(req, "headers", None) or {}).get("Range")
+        self.opened.append(url)
+        if url in FakeYDL.bodies:
+            data = FakeYDL.bodies[url].read_bytes()
+            if not asked or not FakeYDL.serve_ranges:
+                return Answer(data)
+            if FakeYDL.refuse_range_after is not None and len(self.ranges) >= FakeYDL.refuse_range_after:
+                raise OSError("HTTP Error 403: Forbidden")
+            first, last = (int(n) for n in asked.removeprefix("bytes=").split("-"))
+            self.ranges.append((url, first, last))
+            return Answer(data[first:last + 1], 206)
+        if url not in FakeYDL.playlists:
+            raise OSError(f"nothing is served at this test address: {url}")
+        return Answer(FakeYDL.playlists[url].encode())
 
     def dl(self, name, info, subtitle=False, test=False):
         self.fetched.append((Path(name).name, info))
@@ -260,7 +281,8 @@ class FakeYDL(RealYoutubeDL):
 @pytest.fixture
 def fake_ydl(video, monkeypatch):
     FakeYDL.instances, FakeYDL.video, FakeYDL.info = [], video, {}
-    FakeYDL.formats, FakeYDL.files, FakeYDL.playlists = None, {}, {}
+    FakeYDL.formats, FakeYDL.files, FakeYDL.playlists, FakeYDL.bodies = None, {}, {}, {}
+    FakeYDL.serve_ranges, FakeYDL.refuse_range_after = True, None
     FakeYDL.refuse_extract = FakeYDL.refuse_download = FakeYDL.report_bytes = None
     monkeypatch.setattr(platforms, "YoutubeDL", FakeYDL)
     return FakeYDL

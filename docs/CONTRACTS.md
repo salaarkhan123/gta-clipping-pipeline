@@ -386,6 +386,9 @@ Every message says what to do instead (upload the file). New codes in bold.
 | `bytes_done`, `bytes_total` | While `downloading`: bytes so far, and the bytes expected (null when the site does not say). Null in other stages. |
 | `range` | `{"start_sec", "end_sec"}` the import takes, or null for the whole video. |
 | `reused` | True when the account already had exactly this part of this link stored: nothing was downloaded. |
+| `fetched` | Null until the import has finished. Then what came over the network, which is not what was charged or stored: `{"mode", "bytes", "seconds", "full_bytes", "full_seconds", "full_bytes_estimated"}`. `mode`: `segments` (only the segments or byte ranges that hold the chosen part), `whole_file` (the whole video; cut afterwards when a part was chosen), `stored_copy` (cut from a copy the account already had: 0 bytes) or `none` (the stored upload was handed back: 0 bytes). `bytes`, `seconds`: what was downloaded; whole segments, so a few seconds more than the range. `full_bytes`, `full_seconds`: the whole video in the same streams, for comparison. `full_bytes_estimated` true: the site gave no size, so it is the downloaded part's rate over the whole length. |
+
+The price follows `range`; `fetched` follows the download. Example, measured on 2026-11-19: one minute (10:00 to 11:00) of a 1 h 07 min YouTube video at 1080p H.264 with AAC was charged as 60 seconds (1 credit) and fetched `{"mode": "segments", "bytes": 43698227, "seconds": 65.867, "full_bytes": 2230462276, "full_seconds": 4035.0, "full_bytes_estimated": false}`: 43.7 MB of 2.23 GB, 2 %.
 
 ### Never the same video twice
 

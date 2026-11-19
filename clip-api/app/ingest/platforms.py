@@ -40,6 +40,7 @@ from .sources import VIDEO_EXT
 os.environ["YTDLP_NO_PLUGINS"] = "1"          # before yt-dlp is imported: no plugin is ever loaded
 
 from yt_dlp import YoutubeDL  # noqa: E402
+from yt_dlp.networking import Request  # noqa: E402
 from yt_dlp.utils import DownloadError, ExtractorError  # noqa: E402
 
 log = logging.getLogger("clipapi.ingest")
@@ -53,6 +54,8 @@ NOWHERE = Path("/nonexistent/a-preview-writes-nothing")     # the output folder 
 NAMES = {"twitch": "Twitch", "kick": "Kick", "youtube": "YouTube"}
 YOUTUBE_REFUSES = "YouTube often refuses automated downloads: upload the file instead"
 MAX_PLAYLIST_BYTES = 8 * 1024 ** 2      # a media playlist of a very long recording is a few hundred kilobytes
+INDEX_BYTES = 1024 ** 2                 # the start of a fragmented MP4 holds its header and its segment index
+CHUNK_BYTES = 8 * 1024 ** 2             # one byte-range request of a stream (yt-dlp itself asks for 10 MB at a time)
 RECORDING = "_recording"                # set on the metadata of a VOD whose stream is still live
 
 
@@ -70,6 +73,11 @@ class Downloaded:
     filename: str
     span: Span = Span()                 # the part of the source that was taken (whole: Span())
     partial: bool = False               # only that part was downloaded (False: the whole video was fetched)
+    fetched_bytes: int = 0              # what came over the network, all streams together
+    fetched_sec: float | None = None    # the seconds of video those bytes hold (whole segments, so a little over a range)
+    full_bytes: int | None = None       # the size of the whole video in the streams that were picked
+    full_sec: float | None = None       # the whole video's length
+    full_estimated: bool = False        # full_bytes is worked out from what was fetched: the site gave no size
 
 
 class _Quiet:
@@ -260,6 +268,57 @@ def _is_hls(fmt: dict) -> bool:
     return str(fmt.get("protocol") or "").startswith("m3u8") and bool(fmt.get("url"))
 
 
+@dataclass
+class Index:
+    """The segment index of a fragmented MP4 stream served as one file (its `sidx` box): where each few seconds
+    of the stream are in the file, so a part of it can be asked for by byte range, as a player does."""
+    header_end: int                                 # bytes [0, header_end) are the stream's header (ftyp, moov)
+    segments: list[tuple[float, float, int, int]]   # (starts at, lasts, first byte, the byte after its last)
+
+
+def read_index(data: bytes) -> Index | None:
+    """The index in the first bytes of a file, or None when it has none there (a plain MP4, WebM, anything else)."""
+    at = 0
+    while at + 8 <= len(data):
+        size, kind, head = int.from_bytes(data[at:at + 4], "big"), data[at + 4:at + 8], 8
+        if size == 1 and at + 16 <= len(data):
+            size, head = int.from_bytes(data[at + 8:at + 16], "big"), 16
+        if size < head or kind in (b"moof", b"mdat"):
+            return None                             # not a box, or the media starts before any index
+        if kind == b"sidx":
+            if at + size > len(data):
+                return None
+            body, version = data[at + head:at + size], data[at + head]
+            timescale = int.from_bytes(body[8:12], "big")
+            wide = 8 if version else 4
+            starts = int.from_bytes(body[12:12 + wide], "big")
+            first = int.from_bytes(body[12 + wide:12 + 2 * wide], "big")
+            p = 12 + 2 * wide + 2
+            count, p = int.from_bytes(body[p:p + 2], "big"), p + 2
+            if not timescale or len(body) < p + 12 * count:
+                return None
+            segments, byte, tick = [], at + size + first, starts
+            for n in range(count):
+                ref = int.from_bytes(body[p + 12 * n:p + 12 * n + 4], "big")
+                lasts = int.from_bytes(body[p + 12 * n + 4:p + 12 * n + 8], "big")
+                if ref >> 31:
+                    return None                     # an index of indexes: not something a single stream file has
+                segments.append((tick / timescale, lasts / timescale, byte, byte + (ref & 0x7FFFFFFF)))
+                byte, tick = byte + (ref & 0x7FFFFFFF), tick + lasts
+            return Index(at, segments) if segments else None
+        at += size
+    return None
+
+
+def _index(ydl: YoutubeDL, fmt: dict) -> Index | None:
+    """Ask for the first megabyte of a stream and read its index. None when the server does not serve byte
+    ranges (it must answer 206) or the stream has no index there."""
+    with ydl.urlopen(Request(fmt["url"], headers={"Range": f"bytes=0-{INDEX_BYTES - 1}"})) as response:
+        if getattr(response, "status", None) != 206:
+            return None
+        return read_index(response.read(INDEX_BYTES))
+
+
 def _settle_recording(platform: str, info: dict, ydl: YoutubeDL) -> None:
     """Whether a Twitch VOD is really still being recorded. yt-dlp guesses it from the thumbnail: while Twitch
     shows its "processing" placeholder the VOD is called live, and that placeholder also stays for a while after
@@ -394,6 +453,13 @@ def choose(ydl: YoutubeDL, platform: str, info: dict, limits: Limits,
             pieces = [_piece(ydl, fmt, span) for fmt in picked[1]]
             if all(pieces):
                 return picked[0], picked[1], pieces
+        # No segment list (YouTube does not always answer with one): the streams served as one indexed file each
+        # give the same part by byte range.
+        picked = None if info.get(RECORDING) else _select(ydl, info, format_spec(int(limits.max_bytes / share)))
+        if picked:
+            pieces = [_byte_piece(ydl, fmt, span) for fmt in picked[1]]
+            if all(pieces):
+                return picked[0], picked[1], pieces
     picked = _select(ydl, info, format_spec(limits.max_bytes))
     if picked:
         return picked[0], picked[1], None
@@ -422,7 +488,60 @@ def _piece(ydl: YoutubeDL, fmt: dict, span: Span) -> tuple[dict, float] | None:
     if playlist.init:
         fragments.insert(0, {"url": playlist.init})
     return {"protocol": "http_dash_segments", "fragments": fragments, "ext": "mp4" if playlist.init else "ts",
-            "is_live": False}, wanted[0][0]
+            "is_live": False, "seconds": round(sum(s[1] for s in wanted), 3)}, wanted[0][0]
+
+
+def _byte_piece(ydl: YoutubeDL, fmt: dict, span: Span) -> tuple[dict, float] | None:
+    """The same for a stream served as one indexed MP4 file: (the byte ranges that hold `span`, where the first
+    of its segments starts in the video). None when the stream is not such a file."""
+    if str(fmt.get("protocol") or "") not in ("https", "http") or fmt.get("ext") not in ("mp4", "m4a") or not fmt.get("url"):
+        return None
+    try:
+        index = _index(ydl, fmt)
+    except Exception as e:
+        log.warning("could not read a stream's index: %s", e)
+        return None
+    if index is None:
+        return None
+    wanted = [s for s in index.segments if s[0] + s[1] > span.start and (span.end is None or s[0] < span.end)]
+    if not wanted:
+        raise Refused("bad_range", f"The range is outside what the video has right now. {UPLOAD_INSTEAD}")
+    first, last = wanted[0][2], wanted[-1][3]
+    ranges = [(0, index.header_end)] + [(a, min(a + CHUNK_BYTES, last)) for a in range(first, last, CHUNK_BYTES)]
+    return {"byte_ranges": ranges, "ext": fmt["ext"], "seconds": round(sum(s[1] for s in wanted), 3)}, wanted[0][0]
+
+
+def _fetch_ranges(ydl: YoutubeDL, fmt: dict, ranges: list[tuple[int, int]], target: Path,
+                  hook: Callable[[dict], None]) -> None:
+    """Write the byte ranges of a stream to `target`, one request each, through yt-dlp's own connection (the
+    fixed options above). A failed request is tried again RETRIES times; a server that stops serving ranges
+    is a failure, never a fall back to the whole file from here."""
+    with open(target, "wb") as out:
+        for start, end in ranges:
+            for attempt in range(RETRIES + 1):
+                at = out.tell()
+                try:
+                    with ydl.urlopen(Request(fmt["url"], headers={"Range": f"bytes={start}-{end - 1}"})) as response:
+                        if getattr(response, "status", None) != 206:
+                            raise DownloadError("the server did not serve a byte range")
+                        while True:
+                            block = response.read(1024 * 1024)
+                            if not block:
+                                break
+                            out.write(block)
+                            hook({"status": "downloading", "downloaded_bytes": out.tell()})
+                    if out.tell() - at != end - start:
+                        raise OSError(f"a byte range came back short: {out.tell() - at} of {end - start}")
+                    break
+                except (DownloadError, Refused):
+                    raise
+                except Exception as e:      # a dropped or refused request
+                    out.seek(at)
+                    out.truncate()
+                    if attempt == RETRIES:
+                        raise DownloadError(f"unable to download video data: {e}") from None
+        got = out.tell()
+    hook({"status": "finished", "downloaded_bytes": got, "total_bytes": None})
 
 
 def download(platform: str, url: str, dest_dir: Path, limits: Limits,
@@ -451,9 +570,11 @@ def download(platform: str, url: str, dest_dir: Path, limits: Limits,
     ydl = _new_ydl(dest_dir, limits, hook)
     info, span = look(platform, url, dest_dir, limits, ydl, span)
     parts: list[tuple[Path, float]] = []
+    fetched_bytes, full_bytes = 0, None
     try:
         done, streams, pieces = choose(ydl, platform, info, limits, span)
         sizes = [_size(f) for f in streams]
+        full_bytes = int(sum(sizes)) if all(sizes) else None
         if all(sizes):
             expected[0] = sum(sizes) * (_share(info, span) if pieces else 1.0)
         if on_stage:
@@ -462,10 +583,15 @@ def download(platform: str, url: str, dest_dir: Path, limits: Limits,
         for n, fmt in enumerate(streams):
             piece, offset = pieces[n] if pieces else ({}, 0.0)
             target = dest_dir / f"download.{n}.{piece.get('ext') or fmt.get('ext') or 'mp4'}"
-            ok, _real = ydl.dl(str(target), {**base, **fmt, **piece})
+            if piece.get("byte_ranges"):
+                _fetch_ranges(ydl, fmt, piece["byte_ranges"], target, hook)
+                ok = True
+            else:
+                ok, _real = ydl.dl(str(target), {**base, **fmt, **piece})
             if not ok or not target.is_file() or target.stat().st_size == 0:
                 raise DownloadError("nothing was downloaded")
             parts.append((target, offset))
+            fetched_bytes += target.stat().st_size
     except (DownloadError, ExtractorError) as e:
         log.warning("import download refused by %s for %s: %s", platform, url, e)
         _remove_partials(dest_dir)
@@ -478,7 +604,15 @@ def download(platform: str, url: str, dest_dir: Path, limits: Limits,
     left = max(60.0, limits.timeout_sec - (time.monotonic() - started))
     path = assemble(parts, span, dest_dir, Deadline(left))
     title = re.sub(r"[^\w.\- ]+", "_", str(info.get("title") or info.get("id") or platform)).strip(" ._")[:200]
-    return Downloaded(path, f"{title or platform}{path.suffix}", span, pieces is not None)
+    length = info.get("duration")
+    length = float(length) if isinstance(length, (int, float)) and length > 0 else None
+    # The picture stream's segments are what was fetched of the video's length; a whole fetch is all of it.
+    seconds = pieces[0][0]["seconds"] if pieces else length
+    estimated = full_bytes is None and bool(pieces) and bool(seconds) and bool(length)
+    if estimated:                       # segment-list streams have no size: the same rate over the whole length
+        full_bytes = int(fetched_bytes / seconds * length)
+    return Downloaded(path, f"{title or platform}{path.suffix}", span, pieces is not None,
+                      fetched_bytes, seconds, full_bytes, length, estimated)
 
 
 def _remove_partials(dest_dir: Path) -> None:

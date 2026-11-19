@@ -286,6 +286,24 @@ and Kick VODs, most YouTube videos) only that part is downloaded. A video longer
 can be imported one part at a time. A Twitch VOD whose stream is still live is imported up to the part published
 so far; the live stream itself is never read. The same part of the same link is never downloaded twice for one
 account: a stored copy is handed back, or the part is cut from it (stage `copying`).
+A YouTube video that comes without a segment list is read the same way by byte range (each stream is one indexed
+file). What an import actually downloaded is on its status as `fetched` (mode, bytes, seconds, and the whole
+video's size for comparison), apart from what it charged.
+
+Checking a deployed stack end to end, through the public API only, as one test account:
+
+    export CLIP_API_TOKEN=...      # a session token or API key of the test account; the script never prints it
+    python scripts/live_import_smoke.py --base-url https://<api host> \
+        --url "https://www.youtube.com/watch?v=<id>" --start 600 --end 660 --i-have-the-rights
+
+It previews the link, starts clips from it with that range, follows the import (stages and bytes), prints what was
+charged next to what was downloaded, lists the clips, quotes and runs an export of the first one, downloads it and
+checks with ffprobe that it has a picture and sound and decodes to its full length, then prints the balance before
+and after with the ledger rows. It stops at the first failing step with `FAILED stage=... code=... message=...`
+(tokens and signed addresses removed). Exit 0: every step passed. 1: a step failed. 3: a failed import did not come
+back to the starting balance. A passing run spends real credits (the clip job and the export). Needs `httpx` and
+`ffprobe` where it runs; `--help` lists the options.
+
 `IMPORT_TIMEOUT_SEC` (30 minutes) bounds one download. Measured from a laptop on 2026-11-18: 25 seconds of a
 1080p Twitch VOD (24 MB) took 2.9 s end to end. A whole multi-hour VOD has not been timed; a download that runs
 out of time fails cleanly and says to upload the file.

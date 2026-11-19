@@ -68,6 +68,25 @@ def pieces(video, tmp_path_factory):
             "middle": make("middle.ts", "-ss", "10", "-t", "20", "-i", str(keyed), "-c", "copy", "-f", "mpegts")}
 
 
+@pytest.fixture(scope="module")
+def indexed(pieces, tmp_path_factory):
+    """The test video as YouTube serves a stream: one fragmented MP4 file each for picture and sound, with a
+    segment index (sidx) after the header and a fragment every 2 seconds."""
+    folder = tmp_path_factory.mktemp("indexed")
+    def make(name, *select):
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(pieces["keyed"]), *select, "-c", "copy", "-movflags",
+                        "+dash+global_sidx", "-frag_duration", "2000000", str(folder / name)], check=True)
+        return folder / name
+    return {"picture": make("picture.mp4", "-an"), "sound": make("sound.m4a", "-vn")}
+
+
+def serve(fake_ydl, indexed):
+    """YouTube's two-stream list, with the picture and the sound served as indexed files at their addresses."""
+    fake_ydl.formats, fake_ydl.info = YOUTUBE_SPLIT, {"duration": 40.0}
+    fake_ydl.bodies = {"https://media.test/299": indexed["picture"], "https://media.test/140": indexed["sound"]}
+    fake_ydl.files = {"299": indexed["picture"], "140": indexed["sound"]}       # what a whole download would give
+
+
 def chosen(fake_ydl, formats, limits=ROOMY, span=Span(), duration=600.0):
     fake_ydl.formats, fake_ydl.info = formats, {"duration": duration}
     ydl = platforms._new_ydl(platforms.NOWHERE, limits)
@@ -201,6 +220,9 @@ def test_a_range_of_a_segment_list_downloads_only_its_segments(fake_ydl, tmp_pat
     info = probe(got.path)
     assert 14 <= info.duration <= 17.5 and info.has_audio          # 15 s, from the key frame before second 12
     assert progress[0] == int(700_000 / 8 * 40 * 15 / 40)           # expected bytes: the range's share
+    # What was fetched, apart from what was kept: the two 10-second segments, of a 40-second video of 3.5 MB.
+    assert got.fetched_bytes == pieces["middle"].stat().st_size and got.fetched_sec == 20.0
+    assert got.full_bytes == int(700_000 / 8 * 40) and got.full_sec == 40.0
 
 
 def test_a_range_of_a_plain_file_downloads_it_all_and_cuts_it(fake_ydl, tmp_path, pieces):
@@ -211,6 +233,72 @@ def test_a_range_of_a_plain_file_downloads_it_all_and_cuts_it(fake_ydl, tmp_path
     assert got.partial is False and got.span == Span(10.0, 25.0)
     assert fake_ydl.instances[0].fetched[0][1]["protocol"] == "https"
     assert 14 <= probe(got.path).duration <= 17.5 and sorted(p.name for p in tmp_path.iterdir()) == ["video.mp4"]
+
+
+def test_a_range_of_an_indexed_file_downloads_only_its_bytes(fake_ydl, tmp_path, indexed):
+    """YouTube without a segment list (it does not always answer with one): each stream is one file with an
+    index. The index is read from the file's first megabyte and only the bytes of the range are asked for."""
+    serve(fake_ydl, indexed)
+    progress = []
+    got = platforms.download("youtube", YOUTUBE, tmp_path, ROOMY, lambda d, t: progress.append((d, t)), Span(12.0, 27.0))
+    ydl = fake_ydl.instances[0]
+    assert ydl.fetched == []                                         # nothing went through a whole-file download
+    by_url = {u: [(a, b) for url, a, b in ydl.ranges if url == u] for u in fake_ydl.bodies}
+    for url, path in fake_ydl.bodies.items():
+        index = platforms.read_index(path.read_bytes())
+        held = [s for s in index.segments if s[0] + s[1] > 12.0 and s[0] < 27.0]
+        assert [s[0] for s in held][0] <= 12.0 and len(held) in (8, 9)              # 2-second fragments, 12 to 28 s
+        assert by_url[url] == [(0, platforms.INDEX_BYTES - 1), (0, index.header_end - 1), (held[0][2], held[-1][3] - 1)]
+    fetched = sum(b - a + 1 for ranges in by_url.values() for a, b in ranges[1:])
+    whole = sum(p.stat().st_size for p in fake_ydl.bodies.values())
+    assert got.partial is True and got.fetched_bytes == fetched and fetched < 0.5 * whole
+    assert got.fetched_sec == 16.0 and got.full_sec == 40.0
+    assert got.full_bytes == 260 * MB and got.full_estimated is False               # as the site sizes the two streams
+    info = probe(got.path)
+    assert got.path.name == "video.mp4" and 14 <= info.duration <= 17.5 and info.has_audio
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["video.mp4"]
+    done = [d for d, _ in progress]
+    assert done == sorted(done) and done[-1] == fetched and progress[0][1] == int(260 * MB * 15 / 40)
+
+
+def test_long_ranges_are_asked_for_in_chunks(fake_ydl, tmp_path, indexed, monkeypatch):
+    serve(fake_ydl, indexed)
+    monkeypatch.setattr(platforms, "CHUNK_BYTES", 100_000)
+    got = platforms.download("youtube", YOUTUBE, tmp_path, ROOMY, span=Span(4.0, 30.0))
+    media = [(a, b) for url, a, b in fake_ydl.instances[0].ranges if url.endswith("/299")][2:]
+    assert len(media) > 2 and all(b - a + 1 <= 100_000 for a, b in media)
+    assert all(media[n][1] + 1 == media[n + 1][0] for n in range(len(media) - 1))    # end to end, nothing twice
+    assert 25 <= probe(got.path).duration <= 28.5
+
+
+@pytest.mark.parametrize("why", ["the server ignores byte ranges", "the file has no index"])
+def test_a_stream_that_cannot_be_read_in_part_is_downloaded_whole_and_cut(fake_ydl, tmp_path, indexed, pieces, why):
+    serve(fake_ydl, indexed)
+    if why == "the server ignores byte ranges":
+        fake_ydl.serve_ranges = False
+    else:
+        fake_ydl.bodies = {"https://media.test/299": pieces["picture"], "https://media.test/140": pieces["sound"]}
+    got = platforms.download("youtube", YOUTUBE, tmp_path, ROOMY, span=Span(12.0, 27.0))
+    ydl = fake_ydl.instances[0]
+    assert got.partial is False and [f["format_id"] for _name, f in ydl.fetched] == ["299", "140"]
+    assert got.fetched_sec == 40.0 and got.fetched_bytes == sum(p.stat().st_size for p in indexed.values())
+    assert 14 <= probe(got.path).duration <= 17.5
+
+
+def test_a_site_that_refuses_partway_through_the_bytes_is_a_clean_refusal(fake_ydl, tmp_path, indexed):
+    serve(fake_ydl, indexed)
+    fake_ydl.refuse_range_after = 2                  # the index and the header are served, then 403
+    with pytest.raises(Refused) as e:
+        platforms.download("youtube", YOUTUBE, tmp_path, ROOMY, span=Span(12.0, 27.0))
+    assert e.value.code == "source_refused" and "upload the file instead" in e.value.message.lower()
+    ydl = fake_ydl.instances[0]
+    assert len(ydl.opened) == 2 + 1 + platforms.RETRIES          # the same few ordinary retries, then it stops
+    assert ydl.fetched == [] and list(tmp_path.iterdir()) == []  # no whole-file attempt after a refusal, nothing left
+
+
+def test_only_real_indexes_are_read():
+    assert platforms.read_index(b"") is None and platforms.read_index(b"not an mp4 at all" * 100) is None
+    assert platforms.read_index(b"\x00\x00\x00\x08ftyp" + b"\x00\x00\x00\x10mdat" + b"x" * 8) is None    # media, no index
 
 
 @pytest.mark.parametrize("extra", ['#EXT-X-KEY:METHOD=AES-128,URI="https://media.test/key"', "#EXT-X-BYTERANGE:100@0"])

@@ -339,7 +339,9 @@ def test_a_link_this_account_already_has_skips_the_import(client, user, fake_ydl
     assert job["import"] == {"import_id": None, "status": "SUCCEEDED", "stage": "done", "progress": 100,
                              "url": TWITCH, "platform": "twitch", "reused": True, "bytes_done": None,
                              "upload_id": get(client, headers, first["job_id"])["upload_id"], "error": None,
-                             "bytes_total": None, "range": None}
+                             "bytes_total": None, "range": None,
+                             "fetched": {"mode": "none", "bytes": 0, "seconds": 0.0, "full_bytes": None,
+                                         "full_seconds": None, "full_bytes_estimated": False}}
     assert len(fake_ydl.instances) == lookups                   # nothing looked up or downloaded
     assert logs(account["id"]) == 2                             # the consent is logged again
     assert len([j for j in jobs_of(account["id"]) if j.id.startswith("imp_")]) == 1
