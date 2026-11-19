@@ -124,6 +124,7 @@ clip-api 2/
 !/docs/launch-checklist.md
 !/docs/ops/
 !/docs/live-clipping.md
+!/docs/publishing.md
 /gta-clipping-pipeline.pdf
 /screenshots/
 # Personal YouTube-link CLI; the service is uploads-only.
