@@ -280,6 +280,60 @@ def plan_boxes(video: Path, layout_shots: list) -> dict:
     return out
 
 
+PEAKS = 200
+
+
+def peaks(video: Path, start: float, seconds: float) -> list[float]:
+    """The rendered clip's loudness envelope over [start, start + seconds]: PEAKS values, 0 to 1."""
+    import numpy as np
+    from app.pipeline.ff import run_bytes
+    raw = run_bytes(["ffmpeg", "-loglevel", "error", "-ss", f"{start:.3f}", "-t", f"{seconds:.3f}", *SAFE_IN,
+                     "-i", video, "-vn", "-ac", "1", "-ar", "8000", "-f", "s16le", "-"], Deadline(CAP))
+    x = np.abs(np.frombuffer(raw, dtype=np.int16).astype(np.float32))
+    if not x.size:
+        return [0.0] * PEAKS
+    buckets = np.array_split(x, PEAKS)
+    vals = np.array([b.max() if b.size else 0.0 for b in buckets])
+    return [round(float(v), 3) for v in vals / (vals.max() or 1.0)]
+
+
+SIGNAL_STEP = 10
+
+
+def signals_curve(sources: dict, work: Path, out: Path, sid: str) -> int:
+    """The engine's own highlight score for a whole source (the audio signal run_pipeline ranks moments by:
+    signals.audio_rms_db, baseline_z, normalise), max-pooled to SIGNAL_STEP seconds and scaled 0 to 1. Written
+    to work/scout/<sid>.signals.json and onto the source's hero-long-video candidates for the moment finder."""
+    import numpy as np
+    from app.pipeline.signals import audio_rms_db, baseline_z, normalise
+    src = sources[sid]
+    tmp = Path(tempfile.mkdtemp(prefix=f"signals-{sid}-", dir=work))
+    try:
+        video = Path(src["file"]).expanduser() if src.get("file") else _audio_proxy(src["url"], tmp)
+        info = probe(video)
+        db = audio_rms_db(video, Deadline(CAP * 2))
+        n = int(info.duration) + 1
+        series = normalise(baseline_z(db, floor=1.0), n)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    pooled = [float(series[i:i + SIGNAL_STEP].max()) for i in range(0, len(series), SIGNAL_STEP)]
+    top = max(pooled) or 1.0
+    data = {"source": sid, "step_sec": SIGNAL_STEP, "duration_sec": round(info.duration, 1),
+            "what": "the engine's audio highlight score (what run_pipeline ranks moments by), max per step, 0-1",
+            "values": [round(v / top, 3) for v in pooled]}
+    (work / "scout" / f"{sid}.signals.json").write_text(json.dumps(data))
+    section = "hero-long-video"
+    path = out / section / "candidates.json"
+    by_cid = read_candidates(path, section)
+    for c in by_cid.values():
+        if c.get("source", {}).get("id") == sid:
+            (out / section / f"{c['cid']}.signals.json").write_text(json.dumps(data))
+            c["signals"] = f"{c['cid']}.signals.json"
+    write_candidates(path, section, by_cid, CONFIRMED, sources)
+    print(f"signals {sid}: {len(pooled)} values every {SIGNAL_STEP} s")
+    return 0
+
+
 def encode_loop(src: Path, out: Path, start: float, seconds: float, size: tuple[int, int]) -> dict:
     """<out>.mp4 (muted) under MAX_BYTES, <out>.webm when VP9 fits under it too (the site treats it as optional),
     and <out>.webp poster. Returns the file names."""
@@ -448,6 +502,9 @@ def render(sources: dict, shots: list, work: Path, out: Path, only: set | None, 
                          "text": w["text"]} for w in words if loop_start <= w["start"] < end]
                 (dest / f"{cid}.words.json").write_text(json.dumps({"words": kept}))
                 item["words"] = f"{cid}.words.json"
+            if shot.get("peaks") and clip is not None:
+                (dest / f"{cid}.peaks.json").write_text(json.dumps({"peaks": peaks(video, loop_start, seconds)}))
+                item["peaks"] = f"{cid}.peaks.json"
             if shot.get("words_from"):         # the same moment and cut, rendered with captions: its words fit here
                 item["words"] = f"{shot['words_from']}.words.json"
             inner = (clip.start if clip else 0.0) + loop_start      # seconds into the segment
@@ -474,6 +531,10 @@ def render(sources: dict, shots: list, work: Path, out: Path, only: set | None, 
                 item["boxes"] = plan_boxes(seg_file, [s for s in shots if s["section"] == section
                                                       and s["source"] == sid and s.get("moment") == shot.get("moment")
                                                       and s.get("variant") in shot["boxes"]])
+            curve = work / "scout" / f"{sid}.signals.json"
+            if shot.get("duration") == "source" and curve.exists():      # the whole video's highlight curve
+                shutil.copy2(curve, dest / f"{cid}.signals.json")
+                item["signals"] = f"{cid}.signals.json"
             if shot.get("duration") == "source":
                 item["duration_sec"] = scouts.get(sid, {}).get("duration_sec") or src.get("duration_sec")
                 item["loop_sec"] = round(seconds, 2)
@@ -563,9 +624,16 @@ def default_picks(out: Path, exclude: set) -> dict:
             for tier in range(max(map(len, seen), default=0)):
                 cands += [v[tier] for v in seen if tier < len(v)]
         if section == "hero-vertical-clips":
-            top = cands[:HERO_CLIPS]
-            if all(c.get("rating_source") == "ai" for c in top):
-                top = sorted(top, key=lambda c: -c["rating"])
+            # Six different games where there are six: each game's best AI-rated clip, best first; then the
+            # best of what is left when there are fewer games.
+            rated = sorted((c for c in cands if c.get("rating_source") == "ai"), key=lambda c: -c["rating"])
+            top, games = [], set()
+            for c in rated:
+                if c.get("game") not in games:
+                    top.append(c)
+                    games.add(c.get("game"))
+            top += [c for c in rated if c not in top]
+            top = sorted(top[:HERO_CLIPS], key=lambda c: -c["rating"]) if len(rated) >= HERO_CLIPS else cands[:HERO_CLIPS]
             cands = top + extra
         pick = {"clips": [c["cid"] for c in cands]}
         if pick["clips"]:
@@ -618,7 +686,8 @@ def publish(featured: Path, out: Path, public: Path) -> int:
             if c.get("webm") and c.get("src") and \
                     (out / section / c["webm"]).stat().st_size >= (out / section / c["src"]).stat().st_size:
                 del c["webm"]         # the site tries webm first only to save bytes: one no smaller is dead weight
-            for key, ext in (("src", None), ("webm", None), ("poster", None), ("words", ".words.json")):
+            for key, ext in (("src", None), ("webm", None), ("poster", None), ("words", ".words.json"),
+                             ("peaks", ".peaks.json"), ("signals", ".signals.json")):
                 if c.get(key):        # a words file may belong to another candidate (captions "plain")
                     name = f"{pid}{ext or Path(c[key]).suffix}"
                     shutil.copy2(out / section / c[key], dest / name)
@@ -645,7 +714,8 @@ JUDGE_CAP_USD = 0.50
 CALL_CEILING_TOKENS = (20_000, 1024)      # the most one call could use: a generous input bound, and MAX_TOKENS out
 
 
-def judge_hero(work: Path, out: Path, public: Path, model_name: str) -> int:
+def judge_hero(work: Path, out: Path, public: Path, model_name: str, section: str = "hero-vertical-clips",
+               cids: list | None = None) -> int:
     """Rate each published hero clip with the app's judge: the clip's spoken words, its length and signal shares,
     and a frame of the rendered clip. Stores the four sub-scores, the raw score and the display rating (app.scoring
     across these clips, as across one job's clips) on the candidate, with rating_source "ai". Every API response is
@@ -697,10 +767,10 @@ def judge_hero(work: Path, out: Path, public: Path, model_name: str) -> int:
     ai = ClaudeAI(settings.anthropic_api_key, model, client=httpx.Client(
         timeout=45, event_hooks={"request": [refuse_after_auth_error], "response": [record]}))
     stt = transcriber(model_name)
-    section = "hero-vertical-clips"
     cands_path = out / section / "candidates.json"
     by_cid = read_candidates(cands_path, section)
-    hero = [i["candidate"] for i in load(public / section / "manifest.json")["items"]]
+    wanted = cids or [i["candidate"] for i in load(public / section / "manifest.json")["items"]]
+    hero = [c for c in wanted if by_cid[c].get("rating_source") != "ai"]      # a rated clip is never re-rated
     rated = {}
     for cid in hero:
         if spent + 2 * worst > JUDGE_CAP_USD:          # clip_meta may retry once: two calls at most
@@ -733,13 +803,19 @@ def judge_hero(work: Path, out: Path, public: Path, model_name: str) -> int:
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
             log_path.write_text(json.dumps(calls, indent=1) + "\n")
-    shown = display_scores([score["rating"] for _meta, score in rated.values()])
-    for (cid, (meta, score)), display in zip(rated.items(), shown):
-        by_cid[cid].update(rating=display, rating_raw=score["rating"], rating_source="ai", ai_model=model,
+    by_cid = read_candidates(cands_path, section)    # again: a render may have added candidates meanwhile
+    for cid, (meta, score) in rated.items():
+        by_cid[cid].update(rating_raw=score["rating"], rating_source="ai", ai_model=model,
                            ai_scores=score["scores"], scoring_version=score["scoring_version"],
                            ai_reason=meta.get("reason"), ai_kind=meta.get("kind"),
                            ai_calls=[x for x in calls if x["cid"] == cid])
-        print(f"  {cid}: display {display}, raw {score['rating']}, {score['scores']}")
+    # The display rating is calibrated across every AI-rated clip of the section, as across one job's clips.
+    judged = [c for c in by_cid.values() if c.get("rating_source") == "ai" and "rating_raw" in c]
+    for c, display in zip(judged, display_scores([c["rating_raw"] for c in judged])):
+        c["rating"] = display
+    for cid in rated:
+        print(f"  {cid}: display {by_cid[cid]['rating']}, raw {by_cid[cid]['rating_raw']}, {by_cid[cid]['ai_scores']}"
+              f" {by_cid[cid].get('ai_kind')}")
     write_candidates(cands_path, section, by_cid, CONFIRMED, {})
     print(f"rated {len(rated)} of {len(hero)}; {len(calls)} calls; "
           f"{sum(x['input_tokens'] for x in calls)} in / {sum(x['output_tokens'] for x in calls)} out tokens; "
@@ -756,7 +832,7 @@ def clean(work: Path) -> None:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("step", choices=("scout", "fetch", "render", "more", "requests", "publish", "judge", "clean"))
+    p.add_argument("step", choices=("scout", "fetch", "render", "more", "requests", "publish", "judge", "signals", "clean"))
     p.add_argument("--sources", type=Path)
     p.add_argument("--shots", type=Path)
     p.add_argument("--work", type=Path, required=True)
@@ -782,6 +858,10 @@ def main(argv=None) -> int:
     if a.step == "scout":
         scout(sources, work, only, "base.en" if a.whisper != "none" else "none")
         return 0
+    if a.step == "signals":
+        if not (a.out and only):
+            p.error("signals needs --out and --only <source ids>")
+        return max(signals_curve(sources, work, a.out.expanduser(), sid) for sid in sorted(only))
     if a.step not in ("publish", "judge") and not a.shots:
         p.error("--shots is required")
     if a.step == "requests" and not a.featured:
@@ -792,16 +872,21 @@ def main(argv=None) -> int:
     if a.step == "judge":
         if not a.public:
             p.error("judge needs --out and --public")
-        return judge_hero(work, out, a.public.expanduser(), a.whisper)
+        return judge_hero(work, out, a.public.expanduser(), a.whisper, a.section or "hero-vertical-clips",
+                          sorted(only) if only else None)
     if a.step == "publish":
         if not (a.featured and a.public):
             p.error("publish needs --featured and --public")
-        featured = a.featured.expanduser()
-        if not featured.exists():       # the owner has not saved picks: every confirmed candidate, best first
-            featured = work / "default-featured.json"
-            featured.write_text(json.dumps(default_picks(out, set(a.exclude.split(",")) if a.exclude else set()),
-                                           indent=1) + "\n")
-            print(f"no {a.featured.name}: publishing the default picks written to {featured}")
+        # Every confirmed candidate, best first, for each section the owner has not picked; the owner's picks
+        # (featured.json) win for the sections they cover.
+        picks = default_picks(out, set(a.exclude.split(",")) if a.exclude else set())
+        owner = a.featured.expanduser()
+        if owner.exists():
+            picks["sections"].update(load(owner).get("sections", {}))
+            picks["owner_sections"] = sorted(load(owner).get("sections", {}))
+        featured = work / "default-featured.json"
+        featured.write_text(json.dumps(picks, indent=1) + "\n")
+        print(f"owner picks for: {', '.join(picks.get('owner_sections', [])) or 'none'}; defaults elsewhere")
         return publish(featured, out, a.public.expanduser())
     raw = load(a.shots)["shots"]
     if a.step == "more":
