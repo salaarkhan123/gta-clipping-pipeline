@@ -227,11 +227,14 @@ def segments_graph(segments: list[tuple[float, float]], lo: float, has_audio: bo
             parts.append(f"[t{i}]atrim=start={s - lo:.3f}:end={e - lo:.3f},asetpts=PTS-STARTPTS,"
                          f"afade=t=in:d={CUT_FADE},afade=t=out:st={max(0.0, d - CUT_FADE):.3f}:d={CUT_FADE}[a{i}]")
     if has_audio:
-        parts.append("".join(f"[v{i}][a{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=1[cv]" + ("[cx]" if audio_filter else "[ca]"))
+        parts.append("".join(f"[v{i}][a{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=1[cc]" + ("[cx]" if audio_filter else "[ca]"))
         if audio_filter:
             parts.append(f"[cx]{audio_filter}[ca]")
     else:
-        parts.append("".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[cv]")
+        parts.append("".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[cc]")
+    # concat hands its frames on in microseconds; ffmpeg 7.1 then writes them unevenly timed (not 30 fps). fps
+    # puts them back on the 1/30 s grid, one frame per tick, so the clip is constant 30 fps on every version.
+    parts.append(f"[cc]fps={OUT_FPS}[cv]")
     return ";".join(parts)
 
 
