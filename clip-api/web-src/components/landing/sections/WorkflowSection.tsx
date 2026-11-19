@@ -6,6 +6,7 @@ import { Credits, Footage, useItems } from "../demos/Footage";
 import { useInView } from "../demos/motion";
 import { Section } from "../../site/Section";
 import { EyebrowIcon } from "./EyebrowIcon";
+import { platformNames, VERIFIED_PLATFORMS } from "@/lib/platforms";
 
 // Import, auto edit, post. Importing and editing work today; posting on a schedule is not built and says so.
 function Arrow() {
@@ -19,7 +20,7 @@ function Arrow() {
 
 const STEPS = [
   { title: "Import", soon: false, icon: <path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" />,
-    text: "Paste Twitch or Kick links, several at once, or a Google Drive or Dropbox share link. Or upload the recording itself.",
+    text: `Paste ${VERIFIED_PLATFORMS.length ? `recorded ${platformNames()} video links` : "recorded video links"}, several at once, or upload the recording itself.`,
     visual: <div className="flex w-full max-w-[230px] flex-col gap-2">
       {["twitch.tv/videos/…", "kick.com/…/videos/…", "stream-friday.mkv"].map((t, i) =>
         <span key={t} className="flex items-center gap-2 rounded-[9px] bg-black/40 px-3 py-2 text-[12px] text-white/80 ring-1 ring-white/10">

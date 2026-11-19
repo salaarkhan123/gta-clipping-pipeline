@@ -14,13 +14,14 @@ import { Icon, IconName } from "./Icon";
 import { ImportBox, RecentImports, useImportSources } from "./ImportBox";
 import { useDash } from "./Shell";
 import { ACCEPT, UploadProgress, useUpload } from "./Upload";
+import { linkPhrase } from "@/lib/platforms";
 
 const isLink = (v: string) => /^https?:\/\/\S+\.\S+/i.test(v.trim());
 type Tab = "clip" | "auto" | "editor";
 const TABS: [Tab, IconName, string][] = [["clip", "scissors", "Clip long video"], ["auto", "wand", "Auto-edit footage"], ["editor", "sliders", "Open editor"]];
 // Where a link can come from, and what to paste for it. Each is offered only when GET /v1/imports/sources lists it.
 const FROM: { platform: string; icon: IconName; name: string; hint: string }[] = [
-  { platform: "twitch", icon: "link", name: "Paste a link", hint: "Paste a Twitch or Kick link (YouTube works when it can)" },
+  { platform: "twitch", icon: "link", name: "Paste a link", hint: `Paste ${linkPhrase()}` },
   { platform: "gdrive", icon: "cloud", name: "Google Drive", hint: "Paste a Google Drive share link set to “Anyone with the link”" },
   { platform: "dropbox", icon: "folder", name: "Dropbox", hint: "Paste a Dropbox share link to one file" },
 ];
