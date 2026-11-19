@@ -98,6 +98,10 @@ class Settings(BaseSettings):
     # (U4) Automatic discovery (a clip-length bucket and no clip count): the AI rating (0-100) a moment needs to become
     # a clip. No quota: a video gets as many clips as it has moments this good, never filler. Tune on tuning videos.
     clip_quality_floor: int = Field(40, ge=0, le=100)
+    # Per-game weights of the five sub-scores, for ranking only: JSON {"<game or genre or default>": {"hook": n,
+    # "payoff": n, "clarity": n, "emotion": n, "pacing": n}}. Empty: every game ranks by the plain mean. Fill it from
+    # scripts/fit_score_weights.py, which fits on the owner's labels (tuning videos only).
+    score_weights: str = ""
 
     # Pipeline
     whisper_model: str = "small.en"   # captions. "none" disables transcription and captions

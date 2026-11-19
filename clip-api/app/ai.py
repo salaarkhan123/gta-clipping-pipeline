@@ -18,12 +18,13 @@ from pydantic import BeforeValidator, Field
 
 from .config import get_settings
 from .languages import name_of
+from .pipeline import ranking
 from .pipeline.moments import KINDS, kind_of
 
 log = logging.getLogger("clipapi.ai")
 API_URL = "https://api.anthropic.com/v1/messages"
 # (U4) Judge v2: five sub-scores, each 0-100; the clip's score is their plain mean until U5 calibrates the weights.
-SCORES = ("hook", "payoff", "clarity", "emotion", "pacing")
+SCORES = ranking.SCORES              # hook, payoff, clarity, emotion, pacing
 SCORING_VERSION = "judge-v2-equal"   # five sub-scores, equal weights; U5 recalibrates under a new version id
 PARTS = ("hook", "flow", "value", "trend")         # judge v1's four, still read from a reply in the older shape
 MAX_TOKENS = 1024
@@ -45,6 +46,11 @@ SYSTEM = (
     "viewer why to keep watching and must be true to the clip: build it from what happens in THIS clip (the "
     "event, the reaction, the best line said, close to the speaker's own words), never a line that would fit any "
     "clip (wait for it, watch till the end, you won't believe this). No hashtags, no emoji, no full stop.\n\n"
+    # (wording from the captions agent, whose copy check enforces it: app/pipeline/copy_check.py)
+    "HOOK AND TITLES. Name what happens in this clip: who or what, and the turn, using a word the clip itself "
+    "says (a number, a player or character name, a game term). Every fact must be in the transcript or the "
+    "signals; never a number that is not said. Never name an app, a tool, a clipping service or AI. Hashtags: "
+    "the game first, then what happens; never fyp, viral or a tool's name.\n\n"
     "RATING. virality has five parts, each 0-100, for the clip as you cut it: hook = how strongly the first 3 "
     "seconds make a scrolling viewer stop; payoff = whether the clip lands what it sets up (the punchline, the "
     "outcome, the reaction) before it ends; clarity = whether a viewer who never saw the stream understands what "

@@ -49,9 +49,10 @@ from .transcribe import (Transcriber, Transcript, exclamation_hits, extract_wav,
                          snap_to_speech)
 from .edit import FLASH_LEN, KEEP_PAUSE, MAX_REMOVED, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, select_cuts, to_output, with_flash_forward, zoom_expr, zoom_peaks
 from . import hooks as hook_lines
+from .ranking import EQUAL, rank_score
 from .moments import BUCKETS, MAX_CLIPS, NOMINAL, Moment
 from .llm_pass import PASS_BUDGET_SEC, PassResult, Proposal, Proposer, mix, run_pass
-from .variety import HORIZON, min_gap_for, pick_distinct
+from .variety import HORIZON, min_gap_for, pick_distinct, picture_hash
 from .windows import fits, pick_spread, pick_windows
 
 # Hand-set; the learned ranker replaces these later. The timeline signals (timeline.py) are computed only when their
@@ -130,6 +131,8 @@ class PipelineOptions:
     hook_position: str = "beginning"      # beginning | end: where the burned hook shows
     hook_duration_ms: int | None = None   # how long it shows; None = 2.5 s
     quality_floor: int = QUALITY_FLOOR    # (U4) automatic discovery: the judge rating a moment needs to become a clip
+    score_weights: dict | None = None     # the game's weights for the five sub-scores (ranking.py); None: equal
+    score_weights_version: str = EQUAL    # ... and their name, recorded on every clip they ranked
     moment_layout: bool = False           # auto: draw each moment for what it shows (PROVISIONAL; off: one layout)
 
 
@@ -432,17 +435,23 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         ranked = _judge(candidates, judge, input_path, out_dir, progress, deadline, t1, options.judge_focus,
                         timer, limits=cut_limits, floor=t0, every=every,
                         quality_floor=options.quality_floor,
+                        weights=(options.score_weights, options.score_weights_version),
                         timeline=lambda c: _timeline(series, c.offset, c.end + JUDGE_PAD, base))
         if not ranked:      # (U4) automatic discovery found no moment over the quality floor: a refunded failure
             raise PipelineError("no_moments", "No moment in this video reached the quality bar for a clip.")
     # Without the new options this is max_clips over the whole video, as before. A long list is spread by how
     # many moments there really are, and "same topic" only counts between clips near each other (variety.py).
     many = limits is not None or options.limit is not None
-    distinct, _skipped = pick_distinct(
+    distinct, skipped = pick_distinct(
         ranked, want, window=lambda c: (c.start, c.end), meta=lambda c: c.meta,
         speech=lambda c: " ".join(s[2] for s in c.transcript.segments),
         min_gap=min_gap_for(t1 - t0, min(want, len(ranked)) if many else want),
-        horizon=HORIZON if want > 10 else None)
+        horizon=HORIZON if want > 10 else None,
+        picture=lambda c: int(c.features["picture"], 16) if c.features.get("picture") else None)
+    for reason in ("same picture", "same topic", "same speech"):      # repeats dropped, by why (job counts)
+        dropped = sum(1 for _i, why in skipped if why.startswith(reason))
+        if dropped:
+            timer.count("repeat_" + reason.split()[1], dropped)
     chosen = sorted(distinct, key=lambda c: c.start)
     if judge is not None:
         for i, c in enumerate(chosen):
@@ -812,7 +821,7 @@ def _apply_trim(c: _Candidate, trim: dict | None, duration: float,
 def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path, progress, deadline,
            duration: float = float("inf"), focus: str | None = None, timer: Timer | None = None,
            limits: tuple[float, float] | None = None, floor: float = 0.0, every: bool = False,
-           quality_floor: int = QUALITY_FLOOR,
+           quality_floor: int = QUALITY_FLOOR, weights: tuple[dict | None, str] = (None, EQUAL),
            timeline=None) -> list[_Candidate]:
     """Rate every candidate, drop the junk, and return them best first. The judge may also choose each clip's cut:
     15-60 s, or inside `limits` (told to the judge as `cut_range`, whole seconds).
@@ -833,6 +842,10 @@ def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path,
             raise PipelineError("no_moments", "No stand-out moments were found in this video.")
     with timer.stage("judge_frames"):
         frames = [_frame(src, (c.start + c.end) / 2, out_dir / f"cand{i}.jpg", deadline) for i, c in enumerate(candidates)]
+        for c, f in zip(candidates, frames):      # what the moment looks like, for the same-screen test (variety.py)
+            seen = picture_hash(f)
+            if seen is not None:
+                c.features["picture"] = f"{seen:016x}"
 
     def rate(i: int):
         c = candidates[i]
@@ -863,7 +876,13 @@ def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path,
             unrated.append(c)
             continue
         c.features["judge_score"] = score
-        c.final = JUDGE_WEIGHT * score / 100 + (1 - JUDGE_WEIGHT) * min(1.0, c.final / top)
+        # The game's weights reorder clips only (ranking.py): the AI rating above, the stored sub-scores and the
+        # quality floor stay on the plain mean, so new weights never change how many clips a video gets.
+        ranked_by = rank_score(meta.get("scores"), weights[0]) if weights[0] is not None else None
+        if ranked_by is not None:
+            c.features["rank_score"], c.features["rank_weights"] = ranked_by, weights[1]
+        c.final = (JUDGE_WEIGHT * (score if ranked_by is None else ranked_by) / 100
+                   + (1 - JUDGE_WEIGHT) * min(1.0, c.final / top))
         rated.append(c)
     rated.sort(key=lambda c: c.final, reverse=True)
     bar = max(JUDGE_FLOOR, quality_floor) if every else JUDGE_FLOOR

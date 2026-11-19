@@ -86,6 +86,17 @@ uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-cl
   becomes a clip only when the AI rates it at least this (0-100; an ordinary clip is about 50). There is no quota: a
   long video gets as many clips as it has moments this good, at most 50, and none becomes filler; a job with none is
   `no_moments` and refunded. Tune it on the tuning videos only.
+- `SCORE_WEIGHTS` (default empty): per-game weights of the judge's five sub-scores, for ranking only, as JSON
+  `{"<game, genre or default>": {"hook": n, "payoff": n, "clarity": n, "emotion": n, "pacing": n}}`. A job's game is
+  its template's; it uses the game's weights, else its genre's, else `default`, else the plain mean. Empty: every
+  game ranks by the plain mean. The AI rating, the stored sub-scores and the quality floor never change with it.
+  Make the value with `python scripts/fit_score_weights.py eval/labels-v2.csv <vod>=<job.json> ... --out w.json`,
+  which fits on the owner's labels (tuning videos only, at least 30 rated clips per game) and prints each
+  sub-score's rank correlation and precision@k against them. A clip records which weights ranked it
+  (`features.rank_weights`, `features.rank_score`).
+- Repeats (no setting): two candidates on the same screen (a lobby, a respawn or starting-soon screen, a loop) are
+  one moment and only the better is kept; off in a video whose frames all look alike (a fixed camera). Job counts
+  `repeat_picture`, `repeat_topic`, `repeat_speech` say how many candidates were dropped as repeats.
 
 ## Moment signals (U2)
 
