@@ -50,6 +50,7 @@ from .transcribe import (Transcriber, Transcript, exclamation_hits, extract_wav,
 from .edit import FLASH_LEN, KEEP_PAUSE, MAX_REMOVED, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, select_cuts, to_output, with_flash_forward, zoom_expr, zoom_peaks
 from . import hooks as hook_lines
 from .ranking import EQUAL, rank_score
+from .copy_check import check_copy
 from .moments import BUCKETS, MAX_CLIPS, NOMINAL, Moment
 from .llm_pass import PASS_BUDGET_SEC, PassResult, Proposal, Proposer, mix, run_pass
 from .variety import HORIZON, min_gap_for, pick_distinct, picture_hash
@@ -468,6 +469,14 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         for c in chosen:
             _fit(c, limits, t0, t1)
     if judge is not None:
+        game = _template_game(options.template)
+        for c in chosen:          # (captions) no tool names, filler or claims the clip does not make
+            if isinstance(c.meta, dict):
+                lines = [t for s, _e, t in c.transcript.segments if c.start <= s + c.offset < c.end]
+                c.meta, found = check_copy(c.meta, " ".join(lines), game, lines)
+                if found:
+                    c.features["copy_problems"] = found
+                    timer.count("copy_problems", len(found))
         _distinct_hooks(chosen, hook_writer, timer, options.hook_style)
         for c in chosen:          # (U4) the judge's peak, for the thumbnail and the flash-forward: source seconds
             c.features["peak_sec"] = round(c.peak, 3) if c.peak is not None and c.start <= c.peak < c.end else None
@@ -713,6 +722,13 @@ def _snap(c: _Candidate, duration: float, limits: tuple[float, float] | None = N
         segs = [(s + c.offset, e + c.offset, t) for s, e, t in c.transcript.segments]
         snapped = snap_to_speech(c.start, c.end, segs, lo=floor, hi=duration, min_len=min_len, max_len=max_len)
     c.start, c.end = snapped
+
+
+def _template_game(template: str | None) -> str | None:
+    """(captions) The game of the template a job's options came from (a templates.GAMES id), or None."""
+    from app.templates import TEMPLATES
+    game = (TEMPLATES.get(template or "") or {}).get("game")
+    return game if game and game != "other" else None
 
 
 def _distinct_hooks(chosen: list[_Candidate], writer, timer: Timer, style: str = "serious") -> None:
