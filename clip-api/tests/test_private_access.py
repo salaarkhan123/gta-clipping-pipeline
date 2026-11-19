@@ -26,6 +26,7 @@ from app.ingest import platforms
 from app.ingest.takedown import takedown
 from app.main import app
 from app.models import ClipThumbnail, Export, Job, Upload, new_id, utcnow
+from app.pipeline.fonts import FONT_DIR
 from app.security import make_token
 from tests.conftest import FakeTranscriber
 from tests.ingest_support import FakeYDL
@@ -76,6 +77,9 @@ ROUTES: dict[tuple[str, str], Case] = {
     ("POST", "/v1/clips/{clip_id}/thumbnails/premium"): Case(body={"style": "cinematic", "confirm": True,
                                                                   "likeness_consent": True}),
     # (#146) a counter-notice on a report about A's content: only A's login may send one
+    # (#214) an account's own caption fonts; (#215) a clip's caption as words, for text-based editing
+    ("DELETE", "/v1/fonts/{font_id}"): Case(),
+    ("GET", "/v1/clips/{clip_id}/words"): Case(owner=(200, None)),
     ("POST", "/v1/trust/my-cases/{reference}/counter-notice"): Case(body={
         "name": "Some Body", "address": "1 Any St, Calgary AB", "phone": "+1 555 0102",
         "explanation": "This is my own recording.", "mistake": True, "consent": True, "signature": "Some Body"}),
@@ -117,7 +121,7 @@ PUBLIC_BODY_IDS = {
 # Account routes that list things: as B they must hold none of A's ids.
 LISTINGS = ("/v1/me", "/v1/keys", "/v1/uploads", "/v1/jobs", "/v1/clips", "/v1/projects", "/v1/imports",
             "/v1/credits", "/v1/templates/custom", "/v1/me/consents",        # consents: #158
-            "/v1/trust/my-cases")                                             # reports about your content: #146
+            "/v1/trust/my-cases", "/v1/fonts")                                # fonts: #214                                             # reports about your content: #146
 PUBLIC_GETS = {
     "/health": "status only", "/v1/auth/verify": "takes an emailed token", "/v1/languages": "fixed list",
     "/v1/options": "fixed list", "/v1/templates": "catalogue", "/v1/templates/games": "catalogue",
@@ -266,9 +270,12 @@ def world(client, video) -> World:
         "address": "1 Main St", "relationship": "owner", "work": "My original recording",
         "reported_urls": [clip["id"]], "good_faith": True, "accurate": True, "signature": "Rights Holder"})
     assert reported.status_code == 201, reported.text
+    font = client.post("/v1/fonts?filename=Mine.ttf&licence_confirmed=true",            # (#214) A's own font
+                       content=(FONT_DIR / "Bangers-Regular.ttf").read_bytes(), headers=a)
+    assert font.status_code == 201, font.text
     ids = {"key_id": a_key_id, "job_id": clip_job, "clip_id": clip["id"], "upload_id": up["upload_id"],
            "template_id": template.json()["id"], "import_id": imp["import_id"], "thumb_id": thumb_id,
-           "reference": reported.json()["reference"]}
+           "reference": reported.json()["reference"], "font_id": font.json()["id"]}
     w = World(a, a_key, b, b_key, b_account, ids)
     exported = client.get(f"/v1/jobs/{clip_job}", headers=a).json()["clips"]
     assert exported[0]["preview_url"] and exported[0]["export_url"], exported       # a preview and an export exist
@@ -420,6 +427,7 @@ def test_others_changed_nothing(client, world):
     assert mine["kept"] is None and mine["reaction"] is None and mine["title"] != "taken over"
     assert client.get(f"/v1/jobs/{ids['job_id']}", headers=a).json()["status"] == "SUCCEEDED"
     assert client.get(f"/v1/imports/{ids['import_id']}", headers=a).json()["status"] == "SUCCEEDED"
+    assert [f["id"] for f in client.get("/v1/fonts", headers=a).json()["fonts"]] == [ids["font_id"]]
 
 
 # ---- listings ----
