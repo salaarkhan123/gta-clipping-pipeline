@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { api, ApiError, clock } from "@/lib/api";
 import { Icon } from "./Icon";
 import { Tabs } from "./Tabs";
+import { importStep } from "@/lib/imports";
 
 // Link import: a public video link becomes a project. Every import needs the user's word that they own the video
 // or may clip it (sent as `consent: true`); the API logs it and refuses what it cannot fetch, and its words are
@@ -11,7 +12,6 @@ import { Tabs } from "./Tabs";
 export type Sources = { enabled: boolean; sources: { platform: string; name: string; accepts: string; example?: string; note?: string }[];
   bulk_max: number; max_bytes: number; max_duration_sec: number };
 const CONSENT = "I own this video or have permission to clip it";
-const STAGES: Record<string, string> = { importing: "Downloading", checking: "Checking the file", storing: "Saving", done: "Done" };
 const active = (i: any) => i?.status === "QUEUED" || i?.status === "RUNNING";
 const gb = (n: number) => `${Math.round(n / 1024 ** 3)} GB`;
 
@@ -124,7 +124,7 @@ function ImportCard({ item, onReady }: { item: any; onReady?: (upload: any) => v
     if (it.upload_id && onReady && !told.current) { told.current = true; onReady(it.upload || { upload_id: it.upload_id }); }
   }, [it, onReady]);
   const cancel = () => { setCancelling(true); api(`/v1/imports/${it.import_id}/cancel`, { body: {} }).then(setIt).catch((e) => setProblem(e.message)).finally(() => setCancelling(false)); };
-  const status = active(it) ? `${it.status === "QUEUED" ? "Waiting to start" : STAGES[it.stage] || "Importing"} ${it.progress || 0}%`
+  const status = active(it) ? `${importStep(it, "Importing")} ${it.progress || 0}%`
     : it.status === "SUCCEEDED" ? (it.upload_id ? "Imported" : "Imported, no longer stored") : it.status === "FAILED" ? "Failed" : "Cancelled";
   return (
     <article className={`import-card ${String(it.status).toLowerCase()}`} aria-label={`Import of ${it.url}`}>
@@ -158,7 +158,7 @@ export function RecentImports({ reload }: { reload: number }) {
       <ul>
         {list.map((i) => <li key={i.import_id}>
           <span className="import-url" title={i.url}>{i.url}</span>
-          <span className={`muted small st-${String(i.status).toLowerCase()}`}>{active(i) ? `${STAGES[i.stage] || "Waiting"} ${i.progress || 0}%`
+          <span className={`muted small st-${String(i.status).toLowerCase()}`}>{active(i) ? `${importStep(i, "Waiting")} ${i.progress || 0}%`
             : i.status === "SUCCEEDED" ? "Imported" : i.status === "FAILED" ? "Failed" : "Cancelled"}</span>
           {i.upload_id ? <Link className="more" href={`/dashboard/project/?id=${i.upload_id}`}>Open</Link>
             : i.status === "FAILED" && i.error?.message ? <span className="small import-why" title={i.error.message}>{i.error.message}</span> : <span />}
