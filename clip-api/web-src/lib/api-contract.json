@@ -1,5 +1,5 @@
 {
-  "about": "Every API route, request field and query parameter the website uses. tests/api-contract.test.mjs fails when the site calls a route not listed here; clip-api/tests/test_web_contract.py fails when a listed route or field is missing from the API's /openapi.json. `optional`: the site looks the route up in /openapi.json (lib/routes.ts) and works without it. `response`: top-level fields the site reads from that GET, checked by calling it as a fresh account. `optional_body`: fields of a newer API version (link ranges): skipped while no route takes them, required on every listed route once one does. `clip_fields`: fields of a clip object the site reads (judge v2 adds `scores`, `scoring_version`). `edit_options`: the option names an edit may carry (lib/edit.ts forApi); the backend test checks them against the edit's own option model.",
+  "about": "Every API route, request field and query parameter the website uses. tests/api-contract.test.mjs fails when the site calls a route not listed here; clip-api/tests/test_web_contract.py fails when a listed route or field is missing from the API's /openapi.json. `optional`: the site looks the route up in /openapi.json (lib/routes.ts) and works without it. `response`: top-level fields the site reads from that GET, checked by calling it as a fresh account. `optional_body`: fields of a newer API version (link ranges): skipped while no route takes them, required on every listed route once one does. `clip_fields`: fields of a clip object the site reads (judge v2 adds `scores`, `scoring_version`). `edit_options`: the option names an edit may carry (`edit_options_optional`: names a newer API adds, such as caption_look; the site sends them only when /openapi.json describes them) (lib/edit.ts forApi); the backend test checks them against the edit's own option model.",
   "routes": [
     { "method": "GET", "path": "/health" },
     { "method": "POST", "path": "/v1/auth/signup", "body": ["email", "password", "accept_policies"] },
@@ -36,11 +36,12 @@
     { "method": "POST", "path": "/v1/clips/quote", "body": ["upload_id", "options"], "optional": true },
     { "method": "POST", "path": "/v1/clips/from-url", "body": ["url", "consent", "options"], "optional_body": ["start_sec", "end_sec"], "optional": true },
     { "method": "GET", "path": "/v1/clips", "query": ["limit", "offset", "sort", "filter"], "response": ["clips", "total"] },
-    { "method": "PATCH", "path": "/v1/clips/{clip_id}", "body": ["edit", "title"], "optional": true },
+    { "method": "PATCH", "path": "/v1/clips/{clip_id}", "body": ["edit", "title"], "optional_body": ["edit.words"], "optional": true },
     { "method": "POST", "path": "/v1/clips/{clip_id}/feedback", "body": ["kept", "reaction", "bookmarked"] },
     { "method": "GET", "path": "/v1/clips/{clip_id}/subtitles", "query": ["format"] },
-    { "method": "POST", "path": "/v1/clips/export", "body": ["job_id", "clips", "edit", "options"], "optional": true },
-    { "method": "POST", "path": "/v1/clips/export/quote", "body": ["job_id", "clips", "edit", "options"], "optional": true },
+    { "method": "GET", "path": "/v1/clips/{clip_id}/words", "optional": true },
+    { "method": "POST", "path": "/v1/clips/export", "body": ["job_id", "clips", "edit", "options"], "optional_body": ["edit.words"], "optional": true },
+    { "method": "POST", "path": "/v1/clips/export/quote", "body": ["job_id", "clips", "edit", "options"], "optional_body": ["edit.words"], "optional": true },
     { "method": "GET", "path": "/v1/jobs/{job_id}" },
     { "method": "POST", "path": "/v1/jobs/{job_id}/cancel" },
     { "method": "POST", "path": "/v1/find", "body": ["upload_id", "query", "mode", "max_results", "make_clips", "clip_length", "options", "source_lang"] },
@@ -61,7 +62,8 @@
   ],
   "clip_fields": ["id", "job_id", "start_sec", "end_sec", "score", "kind", "title", "titles", "hook", "why", "kept", "reaction", "bookmarked",
     "video_url", "preview_url", "thumb_url", "captions_url", "segments", "virality", "scores", "scoring_version"],
-  "edit_options": ["aspect", "camera", "caption_accent", "caption_position", "caption_style", "captions", "censor", "chat_region",
+  "edit_options_optional": ["caption_look"],
+  "edit_options": ["aspect", "caption_look", "camera", "caption_accent", "caption_position", "caption_style", "captions", "censor", "chat_region",
     "facecam_box", "facecam_region", "hook_duration_ms", "hook_position", "hook_style", "layout", "render", "resolution", "split_ratio",
     "vertical", "zoom"]
 }
