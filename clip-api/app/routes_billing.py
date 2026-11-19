@@ -152,6 +152,12 @@ def _invoice_subscription(inv: dict) -> str | None:
     return sub.get("id") if isinstance(sub, dict) else sub
 
 
+def _period_end(sub: dict):
+    """When a subscription's current period ends. Since 2025-03-31.basil it is on each subscription item."""
+    ends = [it.get("current_period_end") for it in ((sub.get("items") or {}).get("data") or [])]
+    return sub.get("current_period_end") or max((e for e in ends if e), default=None)
+
+
 def _price_ids(obj: dict) -> list[str]:
     """The Stripe Price IDs on an invoice's lines or a subscription's items, in every API version's shape."""
     rows = ((obj.get("lines") or {}).get("data") or []) + ((obj.get("items") or {}).get("data") or [])
@@ -312,9 +318,12 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 acct.stripe_customer_id = obj["customer"]
             if obj.get("mode") == "subscription":
                 plan = find_plan(meta.get("plan_id"))
-                if obj.get("subscription") and plan and plan.get("monthly_credits"):
+                # Not when a newer subscription event was applied: a late (or resent) copy of this event must not
+                # bring back a subscription that has since ended.
+                if obj.get("subscription") and plan and plan.get("monthly_credits") and _fresh(acct, event, mark=False):
+                    if acct.stripe_subscription_id != obj["subscription"] or not acct.subscription_status:
+                        acct.subscription_status = "active"   # a new subscription, also after an old one ended
                     acct.stripe_subscription_id, acct.plan = obj["subscription"], plan["id"]
-                    acct.subscription_status = acct.subscription_status or "active"
             elif obj.get("payment_status") == "paid":
                 pack = find_pack(meta.get("pack_id", ""))
                 if pack:   # keyed on the Checkout Session id, so redelivered events never grant twice
@@ -327,7 +336,11 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         meta = _invoice_meta(obj)
         acct = _account(db, meta.get("account_id"), obj.get("customer"))
         plan, interval = _subscribed_plan(obj, meta, acct.plan if acct else None)
-        if acct and plan and plan.get("monthly_credits"):
+        reason = obj.get("billing_reason") or ""
+        if acct and not _invoice_subscription(obj) and reason and not reason.startswith("subscription"):
+            # A one-off invoice ("manual", "quote_accept", ...): both signals agree it is not a plan renewal.
+            log.info("invoice %s is not for a subscription (%s); no plan credits", obj.get("id"), reason)
+        elif acct and plan and plan.get("monthly_credits"):
             acct.plan = plan["id"]
             if obj.get("customer"):
                 acct.stripe_customer_id = obj["customer"]
@@ -371,7 +384,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 acct.subscription_status, acct.subscription_cancel_at = "canceled", None
             else:
                 acct.subscription_status = status
-                ends = obj.get("cancel_at") or (obj.get("current_period_end") if obj.get("cancel_at_period_end") else None)
+                ends = obj.get("cancel_at") or (_period_end(obj) if obj.get("cancel_at_period_end") else None)
                 acct.subscription_cancel_at = _when(ends)
                 if status in ("active", "trialing", "past_due"):  # past_due keeps the plan while Stripe retries
                     if known_plan:

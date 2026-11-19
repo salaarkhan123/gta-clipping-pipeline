@@ -14,7 +14,7 @@ from .deps import ApiError
 from .render_options import refused_layout
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-log_redact.install()          # no verification or file token in the access log
+log_redact.install()          # no verification or file token, and no key, in the request logs
 
 
 @asynccontextmanager
@@ -22,8 +22,7 @@ async def lifespan(_app: FastAPI):
     s = get_settings()
     s.check_production()
     if s.sentry_dsn:
-        import sentry_sdk
-        sentry_sdk.init(dsn=s.sentry_dsn, traces_sample_rate=0.0)
+        log_redact.init_sentry(s.sentry_dsn)
     init_db()
     yield
 

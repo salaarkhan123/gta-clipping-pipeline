@@ -13,6 +13,8 @@
   bump-token-epoch                              void every password-reset and email-verification link already sent
   selftest                                      load every model and tool once (run in the worker container)
   db-status                                     schema revision and differences from the models (read-only)
+  stripe-check                                  Stripe key mode, key accepted, each plan's Price matches app/plans.py,
+                                                webhook secret set (read-only; prints no secret)
   migrate                                       upgrade the schema to the latest revision (deploy.sh runs it)
   takedown --url URL | --account ID_OR_EMAIL [--dry-run]
                                                 remove every upload, clip and file imported from a source URL, or all
@@ -110,6 +112,50 @@ def selftest() -> int:
     return 1 if failed else 0
 
 
+def stripe_check() -> int:
+    """Read-only check of the Stripe settings after a deploy or a key rotation. Prints no secret. Exit 2: no key."""
+    import stripe
+    from app.config import get_settings
+    from app.deps import ApiError
+    from app.plans import PLANS, stripe_price_id
+    from app.routes_billing import _check_price
+    s, failed = get_settings(), 0
+    print(f"stripe library {stripe.VERSION}, API version {stripe.api_version}")
+    key = s.stripe_secret_key
+    if not key:
+        print("FAIL  STRIPE_SECRET_KEY is not set")
+        return 2
+    print(f"key mode: {'live' if '_live_' in key else 'test' if '_test_' in key else 'unknown'}")
+    try:
+        print(f"OK    key accepted (account {stripe.Account.retrieve(api_key=key).id})")
+    except Exception as e:
+        failed += 1
+        print(f"FAIL  key refused: {type(e).__name__}")
+    for plan in PLANS:
+        for interval in ("month", "year"):
+            cents = plan.get(f"price_{interval}_cents") or 0
+            if cents <= 0:
+                continue
+            name, price_id = f"{plan['id']}/{interval}", stripe_price_id(plan, interval)
+            if not price_id:
+                failed += 1
+                print(f"FAIL  {name}: no Price ID configured")
+                continue
+            try:
+                _check_price(stripe.Price.retrieve(price_id, api_key=key), plan, interval, int(cents), s.currency)
+                print(f"OK    {name}: {price_id}")
+            except ApiError:
+                failed += 1
+                print(f"FAIL  {name}: {price_id} does not match app/plans.py (the log line above says how)")
+            except Exception as e:
+                failed += 1
+                print(f"FAIL  {name}: {price_id}: {type(e).__name__}")
+    print("OK    STRIPE_WEBHOOK_SECRET is set" if s.stripe_webhook_secret else "FAIL  STRIPE_WEBHOOK_SECRET is not set")
+    failed += 0 if s.stripe_webhook_secret else 1
+    print("ALL OK" if not failed else f"{failed} CHECK(S) FAILED")
+    return 1 if failed else 0
+
+
 def send_test_email(to: str) -> int:
     """Sends one message through app/emailer.py (Resend or SMTP). Never prints a password or an API key."""
     from app.config import get_settings
@@ -200,6 +246,7 @@ def main() -> None:
     sub.add_parser("ops-status")
     sub.add_parser("selftest")
     sub.add_parser("db-status")
+    sub.add_parser("stripe-check")
     sub.add_parser("migrate")
     c = sub.add_parser("send-test-email"); c.add_argument("--to", required=True)
     sub.add_parser("bump-token-epoch")
@@ -217,6 +264,8 @@ def main() -> None:
         from app import token_epoch
         print(f"token epoch is now {token_epoch.bump()}: every reset and verification link sent before is void")
         sys.exit(0)
+    if args.cmd == "stripe-check":
+        sys.exit(stripe_check())
     if args.cmd == "db-status":
         sys.exit(db_status())
     if args.cmd == "ops-status":

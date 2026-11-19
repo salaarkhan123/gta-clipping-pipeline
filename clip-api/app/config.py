@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/dev.db"
     data_dir: str = "./data"
     secret_key: str = "dev-insecure-change-me"
+    # During a SECRET_KEY rotation only: the old key, still accepted when reading tokens (never used to sign), so
+    # sessions and emailed links made before the rotation keep working until they expire. Remove it afterwards.
+    secret_key_previous: str = ""
     public_api_url: str = "http://localhost:8000"
     public_web_url: str = "http://localhost:3000"
     cors_origins: str = "http://localhost:3000"
@@ -209,6 +212,8 @@ class Settings(BaseSettings):
         problems = []
         if self.secret_key == "dev-insecure-change-me" or len(self.secret_key) < 32:
             problems.append("SECRET_KEY must be a random string of 32+ characters")
+        if self.secret_key_previous and len(self.secret_key_previous) < 32:
+            problems.append("SECRET_KEY_PREVIOUS, when set, must be the old 32+ character SECRET_KEY")
         if self.database_url.startswith("sqlite"):
             problems.append("DATABASE_URL must point at Postgres")
         if self.auto_verify_email:
