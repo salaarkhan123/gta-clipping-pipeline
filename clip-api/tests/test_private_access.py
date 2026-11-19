@@ -184,10 +184,21 @@ def path_params(path: str) -> list[str]:
     return re.findall(r"{(\w+)}", path)
 
 
-def operations():
+# Admin routes (/v1/admin/...) are closed to every non-admin whatever id is sent, so they have no case in the
+# tables above. tests/test_trust_reports.py calls each one as nobody (401), a normal user (403 admin_required),
+# an admin's API key (403 session_required) and an admin login; its ADMIN_BODIES must list every admin route.
+ADMIN = "/v1/admin/"
+
+
+def all_operations():
     for path, ops in app.openapi()["paths"].items():
         for method, op in ops.items():
             yield method.upper(), path, op
+
+
+def operations():
+    """Every route an ordinary account can call."""
+    return [o for o in all_operations() if not o[1].startswith(ADMIN)]
 
 
 def body_id_fields(op: dict) -> list[str]:
@@ -278,6 +289,9 @@ def test_every_id_route_has_an_access_case():
     assert not (cased | set(PUBLIC_BODY_IDS)) - in_body, "a body case names a route or field that no longer exists"
     gets = {p for m, p, _ in operations() if m == "GET" and not path_params(p)}
     assert gets == set(LISTINGS) | set(PUBLIC_GETS), "a GET route needs a place in LISTINGS or PUBLIC_GETS"
+    from tests.test_trust_reports import ADMIN_BODIES
+    admin = {(m, p) for m, p, _ in all_operations() if p.startswith(ADMIN)}
+    assert admin == set(ADMIN_BODIES), "an admin route needs an entry in test_trust_reports.ADMIN_BODIES"
 
 
 def test_route_cases_name_only_ids_the_world_has(world):

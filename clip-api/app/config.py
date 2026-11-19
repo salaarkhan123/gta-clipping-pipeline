@@ -95,6 +95,12 @@ class Settings(BaseSettings):
     # Signup without accept_policies=true is refused (422 terms_required). Off by default so API clients written
     # before consent records keep working; the website always sends it. Owner decision (app/legal.py).
     require_terms_acceptance: bool = False
+    # Copyright and likeness reports (app/trust.py). TRUST_ADMIN_EMAIL: where new-report notices go (comma
+    # separated); empty = every active admin account. Limits are per sender IP and per claimant email.
+    trust_admin_email: str = ""
+    trust_reports_per_ip_per_hour: int = 5
+    trust_reports_per_ip_per_day: int = 20
+    trust_reports_per_email_per_day: int = 3
 
     # Stripe
     stripe_secret_key: str = ""

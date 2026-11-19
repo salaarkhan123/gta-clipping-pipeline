@@ -74,3 +74,10 @@ def session_principal(p: Principal = Depends(current_principal)) -> Principal:
     if p.via != "session":
         raise ApiError(403, "session_required", "This endpoint needs a website login, not an API key.")
     return p
+
+
+def admin_principal(p: Principal = Depends(session_principal)) -> Principal:
+    """Admin routes: a website login of an account with is_admin set. API keys never reach them."""
+    if not p.account.is_admin:
+        raise ApiError(403, "admin_required", "This endpoint is for ClutchClips admins.")
+    return p

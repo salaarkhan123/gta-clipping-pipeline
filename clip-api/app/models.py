@@ -32,6 +32,8 @@ class Account(Base):
     subscription_event_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)    # newest Stripe event applied
     webhook_secret: Mapped[str] = mapped_column(String(80))
     signup_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Can use the admin routes (/v1/admin/...) from a website login. Set with scripts/admin.py make-admin.
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
@@ -260,6 +262,61 @@ class PolicyAcceptance(Base):
 @event.listens_for(PolicyAcceptance, "before_delete")
 def _append_only(_mapper, _conn, _target):
     raise RuntimeError("policy_acceptances is append-only: add a new row instead")
+
+
+class TrustCase(Base):
+    """A copyright or likeness report about content on ClutchClips (app/trust.py). The claimant's details are
+    readable only through the admin routes. Status moves only by admin decisions, each one a CaseEvent."""
+    __tablename__ = "trust_cases"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    reference: Mapped[str] = mapped_column(String(16), unique=True)          # CC-XXXX-XXXX, given to the claimant
+    kind: Mapped[str] = mapped_column(String(12))                            # copyright | likeness
+    status: Mapped[str] = mapped_column(String(20), default="received")
+    claimant_name: Mapped[str] = mapped_column(String(200))
+    claimant_email: Mapped[str] = mapped_column(String(320), index=True)
+    claimant_organization: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    claimant_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    claimant_phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    relationship: Mapped[str] = mapped_column(String(24))                    # owner | agent | self | representative
+    work: Mapped[str] = mapped_column(Text)                                  # the work, or the person shown
+    reported_urls: Mapped[list] = mapped_column(JSON)
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signature: Mapped[str] = mapped_column(String(200))
+    ip_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)   # HMAC of the sender's IP: abuse checks
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class CaseTarget(Base):
+    """One piece of ClutchClips content a case points at, found from the reported URLs."""
+    __tablename__ = "case_targets"
+    __table_args__ = (UniqueConstraint("case_id", "kind", "target_id", name="uq_case_target"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("trust_cases.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(12))                            # upload | job | clip | export
+    target_id: Mapped[str] = mapped_column(String(40), index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)   # who owns the content
+    state: Mapped[str] = mapped_column(String(12), default="live")           # live | disabled | restored | deleted
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class CaseEvent(Base):
+    """Append-only history of a case: every submission, note and decision, with who and when."""
+    __tablename__ = "case_events"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("trust_cases.id"), index=True)
+    actor_kind: Mapped[str] = mapped_column(String(16))                      # claimant | admin | reported_user | system
+    actor_id: Mapped[str | None] = mapped_column(String(40), nullable=True)  # the admin's or user's account id
+    action: Mapped[str] = mapped_column(String(24))
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+@event.listens_for(CaseEvent, "before_update")
+@event.listens_for(CaseEvent, "before_delete")
+def _events_append_only(_mapper, _conn, _target):
+    raise RuntimeError("case_events is append-only: add a new event instead")
 
 
 class WebhookDelivery(Base):
