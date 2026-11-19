@@ -146,7 +146,8 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
     else { anchor.current = i; setSel({ a: i, b: i }); }
     seek(words[i].start);
   }
-  const cutSelection = () => { if (selSpan) { set({ cuts: addCut(edit.cuts, selSpan) }); setSel(null); } };
+  // Cutting words also marks them `cut` in the word edit (#215): the caption and the video leave together.
+  const cutSelection = () => { if (selSpan) { set({ cuts: addCut(edit.cuts, selSpan), ...(model ? { words: model.map((w) => (w.start >= selSpan[0] && w.end <= selSpan[1] ? { ...w, cut: true } : w)) } : {}) }); setSel(null); } };
   const restoreSelection = () => { if (selSpan) { set({ cuts: removeSpan(edit.cuts, selSpan), ...(model ? { words: model.map((w) => (w.start >= selSpan[0] && w.end <= selSpan[1] ? { ...w, cut: false } : w)) } : {}) }); setSel(null); } };
   // Text-based editing (#215): the words as the user edits them; null when this API can't take them.
   const model: EditWord[] | null = known.words ? (edit.words ?? apiWords) : null;

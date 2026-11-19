@@ -50,7 +50,7 @@ export function WordMenu({ on, words, picked, onWords, onCutWithVideo }: { on: b
             className="h-5 w-6 cursor-pointer border-0 bg-transparent p-0" /></label>
         {sel.some((w) => w.highlight) && <button type="button" className={ITEM} onClick={() => change((w) => ({ ...w, highlight: null }))}>No highlight</button>}
         <button type="button" className={ITEM} aria-pressed={all("hidden")} onClick={() => { const v = !all("hidden"); change((w) => ({ ...w, hidden: v })); }}>Remove caption</button>
-        <button type="button" className={ITEM} aria-pressed={all("cut")} onClick={() => { change((w) => ({ ...w, cut: true })); onCutWithVideo(); }}>Remove caption &amp; video</button>
+        <button type="button" className={ITEM} aria-pressed={all("cut")} onClick={onCutWithVideo}>Remove caption &amp; video</button>
       </div>
       <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Add emoji after the last selected word">
         <span className="mr-1 text-[12.5px] text-muted">Add emoji</span>
