@@ -191,6 +191,27 @@ def parse_meta(text) -> dict | None:
     return out
 
 
+LEGACY_VERSION = "judge-v1"          # clips judged before v2: four parts (hook, flow, value, trend), no `scores`
+
+
+def rating_of(meta) -> dict | None:
+    """The one reader of a clip's AI rating, for everything that shows or stores it (the API's clip object, the
+    website's own clips, scripts): {"rating": 0-100, "scores": the five sub-scores or None, "scoring_version"}.
+    `meta` is what clip_meta returned (and what a clip stores). None when the AI did not rate the clip (no meta, or
+    a score made from signals only). A clip judged before v2 still reads: its rating, no `scores`, LEGACY_VERSION.
+    The rating is the model's opinion of the clip, never a probability or a forecast of views."""
+    if not isinstance(meta, dict) or meta.get("source") == "signals":
+        return None
+    v = meta.get("virality") if isinstance(meta.get("virality"), dict) else {}
+    if not isinstance(v.get("score"), (int, float)) or isinstance(v.get("score"), bool):
+        return None
+    scores = meta.get("scores") if isinstance(meta.get("scores"), dict) else None
+    if scores is not None and set(scores) != set(SCORES):
+        scores = None
+    return {"rating": v["score"], "scores": scores,
+            "scoring_version": (meta.get("scoring_version") or SCORING_VERSION) if scores is not None else LEGACY_VERSION}
+
+
 def signal_meta(score: float) -> dict:
     """Fallback when no AI key is set: an overall score from detection strength only."""
     return {"virality": {"score": _clamp(50 + 49 * min(1.0, max(0.0, score)))}, "source": "signals"}
