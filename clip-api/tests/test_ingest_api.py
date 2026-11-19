@@ -88,7 +88,9 @@ def test_needs_a_login_and_takes_no_other_fields(client, user, web):
     ("https://example.test/index.html", "unsupported_source"),
     ("http://cdn.test/video.mp4", "https_only"),
     ("https://user:pw@cdn.test/video.mp4", "credentials_in_url"),
-    ("https://www.twitch.tv/somechannel", "unsupported_link"),
+    ("https://www.twitch.tv/somechannel", "live_channel"),
+    ("https://kick.com/somechannel", "live_channel"),
+    ("https://www.twitch.tv/directory", "unsupported_link"),
     ("https://www.youtube.com/playlist?list=PL1", "unsupported_link"),
     ("https://internal.test/video.mp4", "private_address"),
     ("https://169.254.169.254/latest/video.mp4", "private_address"),
@@ -335,7 +337,7 @@ def test_a_twitch_link_goes_through_the_platform_downloader(client, user, fake_y
     assert done["upload"]["filename"] == "Ranked grind_ part 3 _ finale.mp4"
     assert done["upload"]["size_bytes"] == video.stat().st_size
     assert len(fake_ydl.instances) == 1 and fake_ydl.instances[0].urls == [TWITCH]
-    options = fake_ydl.instances[0].params
+    options = fake_ydl.instances[0].given
     for name in ("cookiefile", "cookiesfrombrowser", "username", "password", "impersonate", "geo_bypass"):
         assert not options[name]
     assert options["proxy"] == "" and options["extractor_args"] == {} and options["js_runtimes"] == {}
@@ -348,9 +350,9 @@ def test_a_twitch_link_goes_through_the_platform_downloader(client, user, fake_y
      "source_refused"),
     ("https://youtu.be/dQw4w9WgXcQ", "youtube",
      "ERROR: [youtube] dQw4w9WgXcQ: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies",
-     "YouTube often refuses automated downloads: upload the file instead", "login_required"),
+     "YouTube often refuses automated downloads: upload the file instead", "source_refused"),
     (TWITCH, "twitch", "ERROR: [twitch:vod] 2301234567: This video is only available for subscribers",
-     "This video needs a login", "login_required"),
+     "This video is for members or subscribers only", "members_only"),
 ])
 def test_a_site_that_refuses_is_a_clean_failure(client, user, fake_ydl, url, platform, raw, starts, code):
     headers, account = user

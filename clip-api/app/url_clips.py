@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from . import ledger
 from .db import new_session
 from .deps import ApiError
-from .ingest import UPLOAD_INSTEAD
+from .ingest import UPLOAD_INSTEAD, Span, copies
 from .models import Job, Upload, utcnow
 from .routes_media import ACTIVE, WAITING, ClipOptions, price_clips
 
@@ -62,21 +62,27 @@ class Plan:
     upload: Upload | None       # this account's stored copy of the link, when there is one: nothing is imported
 
 
-def reusable_upload(db: Session, account_id: str, canonical_url: str) -> Upload | None:
-    """This account's newest stored, unexpired upload imported from this link."""
-    return db.execute(select(Upload).where(
-        Upload.account_id == account_id, Upload.source_url == canonical_url, Upload.deleted_at.is_(None),
-        Upload.expires_at > utcnow(), Upload.storage_key != "").order_by(Upload.created_at.desc()).limit(1)
-    ).scalar_one_or_none()
+def reusable_upload(db: Session, account_id: str, canonical_url: str, span: Span | None = None) -> Upload | None:
+    """This account's newest stored, unexpired upload that is exactly this part of the link (`span`; left out:
+    the whole video). A stored copy that only contains the part is not handed back here: the import cuts the
+    part out of it, without a download (app/ingest/runner.py)."""
+    return copies.exact(db, account_id, canonical_url, span or Span())
 
 
-def plan_for(options: ClipOptions, preview: dict | None, upload: Upload | None) -> Plan:
-    """The quote. On the stored upload when there is one, else on the preview's length. 422 duration_unknown when
-    neither gives a length; 422 for options that do not fit the video (as POST /v1/clips/quote)."""
+def plan_for(options: ClipOptions, preview: dict | None, upload: Upload | None, span: Span | None = None) -> Plan:
+    """The quote, from the one price function (price_clips). On the stored upload when there is one, else on the
+    length the import will bring in: the chosen part (`span`) of the preview's length, or all of it. 422
+    duration_unknown when neither gives a length; 422 for options that do not fit the video (as POST
+    /v1/clips/quote)."""
+    span = span or Span()
     if upload is not None:
         stored, seconds, cost = price_clips(options, upload.duration_sec, upload.has_audio, bool(upload.analyzed))
     else:
         seconds = (preview or {}).get("duration_sec")
+        if span.end is not None:
+            seconds = span.end - span.start
+        elif isinstance(seconds, (int, float)):
+            seconds = seconds - span.start
         if not isinstance(seconds, (int, float)) or seconds <= 0:
             raise ApiError(422, *NO_LENGTH)
         stored, seconds, cost = price_clips(options, float(seconds))
@@ -98,28 +104,44 @@ def request_of(job: Job) -> dict:
     return ((job.options or {}).get(LINK) or {}).get("request") or {}
 
 
+def range_json(value) -> dict | None:
+    span = Span.of(value)
+    return None if span.whole else {"start_sec": span.start, "end_sec": span.end}
+
+
+def transfer_json(imp: Job) -> dict:
+    """How far an import is, beyond `stage` and `progress`: the bytes downloaded so far of the bytes expected
+    (null when the site does not say), and the part of the video it takes (null: all of it)."""
+    result = imp.result or {}
+    return {"bytes_done": result.get("bytes_done"), "bytes_total": result.get("bytes_total"),
+            "range": range_json(result.get("range") or (imp.options or {}).get("range"))}
+
+
 def link_json(db: Session, job: Job) -> dict:
     """The `import` part of a job started from a link."""
     link = (job.options or {}).get(LINK) or {}
     imp = db.get(Job, link["import_id"]) if link.get("import_id") else None
     if imp is None:                     # the account had the video already: nothing was imported
         return {"import_id": None, "status": "SUCCEEDED", "stage": "done", "progress": 100, "url": link.get("url"),
-                "platform": link.get("platform"), "reused": True,
+                "platform": link.get("platform"), "reused": True, "bytes_done": None, "bytes_total": None,
+                "range": range_json(link.get("range")),
                 "upload_id": job.upload_id, "error": None}
     ready = job.status != WAITING and imp.status == "SUCCEEDED"
     return {"import_id": imp.id, "status": imp.status, "stage": imp.stage, "progress": imp.progress,
+            **transfer_json(imp),
             "url": link.get("url"), "platform": link.get("platform"),
             "reused": bool((imp.result or {}).get("reused")),
             "upload_id": job.upload_id if ready else None,
             "error": {"code": imp.error_code, "message": imp.error_message} if imp.error_code else None}
 
 
-def equal_request(db: Session, account_id: str, url: str, request: dict) -> Job | None:
-    """A job of this account, waiting, queued or running, started from the same link with the same options."""
+def equal_request(db: Session, account_id: str, url: str, request: dict, asked: list | None = None) -> Job | None:
+    """A job of this account, waiting, queued or running, started from the same link with the same options and
+    the same range (`asked`: the request's start and end, None for the whole video)."""
     for job in db.execute(select(Job).where(Job.account_id == account_id, Job.status.in_((WAITING, *ACTIVE)))
                           .order_by(Job.created_at)).scalars():
         link = (job.options or {}).get(LINK) or {}
-        if link.get("url") == url and link.get("request") == request:
+        if link.get("url") == url and link.get("request") == request and link.get("asked") == asked:
             return job
     return None
 

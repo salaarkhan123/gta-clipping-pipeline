@@ -211,7 +211,21 @@ costs credits.
 `POST /v1/imports/preview {url}` shows what a link is (title, channel, length, thumbnail) before an import. It
 reads metadata only, is free, and stores nothing except a log line (`clipapi.ingest`, "import preview"). Lookups
 are capped at 10 a minute per account and 15 seconds each; answers are cached in memory for 5 minutes per link.
-`IMPORTS_ENABLED=false` switches it off too.
+`IMPORTS_ENABLED=false` switches it off too. The preview also says what kind of link it is (`video_type`,
+`live_status`), the game where the site names it, and which options apply; `start_sec` / `end_sec` price a part.
+
+What an import downloads (`app/ingest/platforms.py`): at most 1080p when the video has it, H.264 with AAC first,
+then VP9 or AV1, at the highest resolution whose size fits `IMPORT_MAX_BYTES`. YouTube serves picture and sound
+as two streams: both are downloaded and joined by our own ffmpeg on the saved files (yt-dlp still runs no
+program), so an import needs about twice the video's size in `WORK_DIR` while it runs. `start_sec` / `end_sec`
+on `POST /v1/imports` and `POST /v1/clips/from-url` import a part: where the site serves a segment list (Twitch
+and Kick VODs, most YouTube videos) only that part is downloaded. A video longer than `IMPORT_MAX_DURATION_SEC`
+can be imported one part at a time. A Twitch VOD whose stream is still live is imported up to the part published
+so far; the live stream itself is never read. The same part of the same link is never downloaded twice for one
+account: a stored copy is handed back, or the part is cut from it (stage `copying`).
+`IMPORT_TIMEOUT_SEC` (30 minutes) bounds one download. Measured from a laptop on 2026-11-18: 25 seconds of a
+1080p Twitch VOD (24 MB) took 2.9 s end to end. A whole multi-hour VOD has not been timed; a download that runs
+out of time fails cleanly and says to upload the file.
 
 `POST /v1/clips/from-url {url, consent: true, options}` does both steps in one call: it reserves the quoted
 credits on a clip job (status `WAITING`, stage `importing`), queues a normal import (logged the same way), and
