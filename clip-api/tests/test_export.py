@@ -73,13 +73,14 @@ def test_render_none_stores_no_video_and_an_export_renders_it_for_the_seconds_re
     assert abs(done["result"]["exports"][0]["seconds"] - q["seconds"]) < 0.01           # priced on what it renders
 
     again = client.get(f"/v1/jobs/{job['job_id']}", headers=headers).json()["clips"][0]
-    assert again["rendered"] == "full" and again["export_res"] == "480" and again["video_url"] == again["export_url"]
+    # 480 asked, never above the 640x360 source's short side: the clip says the 360 it is
+    assert again["rendered"] == "full" and again["export_res"] == "360" and again["video_url"] == again["export_url"]
     w, h, length = short_side(client, again["export_url"], tmp_path)
     assert (w, h) == (360, 640)                          # 480 asked, never above the 640x360 source's short side
     assert abs(length - q["seconds"]) < 0.5
     with new_session() as db:
         rows = db.execute(select(Export).where(Export.clip_id == clip["id"])).scalars().all()
-        assert [(x.status, x.resolution) for x in rows] == [("SUCCEEDED", "480")]
+        assert [(x.status, x.resolution) for x in rows] == [("SUCCEEDED", "360")]
 
     # Exported again: the new render replaces the old one, whose file is removed.
     first_key = rows[0].storage_key
