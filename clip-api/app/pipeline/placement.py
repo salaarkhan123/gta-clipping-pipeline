@@ -37,7 +37,7 @@ def _nearest(want: float, lo: float, hi: float, bands: list[tuple[float, float]]
 
 
 def caption_row(oh: int, position: str, half: float, *, seam: int | None = None, keep_out=(),
-                reach: tuple[float, float] | None = None) -> int:
+                reach: tuple[float, float] | None = None, want: float | None = None) -> int:
     """The row (pixels from the top of a frame `oh` tall) of the middle of a one-line caption `half` pixels tall
     above and below it.
 
@@ -47,9 +47,12 @@ def caption_row(oh: int, position: str, half: float, *, seam: int | None = None,
     (x0, y0, x1, y1) in the columns `reach` (x0, x1) the widest caption covers, inside the safe rows."""
     if position not in CAPTION_POSITIONS:
         raise PipelineError("bad_options", f"Unknown caption_position. Use one of: {', '.join(CAPTION_POSITIONS)}.")
+    chosen = want
     want = oh * (0.5 if position == "center" else LOWER_THIRD)
     if position in ("auto", "seam") and seam is not None:
         want = seam
+    if chosen is not None:                     # a row the user chose (caption_look.y): still never on a box
+        want = chosen
     lo, hi = SAFE_ROWS[0] * oh, SAFE_ROWS[1] * oh
     gap = FACE_GAP * oh / 1920
     bands = [(y0 - gap - half, y1 + gap + half) for y0, y1 in _blocked(keep_out, reach)]
@@ -80,7 +83,7 @@ def hook_row(oh: int, want: int, caption: tuple[float, float] | None, *, keep_ou
 
 
 def place(boxes: dict, position: str, half: float, fill: float, hook_want: int, k: float = 1.0,
-          below_video: int | None = None) -> tuple[int, int]:
+          below_video: int | None = None, want: float | None = None) -> tuple[int, int]:
     """(the row of the middle of an impact caption, the hook's top) on the canvas of `boxes` (a reframe_boxes
     dict). `fill` is the share of the text span the widest caption covers; `hook_want` is where the hook would
     sit. `below_video` (the classic layout) is the row the caption goes to when it has no seam or lower third."""
@@ -89,7 +92,8 @@ def place(boxes: dict, position: str, half: float, fill: float, hook_want: int, 
     mid, width = (span[0] + span[1]) / 2 * ow, (span[1] - span[0]) * ow
     keep = [tuple(b) for b in boxes.get("keep_out") or ()]
     seam = boxes.get("seam") if below_video is None else int(below_video + half)
-    center = caption_row(oh, position, half, seam=seam, keep_out=keep, reach=(mid - width * fill / 2, mid + width * fill / 2))
+    center = caption_row(oh, position, half, seam=seam, keep_out=keep, reach=(mid - width * fill / 2, mid + width * fill / 2),
+                         want=want)
     hook = hook_row(oh, hook_want, (center - half, center + half), keep_out=keep,
                     reach=(span[0] * ow + 90 * k, span[1] * ow - 90 * k), k=k)
     return center, hook

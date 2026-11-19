@@ -3,6 +3,7 @@
 Owned by the rendering agent (docs/CONTRACTS.md). The clip-finding options (count, length, language) live with
 the clip routes in routes_media.py.
 """
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
@@ -27,7 +28,7 @@ HookStyle = Literal["serious", "casual", "informative", "conversational", "humor
 RenderMode = Literal["none", "preview", "full"]
 # Stored with a job only when the request sent them: a job without them renders exactly as before, and the option
 # dicts the worker hands to the pipeline do not grow keys it does not know.
-ONLY_WHEN_SENT = ("resolution", "render", "hook_style", "hook_position", "hook_duration_ms")
+ONLY_WHEN_SENT = ("resolution", "render", "hook_style", "hook_position", "hook_duration_ms", "caption_look")
 # Built but not yet checked on real gaming footage: offered only with PROVISIONAL_LAYOUTS on (DEPLOY.md). The
 # same setting turns on the auto layout chosen per moment (facecam.moment_facecam).
 PROVISIONAL = ("trio", "grid4", "ots")
@@ -44,6 +45,34 @@ def refused_layout(errors: list[dict]) -> tuple[str, str] | None:
         if e.get("type") == NOT_AVAILABLE:
             return NOT_AVAILABLE, e.get("msg", "This layout is not available.")
     return None
+
+
+HEX = r"^#[0-9A-Fa-f]{6}$"
+# The caption fonts we ship (pipeline/fonts.py FAMILIES), or an account's own: "custom:<font id>" (GET /v1/fonts).
+CaptionFont = Literal["anton", "bebas", "bangers", "luckiest", "poppins"]
+
+
+class CaptionLook(BaseModel):
+    """How impact captions look, beyond the style: every field left out keeps the style's own. The same look is
+    drawn in a preview and in the export (one renderer). Owned by the captions agent (docs/CONTRACTS.md)."""
+    model_config = ConfigDict(extra="forbid")
+    font: CaptionFont | str | None = Field(default=None, max_length=64)    # a family above, or "custom:<id>"
+    weight: Literal["regular", "bold", "black"] | None = None     # the family's nearest file; others are emboldened
+    italic: bool = False
+    underline: bool = False
+    colour: str | None = Field(default=None, pattern=HEX)          # the letters (null: white)
+    outline_colour: str | None = Field(default=None, pattern=HEX)  # the outline (null: black)
+    size: int | None = Field(default=None, ge=50, le=200)         # % of the style's size (100 = 6% of the height)
+    case: Literal["upper", "as_typed"] = "upper"
+    y: float | None = Field(default=None, ge=0.05, le=0.92)       # the caption's row, a share of the height;
+    #                                                               null: caption_position. Never on the face or HUD.
+
+    @model_validator(mode="after")
+    def check_font(self):
+        if isinstance(self.font, str) and self.font not in CaptionFont.__args__ and \
+                not re.fullmatch(r"custom:[A-Za-z0-9_-]{6,40}", self.font):
+            raise ValueError(f"caption_look.font must be one of {', '.join(CaptionFont.__args__)} or custom:<font id>")
+        return self
 
 
 class LayoutOptions(BaseModel):
@@ -64,6 +93,7 @@ class LayoutOptions(BaseModel):
     # it is asked to sit.
     caption_position: Literal["auto", "seam", "lower", "center"] = "auto"
     caption_accent: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")     # null: the brand lime
+    caption_look: CaptionLook | None = None     # font, weight, italic, underline, colours, size, case, row (impact)
     censor: bool = False          # mask swears in burned captions and subtitle downloads (f***ing)
     # Which layouts an aspect offers is in layouts.ALLOWED. trio, grid4 and ots are provisional (our own reading of the
     # names), offered only with PROVISIONAL_LAYOUTS on; with it on, auto also picks per moment.
