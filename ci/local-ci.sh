@@ -10,6 +10,10 @@
 # docker-build  `docker build clip-api` for linux/amd64, the production droplet's platform. The image is removed after.
 # A change made only of Markdown files outside clip-api/ and web-src/ needs neither job; both get a success status
 # that says so. Nothing here reads the repository's settings files, and no secret goes into a container.
+#
+# docker-build runs before test when both are requested. Building first fails fast and avoids starting the amd64
+# image build after a 30-minute test has already stressed Docker Desktop's VM (which produced a 1-second false
+# failure on edd8a9c4 with a hardcoded "image built" status line).
 set -euo pipefail
 
 target="${1:?usage: ci/local-ci.sh <pr-number | commit> [all|test|docker-build]}"
@@ -40,8 +44,12 @@ status() {  # context state description
 }
 
 jobs=()
-case "$which" in all) jobs=(test docker-build) ;; test|docker-build) jobs=("$which") ;;
-  *) echo "unknown job: $which" >&2; exit 2 ;; esac
+# docker-build first when both run: image check before the long pytest, and Docker Desktop stays fresh.
+case "$which" in
+  all) jobs=(docker-build test) ;;
+  test|docker-build) jobs=("$which") ;;
+  *) echo "unknown job: $which" >&2; exit 2 ;;
+esac
 
 changed="$(git -C "$ROOT" diff --name-only "origin/$base...$sha")"
 if [ -n "$changed" ] && ! grep -vE '\.md$' <<<"$changed" | grep -q . \
@@ -101,11 +109,45 @@ run_test() {
     -v "$src/clip-api:/src" -w /src "$image" pytest -q -rs -p no:cacheprovider
 }
 
-run_docker_build() {
-  with_timeout "none" docker build --platform linux/amd64 -t "lci-build:$short" "$src/clip-api"
+run_docker_build_once() {
+  # Prove the daemon answers before the amd64 build; a dead Docker Desktop fails in ~1s otherwise.
+  docker version >/dev/null
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$TIMEOUT_SEC" docker build --platform linux/amd64 -t "lci-build:$short" "$src/clip-api"
+  else
+    docker build --platform linux/amd64 -t "lci-build:$short" "$src/clip-api"
+  fi
 }
 
-export -f run_test run_docker_build with_timeout
+# One automatic retry for docker-build: clears transient Docker Desktop / qemu blips.
+run_docker_build() {
+  local attempt=1 rc=0
+  while [ "$attempt" -le 2 ]; do
+    rc=0
+    run_docker_build_once || rc=$?
+    [ "$rc" -eq 0 ] && return 0
+    if [ "$attempt" -eq 1 ]; then
+      echo "docker-build attempt 1 failed (rc=$rc); waiting 15s and retrying once" >&2
+      docker builder prune -f >/dev/null 2>&1 || true
+      sleep 15
+    fi
+    attempt=$((attempt + 1))
+  done
+  return "$rc"
+}
+
+log_tail_summary() {  # file -> short failure hint for the GitHub status
+  local file="$1" line
+  line="$(grep -Eie 'error|failed|denied|no space|cannot|killed|qemu|exec format|not found' "$file" | tail -1 \
+    | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | cut -c1-90)"
+  if [ -n "$line" ]; then
+    printf '%s' "$line"
+  else
+    printf 'docker build failed (see log)'
+  fi
+}
+
+export -f run_test run_docker_build run_docker_build_once with_timeout
 export src net short TEST_CPUS TIMEOUT_SEC
 
 overall=0
@@ -117,8 +159,10 @@ for j in "${jobs[@]}"; do
   mins=$(( ($(date +%s) - start) / 60 ))
   if [ "$j" = test ]; then
     summary="$(grep -E '[0-9]+ (passed|failed|error)' "$log-$j.log" | tail -1 | sed 's/=//g; s/^ *//; s/ *$//')"
-  else
+  elif [ $rc -eq 0 ]; then
     summary="image built for linux/amd64"
+  else
+    summary="$(log_tail_summary "$log-$j.log")"
   fi
   if [ $rc -eq 0 ]; then
     status "$j" success "${summary:-passed} · ${mins} min on this Mac"

@@ -22,8 +22,10 @@ RUN python -c "from faster_whisper import WhisperModel; [WhisperModel(m, device=
 
 COPY app ./app
 COPY scripts ./scripts
+# Poster and preview assets for GET /v1/templates/<id>/poster (app/templates.py ASSETS).
+COPY templates ./templates
 
-RUN chmod -R a+rX /srv/app /srv/scripts \
+RUN chmod -R a+rX /srv/app /srv/scripts /srv/templates \
     && useradd --create-home app && mkdir -p /srv/data && chown -R app:app /srv/data
 USER app
 

@@ -12,8 +12,8 @@ ci/local-ci.sh <pr-number | commit> [all|test|docker-build]
 
 | Job | What runs | Same as GitHub? |
 |---|---|---|
+| `local-ci/docker-build` | `docker build --platform linux/amd64 clip-api` (runs first when both jobs run; one automatic retry; failure status quotes the log), image removed afterwards | Same command, pinned to the production droplet's platform. |
 | `local-ci/test` | `pytest -q -rs` in `python:3.12-slim` with apt ffmpeg and fonts-dejavu-core, against a throwaway Postgres 16 (`TEST_DATABASE_URL` set as in `ci.yml`); 4 CPUs, 5 GB memory, 45 min limit | Same Python, Postgres, ffmpeg source and command. Runs linux/arm64 natively; GitHub ran linux/amd64. |
-| `local-ci/docker-build` | `docker build --platform linux/amd64 clip-api`, image removed afterwards | Same command, pinned to the production droplet's platform. |
 
 - It checks out the exact commit in a temporary worktree under `~/.cache/clutchclips-ci/` (no uncommitted file, no settings file, no secret goes into a container), then removes it with its containers and network.
 - It sets `pending`, then `success` or `failure`, on that commit. The description holds the pytest summary; the full log stays on the Mac at `~/.cache/clutchclips-ci/logs/<sha>-<job>.log`.
