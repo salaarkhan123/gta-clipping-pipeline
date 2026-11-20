@@ -77,6 +77,15 @@ class BulkImportRequest(BaseModel):
     consent: Any = None
 
 
+class TakedownRequest(BaseModel):
+    """Self-service removal of this account's link imports. Exactly one of `url` or `all_imports`."""
+    model_config = ConfigDict(extra="forbid")
+    url: str | None = None
+    all_imports: bool = False
+    consent: Any = None
+    dry_run: bool = False
+
+
 def require_consent(consent: Any) -> None:
     if consent is not True:
         raise ApiError(422, "consent_required",
@@ -356,6 +365,24 @@ def create_bulk(body: BulkImportRequest, p: Principal = Depends(current_principa
             results.append({"url": url, "import": None, "error": {"code": e.code, "message": e.message}})
     accepted = sum(1 for r in results if r["import"])
     return {"imports": results, "accepted": accepted, "refused": len(results) - accepted}
+
+
+@router.post("/v1/imports/takedown")
+def self_takedown(body: TakedownRequest, p: Principal = Depends(current_principal)):
+    """Remove this account's clips and files for a source URL, or every link import on the account.
+    Reuses app.ingest.takedown (same path as the admin CLI). Waiting jobs are refunded; running jobs are told
+    to stop. Consent must be true, same as import. Only this account's rows are touched."""
+    require_consent(body.consent)
+    has_url = bool(body.url and body.url.strip())
+    if has_url == body.all_imports:
+        raise ApiError(422, "takedown_target",
+                       "Send exactly one of url (remove that source for this account) or all_imports: true.")
+    from .ingest.takedown import report_json, takedown
+    if has_url:
+        report = takedown(url=body.url.strip(), dry_run=body.dry_run, only_account_id=p.account.id)
+    else:
+        report = takedown(account=p.account.id, dry_run=body.dry_run)
+    return report_json(report)
 
 
 @router.get("/v1/imports")

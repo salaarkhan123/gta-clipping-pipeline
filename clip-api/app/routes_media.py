@@ -452,6 +452,16 @@ def list_uploads(limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge
     return {"uploads": [upload_json(u) for u in rows]}
 
 
+@router.delete("/v1/uploads/{upload_id}")
+def delete_upload(upload_id: str, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
+    """Soft-delete an upload this account owns. It disappears from project and upload lists; files expire on the
+    normal retention sweep. For link imports that must remove clips and refund held jobs, use POST /v1/imports/takedown."""
+    upload = own_upload(db, p, upload_id)
+    upload.deleted_at = utcnow()
+    db.commit()
+    return {"deleted": True, "upload_id": upload.id}
+
+
 def price_clips(options: ClipOptions, duration_sec: float, has_audio: bool = True,
                 analyzed: bool = False) -> tuple[dict, float, int]:
     """The one price of a clip job: (stored options, seconds processed, credits reserved) for `options` on a video
