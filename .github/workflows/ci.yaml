@@ -9,6 +9,7 @@ on:
     branches:
       - main                         # post-merge Check Runs on main (deploy gate); does not deploy
       - cursor/perf-integration-6ad0 # CPR-14 integration branch CI on every push
+      - cursor/phase-4-validation-6ad0 # Phase 4 stacked on #234
   workflow_dispatch:   # re-run on a chosen ref without a new commit
 
 permissions:

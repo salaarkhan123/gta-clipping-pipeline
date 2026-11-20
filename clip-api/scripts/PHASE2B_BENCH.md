@@ -10,7 +10,7 @@ Local `run_pipeline` wall time on a **synthetic** lavfi stress video (not gaming
 |---|---|
 | `preview-serial` / `full-serial` | RC baseline: `render=preview` vs `render=full`, workers=1 |
 | `preview-w1` / `preview-w2` / `preview-w4` | B1 parallel encode (`render_workers`) when present |
-| `preview-chat-dense` / `preview-chat-sparse` | A3 `chat_motion_sample` when present |
+| `preview-chat-dense` / `preview-chat-sparse` / `preview-chat-coarse` | A3/CPR-14 `chat_motion_sample` when present |
 
 Each JSON line includes `wall_seconds`, `stages`, `first_clip_sec`, `peak_rss_mb`, `clips`, `nproc`, plus labels `synthetic` / `not gaming`. `extrapolate_2h` is always `inferred`.
 
