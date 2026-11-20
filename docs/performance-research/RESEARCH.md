@@ -4,7 +4,7 @@ Independent research initiative. Goal: reach and eventually exceed Wayin and Opu
 
 ## Status
 
-Research in progress on branch `cursor/performance-research-6ad0`. No production code changes. No merge to `main`. No deploy.
+Research pack drafted on branch `cursor/performance-research-6ad0` (2026-11-20). No production code changes. No merge to `main`. No deploy. Awaiting owner review before any implementation.
 
 ## Claim legend
 
