@@ -1,6 +1,7 @@
 """Uploads, clip jobs, results and credits."""
 import hashlib
 import json
+import logging
 import math
 import re
 import uuid
@@ -16,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import ledger
-from .ai import MomentPrompt
+from .ai import MomentPrompt, rating_of, _hook as hook_text   # the AI's own hook rules: one line, 6 words, 48 characters
 from .config import get_settings
 from .languages import LanguageCode, SourceLanguage
 from .db import get_db
@@ -27,13 +28,20 @@ from .pipeline.moments import BUCKETS, MAX_CLIPS, kind_of
 from .pipeline.translate import as_text, caption_rows
 from .security import is_public_https_url, read_token
 from .render_options import LayoutOptions  # noqa: F401  (re-exported: routes_tools imports it from here)
+from .exports import ClipEditDoc
 from .scoring import display_scores
 from .storage import LocalStorage, get_storage
 from .templates import TEMPLATES, with_tuning
+from .thumbnails import redraw, words_for
 
+log = logging.getLogger("clipapi.media")
 router = APIRouter()
 ALLOWED_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi", ".flv", ".ts"}
 ACTIVE = ("QUEUED", "RUNNING")
+# A clip job started from a link waits (WAITING, stage "importing") until its import has stored the video; the
+# import then queues it or refunds it (app/url_clips.py). WAITING jobs are never claimed by a worker.
+WAITING = "WAITING"
+IN_FLIGHT = (WAITING, *ACTIVE)
 
 
 RANGE_SLACK = 1.0      # a range may end this many seconds past the video (players round the length up); it is clipped
@@ -164,10 +172,8 @@ TIERS = ((75, "top"), (55, "strong"), (35, "solid"), (0, "long_shot"))
 def tier_of(meta: dict | None) -> str | None:
     """A fixed label for the AI's 0-100 score. None when the AI did not rate the clip: a score derived from
     loudness alone says how a moment compares inside its own video, not how good it is."""
-    v = (meta or {}).get("virality") or {}
-    if (meta or {}).get("source") == "signals" or not isinstance(v.get("score"), (int, float)):
-        return None
-    return next(name for floor, name in TIERS if v["score"] >= floor)
+    rated = rating_of(meta)
+    return next(name for floor, name in TIERS if rated["rating"] >= floor) if rated else None
 
 
 def with_ranks(db: Session, clips: list[dict]) -> list[dict]:
@@ -192,10 +198,8 @@ def with_ranks(db: Session, clips: list[dict]) -> list[dict]:
 
 def _ai_score(meta: dict | None) -> int | float | None:
     """The AI's 0-100 score, or None when the AI did not rate the clip (the same test as tier_of)."""
-    v = (meta or {}).get("virality") or {}
-    if (meta or {}).get("source") == "signals" or not isinstance(v.get("score"), (int, float)):
-        return None
-    return v["score"]
+    rated = rating_of(meta)
+    return rated["rating"] if rated else None
 
 
 def clip_json(c: Clip, storage) -> dict:
@@ -210,10 +214,24 @@ def clip_json(c: Clip, storage) -> dict:
             **{k: (c.meta or {}).get(k) for k in ("title", "description", "hashtags", "virality", "reason")},
             "titles": (c.meta or {}).get("titles") or ([c.meta["title"]] if (c.meta or {}).get("title") else []),
             "hook": (c.meta or {}).get("hook"),
+            # (U4) judge v2's five sub-scores and which judge made the rating (ai.rating_of: the one reader). Clips
+            # judged before v2 have no `scores` and say "judge-v1"; a clip the AI did not rate has neither.
+            "scores": (rating_of(c.meta) or {}).get("scores"),
+            "scoring_version": (rating_of(c.meta) or {}).get("scoring_version"),
             "hook_on_screen": bool(((c.features or {}).get("edit") or {}).get("hook")),   # burned into the video
             "suggestion": (c.meta or {}).get("suggestion"),
-            "video_url": storage.url(c.video_key),
-            "thumb_url": storage.url(c.thumb_key) if c.thumb_key else None,
+            # (render, agent B) the best render there is: the latest export, else the job's own, else its preview.
+            # null: rendered with render "none", nothing to play until it is exported.
+            "video_url": storage.url(c.export_key or c.video_key or c.preview_key)
+            if (c.export_key or c.video_key or c.preview_key) else None,
+            "preview_url": storage.url(c.preview_key) if c.preview_key else None,
+            "export_url": storage.url(c.export_key) if c.export_key else None,
+            "export_res": c.export_res,
+            "rendered": "full" if (c.export_key or c.video_key) else "preview" if c.preview_key else "none",
+            "edit": c.edit,                                     # the editor's edit (exports.ClipEditDoc) or null
+            # the source parts the clip was rendered from, in playing order (a flash-forward first)
+            "segments": ((c.features or {}).get("edit") or {}).get("segments") or [[c.start_sec, c.end_sec]],
+            "thumb_url": storage.url(c.thumb_chosen_key or c.thumb_key) if (c.thumb_chosen_key or c.thumb_key) else None,
             "captions_url": storage.url(c.captions_key) if c.captions_key else None}
 
 
@@ -243,6 +261,9 @@ def job_json(db: Session, job: Job, with_clips: bool = True) -> dict:
            "credits_reserved": job.credits_reserved, "credits_charged": job.credits_charged,
            "error": {"code": job.error_code, "message": job.error_message} if job.error_code else None,
            "created_at": iso(job.created_at), "finished_at": iso(job.finished_at), "expires_at": iso(job.expires_at)}
+    if (job.options or {}).get("link"):              # started from a link: the import it waits for or came from
+        from .url_clips import link_json
+        out["import"] = link_json(db, job)
     if with_clips:
         storage = get_storage()
         clips = db.execute(select(Clip).where(Clip.job_id == job.id, Clip.deleted_at.is_(None))
@@ -259,11 +280,30 @@ def own_job(db: Session, p: Principal, job_id: str) -> Job:
     return job
 
 
+def own_clip(db: Session, p: Principal, clip_id: str, deleted_ok: bool = False) -> tuple[Clip, Job]:
+    """The caller's clip and its job. Someone else's clip and a missing one are the same 404."""
+    clip = db.get(Clip, clip_id)
+    job = db.get(Job, clip.job_id) if clip else None
+    if not clip or (clip.deleted_at and not deleted_ok) or not job or job.account_id != p.account.id:
+        raise ApiError(404, "not_found", "No such clip.")
+    return clip, job
+
+
 def own_upload(db: Session, p: Principal, upload_id: str) -> Upload:
     upload = db.get(Upload, upload_id)
     if not upload or upload.account_id != p.account.id or upload.deleted_at or upload.expires_at <= utcnow():
         raise ApiError(404, "upload_not_found", "No such upload (uploads expire after a few days).")
     return upload
+
+
+def replayed(db: Session, p: Principal, idempotency_key: str | None) -> dict | None:
+    """The job an earlier request with this Idempotency-Key started, as that request returned it, else None.
+    The caller holds the account lock (ledger.lock_account)."""
+    if not idempotency_key:
+        return None
+    existing = db.execute(select(Job).where(Job.account_id == p.account.id,
+                                            Job.idempotency_key == idempotency_key)).scalar_one_or_none()
+    return job_json(db, existing, with_clips=False) if existing else None
 
 
 def submit_job(db: Session, p: Principal, upload_id: str, webhook_url: str | None, idempotency_key: str | None,
@@ -278,28 +318,43 @@ def submit_job(db: Session, p: Principal, upload_id: str, webhook_url: str | Non
         raise ApiError(422, "bad_webhook_url", "webhook_url must be a public https URL.")
 
     ledger.lock_account(db, p.account.id)  # serialise this account's submits (Postgres row lock)
-    if idempotency_key:
-        existing = db.execute(select(Job).where(Job.account_id == p.account.id,
-                                                Job.idempotency_key == idempotency_key)).scalar_one_or_none()
-        if existing:
-            return job_json(db, existing, with_clips=False)
+    existing = replayed(db, p, idempotency_key)
+    if existing:
+        return existing
 
     upload = own_upload(db, p, upload_id)
     options, processed_sec, cost = plan(upload)
+    job = open_job(db, p, upload.id, options, processed_sec, cost, webhook_url, idempotency_key)
+    db.commit()
+    return job_json(db, job, with_clips=False)
 
-    active = db.execute(select(func.count()).select_from(Job).where(
-        Job.account_id == p.account.id, Job.status.in_(ACTIVE))).scalar_one()
-    if active >= s.max_concurrent_jobs_per_account:
+
+def active_jobs(db: Session, account_id: str) -> int:
+    """Jobs of this account waiting or running. An import started for a link clip job is not counted: the clip
+    job it feeds is, so a clip from a link counts once."""
+    rows = db.execute(select(Job.id, Job.options).where(Job.account_id == account_id,
+                                                        Job.status.in_(IN_FLIGHT))).all()
+    return sum(1 for _id, options in rows if not (options or {}).get("chained") and not _id.startswith("thm_"))
+
+
+def open_job(db: Session, p: Principal, upload_id: str, options: dict, processed_sec: float, cost: int,
+             webhook_url: str | None, idempotency_key: str | None, status: str = "QUEUED",
+             stage: str | None = None) -> Job:
+    """Check the account's room and the day's capacity, add the job and reserve its credits (`reserve:<job_id>`).
+    The caller holds the account lock and commits. 402 (everything in the transaction rolled back) when the
+    balance is short."""
+    s = get_settings()
+    if active_jobs(db, p.account.id) >= s.max_concurrent_jobs_per_account:
         raise ApiError(429, "too_many_jobs", "Wait for a running job to finish before starting another.")
 
     day_start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     used_sec = db.execute(select(func.coalesce(func.sum(Job.duration_sec), 0)).where(
-        Job.created_at >= day_start, Job.status.in_(("QUEUED", "RUNNING", "SUCCEEDED")))).scalar_one()
+        Job.created_at >= day_start, Job.status.in_((*IN_FLIGHT, "SUCCEEDED")))).scalar_one()
     if (used_sec + processed_sec) / 60 > s.daily_minutes_cap:
         raise ApiError(503, "capacity", "The service is at capacity for today. Try again tomorrow.")
 
-    job = Job(id=new_id("job"), account_id=p.account.id, upload_id=upload.id, options=options,
-              duration_sec=processed_sec, credits_reserved=cost, webhook_url=webhook_url,
+    job = Job(id=new_id("job"), account_id=p.account.id, upload_id=upload_id, options=options,
+              duration_sec=processed_sec, credits_reserved=cost, webhook_url=webhook_url, status=status, stage=stage,
               idempotency_key=idempotency_key, expires_at=utcnow() + timedelta(days=s.retention_days))
     db.add(job)
     db.flush()
@@ -309,8 +364,7 @@ def submit_job(db: Session, p: Principal, upload_id: str, webhook_url: str | Non
         db.rollback()
         raise ApiError(402, "insufficient_credits",
                        f"This job needs {e.cost} credits and you have {e.balance}.") from None
-    db.commit()
-    return job_json(db, job, with_clips=False)
+    return job
 
 
 @router.post("/v1/uploads", status_code=201)
@@ -338,35 +392,52 @@ async def create_upload(request: Request, response: Response, filename: str = Qu
         if size == 0:
             raise ApiError(422, "empty_body", "The request body was empty. Send the video file as the body.")
         content_hash = digest.hexdigest()
-        # The same bytes from the same account, while the first copy is still stored: hand back that upload.
-        # Nothing new is stored, and jobs on it are priced as on any upload that was already analysed.
-        same = db.execute(select(Upload).where(
-            Upload.account_id == p.account.id, Upload.content_hash == content_hash, Upload.size_bytes == size,
-            Upload.deleted_at.is_(None), Upload.expires_at > utcnow()).order_by(Upload.created_at.desc()).limit(1)
-        ).scalar_one_or_none()
+        same = same_upload(db, p.account.id, content_hash, size)
         if same is not None:
             response.status_code = 200
             return {**upload_json(same), "reused": True}
-        try:
-            info = await run_in_threadpool(probe, tmp)
-        except PipelineError as e:
-            raise ApiError(415, e.code, e.message) from None
-        if info.duration > s.max_duration_sec:
-            raise ApiError(413, "video_too_long", f"Maximum video length is {s.max_duration_sec // 3600} hours.")
-        if info.duration < s.min_duration_sec:
-            raise ApiError(422, "video_too_short", f"Minimum video length is {s.min_duration_sec} seconds.")
+        info = await probe_upload(tmp)
         upload_id = new_id("upl")
         key = f"uploads/{p.account.id}/{upload_id}{ext}"
         await run_in_threadpool(get_storage().put, key, tmp)
     finally:
         tmp.unlink(missing_ok=True)
-    safe_name = re.sub(r"[^\w.\- ]+", "_", Path(filename).name)[:255] or "upload" + ext
+    upload = record_upload(db, p, upload_id, key, filename, size, content_hash, info)
+    return {**upload_json(upload), "reused": False}
+
+
+def same_upload(db: Session, account_id: str, content_hash: str, size: int) -> Upload | None:
+    """The same bytes from the same account, while the first copy is still stored: that upload is handed back.
+    Nothing new is stored, and jobs on it are priced as on any upload that was already analysed."""
+    return db.execute(select(Upload).where(
+        Upload.account_id == account_id, Upload.content_hash == content_hash, Upload.size_bytes == size,
+        Upload.deleted_at.is_(None), Upload.expires_at > utcnow()).order_by(Upload.created_at.desc()).limit(1)
+    ).scalar_one_or_none()
+
+
+async def probe_upload(path: Path):
+    """The video's facts, or the ApiError a user sees for a file that is not a video or is out of bounds."""
+    s = get_settings()
+    try:
+        info = await run_in_threadpool(probe, path)
+    except PipelineError as e:
+        raise ApiError(415, e.code, e.message) from None
+    if info.duration > s.max_duration_sec:
+        raise ApiError(413, "video_too_long", f"Maximum video length is {s.max_duration_sec // 3600} hours.")
+    if info.duration < s.min_duration_sec:
+        raise ApiError(422, "video_too_short", f"Minimum video length is {s.min_duration_sec} seconds.")
+    return info
+
+
+def record_upload(db: Session, p: Principal, upload_id: str, key: str, filename: str, size: int,
+                  content_hash: str, info) -> Upload:
+    safe_name = re.sub(r"[^\w.\- ]+", "_", Path(filename).name)[:255] or "upload" + Path(key).suffix
     upload = Upload(id=upload_id, account_id=p.account.id, filename=safe_name, storage_key=key, size_bytes=size,
                     duration_sec=info.duration, width=info.width, height=info.height, has_audio=info.has_audio,
-                    content_hash=content_hash, expires_at=utcnow() + timedelta(days=s.retention_days))
+                    content_hash=content_hash, expires_at=utcnow() + timedelta(days=get_settings().retention_days))
     db.add(upload)
     db.commit()
-    return {**upload_json(upload), "reused": False}
+    return upload
 
 
 @router.get("/v1/uploads")
@@ -378,24 +449,45 @@ def list_uploads(limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge
     return {"uploads": [upload_json(u) for u in rows]}
 
 
+def price_clips(options: ClipOptions, duration_sec: float, has_audio: bool = True,
+                analyzed: bool = False) -> tuple[dict, float, int]:
+    """The one price of a clip job: (stored options, seconds processed, credits reserved) for `options` on a video
+    this long. POST /v1/clips, its quote, the link preview's estimate and POST /v1/clips/from-url all use it."""
+    if not has_audio and options.chat_region == "none":
+        raise ApiError(422, "no_signal",
+                       "This video has no audio track. Set chat_region so on-screen chat can be used.")
+    check_span(options, duration_sec)
+    basis = {}
+    if analyzed and get_settings().charge_once_per_upload:   # already paid for once: charge only what is rendered
+        cost = credits_for(rerun_seconds(options, duration_sec))     # the worst case is reserved
+        basis = {"charge_basis": "rendered"}           # and the job settles on the seconds it rendered
+    else:
+        cost = credits_for(duration_sec)
+    return {"tool": "clips", **basis, **with_tuning(options.model_dump())}, duration_sec, cost
+
+
+def clip_plan(body: "ClipRequest"):
+    """What POST /v1/clips stores, processes and reserves for `body` (submit_job's `plan`)."""
+    def plan(upload: Upload):
+        return price_clips(body.options, upload.duration_sec, upload.has_audio, bool(upload.analyzed))
+    return plan
+
+
+@router.post("/v1/clips/quote")
+def quote_job(body: ClipRequest, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
+    """(render, agent B) What POST /v1/clips with the same body would reserve. Nothing is reserved or started."""
+    options, _sec, cost = clip_plan(body)(own_upload(db, p, body.upload_id))
+    rendered = options.get("charge_basis") == "rendered"
+    return {"credits_reserved": cost,
+            "note": ("This video was analysed before: charged for the seconds rendered, never more than this."
+                     if rendered else "One credit per started minute of the video.")}
+
+
 @router.post("/v1/clips", status_code=202)
 def create_job(body: ClipRequest, p: Principal = Depends(current_principal), db: Session = Depends(get_db),
                idempotency_key: str | None = Header(default=None, max_length=200)):
     """AI Clip Maker: find the best moments in an upload and render them."""
-    def plan(upload: Upload):
-        if not upload.has_audio and body.options.chat_region == "none":
-            raise ApiError(422, "no_signal",
-                           "This video has no audio track. Set chat_region so on-screen chat can be used.")
-        check_span(body.options, upload.duration_sec)
-        s = get_settings()
-        basis = {}
-        if upload.analyzed and s.charge_once_per_upload:   # already paid for once: charge only what is rendered
-            cost = credits_for(rerun_seconds(body.options, upload.duration_sec))     # the worst case is reserved
-            basis = {"charge_basis": "rendered"}           # and the job settles on the seconds it rendered
-        else:
-            cost = credits_for(upload.duration_sec)
-        return {"tool": "clips", **basis, **with_tuning(body.options.model_dump())}, upload.duration_sec, cost
-    out = submit_job(db, p, body.upload_id, body.webhook_url, idempotency_key, plan)
+    out = submit_job(db, p, body.upload_id, body.webhook_url, idempotency_key, clip_plan(body))
     if body.options.project_name:
         job = db.get(Job, out["job_id"])
         if job is not None and job.name is None:       # a replayed request (Idempotency-Key) keeps its first name
@@ -423,9 +515,15 @@ def cancel_job(job_id: str, p: Principal = Depends(current_principal), db: Sessi
                      .with_for_update()).scalar_one_or_none()
     if not job:
         raise ApiError(404, "not_found", "No such job.")
-    if job.status == "QUEUED":
+    if job.status == WAITING:
+        from .url_clips import cancel_waiting
+        cancel_waiting(db, job)         # refunded now; its import is stopped when nothing else waits for it
+    elif job.status == "QUEUED":
         job.status, job.finished_at = "CANCELED", utcnow()
         ledger.settle(db, job, success=False)
+        if job.id.startswith("imp_"):
+            from .url_clips import resolve
+            resolve(db, job)            # link clip jobs waiting for this import: cancelled and refunded
     elif job.status == "RUNNING":
         job.cancel_requested = True  # the worker stops at the next stage boundary and refunds
     db.commit()
@@ -435,10 +533,7 @@ def cancel_job(job_id: str, p: Principal = Depends(current_principal), db: Sessi
 @router.post("/v1/clips/{clip_id}/feedback")
 def clip_feedback(clip_id: str, body: Feedback, p: Principal = Depends(current_principal),
                   db: Session = Depends(get_db)):
-    clip = db.get(Clip, clip_id)
-    if not clip:
-        raise ApiError(404, "not_found", "No such clip.")
-    own_job(db, p, clip.job_id)
+    clip, _job = own_clip(db, p, clip_id, deleted_ok=True)
     for field in sorted(body.model_fields_set):
         value = getattr(body, field)
         if getattr(clip, field) == value:
@@ -452,22 +547,55 @@ def clip_feedback(clip_id: str, body: Feedback, p: Principal = Depends(current_p
 
 class ClipEdit(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    title: str = Field(min_length=1, max_length=80)
+    title: str | None = Field(default=None, min_length=1, max_length=80)
+    hook: str | None = Field(default=None, min_length=1, max_length=48)   # (U7) the thumbnail's words (one line)
+    # (render, agent B) the editor's edit (app/exports.py ClipEditDoc: source seconds); null forgets it
+    edit: ClipEditDoc | None = None
+
+    @model_validator(mode="after")
+    def check(self):
+        if not self.model_fields_set & {"title", "hook", "edit"}:
+            raise ValueError("send title, hook, edit or any of them together")
+        for name in ("title", "hook"):
+            if name in self.model_fields_set and getattr(self, name) is None:
+                raise ValueError(f"{name} cannot be null")
+        return self
 
 
 @router.patch("/v1/clips/{clip_id}")
 def edit_clip(clip_id: str, body: ClipEdit, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
-    """Choose the clip's title: one of its `titles`, or your own words. Free: nothing is re-rendered."""
-    clip = db.get(Clip, clip_id)
-    if not clip or clip.deleted_at:
-        raise ApiError(404, "not_found", "No such clip.")
-    own_job(db, p, clip.job_id)
-    title = " ".join(body.title.split())
-    if not title:
-        raise ApiError(422, "validation_error", "The title is empty.")
-    clip.meta = {**(clip.meta or {}), "title": title}      # a new dict, so the JSON column is saved
+    """Choose the clip's title (one of its `titles`, or your own words) and its hook, and save the editor's `edit`.
+    Free: nothing is re-rendered; POST /v1/clips/export renders the edit. When the words the thumbnail carries
+    change, it is drawn again on its stored frame now (a fraction of a second). A hook already burned into the
+    video stays as it is there."""
+    clip, job = own_clip(db, p, clip_id)
+    if "edit" in body.model_fields_set:
+        stored = None
+        if body.edit is not None:
+            from .routes_export import check_edit
+            stored = check_edit(db, clip, body.edit).model_dump()     # without cuts: the job's dead air is cut
+        clip.edit = stored
+    changes = {}
+    if body.title is not None:
+        changes["title"] = " ".join(body.title.split())
+        if not changes["title"]:
+            raise ApiError(422, "validation_error", "The title is empty.")
+    if body.hook is not None:
+        changes["hook"] = hook_text(body.hook)
+        if not changes["hook"]:
+            raise ApiError(422, "validation_error", "The hook is empty.")
+    options = job.options if isinstance(job.options, dict) else {}
+    before = words_for(clip.meta, options)
+    if changes:
+        clip.meta = {**(clip.meta or {}), **changes}        # a new dict, so the JSON column is saved
+    storage = get_storage()
+    if words_for(clip.meta, options) != before:
+        try:
+            redraw(clip, options, storage)
+        except Exception:                                   # the words are saved either way
+            log.exception("could not draw the thumbnail of %s again", clip.id)
     db.commit()
-    return with_display_scores(db, with_ranks(db, [clip_json(clip, get_storage())]))[0]
+    return with_display_scores(db, with_ranks(db, [clip_json(clip, storage)]))[0]
 
 
 def _stamp(t: float, sep: str) -> str:
@@ -495,10 +623,7 @@ def clip_subtitles(clip_id: str, format: Literal["srt", "vtt", "txt"] = "srt",
     """Subtitle file for a clip that was rendered with captions. Times are relative to the clip.
     `caption_display`: the spoken words (`original`), their translation into the job's `target_lang`
     (`translation`), or both, original first. Left out: the job's own `caption_display` option."""
-    clip = db.get(Clip, clip_id)
-    if not clip or clip.deleted_at:
-        raise ApiError(404, "not_found", "No such clip.")
-    job = own_job(db, p, clip.job_id)
+    clip, job = own_clip(db, p, clip_id)
     if not clip.captions_key:
         raise ApiError(404, "no_captions", "This clip has no captions (it was rendered with captions off, or has no speech).")
     display = caption_display or (job.options or {}).get("caption_display") or "original"
@@ -544,7 +669,10 @@ def get_file(token: str):
     storage = get_storage()
     if not data or not isinstance(storage, LocalStorage):
         raise ApiError(404, "not_found", "This link is invalid or has expired.")
-    path = storage.path(data["k"])
+    try:
+        path = storage.path(data["k"])
+    except (KeyError, TypeError, ValueError):      # no key, or one that leaves the storage folder
+        raise ApiError(404, "not_found", "This link is invalid or has expired.") from None
     if not path.is_file():
         raise ApiError(404, "not_found", "This file has been deleted.")
     return FileResponse(path, filename=path.name)

@@ -24,19 +24,19 @@ ALLOWED = {
     "1:1": ("auto", "full", "fit", "grid4", "trio"),
     "4:5": ("auto", "full", "fit", "grid4", "split2", "trio", "pip", "screen_first", "gameplay_a", "gameplay_b"),
 }
-# These need several people tracked on screen. They are not built and are never faked.
-NOT_BUILT = ("trio", "grid4", "ots")
+# Every layout is built. trio, grid4 and ots are our own reading of the names (PROVISIONAL: WayinVideo's docs give
+# only the names): see _trio, _grid4 and _ots. The name stays so callers that test it keep working.
+NOT_BUILT: tuple[str, ...] = ()
 BUILT = tuple(name for name in LAYOUTS if name not in NOT_BUILT)
 # The layout names from before the reframe layouts. They keep working, in every shape, with their old meaning:
 # split = split2 (plain fill in 16:9), fill = full, classic = the blurred 9:16 layout with a chat panel (render.py).
 LEGACY = ("split", "fill", "classic")
-NEEDS_CAMERA = ("split", "split2", "pip", "screen_first", "gameplay_a", "gameplay_b")
+NEEDS_CAMERA = ("split", "split2", "pip", "screen_first", "gameplay_a", "gameplay_b", "trio", "grid4", "ots")
 # The two-panel layouts: a camera panel and a gameplay panel. `camera` and `split_ratio` apply to these, whether
 # the layout was asked for by name or "auto" chose it; every other layout ignores both.
 TWO_PANEL = ("split2", "screen_first", "gameplay_a", "gameplay_b")
 CAMERA_SIDES = ("top", "bottom")          # which panel the camera is: the first one (top, or left in a wide frame)
 SPLIT_RATIO = (0.25, 0.75)                # the first panel's share of the frame: of the height, or of a wide frame's width
-CAPTION_POSITIONS = ("auto", "seam", "lower", "center")
 SCENES = ("gameplay_cam", "camera", "gameplay")
 
 ASPECTS = {"9:16": (1080, 1920), "4:5": (1080, 1350), "1:1": (1080, 1080), "16:9": (1920, 1080)}
@@ -56,9 +56,6 @@ MAX_AVOID_ZOOM = 1.35  # a gameplay panel may zoom in this much further when tha
 HEAD_PAD = (0.15, 0.35, 0.10)    # hair, a headset and the chin around a detected face box: sides, top, bottom (of the face size)
 PIP_SHAPE = (0.8, 1.9)           # the inset keeps the camera's own shape, within these width / height limits
 PIP_BORDER = 4                   # pixels of white edge around the inset, on the 1080 canvas
-LOWER_THIRD = 0.70               # where a caption sits when there is no line between panels to sit on
-SAFE_ROWS = (0.05, 0.92)         # a caption stays between these shares of the height (clear of the apps' own buttons)
-FACE_GAP = 14                    # pixels kept between a caption and the head, on a 1920-high canvas
 BLIND_HEAD = 0.85                # no face known: the head is taken to be anywhere in the camera picture but its lowest 15%
 
 Rect = tuple[float, float, float, float]     # x, y, width, height
@@ -84,6 +81,23 @@ def crop_rect(src_w: int, src_h: int, region, tw: int, th: int, zoom: float = 1.
 def _crop_scale(rect, tw: int, th: int) -> str:
     cx, cy, cw, ch = rect
     return f"crop={even(cw)}:{even(ch)}:{even(cx)}:{even(cy)},scale={tw}:{th},setsar=1"
+
+
+def path_expr(points) -> str:
+    """An ffmpeg expression of t through the (t, value) points in straight lines, flat before the first point and
+    after the last."""
+    expr = f"{points[-1][1]:.1f}"
+    for (t0, v0), (t1, v1) in reversed(list(zip(points, points[1:]))):
+        expr = f"if(lt(t,{t1:.3f}),{v0:.1f}+{v1 - v0:.1f}*(t-{t0:.3f})/{t1 - t0:.3f},{expr})"
+    return f"if(lt(t,{points[0][0]:.3f}),{points[0][1]:.1f},{expr})"
+
+
+def _moving_crop_scale(path, tw: int, th: int) -> str:
+    """Like _crop_scale for a crop that slides along `path` ((t, rect) points, every rect the same size)."""
+    _x, _y, cw, ch = path[0][1]
+    xs, ys = [(t, r[0]) for t, r in path], [(t, r[1]) for t, r in path]
+    return (f"crop=w={even(cw)}:h={even(ch)}:x='{path_expr(xs)}':y='{path_expr(ys)}',"
+            f"scale={tw}:{th},setsar=1")
 
 
 def fill_crop(src_w: int, src_h: int, region, tw: int, th: int, zoom: float = 1.0) -> str:
@@ -183,6 +197,13 @@ def _dodge(src_w: int, src_h: int, rect: Rect, box: Rect, cam) -> tuple[str, Rec
     return "shifted", (nx, ny, cw, ch)
 
 
+def _keep_out(src_w: int, src_h: int, cam, face=None) -> Rect:
+    """The part of the source a gameplay picture must stay clear of: the padded camera box and the head."""
+    pad_x, pad_y = FACECAM_PAD * src_w, FACECAM_PAD * src_h
+    box = (cam[0] * src_w - pad_x, cam[1] * src_h - pad_y, cam[2] * src_w + 2 * pad_x, cam[3] * src_h + 2 * pad_y)
+    return _union(box, head_box(face, src_w, src_h)) if face else box
+
+
 def avoid_camera(src_w: int, src_h: int, tw: int, th: int, zoom: float, cam, face=None,
                  max_zoom: float = 1.0) -> tuple[str, Rect | None]:
     """The gameplay crop (target shape tw:th) with the webcam overlay kept out of it completely.
@@ -192,10 +213,7 @@ def avoid_camera(src_w: int, src_h: int, tw: int, th: int, zoom: float, cam, fac
     camera) or ("blocked", None): the camera is in the way and cannot be stepped around. A blocked crop is never
     patched over: the caller draws a layout that shows the camera where it is instead.
     """
-    pad_x, pad_y = FACECAM_PAD * src_w, FACECAM_PAD * src_h
-    box = (cam[0] * src_w - pad_x, cam[1] * src_h - pad_y, cam[2] * src_w + 2 * pad_x, cam[3] * src_h + 2 * pad_y)
-    if face:
-        box = _union(box, head_box(face, src_w, src_h))
+    box = _keep_out(src_w, src_h, cam, face)
     step = 0
     while 1 + 0.05 * step <= max_zoom + 1e-9:
         how, rect = _dodge(src_w, src_h, crop_rect(src_w, src_h, FULL_FRAME, tw, th, zoom * (1 + 0.05 * step)), box, cam)
@@ -231,6 +249,9 @@ class Panel:
     out: tuple[int, int, int, int]      # where it lands on the canvas: x, y, w, h
     punch: bool = False                 # punch-in zooms may play here: only ever a panel with no person in it
     border: int = 0                     # pixels of white edge (the inset)
+    # A crop that moves over the clip: (seconds from the clip's start, crop in source pixels), in time order, each
+    # the same size as `src`. Between two points the crop slides in a straight line. None: `src` the whole clip.
+    path: tuple[tuple[float, Rect], ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -250,6 +271,7 @@ class LayoutPlan:
     note: str | None = None             # why `layout` is not the one that was asked for
     seam: int | None = None             # the line between two stacked panels, in canvas pixels from the top
     head: tuple | None = None           # where a caption must not go: the person's head on the canvas (x0, y0, x1, y1)
+    source: tuple[int, int] | None = None   # the source's size in pixels: what `panels[].src` are measured in
 
 
 def canonical(layout: str, aspect: str) -> str:
@@ -371,6 +393,116 @@ def _pip(c: _Ctx) -> dict | None:
     return dict(panels=panels, caption_top=int(oh * 0.70), hook_top=max(int(oh * 0.18), y + ih + 24))
 
 
+# ---------- trio, grid4, ots: PROVISIONAL, our own reading of WayinVideo's names (their docs give no pictures) ----------
+DETAIL_ZOOM = 2.0       # a second gameplay picture shows this much closer than the widest crop of its shape
+OTS_INSET = (0.34, 0.42)          # the over-the-shoulder camera inset's width: share of a wide frame, of a tall one
+OTS_TIGHT = (2.6, 2.4, 0.45)      # the person's inset around the face: widths, heights (of the face), and how far down
+WIDE_ZOOM = 1.5                   # a full-shape gameplay picture may zoom in this much to clear the camera (grid4, ots)
+
+
+def _detail(c: _Ctx, tw: int, th: int, anchors, zoom: float = DETAIL_ZOOM) -> Rect | None:
+    """A closer gameplay picture of shape tw:th, centred on the first anchor (fractions) where it can be taken
+    clear of the camera and the head: it never shows any part of the person."""
+    _x, _y, w, h = crop_rect(c.sw, c.sh, FULL_FRAME, tw, th, zoom)
+    for ax, ay in anchors:
+        rect = (_clamp(ax * c.sw - w / 2, 0.0, c.sw - w), _clamp(ay * c.sh - h / 2, 0.0, c.sh - h), w, h)
+        if c.scene != "gameplay_cam":
+            return rect
+        _how, moved = _dodge(c.sw, c.sh, rect, _keep_out(c.sw, c.sh, c.cam, c.face), c.cam)
+        if moved is not None:
+            return moved
+    return None
+
+
+def _away_from_camera(c: _Ctx) -> tuple[float, float]:
+    """The middle of the quarter of the frame diagonally across from the camera."""
+    cx, cy = c.cam[0] + c.cam[2] / 2, c.cam[1] + c.cam[3] / 2
+    return (0.75 if cx < 0.5 else 0.25), (0.75 if cy < 0.5 else 0.25)
+
+
+def _trio(c: _Ctx) -> dict | None:
+    """The gameplay large, and two smaller panels: the camera and a closer look at the middle of the game.
+    Tall frames: the two small panels side by side on top. Square: under the gameplay. Wide: a column on the right."""
+    if c.scene != "gameplay_cam":
+        return None
+    ow, oh = c.size
+    if oh > ow:
+        n = even(oh / 3)
+        main, cam_out, det_out = (0, n, ow, oh - n), (0, 0, ow // 2, n), (ow // 2, 0, ow - ow // 2, n)
+    elif oh == ow:
+        n = even(oh * 2 / 3)
+        main, cam_out, det_out = (0, 0, ow, n), (0, n, ow // 2, oh - n), (ow // 2, n, ow - ow // 2, oh - n)
+    else:
+        n = even(ow * 2 / 3)
+        main, cam_out, det_out = (0, 0, n, oh), (n, 0, ow - n, oh // 2), (n, oh // 2, ow - n, oh - oh // 2)
+    cam_src = camera_crop(c.sw, c.sh, c.cam, cam_out[2], cam_out[3], c.face)
+    _how, game = avoid_camera(c.sw, c.sh, main[2], main[3], c.zoom, c.cam, c.face, MAX_AVOID_ZOOM)
+    det = _detail(c, det_out[2], det_out[3], [(0.5, 0.5), _away_from_camera(c)])
+    if cam_src is None or game is None or det is None:
+        return None
+    panels = (Panel("gameplay", game, main, punch=True), Panel("camera", cam_src, cam_out), Panel("gameplay", det, det_out))
+    if oh > ow:        # captions on the line under the top row, the hook under them on the gameplay
+        return dict(panels=panels, caption_top=n - 60, hook_top=min(n + 120, oh - 220), seam=n)
+    if oh == ow:       # the small panels are at the bottom: all text stays on the gameplay above them
+        return dict(panels=panels, caption_top=n - 150, hook_top=max(20, min(int(oh * 0.10), n - 290)), seam=n)
+    return dict(panels=panels, caption_top=int(oh * 0.70), hook_top=int(oh * 0.18), text_span=(0.0, n / ow))
+
+
+def _grid4(c: _Ctx) -> dict | None:
+    """Four equal panels: the camera (top left), the gameplay (top right), a closer look at the middle of the game
+    (bottom left) and one at the part of the frame across from the camera (bottom right)."""
+    if c.scene != "gameplay_cam":
+        return None
+    ow, oh = c.size
+    hw, hh = even(ow / 2), even(oh / 2)
+    cells = [(0, 0, hw, hh), (hw, 0, ow - hw, hh), (0, hh, hw, oh - hh), (hw, hh, ow - hw, oh - hh)]
+    cam_src = camera_crop(c.sw, c.sh, c.cam, hw, hh, c.face)
+    _how, game = avoid_camera(c.sw, c.sh, cells[1][2], cells[1][3], c.zoom, c.cam, c.face, WIDE_ZOOM)
+    centre = _detail(c, cells[2][2], cells[2][3], [(0.5, 0.5), _away_from_camera(c)])
+    across = _detail(c, cells[3][2], cells[3][3], [_away_from_camera(c), (0.5, 0.5)])
+    if None in (cam_src, game, centre, across):
+        return None
+    panels = (Panel("camera", cam_src, cells[0]), Panel("gameplay", game, cells[1], punch=True),
+              Panel("gameplay", centre, cells[2]), Panel("gameplay", across, cells[3]))
+    # Captions on the middle line, the hook under them on the bottom row (the camera is in the top row).
+    return dict(panels=panels, caption_top=hh - 60, hook_top=min(hh + 120, oh - 220), seam=hh)
+
+
+def _ots(c: _Ctx) -> dict | None:
+    """Over the shoulder: the gameplay fills the frame and the camera, cropped tight on the person, is a large
+    inset in the lower corner on the camera's own side. The text is centred on the rest of the width."""
+    if c.scene != "gameplay_cam":
+        return None
+    ow, oh = c.size
+    _how, game = avoid_camera(c.sw, c.sh, ow, oh, c.zoom, c.cam, c.face, WIDE_ZOOM)
+    if game is None:
+        return None
+    region = c.cam
+    if c.face:          # head and shoulders, inside the camera box
+        fx, fy, fw, fh = c.face
+        kw, kh, down = OTS_TIGHT
+        x0, x1 = max(c.cam[0], fx - kw * fw / 2), min(c.cam[0] + c.cam[2], fx + kw * fw / 2)
+        y0, y1 = max(c.cam[1], fy + down * fh - kh * fh / 2), min(c.cam[1] + c.cam[3], fy + down * fh + kh * fh / 2)
+        if x1 > x0 and y1 > y0:
+            region = (x0, y0, x1 - x0, y1 - y0)
+    shape = _clamp(region[2] * c.sw / (region[3] * c.sh), 0.8, 1.25)
+    iw = even(ow * (OTS_INSET[0] if ow > oh else OTS_INSET[1]))
+    ih = even(min(iw / shape, 0.55 * oh))
+    cam_src = camera_crop(c.sw, c.sh, region, iw, ih, c.face)
+    if cam_src is None:
+        return None
+    margin_x, margin_y = even(ow * 0.03), even(oh * 0.05)
+    left = c.cam[0] + c.cam[2] / 2 < 0.5
+    x, y = (margin_x if left else ow - iw - margin_x), oh - ih - margin_y
+    span = ((x + iw) / ow + 0.02, 1.0) if left else (0.0, x / ow - 0.02)
+    panels = (Panel("gameplay", game, (0, 0, ow, oh), punch=True),
+              Panel("camera", cam_src, (x, y, iw, ih), border=PIP_BORDER))
+    return dict(panels=panels, caption_top=int(oh * 0.70), hook_top=int(oh * 0.18), text_span=span)
+
+
+_BUILDERS = {"trio": _trio, "grid4": _grid4, "ots": _ots}
+
+
 def _full(c: _Ctx) -> dict | None:
     """One crop fills the frame. With a person in the source the crop holds them whole, or this is not drawn."""
     ow, oh = c.size
@@ -444,41 +576,6 @@ def _person_on_canvas(c: _Ctx, panels) -> tuple[float, float, float, float] | No
     return None
 
 
-def caption_y(oh: int, position: str, half: float, seam: int | None = None, head=None,
-              reach: tuple[float, float] | None = None) -> int:
-    """The row (pixels from the top of a frame `oh` tall) of the middle of a one-line caption that is `half`
-    pixels tall above and below it.
-
-    "seam": on the line between two stacked panels (`seam`), or the lower third when there is no such line;
-    "lower": the lower third; "center": the middle of the frame; "auto": the seam when there is one, else the
-    lower third. Wherever that is, the caption never covers `head` (x0, y0, x1, y1): it moves the least distance
-    that clears it, up or down. `reach` is the part of the width (x0, x1, in pixels) the widest caption covers.
-    """
-    if position not in CAPTION_POSITIONS:
-        raise PipelineError("bad_options", f"Unknown caption_position. Use one of: {', '.join(CAPTION_POSITIONS)}.")
-    want = oh * (0.5 if position == "center" else LOWER_THIRD)
-    if position in ("auto", "seam") and seam is not None:
-        want = seam
-    lo, hi = SAFE_ROWS[0] * oh + half, SAFE_ROWS[1] * oh - half
-    y = _clamp(want, lo, hi)
-    if head is not None and (reach is None or (head[0] < reach[1] - 1 and head[2] > reach[0] + 1)):
-        gap = FACE_GAP * oh / 1920
-        top, bottom = head[1] - gap, head[3] + gap
-        if y + half > top and y - half < bottom:
-            ways = [v for v in (top - half, bottom + half) if lo <= v <= hi]
-            # No room above or below the head inside the safe rows: as far from the middle of it as the frame allows.
-            y = min(ways, key=lambda v: abs(v - y)) if ways else max((lo, hi), key=lambda v: abs(v - (top + bottom) / 2))
-    return int(round(y))
-
-
-def caption_center(plan: LayoutPlan, position: str, half: float, fill: float = 1.0) -> int:
-    """caption_y for a layout plan, in the plan's canvas pixels. `fill` is the share of the text span the widest
-    caption covers."""
-    ow, oh = plan.size
-    mid, width = (plan.text_span[0] + plan.text_span[1]) / 2 * ow, (plan.text_span[1] - plan.text_span[0]) * ow * fill
-    return caption_y(oh, position, half, plan.seam, plan.head, (mid - width / 2, mid + width / 2))
-
-
 def _text_off_the_face(c: _Ctx, parts: dict) -> dict:
     """Move captions and the hook off the person's head when the one picture has them where the text would go."""
     head = _head_on_canvas(c, parts["panels"])
@@ -547,7 +644,8 @@ def compose(src_w: int, src_h: int, layout: str, aspect: str, *, scene: str | No
     for name in order:
         if name == "pip" and name != first and "pip" not in ALLOWED[aspect]:
             continue           # a fallback is only ever a layout this shape offers
-        parts = _fit(c) if name == "fit" else _full(c) if name == "full" else _pip(c) if name == "pip" else _two(c, name)
+        parts = (_fit(c) if name == "fit" else _full(c) if name == "full" else _pip(c) if name == "pip"
+                 else _BUILDERS[name](c) if name in _BUILDERS else _two(c, name))
         if parts is None:
             continue
         if name in ("full", "fit"):
@@ -556,7 +654,8 @@ def compose(src_w: int, src_h: int, layout: str, aspect: str, *, scene: str | No
         if name != first:
             note = _NOTES["no_camera" if scene == "gameplay" else "camera_only" if scene == "camera" else "in_the_way"]
         return LayoutPlan(requested=requested or layout, layout=name, scene=scene, aspect=aspect, size=c.size,
-                          cam=c.cam, face=c.face, note=note, head=_person_on_canvas(c, parts["panels"]), **parts)
+                          cam=c.cam, face=c.face, note=note, head=_person_on_canvas(c, parts["panels"]),
+                          source=(src_w, src_h), **parts)
     raise PipelineError("layout_unavailable", "This video could not be reframed.")     # unreachable: fit always draws
 
 
@@ -582,6 +681,112 @@ def plan_layout(info, frames, requested: str, aspect: str, *, zoom: float = 1.0,
                    requested=requested, camera=camera, split_ratio=split_ratio)
 
 
+# ---------- boxes for the stages that draw on top (docs/CONTRACTS.md, "Reframe boxes v1") ----------
+# Where each game's HUD sits in a 16:9 source, as fractions [x, y, w, h], measured on the owner's eval footage
+# (docs/REFRAME_EVAL.md). Only HUD a caption must not cover: the kill feed, the minimap, the speedometer.
+# Empty until the first measured entries land: an unmeasured game has no HUD rather than a guessed one.
+HUD_REGIONS: dict[str, tuple[tuple[str, Rect], ...]] = {}
+HUD_GAMES = {"gta6": "gta5", "gta-online": "gta5"}      # games that share another game's HUD
+
+
+def hud_regions(game: str | None) -> tuple[tuple[str, Rect], ...]:
+    """(kind, [x, y, w, h] fractions) for each HUD element of `game` (a templates.GAMES id). None, "other" or a
+    game with no measured HUD: none. Never guessed."""
+    return HUD_REGIONS.get(HUD_GAMES.get(game or "", game or ""), ())
+
+
+def _xyxy(r) -> list[int]:
+    return [int(round(r[0])), int(round(r[1])), int(round(r[0] + r[2])), int(round(r[1] + r[3]))]
+
+
+def _on_canvas(box: Rect, src: Rect, out) -> Rect | None:
+    """Where the part of `box` (source pixels) that the crop `src` shows lands in `out` (canvas pixels), or None."""
+    x0, y0 = max(box[0], src[0]), max(box[1], src[1])
+    x1, y1 = min(box[0] + box[2], src[0] + src[2]), min(box[1] + box[3], src[1] + src[3])
+    if x1 - x0 < 1 or y1 - y0 < 1:
+        return None
+    kx, ky = out[2] / src[2], out[3] / src[3]
+    return out[0] + (x0 - src[0]) * kx, out[1] + (y0 - src[1]) * ky, (x1 - x0) * kx, (y1 - y0) * ky
+
+
+def _shown(box: Rect, panels) -> Rect | None:
+    """The canvas box covering every place `box` (source pixels) is shown by a panel, over the whole clip (every
+    point of a moving crop), or None when no panel shows any of it. A camera panel's own picture is left out."""
+    hits = []
+    for p in panels:
+        if p.kind == "camera":
+            continue
+        for src in ([r for _t, r in p.path] if p.path else [p.src]):
+            hit = _on_canvas(box, src, p.out)
+            if hit:
+                hits.append(hit)
+    if not hits:
+        return None
+    acc = hits[0]
+    for h in hits[1:]:
+        acc = _union(acc, h)
+    return acc
+
+
+def reframe_boxes(plan: LayoutPlan | None, *, src: tuple[int, int] | None = None, cam=None, face=None,
+                  game: str | None = None, confidence: float | None = None) -> dict:
+    """Where everything a caption must respect is on the output, for one clip (docs/CONTRACTS.md, "Reframe boxes v1").
+
+    `plan` is what is drawn; without one (the original 16:9 picture, not reframed) `src` is the source size and
+    `cam` / `face` the camera box and face as in LayoutPlan. `game` (a templates.GAMES id) adds its HUD.
+    `confidence` is the camera detection's (None: given by the user, or not measured).
+    Source boxes are [x, y, w, h] fractions; canvas boxes are [x0, y0, x1, y1] pixels of `canvas`."""
+    if plan is None:
+        if src is None:
+            raise ValueError("reframe_boxes needs a plan or the source size")
+        sw, sh = src
+        whole = (0.0, 0.0, float(sw), float(sh))
+        plan = LayoutPlan(requested="original", layout="original", scene="gameplay_cam" if cam else "gameplay",
+                          aspect="", size=(sw, sh), panels=(Panel("source", whole, (0, 0, sw, sh)),),
+                          cam=tuple(cam) if cam else None, face=tuple(face) if face else None,
+                          head=tuple(_xyxy(head_box(face, sw, sh))) if face else None, source=(sw, sh))
+    sw, sh = plan.source or src or (0, 0)
+    if not sw or not sh:
+        raise ValueError("reframe_boxes needs the source size: a plan from compose, or `src`")
+    ow, oh = plan.size
+    panels = [{"role": "camera" if p.kind == "camera" else "gameplay", "out": _xyxy(p.out)} for p in plan.panels]
+    keep_out: list[list[int]] = []
+    head = [int(round(v)) for v in plan.head] if plan.head else None
+    if head:
+        keep_out.append(head)
+    facecam = None
+    if plan.cam:
+        cam_out = None
+        for p in plan.panels:
+            if p.kind == "camera":
+                cam_out = _xyxy(p.out)
+                if p.border:               # an inset over the gameplay: no text on any of it
+                    keep_out.append(cam_out)
+        if cam_out is None:                # the camera is part of a gameplay picture, where the streamer put it
+            shown = _shown(cam_px(plan.cam, sw, sh), plan.panels)
+            if shown:
+                cam_out = _xyxy(shown)
+                keep_out.append(cam_out)
+        facecam = {"src": [round(v, 4) for v in plan.cam], "out": cam_out,
+                   "confidence": None if confidence is None else round(float(confidence), 3)}
+    hud = []
+    for kind, box in hud_regions(game):
+        shown = _shown(cam_px(box, sw, sh), plan.panels)
+        out = _xyxy(shown) if shown else None
+        hud.append({"kind": kind, "src": list(box), "out": out})
+        if out:
+            keep_out.append(out)
+    path = None
+    for p in plan.panels:
+        if p.kind == "gameplay" and p.path:
+            path = [{"t": round(t, 3), "box": [round(r[0] / sw, 4), round(r[1] / sh, 4), round(r[2] / sw, 4),
+                                                round(r[3] / sh, 4)]} for t, r in p.path]
+            break
+    return {"v": 1, "canvas": [ow, oh], "layout": plan.layout, "scene": plan.scene, "seam": plan.seam,
+            "panels": panels, "text_span": list(plan.text_span), "facecam": facecam, "head": head, "hud": hud,
+            "keep_out": keep_out, "crop_path": path}
+
+
 # ---------- drawing ----------
 def _scaled(out, sx: float, sy: float) -> tuple[int, int, int, int]:
     x0, y0 = even(out[0] * sx), even(out[1] * sy)
@@ -597,7 +802,8 @@ def layout_graph(plan: LayoutPlan, size: tuple[int, int] | None = None, punch: s
     chains, outs = [], []
     for p in plan.panels:
         x, y, w, h = _scaled(p.out, sx, sy)
-        chain = _crop_scale(p.src, w, h) + (punch_in(w, h, punch) if p.punch else "")
+        chain = ((_moving_crop_scale(p.path, w, h) if p.path else _crop_scale(p.src, w, h))
+                 + (punch_in(w, h, punch) if p.punch else ""))
         if p.border:
             chain += f",drawbox=x=0:y=0:w=iw:h=ih:color=white:t={max(2, even(p.border * sx))}"
         chains.append(chain)
@@ -626,4 +832,10 @@ def layout_graph(plan: LayoutPlan, size: tuple[int, int] | None = None, punch: s
                 f"[a]{chains[0]}[{first}];"
                 f"[b]{chains[1]}[{second}];"
                 f"[{first}][{second}]{stack}=inputs=2,format=yuv420p[v]")
+    if sum(w * h for _x, _y, w, h in outs) == tw * th:                         # trio, grid4: panels that tile the frame
+        n = len(chains)
+        return (f"[0:v]split={n}" + "".join(f"[i{k}]" for k in range(n)) + ";"
+                + "".join(f"[i{k}]{chain}[p{k}];" for k, chain in enumerate(chains))
+                + "".join(f"[p{k}]" for k in range(n))
+                + f"xstack=inputs={n}:layout=" + "|".join(f"{x}_{y}" for x, y, _w, _h in outs) + ",format=yuv420p[v]")
     raise PipelineError("layout_unavailable", "This layout cannot be drawn.")

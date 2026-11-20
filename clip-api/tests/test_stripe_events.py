@@ -15,6 +15,7 @@ from sqlalchemy import select
 from app import routes_billing
 from app.db import new_session
 from app.models import Account, CreditLedger, Payment
+from tests.billing_fixtures import CATALOG, checkout_receipt
 from tests.test_api import balance
 
 T0 = 1_800_000_000
@@ -22,7 +23,7 @@ RUN = {"n": ""}
 
 
 @pytest.fixture(autouse=True)
-def fresh_ids():
+def fresh_ids(stripe_catalog):
     """Stripe ids are unique per test: ledger keys are global and the test database outlives one test."""
     RUN["n"] = uuid.uuid4().hex[:8]
 
@@ -57,23 +58,29 @@ def payment(ref):
 def buy_pack(client, account, session=None, intent=None, pack="pack_300", amount=499):
     session, intent = session or i("cs_1"), intent or i("pi_1")
     r = send(client, "checkout.session.completed", {
-        "id": session, "mode": "payment", "payment_status": "paid", "payment_intent": intent, "amount_total": amount,
+        "id": session, "status": "complete", "currency": "usd", "client_reference_id": account["id"], "mode": "payment", "payment_status": "paid", "payment_intent": intent, "amount_total": amount,
         "customer": f"cus_{account['id']}", "metadata": {"account_id": account["id"], "pack_id": pack}})
     assert r.status_code == 200
 
 
-def subscribe(client, account, sub=None, plan="starter", created=T0):
+def subscribe(client, account, sub=None, plan="starter_v2", created=T0):
     sub = sub or i("sub_1")
     meta = {"account_id": account["id"], "plan_id": plan, "interval": "month"}
-    assert send(client, "checkout.session.completed", {
-        "id": f"cs_{sub}", "mode": "subscription", "subscription": sub, "customer": f"cus_{account['id']}",
-        "metadata": meta}, created).status_code == 200
+    assert send(client, "checkout.session.completed", checkout_receipt(account, sub, meta), created).status_code == 200
     return meta
 
 
 def invoice(account, meta, inv=None, sub=None, **extra):
     inv, sub = inv or i("in_1"), sub or i("sub_1")
-    return {"id": inv, "customer": f"cus_{account['id']}", "amount_paid": 900, "subscription": sub,
+    plan, interval = meta.get("plan_id"), meta.get("interval", "month")
+    price, cents = CATALOG.get(plan, {}).get(interval, ("price_1OldInlinePrice", extra.get("total", 0)))
+    lines = extra.pop("lines", {"data": [{"price": {"id": price}}]})
+    for row in lines["data"]:
+        actual_price = (row.get("price") or {}).get("id") or ((row.get("pricing") or {}).get("price_details") or {}).get("price")
+        cents = next((amount for offers in CATALOG.values() for sku, amount in offers.values() if sku == actual_price), cents)
+        row.update({"quantity": 1, "currency": "usd", "amount": cents})
+    return {"id": inv, "customer": f"cus_{account['id']}", "amount_paid": cents, "total": cents, "currency": "usd",
+            "status": "paid", "billing_reason": "subscription_cycle", "subscription": sub, "lines": lines,
             "subscription_details": {"metadata": meta}, **extra}
 
 
@@ -98,14 +105,14 @@ def test_a_full_refund_takes_back_the_pack_once(client, user):
 
 def test_partial_refunds_take_back_in_proportion_and_never_more_than_was_granted(client, user):
     headers, account = user
-    buy_pack(client, account, amount=500)
-    send(client, "charge.refunded", charge(amount=500, refunded=100, full=False))                     # a fifth
+    buy_pack(client, account)
+    send(client, "charge.refunded", charge(amount=499, refunded=100, full=False))                     # a fifth
     assert balance(client, headers) == 270 and payment(i("cs_1")).status == "partial"
-    send(client, "charge.refunded", charge(amount=500, refunded=250, full=False))                     # now half in total
+    send(client, "charge.refunded", charge(amount=499, refunded=250, full=False))                     # now half in total
     assert balance(client, headers) == 180
-    send(client, "charge.refunded", charge(amount=500, refunded=100, full=False))                     # the first one, late
+    send(client, "charge.refunded", charge(amount=499, refunded=100, full=False))                     # the first one, late
     assert balance(client, headers) == 180
-    send(client, "charge.refunded", charge(amount=500, refunded=500, full=True))
+    send(client, "charge.refunded", charge(amount=499, refunded=499, full=True))
     send(client, "charge.dispute.created", {"id": i("dp_1"), "payment_intent": i("pi_1")})                  # and then a dispute
     assert balance(client, headers) == 30 and payment(i("cs_1")).credits_removed == 300
 
@@ -135,7 +142,7 @@ def test_a_refund_of_a_plan_invoice_is_matched_through_stripe_when_the_charge_ha
     monkeypatch.setattr(routes_billing, "_invoice_of", lambda intent, key: asked.append(intent) or i("in_1"))
     assert send(client, "charge.refunded", charge(intent=i("pi_sub"), amount=900, refunded=900)).status_code == 200
     assert asked == [i("pi_sub")] and balance(client, headers) == 30 and payment(i("in_1")).payment_intent == i("pi_sub")
-    assert me(client, headers)["plan"] == "starter"                       # a refund does not end the subscription
+    assert me(client, headers)["plan"] == "starter_v2"                       # a refund does not end the subscription
     send(client, "charge.refunded", charge(intent=i("pi_sub"), amount=900, refunded=900), event_id="evt_2")
     assert asked == [i("pi_sub")] and balance(client, headers) == 30         # found by its payment now; nothing more taken
 
@@ -198,7 +205,7 @@ def test_a_failed_payment_marks_the_account_past_due_and_a_paid_invoice_clears_i
     before = rows(account["id"])
     assert send(client, "invoice.payment_failed", invoice(account, meta, inv=i("in_2")), T0 + 100).status_code == 200
     got = me(client, headers)
-    assert got["subscription_status"] == "past_due" and got["plan"] == "starter"       # the plan stays while Stripe retries
+    assert got["subscription_status"] == "past_due" and got["plan"] == "starter_v2"       # the plan stays while Stripe retries
     assert rows(account["id"]) == before                                                # no credits moved
     send(client, "invoice.paid", invoice(account, meta, inv=i("in_2")), T0 + 200)
     assert me(client, headers)["subscription_status"] == "active" and balance(client, headers) == 1030
@@ -234,7 +241,8 @@ def test_a_failed_payment_without_a_subscription_does_nothing(client, user):
 
 def sub_obj(account, meta, sub=None, **fields):
     sub = sub or i("sub_1")
-    return {"id": sub, "customer": f"cus_{account['id']}", "status": "active", "metadata": meta, **fields}
+    price = CATALOG.get(meta.get("plan_id"), {}).get(meta.get("interval", "month"), ("price_unknown", 0))[0]
+    return {"id": sub, "items": {"data": [{"price": {"id": price}}]}, "customer": f"cus_{account['id']}", "status": "active", "metadata": meta, **fields}
 
 
 def test_cancel_at_period_end_is_shown_and_can_be_undone(client, user):
@@ -242,13 +250,13 @@ def test_cancel_at_period_end_is_shown_and_can_be_undone(client, user):
     meta = subscribe(client, account)
     send(client, "customer.subscription.updated", sub_obj(account, meta, cancel_at_period_end=True, cancel_at=T0 + 86400), T0 + 5)
     got = me(client, headers)
-    assert got["subscription_cancel_at"].startswith("2027-01-16") and got["plan"] == "starter" and got["subscription_status"] == "active"
+    assert got["subscription_cancel_at"].startswith("2027-01-16") and got["plan"] == "starter_v2" and got["subscription_status"] == "active"
     send(client, "customer.subscription.updated", sub_obj(account, meta, cancel_at_period_end=False, cancel_at=None), T0 + 9)
     assert me(client, headers)["subscription_cancel_at"] is None
 
 
 @pytest.mark.parametrize("status,plan,keeps_subscription", [
-    ("past_due", "starter", True), ("trialing", "starter", True), ("unpaid", "free", True), ("paused", "free", True),
+    ("past_due", "starter_v2", True), ("trialing", "starter_v2", True), ("unpaid", "free", True), ("paused", "free", True),
     ("canceled", "free", False), ("incomplete_expired", "free", False)])
 def test_subscription_status_decides_the_plan(client, user, status, plan, keeps_subscription):
     headers, account = user
@@ -261,38 +269,38 @@ def test_subscription_status_decides_the_plan(client, user, status, plan, keeps_
     assert (kept == i("sub_1")) == keeps_subscription and (kept is None) != keeps_subscription
     if keeps_subscription and plan == "free":                # paying it brings the plan back
         send(client, "customer.subscription.updated", sub_obj(account, meta, status="active"), T0 + 9)
-        assert me(client, headers)["plan"] == "starter"
+        assert me(client, headers)["plan"] == "starter_v2"
 
 
 def test_a_plan_change_and_events_out_of_order(client, user):
     headers, account = user
     meta = subscribe(client, account)
-    send(client, "customer.subscription.updated", sub_obj(account, {**meta, "plan_id": "pro"}), T0 + 50)
-    assert me(client, headers)["plan"] == "pro"
+    send(client, "customer.subscription.updated", sub_obj(account, {**meta, "plan_id": "pro_v2"}), T0 + 50)
+    assert me(client, headers)["plan"] == "pro_v2"
     send(client, "customer.subscription.updated", sub_obj(account, meta, status="past_due"), T0 + 20)     # older: ignored
     got = me(client, headers)
-    assert got["plan"] == "pro" and got["subscription_status"] == "active"
+    assert got["plan"] == "pro_v2" and got["subscription_status"] == "active"
     send(client, "customer.subscription.updated", sub_obj(account, {**meta, "plan_id": "not-a-plan"}), T0 + 60)
-    assert me(client, headers)["plan"] == "pro"                                                            # unknown plan ids change nothing
+    assert me(client, headers)["plan"] == "pro_v2"                                                            # unknown plan ids change nothing
 
 
 def test_another_subscription_cannot_change_this_account(client, user):
     headers, account = user
     meta = subscribe(client, account)
     send(client, "customer.subscription.updated", sub_obj(account, meta, sub=i("sub_other"), status="canceled"), T0 + 5)
-    assert me(client, headers)["plan"] == "starter"
+    assert me(client, headers)["plan"] == "starter_v2"
     send(client, "customer.subscription.updated", sub_obj(account, {"account_id": "acc_nobody"}, sub=i("sub_1"), status="canceled")
          | {"customer": "cus_nobody"}, T0 + 6)
-    assert me(client, headers)["plan"] == "starter"
+    assert me(client, headers)["plan"] == "starter_v2"
 
 
 def test_an_update_that_arrives_before_checkout_completes_starts_the_plan(client, user):
     headers, account = user
-    meta = {"account_id": account["id"], "plan_id": "starter", "interval": "month"}
+    meta = {"account_id": account["id"], "plan_id": "starter_v2", "interval": "month"}
     send(client, "customer.subscription.updated", sub_obj(account, meta, status="incomplete"), T0)
     assert me(client, headers)["plan"] == "free"                          # not paid yet
     send(client, "customer.subscription.updated", sub_obj(account, meta), T0 + 1)
-    assert me(client, headers)["plan"] == "starter" and me(client, headers)["subscription_status"] == "active"
+    assert me(client, headers)["plan"] == "starter_v2" and me(client, headers)["subscription_status"] == "active"
     assert balance(client, headers) == 30                                 # credits come only with invoice.paid
 
 

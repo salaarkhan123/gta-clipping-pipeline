@@ -4,8 +4,10 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from . import layouts
-from .captions import FONT_DIR, IMPACT_FILE, IMPACT_FILL, build_ass, impact_size
+from . import fonts, layouts, placement
+from .fonts import Face
+from .captions import EMOJI_FILE, FONT_DIR, HOOK_SECONDS, IMPACT_FILE, IMPACT_FILL, build_ass, impact_size
+from .placement import HOOK_ROOM, TEXT_GAP  # noqa: F401 (re-exported: tests import them from here)
 from .ff import SAFE_IN, Deadline, PipelineError, PipelineTimeout, run
 # The geometry lives in layouts.py; these names are re-exported because callers and tests import them from here.
 from .layouts import (ASPECTS, EDGE, FACECAM_PAD, FACECAM_REGIONS, FULL_FRAME, MAX_DODGE, LayoutPlan,  # noqa: F401
@@ -130,6 +132,12 @@ def output_size(src_w: int, src_h: int, vertical: bool, aspect: str = "9:16", re
     return even(ref[0] * k), even(ref[1] * k)
 
 
+def resolution_name(width: int, height: int) -> str:
+    """What a rendered size is called: its short side by its RESOLUTIONS name ("720", "2k"), else in pixels ("360")."""
+    side = min(width, height)
+    return next((name for name, px in RESOLUTIONS.items() if px == side), str(side))
+
+
 def vertical_filter(src_w: int, src_h: int, zoom: float, chat: str) -> str:
     """1080x1920: blurred background, enlarged chat on top (optional), video below."""
     cw = even(src_w / zoom)
@@ -227,38 +235,108 @@ def segments_graph(segments: list[tuple[float, float]], lo: float, has_audio: bo
             parts.append(f"[t{i}]atrim=start={s - lo:.3f}:end={e - lo:.3f},asetpts=PTS-STARTPTS,"
                          f"afade=t=in:d={CUT_FADE},afade=t=out:st={max(0.0, d - CUT_FADE):.3f}:d={CUT_FADE}[a{i}]")
     if has_audio:
-        parts.append("".join(f"[v{i}][a{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=1[cv]" + ("[cx]" if audio_filter else "[ca]"))
+        parts.append("".join(f"[v{i}][a{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=1[cc]" + ("[cx]" if audio_filter else "[ca]"))
         if audio_filter:
             parts.append(f"[cx]{audio_filter}[ca]")
     else:
-        parts.append("".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[cv]")
+        parts.append("".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[cc]")
+    # concat hands its frames on in microseconds; ffmpeg 7.1 then writes them unevenly timed (not 30 fps). fps
+    # puts them back on the 1/30 s grid, one frame per tick, so the clip is constant 30 fps on every version.
+    parts.append(f"[cc]fps={OUT_FPS}[cv]")
     return ";".join(parts)
 
 
-HOOK_ROOM = 200      # pixels a hook may take from its top on the 1080 canvas: two lines and the box around them
-TEXT_GAP = 16        # pixels kept between the hook and an impact caption
-
-
 def impact_rows(plan: LayoutPlan | None, oh: int, position: str, under: int, below_video: int | None = None,
-                k: float = 1.0) -> tuple[int, int]:
-    """(the row of the middle of an impact caption, the hook's top) in a frame `oh` tall. With a layout plan the
-    caption goes where the plan says for `position` and never on the person's head. Without one (the source's
-    own frame, or the classic layout, where `below_video` is where the old captions start under the picture)
-    there is no line between panels and no known person. `under` is where the hook would sit; it steps under
-    the caption (or over it) when the two would overlap. `k` scales the hook's size for a frame that is not the
-    1080 canvas."""
-    half = impact_size(oh).half
-    if plan is not None:
-        center = layouts.caption_center(plan, position, half, IMPACT_FILL)
+                k: float = 1.0, boxes: dict | None = None, half: float | None = None,
+                want: float | None = None) -> tuple[int, int]:
+    """(the row of the middle of an impact caption, the hook's top) in a frame `oh` tall (placement.place).
+    `boxes` is the clip's reframe_boxes dict: the caption and the hook keep off everything in its keep_out (the
+    head, a webcam in the picture, the game's HUD). Without it, the plan's own (its head), or for the source's
+    own frame or the classic layout (`below_video`: where the old captions start under the picture) nothing.
+    `under` is where the hook would sit; `k` scales the hook for a frame that is not the 1080 canvas. `half` is
+    the caption's half height (default: the impact style's own); `want`, a row the user chose (caption_look.y)."""
+    if boxes is None:
+        if plan is not None:
+            boxes = layouts.reframe_boxes(plan, src=plan.source or (1920, 1080))
+        else:
+            boxes = {"canvas": [round(oh * (9 / 16 if below_video is not None else 16 / 9)), oh]}
+    return placement.place(boxes, position, half or impact_size(oh).half, IMPACT_FILL, under, k, below_video, want)
+
+
+HOOK_POSITIONS = ("beginning", "end")
+HOOK_MS = (500, 10000)      # the shortest and longest a hook may stay on screen, in milliseconds
+
+
+def hook_window(length: float, position: str = "beginning", ms: int | None = None) -> tuple[float, float] | None:
+    """When the hook is on screen, (from, to) seconds on a clip `length` long: the first HOOK_SECONDS (or `ms`),
+    or the last ones for position "end". Never longer than the clip. None for the default (the caption files
+    are then written exactly as before these options existed)."""
+    if position == "beginning" and ms is None:
+        return None
+    if position not in HOOK_POSITIONS:
+        raise PipelineError("bad_options", f"Unknown hook position. Use one of: {', '.join(HOOK_POSITIONS)}.")
+    show = min(length, (ms if ms is not None else HOOK_SECONDS * 1000) / 1000)
+    return (0.0, round(show, 3)) if position == "beginning" else (round(max(0.0, length - show), 3), round(length, 3))
+
+
+def caption_face(look: dict | None, custom_font: Path | None = None) -> Face | None:
+    """The font a caption_look asks for: an account's uploaded font ("custom:<id>", its local file `custom_font`),
+    or one of fonts.FAMILIES in the weight and slant asked for. None: the impact style's own Anton."""
+    look = look or {}
+    family = look.get("font")
+    if not family:
+        return fonts.bundled(weight=look.get("weight") or "regular", italic=bool(look.get("italic"))) \
+            if (look.get("weight") or look.get("italic")) else None
+    if family.startswith("custom:"):
+        if custom_font is None or not Path(custom_font).is_file():
+            raise PipelineError("caption_font_missing", "The uploaded caption font could not be found.")
+        try:
+            return fonts.read_face(Path(custom_font))
+        except fonts.BadFont as e:
+            raise PipelineError("caption_font_bad", str(e)) from None
+    if family not in fonts.FAMILIES:
+        raise PipelineError("bad_options", f"Unknown caption font. Use one of: {', '.join(fonts.FAMILIES)}.")
+    return fonts.bundled(family, look.get("weight") or "regular", bool(look.get("italic")))
+
+
+def text_track(path: Path, words, *, src_w: int, src_h: int, vertical: bool, zoom: float, chat: str,
+               plan: LayoutPlan | None, aspect: str, font: str, style: str, position: str = "auto",
+               accent: str | None = None, hook: str | None = None,
+               hook_at: tuple[float, float] | None = None, game: str | None = None, facecam=None,
+               look: dict | None = None, typeface: Face | None = None) -> int:
+    """Write the clip's captions and hook (an ASS file) for the frame render_clip draws: `plan` when reframing
+    with one, the classic layout when reframing without one, the source's own frame when not reframing (where
+    `facecam`, as render_clip takes it, is the webcam in the picture). `game` adds the game's HUD to what the
+    impact captions and the hook keep off. `look` (render_options.CaptionLook as a dict) and `typeface` (its
+    font, from caption_face) restyle impact captions. Returns the number of captions. scripts/caption_checks.py measures
+    exactly this file."""
+    ow, oh = ASPECTS.get(aspect, ASPECTS["9:16"]) if vertical else (src_w, src_h)
+    if not vertical:
+        top, under, span = 0, int(1080 * 0.1), (0.0, 1.0)
+    elif plan is not None:
+        top, under, span = plan.caption_top, plan.hook_top, plan.text_span
     else:
-        center = layouts.caption_y(oh, position, half, None if below_video is None else int(below_video + half))
-    top, bottom = center - half - TEXT_GAP * k, center + half + TEXT_GAP * k
-    if under - 14 * k < bottom and under + HOOK_ROOM * k > top:
-        if bottom + 24 * k + HOOK_ROOM * k <= 0.94 * oh:
-            under = int(bottom + 24 * k)
-        elif top - 24 * k - HOOK_ROOM * k >= 20 * k:
-            under = int(top - 24 * k - HOOK_ROOM * k)
-    return center, under
+        top, under, span = caption_top(src_w, src_h, "classic", zoom, chat, oh), hook_top("classic", oh), (0.0, 1.0)
+    center = None
+    if style == "impact":
+        # Measured in the frame's own pixels (the old styles write a source frame as if it were 1920x1080).
+        k = 1.0 if vertical else oh / 1080
+        if not vertical:
+            box, face, _scene = _camera(facecam)
+            boxes = layouts.reframe_boxes(None, src=(src_w, src_h), cam=box, face=face, game=game)
+        elif plan is not None:
+            boxes = layouts.reframe_boxes(plan, src=plan.source or (src_w, src_h), game=game)
+        else:
+            boxes = {"canvas": [ow, oh]}
+        look = look or {}
+        half = impact_size(oh, typeface, (look.get("size") or 100) / 100).half
+        center, under = impact_rows(plan, oh, position, under if vertical else int(oh * 0.1),
+                                    top if vertical and plan is None else None, k, boxes, half,
+                                    look["y"] * oh if look.get("y") is not None else None)
+    # Always written for the 1080 canvas: the subtitle renderer scales it to whatever size the clip is.
+    return build_ass(words, path, vertical, top, font, style, play=(ow, oh), hook=hook, hook_top=under,
+                     span=span, center=center, accent=accent, hook_at=hook_at, game=game, look=look,
+                     face=typeface)
 
 
 def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, src_h: int,
@@ -269,17 +347,22 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
                 hook: str | None = None, flash: bool = False, loudness: bool = True,
                 plan: LayoutPlan | None = None, resolution: str | None = None, preview: bool = False,
                 position: str = "auto", accent: str | None = None, camera: str | None = None,
-                split_ratio: float | None = None) -> None:
+                split_ratio: float | None = None, hook_position: str = "beginning",
+                hook_ms: int | None = None, game: str | None = None, look: dict | None = None,
+                custom_font: Path | None = None) -> None:
     """Cut [start, end] from src and render it. `words` are clip-relative (start, end, text) or empty.
 
     `style` is a caption style from captions.CAPTION_STYLES. For "impact", `position` ("auto", "seam", "lower",
     "center") is where the caption sits and `accent` (#RRGGBB) the keyword's colour; the other styles ignore
-    both. `camera` ("top" | "bottom") and `split_ratio` (the top panel's share, 0.25 to 0.75) adjust a two-panel
-    layout made here from `layout`; a `plan` already has them.
+    both; `game` (a templates.GAMES id) adds that game's terms to the words impact emphasises. `camera`
+    ("top" | "bottom") and `split_ratio` (the top panel's share, 0.25 to 0.75) adjust a two-panel
+    layout made here from `layout`; a `plan` already has them. `look` (render_options.CaptionLook as a dict)
+    restyles impact captions; `custom_font` is the local file of its "custom:<id>" font (the caller fetched it).
 
     With `segments` (source seconds, in playing order) those pieces are played back to back instead, and `words`
     are on that rendered timeline. `punch` is a zoom expression over rendered time for the gameplay picture.
-    `hook` is a line of on-screen text for the first 2.5 s. `flash` marks the first segment as a flash-forward.
+    `hook` is a line of on-screen text for the first 2.5 s, or for `hook_ms` milliseconds at the "beginning" or
+    the "end" (`hook_position`) of the rendered clip. `flash` marks the first segment as a flash-forward.
     `loudness` normalises the audio to -14 LUFS with peaks under -2 dB before encoding, -1 dB after (on by default).
 
     When reframing (`vertical`), what is drawn is a layout plan: `plan` if one is given (layouts.plan_layout),
@@ -298,31 +381,25 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
             aspect = plan.aspect
         elif layouts.canonical(layout, aspect) != "classic":
             plan = plan_for(src_w, src_h, layout, facecam, aspect, zoom, camera, split_ratio)
-        ref = ow, oh = ASPECTS.get(aspect, ASPECTS["9:16"]) if vertical else (src_w, src_h)
+        ref = ASPECTS.get(aspect, ASPECTS["9:16"]) if vertical else (src_w, src_h)
         if words or hook:
-            if not vertical:
-                top, under, span = 0, int(1080 * 0.1), (0.0, 1.0)
-            elif plan is not None:
-                top, under, span = plan.caption_top, plan.hook_top, plan.text_span
-            else:
-                top, under, span = caption_top(src_w, src_h, "classic", zoom, chat, oh), hook_top("classic", oh), (0.0, 1.0)
-            center = None
-            if style == "impact":
-                # Measured in the frame's own pixels (the old styles write a source frame as if it were 1920x1080).
-                k = 1.0 if vertical else oh / 1080
-                center, under = impact_rows(plan, oh, position, under if vertical else int(oh * 0.1),
-                                            top if vertical and plan is None else None, k)
-            # Always written for the 1080 canvas: the subtitle renderer scales it to whatever size the clip is.
-            build_ass(words, tmp / "cap.ass", vertical, top, font, style, play=(ow, oh), hook=hook, hook_top=under,
-                      span=span, center=center, accent=accent)
+            length = sum(e - s for s, e in segments) if segments else end - start
+            typeface = caption_face(look, custom_font) if style == "impact" else None
+            text_track(tmp / "cap.ass", words, src_w=src_w, src_h=src_h, vertical=vertical, zoom=zoom, chat=chat,
+                       plan=plan, aspect=aspect, font=font, style=style, position=position, accent=accent,
+                       hook=hook, hook_at=hook_window(length, hook_position, hook_ms) if hook else None, game=game,
+                       facecam=facecam, look=look, typeface=typeface)
             cap_filter = f"ass=filename={tmp / 'cap.ass'}"
             if style == "impact":
                 # The renderer is handed our own font file, so the text never depends on what the machine has
                 # installed. A copy in the temp dir keeps the filter's path free of spaces.
-                if not (FONT_DIR / IMPACT_FILE).is_file():
+                font_file = typeface.file if typeface else FONT_DIR / IMPACT_FILE
+                if not font_file.is_file():
                     raise PipelineError("captions_unavailable", "The caption font is missing on this server.")
                 (tmp / "fonts").mkdir()
-                shutil.copy(FONT_DIR / IMPACT_FILE, tmp / "fonts" / IMPACT_FILE)
+                shutil.copy(font_file, tmp / "fonts" / font_file.name)
+                if any(getattr(w[2], "emoji", None) for w in words or ()):     # (captions) an editor's emoji
+                    shutil.copy(FONT_DIR / EMOJI_FILE, tmp / "fonts" / EMOJI_FILE)
                 cap_filter += f":fontsdir={tmp / 'fonts'}"
         size = output_size(src_w, src_h, vertical, aspect, resolution, preview, max_side)
         # A chosen resolution or a preview is drawn at its own size (sharper above 1080, far less work below it).
@@ -362,5 +439,5 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
 
 
 def render_thumb(clip: Path, out: Path, deadline: Deadline | None = None) -> None:
-    run(["ffmpeg", "-loglevel", "error", "-y", "-ss", "1", "-i", clip, "-frames:v", "1",
+    run(["ffmpeg", "-loglevel", "error", "-y", "-ss", "1", *SAFE_IN, "-i", clip, "-frames:v", "1",
          "-vf", "scale=360:-2", out], deadline, cap=60)

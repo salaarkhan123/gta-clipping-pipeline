@@ -14,6 +14,8 @@ EXCLAMATIONS = ("oh my god", "oh my gosh", "no way", "what the", "let's go", "le
 class Transcript:
     words: list[tuple[float, float, str]] = field(default_factory=list)      # (start, end, word)
     segments: list[tuple[float, float, str]] = field(default_factory=list)   # sentence-ish chunks
+    # (start, end, speaker) when the transcriber identified who speaks; None when it does not (never guessed)
+    turns: list[tuple[float, float, str]] | None = None
 
 
 class Transcriber(Protocol):
@@ -69,6 +71,14 @@ class FasterWhisperTranscriber:
             self._others[language] = FasterWhisperTranscriber(self.multilingual, self.beam_size, self.words,
                                                               language=language, multilingual=self.multilingual)
         return self._others[language]
+
+    def timing_words(self) -> "FasterWhisperTranscriber":
+        """The same model, language and settings, timing every word (what a stored whole transcript needs)."""
+        if self.words:
+            return self
+        out = FasterWhisperTranscriber(self.model_name, self.beam_size, True, self.language, self.multilingual)
+        out._others = {code: t.timing_words() for code, t in self._others.items()}
+        return out
 
     def options(self) -> dict:
         """What the model is asked to do. For English this is exactly what it was before languages existed."""
@@ -139,3 +149,50 @@ def snap_to_speech(start: float, end: float, segments: list[tuple[float, float, 
     if not (min_len <= new_e - new_s <= max_len):
         return start, end
     return new_s, new_e
+
+
+# (U4) Cuts on whole sentences.
+SENTENCE_END = (".", "?", "!", "…")
+SENTENCE_PAUSE = 0.8          # a silence this long between two words ends a sentence too (speech without punctuation)
+
+
+def sentences(words: list[tuple[float, float, str]]) -> list[tuple[float, float]]:
+    """The sentences of a run of timed words (sorted), as (start, end): a sentence ends on a word ending in . ? ! or
+    before a pause of SENTENCE_PAUSE seconds."""
+    out: list[tuple[float, float]] = []
+    start = last = None
+    for s, e, w in words:
+        if start is not None and s - last >= SENTENCE_PAUSE:
+            out.append((start, last))
+            start = None
+        if start is None:
+            start = s
+        last = e
+        if str(w).strip().endswith(SENTENCE_END):
+            out.append((start, e))
+            start = None
+    if start is not None:
+        out.append((start, last))
+    return out
+
+
+def snap_to_sentences(start: float, end: float, words: list[tuple[float, float, str]], lo: float, hi: float,
+                      min_len: float, max_len: float, tol: float = 4.0) -> tuple[float, float] | None:
+    """Clip edges on whole sentences: the start moves back to the start of the sentence it falls in (or to the
+    nearest sentence start), the end forward to the end of its sentence (or the nearest end), each by at most
+    `tol` seconds. None when there are no timed words or the snapped clip would leave [min_len, max_len]."""
+    spans = sentences(words)
+    if not spans:
+        return None
+
+    def edge(t: float, inside, points: list[float]) -> float | None:
+        if inside is not None and abs(inside - t) <= tol:
+            return inside
+        near = [p for p in points if abs(p - t) <= tol]
+        return min(near, key=lambda p: abs(p - t)) if near else None
+
+    s = edge(start, next((a for a, b in spans if a <= start < b), None), [a for a, _b in spans])
+    e = edge(end, next((b for a, b in spans if a < end <= b), None), [b for _a, b in spans])
+    new_s = max(lo, s - 0.15) if s is not None else start
+    new_e = min(hi, e + 0.25) if e is not None else end
+    return (new_s, new_e) if min_len <= new_e - new_s <= max_len else None

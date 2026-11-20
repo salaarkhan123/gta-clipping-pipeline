@@ -18,16 +18,16 @@
 | Clip length | Buckets 0–30, 0–90, 30–60, 60–90, 90–180, 180–300 s; default 0–90 | Fixed length 10–60 s (default 30); the AI may pick 15–45 s | partial | A | – |
 | Clip limit | Top N by score; default all | 1–10, default 3 | partial | A | – |
 | Time range | Whole video or a chosen range (web product; not in the API) | Whole video only | partial | A | – |
-| Render on request | Off by default: results are metadata; on renders every clip | Always renders every clip | partial | B · S2 | – |
+| Render on request | Off by default: results are metadata; on renders every clip | `render`: `full` (every clip rendered, still the default until the defaults PR), `preview` (540 on the short side, fast preset; `preview_url`), `none` (times, copy, scores, captions file and a thumbnail from the source; no video). `POST /v1/clips/export` renders them later | partial: built, not verified | B · S2 | – |
 | Resolution | 480, 720, 1080, 2K, 4K; default 480; never above the source | 1080 (capped by plan) | partial | B · S2 (plan caps: money) | – |
 | Captions | Off by default | On by default | partial | B | – |
 | Caption display | Original, translation or both; default original | `caption_display` original / translation / both on clip jobs and on subtitle and transcript downloads (TXT, SRT, VTT). Burned-in captions stay original until the renderer takes the translated lines (B) | partial: downloads only | F · 2.3 | – |
-| Caption style | 53 styles: 4 word-emphasis, 18 animated, 6 static, 25 gaming; default the 8th animated one | 6 styles: `impact` (the default: one or two big words, the keyword in the accent colour; `caption_position`, `caption_accent`) and the five word-highlight styles. No animated or per-game sets | partial | B · 2.2 | – |
-| AI hook | Off by default; 13 script styles (default serious); position beginning or end | On by default; one style; beginning only | partial | B · 3.2 | – |
-| Hook keywords, hook duration | On re-export only | Fixed 2.5 s, no keywords | missing | B | – |
+| Caption style | 53 styles: 4 word-emphasis, 18 animated, 6 static, 25 gaming; default the 8th animated one | 12 styles: `impact` (the default), the five word-highlight styles, and `bounce`, `karaoke`, `reveal` (animated), `outline`, `subtitle` (still) and `tag` (box behind the keyword). No per-game sets | partial | B · 2.2 | – |
+| AI hook | Off by default; 13 script styles (default serious); position beginning or end | On by default; `hook_style` (the 13 names; anything but `serious` adds one tone line to the judge's instructions), `hook_position` `beginning` or `end` | partial: built, not tried with the real judge | B · 3.2 | – |
+| Hook keywords, hook duration | On re-export only | `hook_duration_ms` (500 to 10000; default 2.5 s) on clip jobs and exports. `hook_keywords`: not built (Wayin documents the name only) | partial | B | – |
 | Reframe | Off by default (keeps source ratio) | On by default (9:16) | partial | B | – |
 | Ratio | 9:16, 1:1, 4:5, 16:9 | Same four | done | B | – |
-| Reframe layout | Auto, Full, Fit, Grid 4, Split 2, Trio, PiP, OTS, Screen First, Gameplay A, Gameplay B; allowed set depends on the ratio; default Auto | auto, split, fill, classic | partial | B · 2.1a/b | – |
+| Reframe layout | Auto, Full, Fit, Grid 4, Split 2, Trio, PiP, OTS, Screen First, Gameplay A, Gameplay B; allowed set depends on the ratio; default Auto | All eleven, per ratio as Wayin. `trio`, `grid4`, `ots` are our own reading of the names (provisional; panels tile the frame, the person is never cut). `auto` is chosen per moment: a moment with the camera hidden fills the frame with gameplay | partial: built, provisional | B · 2.1a/b | – |
 | What moments to find | Optional free text with five quick picks (their app, w08; not in the API docs) | `prompt` clip option, max 300 characters: handed to the AI judge as the viewer's interest, next to the template's focus. It moves ratings only: the same candidates, AI calls and price. Not tried with the real judge; the form field and quick picks are D's | partial | A, D | – |
 | More results, express mode | Enterprise-only switches | None | skip (owner: wait) | – | – |
 | Task states | Created, queued, ongoing, succeeded, failed | Queued, running, succeeded, failed, cancelled | partial | A | – |
@@ -37,7 +37,7 @@
 | Per clip: title, description, tags | One each | Title (3 options), description, hashtags | done | A | – |
 | Per clip: score | 0–100 | Raw 0–100 from the AI, plus `display_score`: calibrated per job on every read (best clip 90 to 99, none under 55, order kept), in the job, project, library and clip-edit responses. The website still shows rank and tier | partial | A · U4/U5; D shows it | – |
 | Score breakdown | Five dimensions (Hook, Story, Value, Engagement, Reach) with grades and explanations on paid plans | Four parts (hook, flow, value, trend), one reason | partial | A · U4 | – |
-| Per clip: thumbnail | Image URL | Frame from the clip | done | B | – |
+| Per clip: thumbnail | Image URL | `thumb_url`: the clip's best frame (face, action, loudness; never a menu, a cut or a blurred frame) in the clip's own layout and aspect, with its hook (or title) set on it, 720 on the short side. Free. AI-generated thumbnails are a separate paid option, not built | done | U7 | – |
 | Per clip: download link | Only when rendered; new link on every read, valid 24 h | Signed link, valid for a configured time | partial | B | – |
 | Result expiry, cost used | Reported per task | Expiry reported; credits charged reported | done | – | – |
 | Markers on the source timeline | Results show where each clip came from | Not shown | missing | D | – |
@@ -47,7 +47,7 @@
 | Feature | Wayin (documented) | ClutchClips today | Status | Agent · ticket | Verified O/F/O |
 |---|---|---|---|---|---|
 | Find Moments | Prompt search; same clip format and render options as clipping; limit; no length bucket | Video Finder: speech and on-screen search, returns matches and optional clips | partial | A · 3.3 | – |
-| Re-export clips | Render all or chosen clips of a finished task again with new options | None (a clip is rendered once) | missing | B · S2 | – |
+| Re-export clips | Render all or chosen clips of a finished task again with new options | `POST /v1/clips/export` (`job_id`, `clips` or all, render options on top of the job's, one clip's `edit`) and `/quote`. Charged for the seconds rendered (money PR: owner's OK) | partial: built, not verified | B · S2 | – |
 | One-Click Highlights | Prompt-driven montage from one or several videos; ratio, duration, language, subtitles, hook, B-roll, music; five prompt presets | None | missing | B · 3.4 (music licence: owner) | – |
 | Game Clipping | Per-game templates: a layout, a subtitle style and detection tuned to the game | 5 GTA templates (options and tuning) | partial: 31 game templates for 12 games, and 7 game-type presets (`GET /v1/templates?kind=preset`: a layout, panel sizes in `panels`, a caption style; all provisional). Template options now carry the real layout names. Not reaching a job yet: panel sizes (B: `camera`, `split_ratio`), the `impact` caption style (B; presets use `pop` until then), length buckets and hook styles (A, B), and the dashboard (D). Gameplay A / B are provisional; not verified | C · 2.4 | – |
 | Game list | LoL, GTA 5, WoW, OW2, Minecraft, Apex, Valorant, Fortnite, Dota 2 / Rust, More | GTA only | partial: all 11 games plus "other" built on `feat/game-template-gallery` (`GET /v1/templates/games`, `?game=`); not verified | C | – |
@@ -68,7 +68,7 @@
 | Brand kit | Logos, colours, subtitle and text styles, fonts, media | None | missing | D · 2.5 | – |
 | Scheduler and publishing | Connect accounts; post now or on a schedule to YouTube, TikTok, Instagram, Facebook, LinkedIn, X; calendar; bulk schedule; cancel | None | missing | E · 4.1/4.2 (platform approvals: owner) | – |
 | Agent integration | Agent skills and a remote MCP server | A skill exists; no MCP server | partial | G | – |
-| Export | MP4; 480 to 4K, never above the source; no watermark | MP4; 1080; no watermark | partial | B · S2 | – |
+| Export | MP4; 480 to 4K, never above the source; no watermark | MP4; `resolution` 480 to 4k, never above the source, capped by plan; no watermark; `export_url` per clip | partial | B · S2 | – |
 
 ## 3. Ingestion
 
@@ -93,7 +93,7 @@ Our ingestion rule stays (CLAUDE.md): public, non-DRM content only; no logins, c
 
 ## 5. Money (owner decides; nothing here is built without an OK in the PR)
 
-Their plans, credits and per-plan limits (export resolution, storage, upload size, bulk batch size, connected accounts, scheduled posts, custom templates, fonts, seats) are listed in the research notes. Owner's decision: we keep our own pricing. Tiers, credits and limits will be recommended from measured processing costs and need the owner's approval before anything changes.
+Their plans, credits and per-plan limits (export resolution, storage, upload size, bulk batch size, connected accounts, scheduled posts, custom templates, fonts, seats) are listed in the research notes. Owner's decision (2026-11-17, replacing "keep our own pricing"): copy their plans. Built in `clip-api/app/plans.py` (PR `feat/pricing-wayin-plans`, owner OK needed): Starter, Pro and Scale at their monthly and yearly prices and credits, with the limits we enforce (export resolution, bulk import batch, custom templates, plus our Reframe/Captions minutes per job). Their storage quota, social accounts, seats, bulk edit and export, scheduling, AI music, speech enhancement, B-roll and hook generation are not plan features until we build them. Subscribers from before the change are grandfathered.
 
 ## 6. Observed in the owner's screenshots (2026-11-16)
 
@@ -163,7 +163,7 @@ python scripts/eval_clips.py eval/wayin-zias-iceman.csv job.json     # found, an
 
 Run on 2026-11-16 without the AI judge (selection only): 7 of the 15 found, 8 missed. Details and causes in `docs/super-board/runs/2026-11-16-swarm.md`, "Moment benchmark". Clip #4 ends 1:13:31 (the screenshot; confirmed by the owner).
 
-### Their pricing (w11), for the cost model only
+### Their pricing (w11), copied for our plans on 2026-11-17
 
 | Plan | Monthly | Billed yearly, per month | Credits per month | Export | Bulk edit and export | Bulk import | Storage | Social accounts | Custom templates |
 |---|---|---|---|---|---|---|---|---|---|
@@ -173,6 +173,8 @@ Run on 2026-11-16 without the AI judge (selection only): 7 of the 15 found, 8 mi
 
 1 credit processes 1 minute of source video. Pro adds 2 seats, brand kit, custom fonts, AI music, speech enhancement, B-roll and hook generation; Scale adds 4 seats and priority processing. Per credit: $0.032 (Starter), $0.027 (Pro), $0.023 (Scale) at monthly prices; $0.011, $0.0096, $0.0117 billed yearly.
 
+Our own yearly prices differ from theirs since 2026-11-19 (owner): $66.99, $114.99 and $839.99 a year, set in `clip-api/app/plans.py`. The table above stays as their prices were read.
+
 ## Decisions (owner, 2026-11-16)
 
 1. **API names:** our own parameter names, with a published mapping to Wayin's documented options. ClutchClips stays an independent platform with equivalent function.
@@ -181,7 +183,7 @@ Run on 2026-11-16 without the AI judge (selection only): 7 of the 15 found, 8 mi
 4. **Templates, caption styles, layouts:** keep building the documented layouts and per-game templates with our own branding and artwork. Gameplay A and Gameplay B stay **provisional** until compared with Wayin's real output. The owner will supply screenshots and recordings. **Nothing is marked verified until that comparison is done.**
 5. **Enterprise switches** (more results, express mode): wait. Not built. Consumer-facing platform first.
 6. **Paid services:** research and price, in this order: hosted transcription and translation; AI thumbnail generation; text-to-speech for hooks; AI-generated or stock B-roll; video enhancement and upscaling. Compare providers on price, speed, quality and estimated cost per video; prefer affordable and open-source options. **No paid service is integrated without the owner's approval.**
-7. **Plans and pricing:** keep our own structure. Before subscriptions are finalised, calculate real processing costs (transcription, AI analysis, rendering, storage, bandwidth) and recommend tiers, credit allocations and usage limits from them. **No pricing change is implemented without the owner's approval.**
+7. **Plans and pricing:** *Replaced on 2026-11-17: copy Wayin's plans (section 5).* Was: keep our own structure. Before subscriptions are finalised, calculate real processing costs (transcription, AI analysis, rendering, storage, bandwidth) and recommend tiers, credit allocations and usage limits from them. **No pricing change is implemented without the owner's approval.**
 
 ## Still open
 

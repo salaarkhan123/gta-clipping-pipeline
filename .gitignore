@@ -78,6 +78,12 @@ _tmp/
 *.mov
 *.mkv
 *.webm
+# The site's own short loops (scripts/make_site_media.py publish; each under 1.5 MB) are the exception.
+!clip-api/web-src/public/media/**/*.mp4
+!clip-api/web-src/public/media/**/*.webm
+# Caddy serves the checked-in static export, including the same source-built preview videos.
+!clip-api/web/media/**/*.mp4
+!clip-api/web/media/**/*.webm
 *.avi
 *.m4a
 *.mp3
@@ -114,8 +120,15 @@ clip-api 2/
 /docs/*
 !/docs/agents/
 !/docs/super-board/
+!/docs/devops/
 !/docs/PARITY.md
 !/docs/CONTRACTS.md
+!/docs/trust/
+!/docs/launch-checklist.md
+!/docs/ops/
+!/docs/live-clipping.md
+!/docs/publishing.md
+!/docs/parity-opusclip.md
 /gta-clipping-pipeline.pdf
 /screenshots/
 # Personal YouTube-link CLI; the service is uploads-only.

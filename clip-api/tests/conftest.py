@@ -1,4 +1,5 @@
 import atexit
+import logging
 import os
 import shutil
 import subprocess
@@ -24,6 +25,16 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.db import init_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.pipeline.transcribe import Transcript  # noqa: E402
+from tests.billing_fixtures import stripe_catalog  # noqa: E402,F401
+from tests.secret_scan import RECORDER  # noqa: E402
+
+logging.getLogger().addHandler(RECORDER)      # after app.main's basicConfig, so the root logger keeps its INFO level
+LAST = "tests/test_secrets_in_logs.py::test_no_log_line_in_this_run_holds_a_secret"
+
+
+def pytest_collection_modifyitems(items):
+    """The log scan runs last, so it sees what every other test logged."""
+    items.sort(key=lambda item: item.nodeid.endswith(LAST))
 
 
 @pytest.fixture(scope="session")

@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from app.pipeline import PipelineOptions, run_pipeline
 from app.pipeline import captions as C
 from app.pipeline import layouts as L
+from app.pipeline import placement as P
 from app.pipeline import render as R
 from app.pipeline.tools import RenderOptions, run_render
 from app.render_options import LayoutOptions
@@ -99,6 +100,8 @@ def test_one_or_two_words_at_a_time_and_a_third_only_when_all_three_are_short():
     assert lines("damn that clutch") == ["DAMN THAT", "CLUTCH"]               # 14 characters: the third waits
     assert lines("no way, bro. run!") == ["NO WAY", "BRO", "RUN!"]            # punctuation ends a caption and is dropped
     assert lines("he is gone now", pauses=(2,)) == ["HE IS", "GONE NOW"]      # so does a pause
+    # A slow speaker: no word waits on screen more than IMPACT_LEAD before it is said.
+    assert lines("set me for it", length=0.42, gap=0.0) == ["SET ME", "FOR IT"]
     for text in ("a b c d e f g", "supercalifragilistic is a word I know", "it is what it is and that is that"):
         for chunk in C.group_impact(timed(text)):
             assert 1 <= len(chunk) <= 3
@@ -109,14 +112,24 @@ def test_one_or_two_words_at_a_time_and_a_third_only_when_all_three_are_short():
     assert [len(c) for c in narrow] == [1, 1]
 
 
-def test_the_keyword_is_the_longest_word_that_is_not_a_stop_word():
+def test_the_keyword_is_a_number_a_name_a_game_term_an_exclamation_or_else_the_longest_word():
     assert C.keyword(["I", "JUST", "FOUND"]) == 2
     assert C.keyword(["THE", "ULTIMATE"]) == 1
     assert C.keyword(["I", "JUST"]) is None and C.keyword(["OH", "NO"]) is None and C.keyword([]) is None
     assert C.keyword(["I'M", "SO", "JEALOUS"]) == 2 and C.keyword(["DON’T", "MOVE"]) == 1
     assert C.keyword(["DAMN", "GAME"]) == 0                                    # equal length: the first
-    assert C.keyword(["RUN!", "NOW"]) == 0 and C.keyword(["100", "KILLS"]) == 1 and C.keyword(["!!!"]) is None
+    assert C.keyword(["RUN!", "NOW"]) == 0 and C.keyword(["!!!"]) is None
     assert {"the", "i'm", "just", "don't"} <= C.STOP_WORDS and not {"game", "money", "today"} & C.STOP_WORDS
+    # In order: a number, a name, a game term, a word said with "!", then the longest word.
+    assert C.keyword(["absolutely", "100", "kills"]) == 1 and C.keyword(["thirty", "eliminations"]) == 0
+    assert C.keyword(["absolutely", "Shroud"], [False, True]) == 1
+    assert C.keyword(["absolutely", "clutched", "headshot"]) == 2
+    assert C.keyword(["absolutely", "move!"]) == 1
+    assert C.keyword(["absolutely", "spike"]) == 0 and C.keyword(["absolutely", "spike"], game="valorant") == 1
+    assert C.keyword(["f***ing", "car"]) == 1                                  # a masked swear never is
+    names = C.proper_names([(0, 1, "Then"), (1, 2, "Lamar"), (2, 3, "said."), (3, 4, "Where"), (4, 5, "I"),
+                            (5, 6, "went")])
+    assert names == [False, True, False, False, False, False]                  # not a sentence's first word, not "I"
 
 
 def test_the_ass_file_upper_case_bundled_font_size_outline_shadow_and_one_keyword_per_caption(tmp_path):
@@ -135,13 +148,19 @@ def test_the_ass_file_upper_case_bundled_font_size_outline_shadow_and_one_keywor
     shadow = next(line for line in text.splitlines() if line.startswith("Style: CapShadow,"))
     assert "&HFF000000,&HFF000000,&HFF000000,&H50000000" in shadow and shadow.endswith(f",1,11,{m.shadow},5,0,0,0,1")
     caps, shadows = events(tmp_path / "i.ass"), events(tmp_path / "i.ass", "CapShadow")
-    assert n == len(caps) == len(shadows) == 5
-    assert [shown(e[9]) for e in caps] == ["OH  NO", "I  JUST  FOUND", "THE  ULTIMATE", "MONEY  GLITCH", "TODAY"]
-    assert [shown(e[9]) for e in shadows] == [shown(e[9]) for e in caps]
-    lime = "{\\c&H3CFFB8&}"
-    assert [e[9].count(lime) for e in caps] == [0, 1, 1, 1, 1]                 # one keyword at most, none among stop words
-    assert lime + "FOUND{\\c&HFFFFFF&}" in caps[1][9] and lime + "ULTIMATE" in caps[2][9] and lime + "GLITCH" in caps[3][9]
-    assert lime + "TODAY" in caps[4][9]
+    assert n == 5 and len(caps) == len(shadows) == len(words) == 10          # one event pair per word said
+    lines = [shown(e[9]) for e in caps]
+    assert list(dict.fromkeys(lines)) == ["OH  NO", "I  JUST  FOUND", "THE  ULTIMATE", "MONEY  GLITCH", "TODAY"]
+    assert [shown(e[9]) for e in shadows] == lines
+    assert [e[4] for e in caps] == [f"w{i}" for i in range(10)]               # each marks the word being said ...
+    assert [e[1] for e in caps] == [C.ass_time(s) for s, _, _ in words]      # ... from the moment it is said
+    lime = "\\c&H3CFFB8&"
+    assert [e[9].count(lime) for e in caps] == [0, 0, 1, 1, 1, 1, 1, 1, 1, 1]  # one keyword at most, none among stop words
+    assert lime + "\\1a&H00&\\fscx" in caps[4][9] and caps[4][9].endswith("FOUND")
+    # The word being said grows in; the words not said yet are see-through; said ones are solid.
+    first = caps[2][9]                                                         # "I" of "I JUST FOUND"
+    assert first.count("\\t(0,90,") == 1 and first.count("\\1a" + C.UPCOMING) == 2
+    assert caps[4][9].count("\\1a" + C.UPCOMING) == 0 and caps[4][9].count("\\t(0,90,") == 1
     for cap, sh in zip(caps, shadows):
         assert (cap[1], cap[2]) == (sh[1], sh[2]) and "\\blur" in sh[9] and "\\c&" not in sh[9]
         assert "\\pos(540," in cap[9] and "\\q2" in cap[9] and "\\fscx100\\fscy100" in cap[9]
@@ -153,7 +172,7 @@ def test_the_ass_file_upper_case_bundled_font_size_outline_shadow_and_one_keywor
 
     C.build_ass(words, tmp_path / "red.ass", True, 0, "DejaVu Sans", "impact", accent="#FF4D6D")
     red = events(tmp_path / "red.ass")
-    assert "{\\c&H6D4DFF&}FOUND" in red[1][9] and "\\c&H3CFFB8&" not in (tmp_path / "red.ass").read_text()
+    assert "\\c&H6D4DFF&" in red[4][9] and red[4][9].endswith("FOUND") and "\\c&H3CFFB8&" not in (tmp_path / "red.ass").read_text()
     assert f"\\pos(540,{round(0.70 * 1920 - (C.ANTON_ASCENT - C.ANTON_DESCENT - C.ANTON_CAP) / 2 * m.em)})" in red[0][9]
     with pytest.raises(ValueError):
         C.build_ass(words, tmp_path / "bad.ass", True, 0, "DejaVu Sans", "impact", accent="lime")
@@ -179,13 +198,14 @@ def test_a_caption_never_runs_off_the_frame_long_words_are_drawn_smaller(tmp_pat
         assert len(caps) >= 5
         for e in caps:
             texts = shown(e[9]).split(C.WORD_GAP)
-            pct = int(re.search(r"\\t\(0,\d+,\\fscx(\d+)", e[9]).group(1))
+            pct = int(re.search(r"\\q2\\fscx(\d+)", e[9]).group(1))
+            big = int(re.search(r"\\t\(0,\d+,\\fscx(\d+)", e[9]).group(1))      # the word being said, grown
             letters = C.impact_width(texts, m.em) - 2 * m.outline
-            assert letters * pct / 100 + 2 * m.outline <= room + 0.5, (play, texts)     # inside the width it is centred in
+            assert letters * big / 100 + 2 * m.outline <= room + 0.5, (play, texts)     # inside the width it is centred in
             assert pct == 100 or len(texts) == 1                                # only a single long word is ever shrunk
             assert f"\\pos({round((span[0] + span[1]) / 2 * play[0])}," in e[9]
         if play[1] > play[0]:
-            assert any("\\fscx100" not in e[9].split("\\t(")[1] for e in caps)  # the 34-letter word was
+            assert any("\\q2\\fscx100" not in e[9] for e in caps)               # the 34-letter word was
         assert all("\\N" not in e[9] and "\\q2" in e[9] for e in caps)          # one line, never wrapped
 
 
@@ -255,16 +275,28 @@ def test_the_bundled_font_is_anton_under_the_open_font_licence_and_the_numbers_m
 
 
 # ---------- where it sits ----------
+def caption_y(oh, position, half, seam=None, head=None, reach=None):
+    return P.caption_row(oh, position, half, seam=seam, keep_out=[head] if head else (), reach=reach)
+
+
+def caption_center(plan, position, half, fill=1.0):
+    """placement.caption_row for a layout plan, keeping off its head: what the renderer does with no HUD."""
+    ow, oh = plan.size
+    mid, width = (plan.text_span[0] + plan.text_span[1]) / 2 * ow, (plan.text_span[1] - plan.text_span[0]) * ow * fill
+    return P.caption_row(oh, position, half, seam=plan.seam, keep_out=[plan.head] if plan.head else (),
+                         reach=(mid - width / 2, mid + width / 2))
+
+
 def test_auto_is_the_seam_in_a_split_and_the_lower_third_otherwise_and_the_other_three_positions():
     half = C.impact_size(1920).half
-    assert L.CAPTION_POSITIONS == ("auto", "seam", "lower", "center")
-    assert L.caption_y(1920, "auto", half) == L.caption_y(1920, "lower", half) == L.caption_y(1920, "seam", half) == 1344
-    assert L.caption_y(1920, "center", half) == 960
-    assert L.caption_y(1920, "auto", half, seam=640) == L.caption_y(1920, "seam", half, seam=640) == 640
-    assert L.caption_y(1920, "lower", half, seam=640) == 1344 and L.caption_y(1920, "center", half, seam=640) == 960
-    assert L.caption_y(1350, "auto", 40) == 945 and L.caption_y(1080, "lower", 40) == 756
+    assert P.CAPTION_POSITIONS == ("auto", "seam", "lower", "center")
+    assert caption_y(1920, "auto", half) == caption_y(1920, "lower", half) == caption_y(1920, "seam", half) == 1344
+    assert caption_y(1920, "center", half) == 960
+    assert caption_y(1920, "auto", half, seam=640) == caption_y(1920, "seam", half, seam=640) == 640
+    assert caption_y(1920, "lower", half, seam=640) == 1344 and caption_y(1920, "center", half, seam=640) == 960
+    assert caption_y(1350, "auto", 40) == 945 and caption_y(1080, "lower", 40) == 756
     with pytest.raises(L.PipelineError):
-        L.caption_y(1920, "top", half)
+        caption_y(1920, "top", half)
     # The plans say where the seam is: only two stacked panels have one.
     cam, face = frac(CORNER[0]), face_of(CORNER[1])
     assert L.compose(SW, SH, "split2", "9:16", cam=cam).seam == 640
@@ -274,25 +306,25 @@ def test_auto_is_the_seam_in_a_split_and_the_lower_third_otherwise_and_the_other
     for name, aspect in (("full", "9:16"), ("pip", "9:16"), ("fit", "9:16"), ("split2", "16:9"), ("screen_first", "16:9")):
         assert L.compose(SW, SH, name, aspect, cam=cam, face=face).seam is None, name
     wide = L.compose(SW, SH, "split2", "16:9", cam=cam)                         # beside the camera: centred on the gameplay
-    assert L.caption_center(wide, "auto", 40) == 756 and wide.text_span == (pytest.approx(1 / 3, abs=0.01), 1.0)
+    assert caption_center(wide, "auto", 40) == 756 and wide.text_span == (pytest.approx(1 / 3, abs=0.01), 1.0)
 
 
 def test_a_caption_moves_the_least_distance_that_clears_the_head_and_stays_in_the_frame():
-    half, gap = 70, L.FACE_GAP
+    half, gap = 70, P.FACE_GAP
     head = (300, 400, 780, 630)                                               # ends just above a seam at 640
-    y = L.caption_y(1920, "auto", half, seam=640, head=head)
+    y = caption_y(1920, "auto", half, seam=640, head=head)
     assert y == 630 + gap + half                                              # down, onto the gameplay under the camera
     under = (300, 1160, 780, 1500)                                            # a camera under the gameplay, seam at 1152
-    assert L.caption_y(1920, "auto", half, seam=1152, head=under) == 1160 - gap - half      # up, onto the gameplay
-    assert L.caption_y(1920, "lower", half, head=(300, 1300, 780, 1500)) == 1300 - gap - half
-    assert L.caption_y(1920, "center", half, head=(300, 800, 780, 1000)) == 1000 + gap + half
-    assert L.caption_y(1920, "auto", half, seam=640, head=(300, 100, 780, 500)) == 640      # clear of it: not moved
-    assert L.caption_y(1920, "lower", half, head=(0, 1300, 100, 1500), reach=(120, 960)) == 1344     # off to the side
-    lo, hi = L.SAFE_ROWS[0] * 1920 + half, L.SAFE_ROWS[1] * 1920 - half
-    assert L.caption_y(1920, "lower", half, head=(0, 300, 1080, 1900)) == 300 - gap - half   # no room under it: over it
-    assert L.caption_y(1920, "center", half, head=(0, 0, 1080, 1920)) in (round(lo), round(hi))       # nowhere clear: an edge
-    for position, seam in itertools.product(L.CAPTION_POSITIONS, (None, 100, 480, 1152, 1900)):
-        assert lo - 1 <= L.caption_y(1920, position, half, seam=seam) <= hi + 1               # never off the frame
+    assert caption_y(1920, "auto", half, seam=1152, head=under) == 1160 - gap - half      # up, onto the gameplay
+    assert caption_y(1920, "lower", half, head=(300, 1300, 780, 1500)) == 1300 - gap - half
+    assert caption_y(1920, "center", half, head=(300, 800, 780, 1000)) == 1000 + gap + half
+    assert caption_y(1920, "auto", half, seam=640, head=(300, 100, 780, 500)) == 640      # clear of it: not moved
+    assert caption_y(1920, "lower", half, head=(0, 1300, 100, 1500), reach=(120, 960)) == 1344     # off to the side
+    lo, hi = P.SAFE_ROWS[0] * 1920 + half, P.SAFE_ROWS[1] * 1920 - half
+    assert caption_y(1920, "lower", half, head=(0, 300, 1080, 1900)) == 300 - gap - half   # no room under it: over it
+    assert caption_y(1920, "center", half, head=(0, 0, 1080, 1920)) in (round(lo), round(hi))       # nowhere clear: an edge
+    for position, seam in itertools.product(P.CAPTION_POSITIONS, (None, 100, 480, 1152, 1900)):
+        assert lo - 1 <= caption_y(1920, position, half, seam=seam) <= hi + 1               # never off the frame
 
 
 def test_no_caption_position_ever_covers_the_head_in_any_layout_ratio_or_shape():
@@ -302,13 +334,13 @@ def test_no_caption_position_ever_covers_the_head_in_any_layout_ratio_or_shape()
             ((700, 380, 500, 320), (860, 400, 150, 190)))
     names = [n for n in L.BUILT] + ["split"]
     for (cam_px, face_px), aspect, name, side, ratio, position, known in itertools.product(
-            cams, L.ALLOWED, names, (None, "top", "bottom"), (None, 0.25, 0.4, 0.6, 0.75), L.CAPTION_POSITIONS, (True, False)):
+            cams, L.ALLOWED, names, (None, "top", "bottom"), (None, 0.25, 0.4, 0.6, 0.75), P.CAPTION_POSITIONS, (True, False)):
         plan = L.compose(SW, SH, name, aspect, cam=frac(cam_px), face=face_of(face_px) if known else None, camera=side,
                          split_ratio=ratio)
         ow, oh = plan.size
         half = C.impact_size(oh).half
-        y = L.caption_center(plan, position, half, C.IMPACT_FILL)
-        assert L.SAFE_ROWS[0] * oh + half - 1 <= y <= L.SAFE_ROWS[1] * oh - half + 1, (plan.layout, aspect, position)
+        y = caption_center(plan, position, half, C.IMPACT_FILL)
+        assert P.SAFE_ROWS[0] * oh + half - 1 <= y <= P.SAFE_ROWS[1] * oh - half + 1, (plan.layout, aspect, position)
         checked += 1
         if plan.head is None:
             continue
@@ -318,7 +350,7 @@ def test_no_caption_position_ever_covers_the_head_in_any_layout_ratio_or_shape()
         if x1 <= mid - reach + 1 or x0 >= mid + reach - 1:
             continue                                                          # the text never reaches that far out
         clear = y + half <= y0 or y - half >= y1
-        room = (y0 - half >= L.SAFE_ROWS[0] * oh + half) or (y1 + half <= L.SAFE_ROWS[1] * oh - half)
+        room = (y0 - half >= P.SAFE_ROWS[0] * oh + half) or (y1 + half <= P.SAFE_ROWS[1] * oh - half)
         assert clear or not room, (plan.layout, aspect, side, ratio, position, known, y, plan.head)
         want = plan.seam if (position in ("auto", "seam") and plan.seam is not None) else oh * (0.5 if position == "center" else 0.7)
         moved += abs(y - want) > 2
@@ -327,10 +359,10 @@ def test_no_caption_position_ever_covers_the_head_in_any_layout_ratio_or_shape()
     known = L.compose(SW, SH, "split2", "9:16", cam=frac(CORNER[0]), face=face_of(CORNER[1]))
     blind = L.compose(SW, SH, "split2", "9:16", cam=frac(CORNER[0]))
     assert blind.head == (0.0, 0.0, 1080.0, L.BLIND_HEAD * 640) and known.head[3] <= 640 and known.head != blind.head
-    assert L.caption_center(blind, "auto", 68.6) == 640                        # camera on top, no face: on the line
+    assert caption_center(blind, "auto", 68.6) == 640                        # camera on top, no face: on the line
     under = L.compose(SW, SH, "gameplay_b", "9:16", cam=frac(CORNER[0]))
-    assert L.caption_center(under, "auto", 68.6) == round(960 - L.FACE_GAP - 68.6)       # camera below: wholly on the gameplay
-    assert L.compose(SW, SH, "full", "9:16").head is None and L.caption_center(L.compose(SW, SH, "full", "9:16"), "auto", 68.6) == 1344
+    assert caption_center(under, "auto", 68.6) == round(960 - P.FACE_GAP - 68.6)       # camera below: wholly on the gameplay
+    assert L.compose(SW, SH, "full", "9:16").head is None and caption_center(L.compose(SW, SH, "full", "9:16"), "auto", 68.6) == 1344
 
 
 def test_the_hook_steps_clear_of_the_caption():
@@ -343,7 +375,7 @@ def test_the_hook_steps_clear_of_the_caption():
     if y != 640:                                                              # the caption moved down off the head ...
         assert hook >= y + half + R.TEXT_GAP                                  # ... so the hook moved down with it
     for name, position in itertools.product(("split2", "gameplay_a", "gameplay_b", "screen_first", "full", "pip"),
-                                            L.CAPTION_POSITIONS):
+                                            P.CAPTION_POSITIONS):
         for ratio in (None, 0.25, 0.75):
             p = L.compose(SW, SH, name, "9:16", cam=cam, face=face, split_ratio=ratio)
             y, hook = R.impact_rows(p, 1920, position, p.hook_top)
@@ -380,16 +412,22 @@ def test_rendered_the_bundled_font_is_what_is_drawn_where_the_plan_says_and_the_
                        ("full", L.compose(SW, SH, "full", "9:16"))):
         render(stream, tmp_path / f"{name}-bare.mp4", plan=plan)
         bare[name] = face_pixels(frame(tmp_path / f"{name}-bare.mp4")).sum()
-        for position in L.CAPTION_POSITIONS:
+        for position in P.CAPTION_POSITIONS:
             render(stream, tmp_path / "c.mp4", plan=plan, words=words, style="impact", position=position, accent=CYAN)
             img = frame(tmp_path / "c.mp4", 0.5)
             m = C.impact_size(1920)
             ink = white(img) | lime(img)
             rows, cols = np.nonzero(ink)
             assert len(rows) > 5000, (name, position)                         # the caption is there
-            want = L.caption_center(plan, position, m.half, C.IMPACT_FILL)
+            want = caption_center(plan, position, m.half, C.IMPACT_FILL)
             assert (rows.min() + rows.max()) / 2 == pytest.approx(want, abs=6), (name, position)
-            assert rows.max() - rows.min() == pytest.approx(m.cap, abs=8)      # the capitals: 6% of the frame height
+            # The capitals: 6% of the frame height. BANANA is the word being said at 0.5 s, so it has grown to
+            # ACTIVE_POP's size (#180); OKAY, already said, keeps the line's own.
+            said, other = lime(img), white(img)
+            other_rows = np.nonzero(other)[0]
+            assert other_rows.max() - other_rows.min() == pytest.approx(m.cap, abs=8), (name, position)
+            assert rows.max() - rows.min() == pytest.approx(m.cap * C.ACTIVE_POP[1], abs=8), (name, position)
+            assert said.sum() > 0
             # Anton is a condensed face: OKAY  BANANA is as wide as the font's own table says. Any stand-in
             # (the machine's default sans is half as wide again) fails this.
             letters = C.impact_width(["OKAY", "BANANA"], m.em) - 2 * m.outline

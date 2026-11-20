@@ -1,0 +1,39 @@
+name: ops-lint
+
+# shellcheck on the server scripts and actionlint on the workflows. Runs only on PRs that touch them; the existing
+# ci.yml jobs are unchanged.
+on:
+  pull_request:
+    branches: [staging, main]
+    paths:
+      - ".github/workflows/**"
+      - ".github/ops/**"
+      - "clip-api/scripts/*.sh"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ops-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: shellcheck
+        run: shellcheck -x clip-api/scripts/*.sh .github/ops/*.sh
+      - name: actionlint
+        run: |
+          pip install --quiet actionlint-py==1.7.12.25
+          actionlint -color
+
+  sshd-e2e:
+    # The server setup from docs/devops/setup.md against a real sshd, sudo and forced command, in a container.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker run --rm -v "$PWD:/src:ro" ubuntu:24.04 bash /src/.github/ops/sshd_e2e.sh

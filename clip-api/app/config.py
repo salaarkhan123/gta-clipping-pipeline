@@ -13,6 +13,24 @@ DEFAULT_PACKS = json.dumps([
     {"id": "pack_5000", "name": "5,000 credits", "credits": 5000, "price_cents": 4999},
 ])
 
+# Premium AI thumbnails (#140): the named looks a user picks from. Each prompt describes a look only; the fixed
+# rules (keep the face, add nothing, no text, brand-safe) are in app/imagegen/prompts.py and always come first.
+# Override with PREMIUM_THUMB_STYLES (the same JSON shape).
+DEFAULT_THUMB_STYLES = json.dumps([
+    {"id": "cinematic", "name": "Cinematic",
+     "prompt": "a cinematic film still: teal and orange color grade, soft volumetric light, gentle haze and depth in "
+               "the background, rich contrast, a subtle vignette"},
+    {"id": "high_energy", "name": "High-energy gaming",
+     "prompt": "a high-energy gaming thumbnail: punchy saturated colors, strong colored rim light on the person, a "
+               "soft glow outline around them, vivid contrast and motion energy in the existing background"},
+    {"id": "clean", "name": "Clean professional",
+     "prompt": "a clean professional look: balanced natural colors, crisp detail, soft even lighting, a slightly "
+               "calmer, less cluttered background"},
+    {"id": "dramatic", "name": "Dramatic",
+     "prompt": "a dramatic look: deep shadows, moody low-key lighting with one strong key light on the person, a "
+               "dark vignette and an intense atmosphere"},
+])
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -21,6 +39,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/dev.db"
     data_dir: str = "./data"
     secret_key: str = "dev-insecure-change-me"
+    # During a SECRET_KEY rotation only: the old key, still accepted when reading tokens (never used to sign), so
+    # sessions and emailed links made before the rotation keep working until they expire. Remove it afterwards.
+    secret_key_previous: str = ""
     public_api_url: str = "http://localhost:8000"
     public_web_url: str = "http://localhost:3000"
     cors_origins: str = "http://localhost:3000"
@@ -49,6 +70,9 @@ class Settings(BaseSettings):
     max_render_sec: int = 6 * 3600    # reframe/captions: max video rendered per job
     charge_once_per_upload: bool = True   # after a video is analysed once, tools only charge for minutes rendered
     visual_search: bool = True        # Video Finder also searches what is on screen (CLIP)
+    # trio, grid4, ots and the auto layout chosen per moment are our own reading of WayinVideo's names, not yet
+    # checked on real gaming footage. Off: they are not offered and auto draws one layout per video, as before.
+    provisional_layouts: bool = False
     stale_job_minutes: int = 5        # RUNNING job with no heartbeat for this long is failed + refunded
 
     # Link import (app/ingest, agent E). An import is free; the imported file then follows the upload limits
@@ -74,15 +98,58 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     email_from: str = "noreply@clutchclips.io"
+    # Signup without accept_policies=true is refused (422 terms_required). Off by default so API clients written
+    # before consent records keep working; the website always sends it. Owner decision (app/legal.py).
+    require_terms_acceptance: bool = False
+    # Copyright and likeness reports (app/trust.py). TRUST_ADMIN_EMAIL: where new-report notices go (comma
+    # separated); empty = every active admin account. Limits are per sender IP and per claimant email.
+    trust_admin_email: str = ""
+    trust_reports_per_ip_per_hour: int = 5
+    trust_reports_per_ip_per_day: int = 20
+    trust_reports_per_email_per_day: int = 3
+    # Repeat infringers (owner, 2026-11-18: three strikes). Strikes expire after this many days; 0 = never.
+    # Both are owner decisions (app/trust_decisions.py).
+    repeat_infringer_strikes: int = 3
+    repeat_infringer_strike_days: int = 0
 
     # Stripe
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
-    plans: str = ""                   # JSON list overriding app/plans.py DEFAULT_PLANS
+    # Stripe Price IDs for the plans in app/plans.py (created by the owner in Stripe, see DEPLOY.md). Prices and
+    # credits themselves live in app/plans.py only; a plan whose Price ID is empty cannot be bought.
+    stripe_price_starter_month: str = ""
+    stripe_price_starter_year: str = ""
+    stripe_price_pro_month: str = ""
+    stripe_price_pro_year: str = ""
+    stripe_price_scale_month: str = ""
+    stripe_price_scale_year: str = ""
 
-    # AI titles, hashtags and virality scores (optional; off when the key is empty)
+    # AI titles, hashtags and the AI rating of each clip (optional; off when the key is empty). The rating is the
+    # model's opinion of the clip, 0-100, never a probability or prediction of views or virality.
     anthropic_api_key: str = ""
     ai_model: str = "claude-haiku-5-5"
+    # (U3) With the AI key and a whole transcript of the upload, an LLM reads the transcript in 5-minute chunks and
+    # proposes moments for the judge (app/pipeline/llm_pass.py). Costs tokens per job (measured in the U3 PR);
+    # false: candidates are nominated from the signals only, as before.
+    llm_pass: bool = True
+    # (U4) Automatic discovery (a clip-length bucket and no clip count): the AI rating (0-100) a moment needs to become
+    # a clip. No quota: a video gets as many clips as it has moments this good, never filler. Tune on tuning videos.
+    clip_quality_floor: int = Field(40, ge=0, le=100)
+    # Per-game weights of the five sub-scores, for ranking only: JSON {"<game or genre or default>": {"hook": n,
+    # "payoff": n, "clarity": n, "emotion": n, "pacing": n}}. Empty: every game ranks by the plain mean. Fill it from
+    # scripts/fit_score_weights.py, which fits on the owner's labels (tuning videos only).
+    score_weights: str = ""
+
+    # Premium AI thumbnails (#140, paid; owner OK 2026-11-17). Off until real provider testing and a quality check
+    # are done: off, the premium routes answer 404 `premium_thumbnails_off` and /v1/options does not list them. The
+    # free frame-based thumbnail is always made and stays free.
+    premium_thumbnails: bool = False
+    premium_thumb_credits: int = Field(25, ge=1)      # what one premium thumbnail costs: the only price used
+    gemini_api_key: str = ""                          # Gemini Nano Banana 2.1 (image edit); a billing-enabled key only
+    gemini_image_model: str = "gemini-nano-banana-2.1"
+    gemini_image_size: str = "2K"                     # 1K | 2K | 4K (upper-case K)
+    premium_thumb_timeout_sec: float = Field(60.0, ge=5, le=300)   # one provider attempt, end to end
+    premium_thumb_styles: str = DEFAULT_THUMB_STYLES
 
     # Pipeline
     whisper_model: str = "small.en"   # captions. "none" disables transcription and captions
@@ -93,6 +160,11 @@ class Settings(BaseSettings):
     transcription_provider: str = "local"
     transcribe_parallel: int = Field(1, ge=1, le=8)
     transcribe_chunk_sec: int = Field(300, ge=60, le=1800)
+    # Clip Maker transcribes the whole recording first (with word timings) and keeps it for every later job on the
+    # upload, instead of transcribing candidate windows only. Off by default: on the 4 vCPU droplet the local model
+    # makes a 2-hour job slower (see DEPLOY.md, "Transcription settings"); turn it on with a hosted provider or a
+    # bigger machine.
+    transcribe_whole: bool = False
     # Languages (agent F; app/languages.py). English always uses the two models above, exactly as before. Speech in
     # any other language uses the multilingual model of the same size: empty = worked out from the model above
     # (small.en -> small, base.en -> base). They are public models and are downloaded on first use unless the
@@ -118,6 +190,10 @@ class Settings(BaseSettings):
         return json.loads(self.credit_packs)
 
     @property
+    def thumb_styles(self) -> list[dict]:
+        return json.loads(self.premium_thumb_styles)
+
+    @property
     def work_dir(self) -> Path:
         p = Path(self.data_dir) / "work"
         p.mkdir(parents=True, exist_ok=True)
@@ -136,6 +212,8 @@ class Settings(BaseSettings):
         problems = []
         if self.secret_key == "dev-insecure-change-me" or len(self.secret_key) < 32:
             problems.append("SECRET_KEY must be a random string of 32+ characters")
+        if self.secret_key_previous and len(self.secret_key_previous) < 32:
+            problems.append("SECRET_KEY_PREVIOUS, when set, must be the old 32+ character SECRET_KEY")
         if self.database_url.startswith("sqlite"):
             problems.append("DATABASE_URL must point at Postgres")
         if self.auto_verify_email:

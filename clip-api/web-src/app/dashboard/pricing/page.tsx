@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PeriodToggle, Plan, PlanCards, yearlySaving } from "@/components/PricingPlans";
 import { useDash } from "@/components/dash/Shell";
+import { BALANCE } from "@/components/dash/ui";
 import { api, ApiError, money } from "@/lib/api";
 
 // Pricing inside the app: the same plans and packs as the public page, from the server's plan config.
@@ -31,9 +32,9 @@ export default function AppPricing() {
   }
 
   return (
-    <div className="wide pricing-wrap">
-      <header className="pricing-head">
-        <h1>Pick a plan</h1>
+    <div className="wide mx-auto grid w-full max-w-[1160px] gap-7">
+      <header className="mb-10 grid justify-items-center gap-3 text-center">
+        <h1 className="text-[26px]">Pick a plan</h1>
         <p className="muted">1 credit processes 1 minute of source video. A failed or cancelled job gives its credits back.
           {" "}You have <b>{me.credits.toLocaleString()}</b> credits. <Link href="/dashboard/billing/">Credit history</Link></p>
         {plans && <PeriodToggle yearly={yearly} onChange={setYearly} save={yearlySaving(plans)} />}
@@ -42,7 +43,9 @@ export default function AppPricing() {
       {!plans ? <p className="muted">Loading plans…</p>
         : <PlanCards plans={plans} currency={currency} yearly={yearly} current={me.plan} busy={busy} freeHref="/dashboard/"
             onPick={(p) => go("/v1/billing/subscribe", { plan_id: p.id, interval: yearly ? "year" : "month" }, p.id)} />}
-      {packs.length > 0 && <section className="balance-card" aria-labelledby="packs-title">
+      <p className="muted small text-center">Plans renew until you cancel. By subscribing or buying credits you agree to the{" "}
+        <a href="/terms/#credits" className="text-lime underline">Terms of Service</a> and the <a href="/refunds/" className="text-lime underline">Refund Policy</a>.</p>
+      {packs.length > 0 && <section className={BALANCE} aria-labelledby="packs-title">
         <div><h2 id="packs-title">Need a few more credits?</h2><p className="muted small">One-time top-ups. They never expire.</p></div>
         <div className="row">{packs.map((k) => (
           <button key={k.id} className="btn small ghost" disabled={busy === k.id} onClick={() => go("/v1/billing/checkout", { pack_id: k.id }, k.id)}>

@@ -12,7 +12,8 @@ from app.config import Settings
 from app.pipeline import PipelineError, PipelineOptions, PipelineTimeout, Timer, run_pipeline
 from app.pipeline.ff import Deadline, probe
 from app.pipeline.signals import audio_rms_db
-from app.pipeline.stt import LocalProvider, chunk_bounds, extract_audio, provider_for, slice_wav, wav_duration, window
+from app.pipeline.stt import LocalProvider, chunk_bounds, extract_audio, provider_for, slice_wav, wav_duration
+from app.pipeline.heard import Heard
 from app.pipeline.transcribe import Transcript
 from tests.test_api import upload
 from tests.test_launch import FakeAI, three_bursts  # noqa: F401
@@ -106,7 +107,7 @@ def test_provider_stops_at_the_deadline_and_unknown_providers_are_refused(tmp_pa
 
 def test_window_reads_a_candidate_out_of_a_whole_transcript():
     full = Transcript(words=[(5.0, 5.4, "a"), (12.0, 12.4, "b"), (30.0, 30.4, "c")], segments=[(5.0, 5.4, "a"), (12.0, 30.4, "b c")])
-    t, offset = window(full, 10.0, 25.0)
+    t, offset = _whole(full, 40.0).window(10.0, 25.0)
     assert offset == 10.0 and t.words == [(2.0, pytest.approx(2.4), "b")] and t.segments == [(2.0, pytest.approx(20.4), "b c")]
 
 
@@ -132,12 +133,20 @@ def test_by_default_nothing_is_extracted_up_front_and_the_result_is_the_same(vid
     assert not list((tmp_path / "p").glob("*.wav"))                         # no 230 MB file for a 2 h video
 
 
+def _whole(t: Transcript, duration: float, model: str = "base.en") -> Heard:
+    """What an upload with a whole transcript made by `model` knows."""
+    heard = Heard()
+    heard.add(0.0, duration, model, t)
+    heard.added.clear()
+    return heard
+
+
 def full_talk(duration=60):
     t = Transcript()
     for k in range(0, duration, 2):
         t.words += [(float(k), k + 0.4, "full"), (k + 0.4, k + 0.9, "text")]
         t.segments.append((float(k), k + 0.9, "full text"))
-    return t
+    return _whole(t, duration)
 
 
 def test_an_existing_transcript_replaces_the_rough_pass_and_captions_still_use_the_caption_model(three_bursts, tmp_path):  # noqa: F811

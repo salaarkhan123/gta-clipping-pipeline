@@ -1,11 +1,9 @@
 """Alembic: the baseline equals the create_all schema; old databases are stamped, not rebuilt; reruns are no-ops."""
-import importlib.util
 import os
 import re
 import threading
 import uuid
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 from alembic import command
@@ -155,35 +153,29 @@ def test_a_database_ahead_of_this_code_starts_without_migrating(db, caplog):
     assert any("newer" in r.getMessage() and "9999" in r.getMessage() for r in caplog.records)
 
 
-# Exact copies of Step 2's migrations: 0007 from staging, 0008 from #158, 0009 from #152. Step 2 runs them in
-# production, so this code (Step 1.1) must keep working on the schema they leave if Step 2's code is rolled back.
-STEP2_MIGRATIONS = Path(__file__).parent / "step2_migrations"
+def _apply_future_revision(engine):
+    """What a later, additive release could do: a nullable column, a NOT NULL column with a server default, and a
+    new table. Then the database says it is at a revision this code has no script for."""
+    with engine.begin() as conn:
+        ops = Operations(MigrationContext.configure(conn))
+        ops.add_column("clips", sa.Column("future_note", sa.String(40), nullable=True))
+        ops.add_column("payments", sa.Column("future_flag", sa.Boolean(), nullable=False, server_default=sa.false()))
+        ops.create_table("future_things", sa.Column("id", sa.Integer(), primary_key=True),
+                         sa.Column("clip_id", sa.String(40), sa.ForeignKey("clips.id"), nullable=False))
+        conn.execute(text("UPDATE alembic_version SET version_num = '9999'"))
 
 
-def _apply_step2_migrations(engine):
-    with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
-        for path in sorted(STEP2_MIGRATIONS.glob("m00*.py")):
-            spec = importlib.util.spec_from_file_location(path.stem, path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            module.upgrade()
-            conn.execute(text("UPDATE alembic_version SET version_num = :r"), {"r": module.revision})
-
-
-def test_rolling_back_from_step_2_migrations_0007_to_0009_keeps_this_code_working(db, caplog):
-    """Step 2 migrated the database to 0009 and its code was rolled back to this release: the api and worker start,
-    and this code's models still write and read the tables Step 2 changed (payments, clips) and their parents."""
-    assert head() == "0006"
-    assert [p.name[1:5] for p in sorted(STEP2_MIGRATIONS.glob("m00*.py"))] == ["0007", "0008", "0009"]
-    engine = db("rollback_step2")
+def test_rolling_back_from_a_newer_additive_release_keeps_this_code_working(db, caplog):
+    """A newer release migrated the database additively and its code was rolled back to this one: startup goes on
+    without migrating, and this code's models still write and read the tables the newer release changed."""
+    engine = db("rollback_future")
     migrate(engine)
-    _apply_step2_migrations(engine)
-    assert current(engine) == "0009"
-    assert {"policy_acceptances", "clip_thumbnails", "likeness_consents"} <= set(inspect(engine).get_table_names())
+    _apply_future_revision(engine)
+    assert current(engine) == "9999"
 
     caplog.set_level("WARNING", logger="clipapi.migrate")
-    assert migrate(engine) == ("0009", "0009")
-    assert current(engine) == "0009"
+    assert migrate(engine) == ("9999", "9999")
+    assert current(engine) == "9999"
     with engine.connect() as conn:
         assert incompatible(conn) == []
 
@@ -208,9 +200,8 @@ def test_rolling_back_from_step_2_migrations_0007_to_0009_keeps_this_code_workin
         assert s.get(Clip, "c1").video_key == "v"
         assert s.query(Payment).one().credits == 10
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT thumb_id, thumb_chosen_key FROM clips")).one() == (None, None)
-        assert conn.execute(text("SELECT subscription_id, plan_id, period_start, period_end FROM payments")
-                            ).one() == (None, None, None, None)
+        assert conn.execute(text("SELECT future_note FROM clips")).one() == (None,)
+        assert not conn.execute(text("SELECT future_flag FROM payments")).scalar_one()
 
 
 @pytest.mark.parametrize("change, problem", [

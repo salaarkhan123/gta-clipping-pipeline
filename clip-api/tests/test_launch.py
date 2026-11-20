@@ -15,6 +15,8 @@ from app.models import Account
 from app.pipeline import PipelineOptions, run_pipeline
 from app.pipeline.ff import probe
 from app.routes_media import subtitle_cues
+from tests.billing_fixtures import checkout_receipt
+from tests.test_stripe_events import invoice
 from tests.test_api import balance, upload
 from tests.test_tools import fetch
 
@@ -39,48 +41,50 @@ def me(client, headers):
 def test_plans_listed_and_checkout_needs_stripe(client, user):
     headers, _ = user
     plans = client.get("/v1/billing/plans").json()
-    assert [p["id"] for p in plans["plans"]] == ["free", "starter", "pro", "scale"] and plans["billing_enabled"] is False
+    assert [p["id"] for p in plans["plans"]] == ["free", "starter_v2", "pro_v2", "scale_v2"] and plans["billing_enabled"] is False
     assert me(client, headers)["plan"] == "free"
-    for path, body in (("/v1/billing/subscribe", {"plan_id": "pro"}), ("/v1/billing/portal", None)):
+    for path, body in (("/v1/billing/subscribe", {"plan_id": "pro_v2"}), ("/v1/billing/portal", None)):
         r = client.post(path, json=body, headers=headers)
         assert r.status_code == 503 and r.json()["error"]["code"] == "billing_unavailable"
 
 
-def test_subscription_lifecycle(client, user):
+def test_subscription_lifecycle(client, user, stripe_catalog):
     headers, account = user
-    aid, meta = account["id"], {"account_id": account["id"], "plan_id": "pro", "interval": "month"}
+    aid, meta = account["id"], {"account_id": account["id"], "plan_id": "pro_v2", "interval": "month"}
     # invoice.paid can arrive before checkout.session.completed: it alone must be enough.
-    inv = {"id": f"in_1_{aid}", "customer": f"cus_{aid}", "subscription_details": {"metadata": meta}}
+    inv = invoice(account, meta, inv=f"in_1_{aid}", sub=f"sub_{aid}")
     send(client, "invoice.paid", inv)
     send(client, "invoice.paid", inv)                                        # redelivery
-    assert balance(client, headers) == 30 + 1200 and me(client, headers)["plan"] == "pro"
-    send(client, "checkout.session.completed", {"id": f"cs_{aid}", "mode": "subscription", "customer": f"cus_{aid}",
-                                                "subscription": f"sub_{aid}", "metadata": meta})
-    assert balance(client, headers) == 1230                                  # checkout itself grants nothing
+    assert balance(client, headers) == 30 + 1000 and me(client, headers)["plan"] == "pro_v2"
+    send(client, "checkout.session.completed", checkout_receipt(account, f"sub_{aid}", meta))
+    assert balance(client, headers) == 1030                                  # checkout itself grants nothing
     # Renewal: newer API shape, metadata under parent; plus a forged credits number that must be ignored.
-    send(client, "invoice.paid", {"id": f"in_2_{aid}", "customer": f"cus_{aid}", "credits": 999999,
-                                  "parent": {"subscription_details": {"metadata": meta}}})
-    assert balance(client, headers) == 2430
-    # Renewal with no metadata at all: matched by customer id, plan taken from the account.
-    send(client, "invoice.paid", {"id": f"in_3_{aid}", "customer": f"cus_{aid}"})
-    assert balance(client, headers) == 3630
-    r = client.post("/v1/billing/subscribe", json={"plan_id": "starter"}, headers=headers)
+    renewal = {**inv, "id": f"in_2_{aid}", "credits": 999999, "subscription_details": {},
+               "parent": {"subscription_details": {"metadata": meta, "subscription": f"sub_{aid}"}}}
+    send(client, "invoice.paid", renewal)
+    assert balance(client, headers) == 2030
+    # Renewal with no metadata at all: matched by customer id, offer taken from the invoice line.
+    send(client, "invoice.paid", {**inv, "id": f"in_3_{aid}", "subscription_details": {}})
+    assert balance(client, headers) == 3030
+    r = client.post("/v1/billing/subscribe", json={"plan_id": "starter_v2"}, headers=headers)
     assert r.status_code == 503                                               # (Stripe off in tests)
     send(client, "customer.subscription.deleted", {"id": "sub_someone_else", "customer": f"cus_{aid}"})
-    assert me(client, headers)["plan"] == "pro"                               # a different subscription: ignored
+    assert me(client, headers)["plan"] == "pro_v2"                               # a different subscription: ignored
     send(client, "customer.subscription.deleted", {"id": f"sub_{aid}", "customer": f"cus_{aid}"})
-    assert me(client, headers)["plan"] == "free" and balance(client, headers) == 3630   # credits are kept
+    assert me(client, headers)["plan"] == "free" and balance(client, headers) == 3030   # credits are kept
 
 
-def test_yearly_plan_grants_twelve_months_and_bad_events_do_nothing(client, user):
+def test_yearly_plan_grants_its_first_month_and_bad_events_do_nothing(client, user, stripe_catalog):
     headers, account = user
-    meta = {"account_id": account["id"], "plan_id": "starter", "interval": "year"}
-    send(client, "invoice.paid", {"id": f"in_y_{account['id']}", "customer": "cus_y", "lines": {"data": [{"metadata": meta}]}})
-    assert balance(client, headers) == 30 + 500 * 12
+    meta = {"account_id": account["id"], "plan_id": "starter_v2", "interval": "year"}
+    inv = invoice(account, meta, inv=f"in_y_{account['id']}", subscription_details={})
+    inv["lines"]["data"][0]["metadata"] = meta
+    send(client, "invoice.paid", inv)
+    assert balance(client, headers) == 30 + 500          # month 1; the worker grants months 2 to 12
     send(client, "invoice.paid", {"id": "in_unknown", "customer": "cus_nobody"})
     send(client, "invoice.paid", {"id": "in_badplan", "customer": "cus_y2",
                                   "subscription_details": {"metadata": {"account_id": account["id"], "plan_id": "nope"}}})
-    assert balance(client, headers) == 6030 and me(client, headers)["plan"] == "starter"
+    assert balance(client, headers) == 530 and me(client, headers)["plan"] == "starter_v2"
     payload, headers2 = event("invoice.paid", {"id": "in_forged", "subscription_details": {"metadata": meta}})
     headers2["stripe-signature"] = headers2["stripe-signature"][:-4] + "0000"
     assert client.post("/webhooks/stripe", content=payload, headers=headers2).status_code == 400
@@ -90,7 +94,7 @@ def test_paid_plan_exports_1080_and_plan_caps_render_minutes(client, user, video
     headers, account = user
     up = upload(client, headers, video)
     with new_session() as db:
-        db.get(Account, account["id"]).plan = "starter"
+        db.get(Account, account["id"]).plan = "starter_v2"
         db.commit()
     body = {"upload_id": up["upload_id"], "segments": [{"start": 5, "end": 12}], "options": {"aspect": "4:5"}}
     r = client.post("/v1/reframe", json=body, headers=headers)
@@ -171,7 +175,8 @@ def test_clips_get_ai_titles_scores_and_subtitles(client, user, video, transcrib
     r = client.post("/v1/clips", json={"upload_id": up["upload_id"], "options": {"max_clips": 1, "clip_length": 10}},
                     headers=headers)
     ai = FakeAI()
-    assert worker.run_once(transcriber, ai=ai) == "SUCCEEDED"
+    from tests.test_punchier_clips import Talker      # speech all through the excerpt: the judge's window is wider now
+    assert worker.run_once(Talker(), ai=ai) == "SUCCEEDED"
     clip = client.get(f"/v1/jobs/{r.json()['job_id']}", headers=headers).json()["clips"][0]
     assert clip["title"] == "Big moment" and clip["virality"]["score"] == 81 and clip["hashtags"] == ["gta6"]
     assert ai.calls[0][0] and ai.calls[0][2] is not None                    # got the clip's words and a frame

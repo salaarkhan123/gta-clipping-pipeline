@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, false
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, event, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -32,6 +32,8 @@ class Account(Base):
     subscription_event_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)    # newest Stripe event applied
     webhook_secret: Mapped[str] = mapped_column(String(80))
     signup_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Can use the admin routes (/v1/admin/...) from a website login. Set with scripts/admin.py make-admin.
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
@@ -123,6 +125,8 @@ class Clip(Base):
     export_key: Mapped[str | None] = mapped_column(String(400), nullable=True)    # latest full-quality render
     export_res: Mapped[str | None] = mapped_column(String(8), nullable=True)
     edit: Mapped[dict | None] = mapped_column(JSON, nullable=True)                # edit decisions saved by the editor
+    thumb_id: Mapped[str | None] = mapped_column(String(40), nullable=True)       # the chosen ClipThumbnail (#140)
+    thumb_chosen_key: Mapped[str | None] = mapped_column(String(400), nullable=True)   # what it shows; None: thumb_key
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -162,6 +166,39 @@ class ImportLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class ClipThumbnail(Base):
+    """One thumbnail a clip can use besides the one its job made (`clips.thumb_key`, kept as it was): a premium AI
+    thumbnail, or the original with its text edited. `clean_key` is the picture without text; `image_key` is what
+    is shown (the text drawn on it by our renderer when `show_text`). Choosing one is free (`clips.thumb_id`)."""
+    __tablename__ = "clip_thumbnails"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    clip_id: Mapped[str] = mapped_column(ForeignKey("clips.id"), index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(12))                     # original | premium
+    job_id: Mapped[str | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)   # the paid job that made it
+    style: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    instruction: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    clean_key: Mapped[str] = mapped_column(String(400))
+    image_key: Mapped[str] = mapped_column(String(400))
+    text: Mapped[str | None] = mapped_column(String(200), nullable=True)   # the words; None: the clip's hook
+    show_text: Mapped[bool] = mapped_column(Boolean, default=True)
+    info: Mapped[dict | None] = mapped_column(JSON, nullable=True)    # provider, model, attempts, face check, cost
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class LikenessConsent(Base):
+    """Append-only: an account confirmed it is the streamer shown in a clip, or has their permission to have their
+    likeness edited by AI. Needed once per clip before its first premium thumbnail."""
+    __tablename__ = "likeness_consents"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    clip_id: Mapped[str] = mapped_column(ForeignKey("clips.id"), index=True)
+    consent: Mapped[bool] = mapped_column(Boolean)
+    wording: Mapped[str] = mapped_column(String(400))                 # the sentence the user agreed to
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class CustomTemplate(Base):
     """A look an account saved for reuse: a name and the clip options it sets. Never changes what a job costs."""
     __tablename__ = "custom_templates"
@@ -180,14 +217,19 @@ class Payment(Base):
     __tablename__ = "payments"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
-    kind: Mapped[str] = mapped_column(String(12))                       # pack | plan
+    kind: Mapped[str] = mapped_column(String(12))                       # pack | plan | plan_year
     stripe_ref: Mapped[str] = mapped_column(String(80), unique=True)    # Checkout Session id or invoice id
     payment_intent: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     amount_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    credits: Mapped[int] = mapped_column(Integer)                       # granted by this payment
+    credits: Mapped[int] = mapped_column(Integer)                       # granted by this payment so far
     credits_removed: Mapped[int] = mapped_column(Integer, default=0)    # taken back (or written off) after refunds
     status: Mapped[str] = mapped_column(String(12), default="paid")     # paid | partial | refunded | disputed
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # plan_year only: a yearly invoice whose credits are granted one month at a time (app/plan_grants.py).
+    subscription_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    plan_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    period_start: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    period_end: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class CreditLedger(Base):
@@ -201,6 +243,80 @@ class CreditLedger(Base):
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
     idempotency_key: Mapped[str] = mapped_column(String(200), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class PolicyAcceptance(Base):
+    """Append-only: which version of which legal policy an account accepted, when and how (app/legal.py).
+    Rows are never updated or deleted by the app; the mapper events below refuse it."""
+    __tablename__ = "policy_acceptances"
+    __table_args__ = (UniqueConstraint("account_id", "policy", "version", name="uq_policy_acceptance"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    policy: Mapped[str] = mapped_column(String(32))
+    version: Mapped[str] = mapped_column(String(32))
+    source: Mapped[str] = mapped_column(String(16))        # signup | reaccept
+    accepted_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+@event.listens_for(PolicyAcceptance, "before_update")
+@event.listens_for(PolicyAcceptance, "before_delete")
+def _append_only(_mapper, _conn, _target):
+    raise RuntimeError("policy_acceptances is append-only: add a new row instead")
+
+
+class TrustCase(Base):
+    """A copyright or likeness report about content on ClutchClips (app/trust.py). The claimant's details are
+    readable only through the admin routes. Status moves only by admin decisions, each one a CaseEvent."""
+    __tablename__ = "trust_cases"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    reference: Mapped[str] = mapped_column(String(16), unique=True)          # CC-XXXX-XXXX, given to the claimant
+    kind: Mapped[str] = mapped_column(String(12))                            # copyright | likeness
+    status: Mapped[str] = mapped_column(String(20), default="received")
+    claimant_name: Mapped[str] = mapped_column(String(200))
+    claimant_email: Mapped[str] = mapped_column(String(320), index=True)
+    claimant_organization: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    claimant_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    claimant_phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    relationship: Mapped[str] = mapped_column(String(24))                    # owner | agent | self | representative
+    work: Mapped[str] = mapped_column(Text)                                  # the work, or the person shown
+    reported_urls: Mapped[list] = mapped_column(JSON)
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signature: Mapped[str] = mapped_column(String(200))
+    ip_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)   # HMAC of the sender's IP: abuse checks
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class CaseTarget(Base):
+    """One piece of ClutchClips content a case points at, found from the reported URLs."""
+    __tablename__ = "case_targets"
+    __table_args__ = (UniqueConstraint("case_id", "kind", "target_id", name="uq_case_target"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("trust_cases.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(12))                            # upload | job | clip | export
+    target_id: Mapped[str] = mapped_column(String(40), index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)   # who owns the content
+    state: Mapped[str] = mapped_column(String(12), default="live")           # live | disabled | restored | deleted
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class CaseEvent(Base):
+    """Append-only history of a case: every submission, note and decision, with who and when."""
+    __tablename__ = "case_events"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("trust_cases.id"), index=True)
+    actor_kind: Mapped[str] = mapped_column(String(16))                      # claimant | admin | reported_user | system
+    actor_id: Mapped[str | None] = mapped_column(String(40), nullable=True)  # the admin's or user's account id
+    action: Mapped[str] = mapped_column(String(24))
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+@event.listens_for(CaseEvent, "before_update")
+@event.listens_for(CaseEvent, "before_delete")
+def _events_append_only(_mapper, _conn, _target):
+    raise RuntimeError("case_events is append-only: add a new event instead")
 
 
 class WebhookDelivery(Base):

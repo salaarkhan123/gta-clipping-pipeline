@@ -14,11 +14,15 @@ from . import ClipResult
 from .ff import Deadline, PipelineError, PipelineTimeout, probe
 import logging
 
-from .censor import mask_words
+from .censor import mask, mask_words
+from .edit import remap_words
 from .facecam import resolve_facecam
-from .render import CHAT_REGIONS, render_clip, render_thumb
+from .render import CHAT_REGIONS, render_clip, render_thumb, resolution_name
 from .stt import LocalProvider, extract_audio
+from .thumbs import Thumb, make_thumbnail
 from .transcribe import Transcriber, Transcript, extract_wav
+from .translate import whole_transcript
+from .heard import model_of
 from .visual import build_visual_index, search_visual
 
 log = logging.getLogger("clipapi.tools")
@@ -35,16 +39,111 @@ class RenderOptions:
     chat_region: str = "none"
     zoom: float = 1.0
     captions: bool = False
-    caption_style: str = "pop"        # impact | pop | bold | neon | boxed | clean
+    caption_style: str = "pop"        # a name from captions.STYLE_NAMES
     caption_font: str = "DejaVu Sans"
     caption_position: str = "auto"    # impact only: auto | seam | lower | center
     caption_accent: str | None = None # impact only: the keyword's colour, #RRGGBB; None = the brand lime
+    caption_look: dict | None = None      # (captions) render_options.CaptionLook as a dict: font, weight, colours...
+    caption_font_file: str | None = None  # (captions) local file of caption_look's "custom:<id>" font (the worker fetches it)
     censor: bool = False
+    thumbnail_text: bool = True       # the worker sets the AI's title on the thumbnail (thumbs.py); false: frame only
     resolution: str | None = None     # "480" | "720" | "1080" | "2k" | "4k"; None renders at the size it always did
     preview: bool = False             # a fast, small render to look at (540 on the short side)
     camera: str | None = None         # two-panel layouts: "top" | "bottom"; None = the layout's own
     split_ratio: float | None = None  # two-panel layouts: the top panel's share of the height, 0.25 to 0.75
     source_lang: str | None = None    # (languages, agent F) recorded; the worker hands the matching transcriber in
+    render: str = "full"              # clip jobs only: Reframe and Captions always render in full
+    hook_style: str = "serious"       # the AI's tone for the hook (clip jobs); recorded here
+    hook_position: str = "beginning"  # exports: "beginning" | "end" of the clip
+    hook_duration_ms: int | None = None   # exports: how long the hook shows; None = 2.5 s
+    hook_overlay: bool = True         # exports: burn the clip's hook text in
+    moment_layout: bool = False       # exports, auto: each moment drawn for what it shows (PROVISIONAL)
+
+
+@dataclass
+class ExportItem:
+    """One stored clip to render again (run_export), as its job left it. Read from the database by the caller."""
+    clip_id: str
+    start: float
+    end: float
+    segments: list                    # source seconds, in playing order (cuts and the flash-forward included)
+    flash: bool = False               # the first segment is a flash-forward
+    zoom_at: list = ()                # punch-in zooms on the rendered timeline
+    words: list | None = None         # caption words on the rendered timeline; None: transcribed now if wanted
+    hook: str | None = None           # the clip's hook text
+
+
+@dataclass
+class ExportResult:
+    clip_id: str
+    video_path: Path
+    seconds: float                    # the rendered length
+    resolution: str = ""              # the file's own short side (render.resolution_name): what an export reports
+
+
+def planned_seconds(segments: list) -> float:
+    """What an export of these segments renders, in seconds: what it is priced on."""
+    return round(sum(max(0.0, float(e) - float(s)) for s, e in segments), 3)
+
+
+def run_export(src: Path, items: list[ExportItem], options: RenderOptions, out_dir: Path, progress_cb=None,
+               transcriber: Transcriber | None = None, deadline: Deadline | None = None,
+               timer=None) -> list[ExportResult]:
+    """Render stored clips again with new options (POST /v1/clips/export): the same moments, cuts and words,
+    at `options.resolution`, in the layout, caption style and hook placement asked for. Captions are the clip's
+    own words when it has them; a clip made without captions is transcribed now (needs `transcriber`). With
+    moment_layout on, an auto layout gives each moment its own (facecam.moment_facecam). Counts `rendered_sec` on `timer`."""
+    from .edit import zoom_expr
+    from .facecam import moment_facecam
+    progress = progress_cb or (lambda stage, pct: None)
+    src, out_dir = Path(src), Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    progress("probing", 2)
+    info = probe(src, deadline)
+    layout, facecam = _layout(src, info, options, deadline)
+    results = []
+    for i, item in enumerate(items, 1):
+        progress("rendering", 5 + int(93 * (i - 1) / max(1, len(items))))
+        segments = [(max(0.0, float(s)), min(float(e), info.duration)) for s, e in item.segments]
+        segments = [(s, e) for s, e in segments if e - s > 0.05]
+        if not segments:
+            raise PipelineError("bad_segment", "This clip's times fall outside its video.")
+        body = segments[1:] if item.flash and len(segments) > 1 else segments      # the moment, without its tease
+        lo, hi = min(s for s, _ in body), max(e for _, e in body)
+        words = []
+        if options.captions and info.has_audio:
+            words = item.words
+            if words is None:
+                if transcriber is None:
+                    raise PipelineError("transcription_unavailable", "Captions are not available on this server right now.")
+                spoken = transcribe_range(src, lo, hi, transcriber, out_dir, deadline).words
+                words = remap_words(spoken, segments)
+            if options.censor:
+                words = mask_words(words)
+        hook = item.hook if options.hook_overlay else None
+        if hook and options.censor:
+            hook = " ".join(mask(w) for w in hook.split())
+        lay, cam = layout, facecam
+        if options.moment_layout and options.layout == "auto" and options.vertical and layout != "classic":
+            lay, cam = moment_facecam(src, info, lo, hi, layout, facecam, deadline)
+        video = out_dir / f"export-{i}.mp4"
+        render_clip(src, item.start, item.end, video, src_w=info.width, src_h=info.height, vertical=options.vertical,
+                    zoom=options.zoom, chat=options.chat_region, words=words, font=options.caption_font,
+                    layout=lay, facecam=cam, style=options.caption_style, aspect=options.aspect,
+                    max_side=options.max_side, deadline=deadline, segments=segments,
+                    punch=zoom_expr(list(item.zoom_at)) if options.vertical else "1", has_audio=info.has_audio,
+                    hook=hook, flash=item.flash, resolution=options.resolution, position=options.caption_position,
+                    accent=options.caption_accent, camera=options.camera, split_ratio=options.split_ratio,
+                    look=options.caption_look, custom_font=_font_file(options),
+                    hook_position=options.hook_position, hook_ms=options.hook_duration_ms)
+        seconds = planned_seconds(segments)
+        if timer is not None:
+            timer.count("clips")
+            timer.count("rendered_sec", round(seconds, 1))
+        made = probe(video, deadline)
+        results.append(ExportResult(item.clip_id, video, seconds, resolution_name(made.width, made.height)))
+    progress("done", 100)
+    return results
 
 
 def _layout(src, info, options, deadline=None) -> tuple[str, object]:
@@ -84,19 +183,29 @@ def _render_one(src, info, start, end, idx, words, options, layout, facecam, out
                 layout=layout, facecam=facecam, style=options.caption_style, aspect=options.aspect,
                 max_side=options.max_side, deadline=deadline, resolution=options.resolution, preview=options.preview,
                 position=options.caption_position, accent=options.caption_accent, camera=options.camera,
-                split_ratio=options.split_ratio)
-    thumb = out_dir / f"clip-{idx}.jpg"
+                split_ratio=options.split_ratio,
+                    look=options.caption_look, custom_font=_font_file(options))
+    thumb = None
     try:
-        render_thumb(video, thumb, deadline)
+        # No text yet: these clips have no hook. The worker sets the title on it when the AI writes one.
+        thumb = make_thumbnail(src, info, start, end, out_dir / f"clip-{idx}.jpg", options=options, layout=layout,
+                               facecam=facecam, deadline=deadline)
     except PipelineTimeout:
         raise
     except PipelineError:
-        thumb = None
+        pass
     caps = None
     if words:
         caps = out_dir / f"clip-{idx}.captions.json"
         caps.write_text(json.dumps({"words": [{"start": s, "end": e, "text": t} for s, e, t in words]}))
     return video, thumb, caps
+
+
+def _thumb_fields(thumb: Thumb | None, features: dict) -> dict:
+    """ClipResult fields for a thumbnail (or none), its record kept in `features`."""
+    if thumb is None:
+        return {"features": features}
+    return {"thumb_path": thumb.path, "frame_path": thumb.frame, "features": {**features, "thumbnail": thumb.record}}
 
 
 def _relative(words, start: float, end: float):
@@ -130,8 +239,7 @@ def run_render(src: Path, segments: list, options: RenderOptions, out_dir: Path,
         progress("rendering", 50 + int(48 * (i - 1) / n))
         video, thumb, caps = _render_one(src, info, a, b, i, words, options, layout, facecam, out_dir, deadline)
         results.append(ClipResult(start=round(a, 3), end=round(b, 3), score=1.0, signals={"manual": 1.0},
-                                  features={"words": len(words)}, video_path=video, thumb_path=thumb,
-                                  captions_path=caps))
+                                  video_path=video, captions_path=caps, **_thumb_fields(thumb, {"words": len(words)})))
     if not results:
         raise PipelineError("bad_segment", "None of the requested segments fall inside this video.")
     progress("done", 100)
@@ -178,11 +286,12 @@ def run_find(src: Path, query: str, max_results: int, make_clips: bool, clip_len
              options: RenderOptions, out_dir: Path, progress_cb=None, transcriber: Transcriber | None = None,
              deadline: Deadline | None = None, transcript: dict | None = None, mode: str = "auto",
              embedder=None, vindex: dict | None = None, indexer: Transcriber | None = None,
-             provider=None):
+             provider=None, heard=None):
     """Search an upload by what was said (transcript) and what is on screen (CLIP frame index).
 
     mode: "auto" uses whatever is available, "speech" or "visual" require that one.
-    Pass cached `transcript` / `vindex` to skip rebuilding them.
+    Pass cached `transcript` / `vindex` to skip rebuilding them, and `heard` (heard.Heard) so a new transcript
+    reuses the pieces earlier jobs transcribed.
     Returns (clips, result, new_transcript_or_None, new_vindex_or_None).
     """
     progress = progress_cb or (lambda stage, pct: None)
@@ -199,16 +308,9 @@ def run_find(src: Path, query: str, max_results: int, make_clips: bool, clip_len
             progress("transcribing", 5)
             # Decode the audio once, then let the provider transcribe the whole file (chunks cut at quiet points,
             # several at once where the machine allows). Default: the local model, one chunk at a time.
-            stt = provider or LocalProvider(tr)
-            audio = out_dir / "source-audio.wav"
-            try:
-                t = stt.transcribe_file(extract_audio(src, audio, deadline).path, out_dir, deadline,
-                                        lambda k, m: progress("transcribing", 5 + int(35 * k / m)))
-            finally:
-                audio.unlink(missing_ok=True)
-            transcript = new_t = {"duration": round(info.duration, 3),
-                                  "segments": [{"start": s, "end": e, "text": x} for s, e, x in t.segments],
-                                  "words": [[s, e, w] for s, e, w in t.words]}
+            # Only what earlier jobs on this upload did not transcribe (`heard`) is transcribed now.
+            transcript = new_t = whole_transcript(src, info.duration, provider or LocalProvider(tr), out_dir, deadline,
+                                                  lambda k, m: progress("transcribing", 5 + int(35 * k / m)), heard)
         elif mode == "speech":
             if not info.has_audio:
                 raise PipelineError("no_audio", "This video has no audio track to search.")
@@ -255,7 +357,10 @@ def run_find(src: Path, query: str, max_results: int, make_clips: bool, clip_len
     clips = []
     if make_clips and picked:
         layout, facecam = _layout(src, info, options, deadline)
-        all_words = [tuple(w) for w in (transcript or {}).get("words", [])]
+        # Captions are the caption model's words: the search transcript's own words only when that model made it.
+        caption_model = model_of(transcriber) if transcriber is not None else None
+        all_words = ([tuple(w) for w in (transcript or {}).get("words", [])]
+                     if (transcript or {}).get("model") == caption_model else [])
         for i, m in enumerate(picked, 1):
             progress("rendering", 70 + int(28 * (i - 1) / len(picked)))
             lead = 3.0 if m["kind"] == "speech" else 5.0
@@ -266,13 +371,18 @@ def run_find(src: Path, query: str, max_results: int, make_clips: bool, clip_len
             if options.captions and info.has_audio:
                 if all_words:
                     words = _relative(all_words, start, end)
-                elif transcriber is not None:   # the search index has no word timings: caption just this clip
+                elif transcriber is not None:   # the caption model did not make the index: caption just this clip
                     words = _relative(transcribe_range(src, start, end, transcriber, out_dir, deadline).words, start, end)
             video, thumb, caps = _render_one(src, info, start, end, i, words, options, layout, facecam,
                                              out_dir, deadline)
             clips.append(ClipResult(start=round(start, 3), end=round(end, 3), score=m["score"],
-                                    signals={m["kind"]: 1.0}, features={"query": query, "text": m["text"][:300]},
-                                    video_path=video, thumb_path=thumb, captions_path=caps))
+                                    signals={m["kind"]: 1.0}, video_path=video, captions_path=caps,
+                                    **_thumb_fields(thumb, {"query": query, "text": m["text"][:300]})))
     progress("done", 100)
     result = {"query": query, "mode": mode, "matches": picked, "transcript_cached": had_t, "visual_cached": had_v}
     return clips, result, new_t, new_v
+
+
+def _font_file(options) -> Path | None:
+    """(captions) The local file of the caption_look's uploaded font, when it has one."""
+    return Path(options.caption_font_file) if getattr(options, "caption_font_file", None) else None

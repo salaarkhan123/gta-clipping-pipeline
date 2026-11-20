@@ -20,7 +20,7 @@ from pathlib import Path
 # Fine pipeline stage -> the coarse stage the dashboard shows.
 COARSE = {"download": "downloading", "probe": "probing", "facecam_detect": "probing", "chat_motion": "chat_motion",
           "audio_signal": "audio", "transcribe_rough": "transcribing", "transcribe_final": "transcribing",
-          "judge_frames": "judging", "judge_ai": "judging", "dead_air": "rendering", "render": "rendering",
+          "llm_pass": "judging", "judge_frames": "judging", "judge_ai": "judging", "dead_air": "rendering", "render": "rendering",
           "thumbnail": "rendering", "titles": "writing_titles", "store": "uploading"}
 TARGETS = ((2 * 3600, 600.0), (4 * 3600, 900.0))    # the goal: a 2 h video in 10 min, a 4 h video in 15 min
 

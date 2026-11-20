@@ -17,7 +17,9 @@ from sqlalchemy import select
 from .. import ledger
 from ..db import new_session
 from ..models import Account, Clip, Export, ImportLog, Job, Upload, utcnow
-from ..storage import get_storage, transcript_key, vindex_key
+from ..storage import get_storage, transcript_key, transcript_parts_key, vindex_key
+from ..thumbnail_jobs import thumbnail_keys
+from ..thumbnails import frame_key_of
 from .sources import canonical
 
 TAKEN_DOWN = ("taken_down", "This video was removed after a takedown request. Any credits held for this job "
@@ -95,7 +97,7 @@ def _take_down(db, storage, upload: Upload, dry_run: bool) -> Removed:
     jobs = db.execute(select(Job).where(Job.upload_id == upload.id).order_by(Job.created_at)
                       .with_for_update()).scalars().all()
     for job in jobs:
-        if job.status == "QUEUED":
+        if job.status in ("QUEUED", "WAITING"):            # WAITING: a link clip job waiting for its import
             out.cancelled.append((job.id, job.credits_reserved))
             if not dry_run:
                 job.status, job.finished_at = "CANCELED", now
@@ -115,10 +117,11 @@ def _take_down(db, storage, upload: Upload, dry_run: bool) -> Removed:
         if clip.deleted_at is None:
             out.clips += 1
             out.files += [k for k in (clip.video_key, clip.thumb_key, clip.captions_key, clip.preview_key,
-                                      clip.export_key) if k]
+                                      clip.export_key, frame_key_of(clip.features)) if k]
             if not dry_run:
                 clip.deleted_at = now
     clip_ids = [c.id for c in clips]
+    out.files += thumbnail_keys(db, clip_ids)         # premium thumbnails and edited ones (#140)
     exports = db.execute(select(Export).where(Export.clip_id.in_(clip_ids), Export.storage_key.is_not(None))
                          ).scalars().all() if clip_ids else []
     for export in exports:
@@ -127,7 +130,8 @@ def _take_down(db, storage, upload: Upload, dry_run: bool) -> Removed:
             export.storage_key = None               # the file is gone; the row has no deleted mark of its own
     if upload.deleted_at is None:
         out.upload_removed = True
-        out.files += [k for k in (upload.storage_key, transcript_key(upload.id), vindex_key(upload.id))
+        out.files += [k for k in (upload.storage_key, transcript_key(upload.id), transcript_parts_key(upload.id),
+                                   vindex_key(upload.id))
                       if k and storage.exists(k)]
         if not dry_run:
             upload.deleted_at = now

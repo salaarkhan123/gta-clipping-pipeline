@@ -1,15 +1,14 @@
 "use client";
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { Listed, useClipOptions } from "@/lib/options";
+import { Listed } from "@/lib/options";
 import { tidy } from "@/lib/templates";
-import { JobForm } from "./JobForm";
 import { AspectSelect } from "./PreEdit";
 import { useDash } from "./Shell";
 import { StartRow } from "./StartRow";
-import { Tabs } from "./Tabs";
 
-// The tools in this panel. Video Finder ("find") lives in the project's Find moments tab.
+// The tools a project page can open (?tool=). Clip Maker is the job-setup screen (setup/MakeView.tsx); Video Finder
+// ("find") lives in the project's Find moments tab.
 export type Tool = "clips" | "reframe" | "captions" | "find";
 type Here = Exclude<Tool, "find">;
 const TOOL_NAMES: Record<Here, string> = { clips: "Clip Maker", reframe: "Reframe", captions: "Captions" };
@@ -29,25 +28,8 @@ function parseTime(v: string): number | null {
   return parts.reduce((t, n) => t * 60 + n, 0);
 }
 
-// The tools for one upload. Each shows its credit price before the button that starts it.
-// `open` is how Home and the template gallery hand over: the tool to show first, and a template to apply once.
-export function ToolPanel({ upload, onStarted, open }: { upload: any; onStarted: (job: any) => void; open?: { tool?: Tool; template?: string } }) {
-  const listed = useClipOptions();
-  const [tool, setTool] = useState<Here>(open?.tool && open.tool !== "find" ? open.tool : "clips");
-  return (
-    <section className="panel" id="tools" aria-label="Make something from this video">
-      <Tabs label="Tool" panel="tool-panel" tabs={Object.entries(TOOL_NAMES) as [Here, string][]} value={tool} onChange={setTool} />
-      <div id="tool-panel" role="tabpanel" aria-label={TOOL_NAMES[tool]} className="stack-m">
-        {!listed ? <p className="muted">Loading the options…</p>
-          : tool === "clips" ? <JobForm upload={upload} listed={listed} onStarted={onStarted} template={open?.template} />
-          : <RenderForm key={tool} tool={tool} upload={upload} listed={listed} onStarted={onStarted} />}
-      </div>
-    </section>
-  );
-}
-
 // Reframe and Captions: one part of the video (or all of it), rendered once.
-function RenderForm({ tool, upload, listed, onStarted }: { tool: "reframe" | "captions"; upload: any; listed: Listed; onStarted: (job: any) => void }) {
+export function RenderForm({ tool, upload, listed, onStarted }: { tool: "reframe" | "captions"; upload: any; listed: Listed; onStarted: (job: any) => void }) {
   const { reloadMe, fail } = useDash();
   const [o, setO] = useState({ aspect: "9:16", caption_style: firstStyle(listed), censor: false, from: "", to: "" });
   const [starting, setStarting] = useState(false), [problem, setProblem] = useState("");

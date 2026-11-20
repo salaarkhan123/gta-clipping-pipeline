@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 from .ff import Deadline, PipelineError
-from .stt import extract_audio
+from .stt import complete, extract_audio
 from .transcribe import extract_wav
 
 DISPLAYS = ("original", "translation", "both")
@@ -65,18 +65,18 @@ def detect_language(src: Path, duration: float, probs: Callable[[Path], dict | N
 # ---------- the whole video's transcript ----------
 
 def whole_transcript(src: Path, duration: float, stt, work_dir: Path, deadline: Deadline | None = None,
-                     on_progress: Callable[[int, int], None] | None = None) -> dict:
+                     on_progress: Callable[[int, int], None] | None = None, heard=None) -> dict:
     """Transcribe the whole recording with a transcription provider (stt.provider_for). The result has the shape
-    Video Finder stores: {"duration", "segments": [{start, end, text}], "words": [[start, end, word]]}."""
+    Video Finder stores (heard.doc_of). `heard` (heard.Heard): what earlier jobs already transcribed of it; only
+    the rest is transcribed, and what is transcribed now is added to it."""
+    from .heard import Heard
     work_dir.mkdir(parents=True, exist_ok=True)
     audio = work_dir / "source-audio.wav"
     try:
-        t = stt.transcribe_file(extract_audio(src, audio, deadline).path, work_dir, deadline, on_progress)
+        return complete(heard if heard is not None else Heard(), extract_audio(src, audio, deadline).path, duration,
+                        stt, work_dir, deadline, on_progress)
     finally:
         audio.unlink(missing_ok=True)
-    return {"duration": round(duration, 3),
-            "segments": [{"start": s, "end": e, "text": x} for s, e, x in t.segments],
-            "words": [[s, e, w] for s, e, w in t.words]}
 
 
 def stored_translation(transcript: dict, target: str) -> list[str] | None:
@@ -93,7 +93,8 @@ def segment_rows(transcript: dict, target: str | None = None) -> list[dict]:
     texts = stored_translation(transcript, target) if target else None
     rows = []
     for i, seg in enumerate(transcript.get("segments", [])):
-        row = {"start": seg["start"], "end": seg["end"], "text": seg["text"], "language": language, "speaker": None}
+        row = {"start": seg["start"], "end": seg["end"], "text": seg["text"], "language": language,
+               "speaker": seg.get("speaker")}
         if texts is not None:
             row["translation"] = texts[i]
         rows.append(row)
@@ -323,11 +324,12 @@ def transcript_language(transcript: dict) -> str:
 def run_text_job(tool: str, src: Path, duration: float, language: str | None, target: str | None,
                  cached: dict | None, stt, translator: Translator | None, summarizer: Summarizer | None,
                  work_dir: Path, progress: Callable[[str, int], None], deadline: Deadline | None = None,
-                 detected: bool = False) -> tuple[dict | None, dict]:
+                 detected: bool = False, heard=None) -> tuple[dict | None, dict]:
     """A transcript job ("transcript") or a summary job ("summary") on one recording.
 
     `language`: the spoken language (None: unknown, the English models were used). `cached`: the transcript the
     upload already has, used when it is in that language. `stt`: the transcription provider for that language.
+    `heard`: the pieces earlier jobs transcribed (heard.Heard), so only the rest is transcribed.
     Returns (transcript to store, or None when nothing in it changed; the job's result)."""
     want = language or "en"
     changed = False
@@ -338,7 +340,7 @@ def run_text_job(tool: str, src: Path, duration: float, language: str | None, ta
             raise PipelineError("transcription_unavailable", "Transcription is not available on this server right now.")
         progress("transcribing", 5)
         transcript = whole_transcript(src, duration, stt, work_dir, deadline,
-                                      lambda k, m: progress("transcribing", 5 + int(60 * k / m)))
+                                      lambda k, m: progress("transcribing", 5 + int(60 * k / m)), heard)
         transcript.update(language=want, language_detected=detected)
         reused, changed = False, True
     result = {"language": want, "transcript_cached": reused, "segments": len(transcript.get("segments", []))}

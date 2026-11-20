@@ -1,18 +1,15 @@
-import "@fontsource/poppins/600.css";
-import "@fontsource/poppins/700.css";
-import "@fontsource/poppins/800.css";
-import "@fontsource/inter/400.css";
-import "@fontsource/inter/500.css";
-import "@fontsource/inter/600.css";
-import "./globals.css";
-import "./app-shell.css";
+import { GeistMono } from "geist/font/mono";
+import { GeistSans } from "geist/font/sans";
+import "./styles.css";
 import type { Metadata } from "next";
+import { linkPhrase } from "@/lib/platforms";
 
 export const metadata: Metadata = {
   title: "ClutchClips: AI clipping for gaming streams",
-  description: "Upload a stream recording. ClutchClips finds the best moments, stacks your facecam over the gameplay, adds animated captions, and scores every clip.",
+  description: `Upload a stream recording or paste ${linkPhrase()}. ClutchClips finds the best moments, stacks your facecam over the gameplay, adds animated captions, and gives every clip an AI rating.`,
 };
 
+// Geist and Geist Mono (SIL Open Font License) are self-hosted by next/font: the files ship with the site.
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (<html lang="en"><body>{children}</body></html>);
+  return (<html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}><body>{children}</body></html>);
 }

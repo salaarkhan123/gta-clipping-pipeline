@@ -6,3 +6,13 @@ __pycache__/
 tests/
 skill/
 .git/
+# Static site is served by Caddy from the checkout, not baked into the API image.
+web/
+web-src/
+node_modules/
+*.md
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov/

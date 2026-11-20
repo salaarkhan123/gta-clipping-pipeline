@@ -1,3 +1,5 @@
+import { ComingSoonBadge } from "@/components/ComingSoonBadge";
+
 // The dashboard's own line icons: 24 px grid, drawn for ClutchClips. Decorative, so always hidden from screen readers.
 const PATHS = {
   home: <><path d="M4 11.5 12 4l8 7.5" /><path d="M6.5 10v9.5h11V10" /><path d="M10 19.5v-5h4v5" /></>,
@@ -43,16 +45,54 @@ const PATHS = {
   grid: <><rect x="4" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" /></>,
   play: <path d="M7.5 5v14l11-7-11-7Z" />,
   pause: <path d="M8 5v14M16 5v14" />,
+  music: <><path d="M9 17.5V6l10-2v11.5" /><circle cx="6.5" cy="17.5" r="2.5" /><circle cx="16.5" cy="15.5" r="2.5" /></>,
+  transitions: <><path d="M4 6.5h6l4 11h6" /><path d="M4 17.5h6l1.5-4M14 6.5h6" /></>,
+  mic: <><rect x="9" y="3.5" width="6" height="11" rx="3" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5" /></>,
+  text: <path d="M5 6.5V5h14v1.5M12 5v14M9 19h6" />,
+  hook: <><path d="M5 5.5h14v9H11l-4 3.5v-3.5H5v-9Z" /><path d="M9 9.5h6M9 12h3.5" /></>,
+  skipBack: <><path d="M6 5v14" /><path d="M18.5 5.5v13L9 12l9.5-6.5Z" /></>,
+  skipForward: <><path d="M18 5v14" /><path d="M5.5 5.5v13L15 12 5.5 5.5Z" /></>,
+  zoomIn: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5M8.5 11h5M11 8.5v5" /></>,
+  zoomOut: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5M8.5 11h5" /></>,
+  smile: <><circle cx="12" cy="12" r="8.5" /><path d="M8.5 14a4 4 0 0 0 7 0M9 9.5h.01M15 9.5h.01" /></>,
+  shapes: <><circle cx="8" cy="8" r="4" /><path d="M14 13.5h6.5V20H14z" /><path d="m15.5 4 3.5 6h-7l3.5-6Z" /></>,
+  volume: <><path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3v-5Z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></>,
+  wave: <path d="M4 12h1.5M7.5 8v8M11 5v14M14.5 9v6M18 7v10M20.5 12H20" />,
+  expand: <path d="M14 4.5h5.5V10M19.5 4.5 13.5 10.5M10 19.5H4.5V14M4.5 19.5l6-6" />,
+  palette: <><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.4 0 2-1 2-2 0-1.5-1.5-1.8-1.5-3s1-2 2.5-2H18a2.5 2.5 0 0 0 2.5-2.5c0-4.3-3.8-7.5-8.5-7.5Z" /><path d="M7.5 12h.01M9.5 8h.01M14.5 8h.01" /></>,
+  eye: <><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="3" /></>,
+  translate: <><path d="M4 6h9M8.5 4v2c0 4-2 7-4.5 8.5M6.5 10c1 2 3 3.5 5.5 4" /><path d="m13 20 3.5-8 3.5 8M14.2 17.5h4.6" /></>,
+  rewind: <><path d="M11 6.5 4.5 12l6.5 5.5v-11Z" /><path d="M19.5 6.5 13 12l6.5 5.5v-11Z" /></>,
+  info: <><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5M12 8h.01" /></>,
+  phone: <rect x="7.5" y="3.5" width="9" height="17" rx="2" />,
+  cloud: <path d="M7 18.5h10.5a4 4 0 0 0 .6-7.95A5.5 5.5 0 0 0 7.4 9.1 4.75 4.75 0 0 0 7 18.5Z" />,
+  wand: <><path d="m4.5 19.5 10-10M13 6.5l2.5 2.5" /><path d="M17.5 3.5v3M16 5h3M19.5 10.5v2M18.5 11.5h2M9.5 3.5v2M8.5 4.5h2" /></>,
+  folder: <path d="M3.5 7A1.5 1.5 0 0 1 5 5.5h4.5l2 2.5H19A1.5 1.5 0 0 1 20.5 9.5V17A1.5 1.5 0 0 1 19 18.5H5A1.5 1.5 0 0 1 3.5 17V7Z" />,
+  undo: <><path d="M9 7.5 5 11.5l4 4" /><path d="M5 11.5h9.5a4.5 4.5 0 0 1 0 9H12" /></>,
+  // Dashboard shell (agent E).
+  redo: <><path d="M15 7.5l4 4-4 4" /><path d="M19 11.5H9.5a4.5 4.5 0 0 0 0 9H12" /></>,
+  bell: <><path d="M6.5 16.5V11a5.5 5.5 0 0 1 11 0v5.5l1.5 2H5l1.5-2Z" /><path d="M10 20.5a2.2 2.2 0 0 0 4 0" /></>,
+  chart: <><path d="M4.5 19.5h15" /><path d="M7.5 16v-4M12 16V7.5M16.5 16v-6" /></>,
+  share: <><circle cx="17" cy="6" r="2.5" /><circle cx="7" cy="12" r="2.5" /><circle cx="17" cy="18" r="2.5" /><path d="m9.2 10.8 5.6-3.5M9.2 13.2l5.6 3.5" /></>,
+  flask: <><path d="M9.5 3.5h5M10.5 3.5v5.5L5 18.3a1.5 1.5 0 0 0 1.3 2.2h11.4a1.5 1.5 0 0 0 1.3-2.2L13.5 9V3.5" /><path d="M7.5 14.5h9" /></>,
+  book: <><path d="M4.5 5.5A1.5 1.5 0 0 1 6 4h5.5v15.5H6a1.5 1.5 0 0 0-1.5 1.5V5.5Z" /><path d="M19.5 5.5A1.5 1.5 0 0 0 18 4h-5.5v15.5H18a1.5 1.5 0 0 1 1.5 1.5V5.5Z" /></>,
+  template: <><rect x="4" y="4" width="16" height="16" rx="2.5" /><path d="M4 9.5h16M9.5 9.5V20" /></>,
+  sidebar: <><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" /><path d="M9.5 4.5v15" /></>,
+  key: <><circle cx="8" cy="15" r="3.5" /><path d="m10.5 12.5 8-8M15.5 7.5l2.5 2.5M17.5 5.5l2 2" /></>,
+  font: <path d="M4.5 19 9.5 5h1l5 14M6.5 14h7M15.5 19l2.5-6.5L20.5 19M16.3 17h3.4" />,
+  shield: <path d="M12 3.5 19 6v5.5c0 4.3-3 7.6-7 9-4-1.4-7-4.7-7-9V6l7-2.5Z" />,
+  swap: <path d="M7 4.5 4 7.5l3 3M4 7.5h12M17 13.5l3 3-3 3M20 16.5H8" />,
 } as const;
 
 export type IconName = keyof typeof PATHS;
 
-export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
+// `className` adds utility classes (a colour, say) next to `ico`.
+export function Icon({ name, size = 20, className }: { name: IconName; size?: number; className?: string }) {
   return (
-    <svg className="ico" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+    <svg className={className ? `ico ${className}` : "ico"} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">{PATHS[name]}</svg>
   );
 }
 
 // Marks something that is planned but not built. Never put this on a working link.
-export const Soon = () => <small className="soon-tag">Coming soon</small>;
+export const Soon = ({ short }: { short?: boolean }) => <ComingSoonBadge short={short} className="ml-1" />;

@@ -17,8 +17,18 @@ For a long list (dozens of clips from a multi-hour video) the caller passes `hor
 tests then only compare clips less than that many seconds apart. Every clip is otherwise compared with every
 clip already picked, and with 50 picks two unrelated moments hours apart that happen to share words (two car
 chases, two arguments with the same person) would cost a clip each time. The time test always applies.
+
+A third test, on the picture (only when the caller has a frame of each candidate): two candidates whose frames are
+the same screen (a lobby, a respawn or starting-soon screen, a loop) are one moment, however far apart, and only
+the better one is kept. A frame is a 64-bit difference hash (picture_hash); frames at most SAME_PICTURE bits apart
+are the same screen. The test only means something in a video whose pictures differ: when the median distance
+between the candidates' frames is under PICTURE_VARIES (a fixed camera: a react video, a cockpit view), every
+frame looks alike and the test is off. Both numbers come from the two tuning videos: the 2-hour GTA benchmark has
+five moments on one screen 0-2 bits apart, the next pair 11 bits apart and a median of 31; the Zias react video
+has a median of 11 and 4 pairs of different moments within 4 bits, which the median rule leaves alone.
 """
 import re
+from pathlib import Path
 
 MIN_GAP = 60.0
 HORIZON = 900.0           # with a long list, "same topic" and "same speech" only count within 15 minutes
@@ -26,6 +36,9 @@ TOPIC_OVERLAP = 0.5
 SPEECH_JACCARD = 0.5
 MIN_SPEECH_TOKENS = 6
 COMMON_POOL = 4
+SAME_PICTURE = 4          # of 64 bits: two frames this close are the same screen
+PICTURE_VARIES = 20       # the picture test is on only when the median distance between frames is at least this
+MIN_PICTURES = 4          # ... and at least this many candidates have a frame
 STOPWORDS = frozenset(
     "the and for you this that with are was but not have has had his her they them then than what when where "
     "who why how all any can could would should will just get got its it's into out off over from your our "
@@ -72,11 +85,48 @@ def jaccard(a: set, b: set) -> float:
     return len(a & b) / len(a | b) if a and b else 0.0
 
 
+def picture_hash(frame: Path | None) -> int | None:
+    """A 64-bit difference hash of an image file: each bit says whether a pixel of the 9x8 grey thumbnail is
+    brighter than the one left of it. None when there is no readable image."""
+    if frame is None:
+        return None
+    try:
+        from PIL import Image
+        with Image.open(frame) as img:
+            # One byte per pixel of an "L" image, row by row: the same values getdata() gave (deprecated in
+            # Pillow 13, removed in 14), on every Pillow requirements.txt allows.
+            grey = list(img.convert("L").resize((9, 8), Image.BILINEAR).tobytes())
+    except Exception:
+        return None
+    bits = 0
+    for row in range(8):
+        for col in range(8):
+            bits = (bits << 1) | (grey[row * 9 + col + 1] > grey[row * 9 + col])
+    return bits
+
+
+def bits_apart(a: int, b: int) -> int:
+    return bin(a ^ b).count("1")
+
+
+def pictures_differ(pictures: list) -> bool:
+    """Whether the candidates' frames differ enough for "the same picture" to mean the same screen."""
+    known = [p for p in pictures if p is not None]
+    if len(known) < MIN_PICTURES:
+        return False
+    apart = sorted(bits_apart(a, b) for i, a in enumerate(known) for b in known[i + 1:])
+    return apart[len(apart) // 2] >= PICTURE_VARIES
+
+
 def pick_distinct(ranked: list, n: int, window, meta, speech, min_gap: float = MIN_GAP,
-                  horizon: float | None = None) -> tuple[list, list[tuple[int, str]]]:
+                  horizon: float | None = None, picture=None) -> tuple[list, list[tuple[int, str]]]:
     """Greedy over `ranked` (best first). `window(c)` -> (start, end), `meta(c)` -> judge dict or None,
     `speech(c)` -> transcript text. Returns (picked, skipped) where skipped is [(index in ranked, reason)].
-    `horizon`: compare topic and speech only between clips less than this many seconds apart (None = always)."""
+    `horizon`: compare topic and speech only between clips less than this many seconds apart (None = always).
+    `picture(c)` -> the candidate's picture_hash or None: with it, the same screen as a picked clip is skipped at
+    any distance (see the module text)."""
+    pictures = [picture(c) for c in ranked] if picture is not None else [None] * len(ranked)
+    by_picture = pictures_differ(pictures)
     topics = _strip_common([tokens(topic_text(meta(c))) for c in ranked])
     words = [w if len(w) >= MIN_SPEECH_TOKENS else set() for w in (tokens(speech(c)) for c in ranked)]
     picked: list[int] = []
@@ -89,6 +139,9 @@ def pick_distinct(ranked: list, n: int, window, meta, speech, min_gap: float = M
             apart = gap(window(c), window(ranked[j]))
             if apart < min_gap:
                 reason = f"within {min_gap:.0f} s of a picked clip"
+            elif (by_picture and pictures[i] is not None and pictures[j] is not None
+                  and bits_apart(pictures[i], pictures[j]) <= SAME_PICTURE):
+                reason = "same picture as a picked clip"
             elif horizon is not None and apart >= horizon:
                 continue
             elif overlap(topics[i], topics[j]) >= TOPIC_OVERLAP:

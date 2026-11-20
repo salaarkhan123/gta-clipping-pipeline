@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from . import ledger, token_epoch
+from . import ledger, legal, token_epoch
 from .config import get_settings
 from .db import get_db
 from .deps import ApiError, Principal, client_ip, current_principal, rate_limit, session_principal
@@ -29,6 +29,12 @@ class Credentials(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: EmailStr
     password: str = Field(min_length=8, max_length=200)
+
+
+class SignupRequest(Credentials):
+    # true: you accept the current Terms, Privacy Policy and Acceptable Use Policy (GET /v1/legal/policies).
+    # The versions and the time are recorded (GET /v1/me/consents).
+    accept_policies: bool | None = None
 
 
 class ForgotRequest(BaseModel):
@@ -53,8 +59,14 @@ class KeyCreate(BaseModel):
 
 
 def account_json(db: Session, a: Account) -> dict:
+    missing = legal.missing(db, a.id)
     return {"id": a.id, "email": a.email, "email_verified": a.email_verified, "plan": a.plan or "free",
+            # true: a current policy version is not accepted yet (POST /v1/me/consents)
+            "consent_required": bool(missing), "consents_missing": missing,
             "credits": ledger.balance(db, a.id), "created_at": a.created_at.isoformat() + "Z",
+            # true: a ClutchClips admin (scripts/admin.py make-admin). The website shows the admin screens only then;
+            # the admin routes check it themselves.
+            "is_admin": bool(a.is_admin),
             # What Stripe last reported: null without a subscription; "past_due" means the last payment failed.
             "subscription_status": a.subscription_status,
             "subscription_cancel_at": a.subscription_cancel_at.isoformat() + "Z" if a.subscription_cancel_at else None}
@@ -90,10 +102,13 @@ def send_verification(a: Account) -> bool:
 
 
 @router.post("/v1/auth/signup", status_code=201)
-def signup(body: Credentials, request: Request, db: Session = Depends(get_db)):
+def signup(body: SignupRequest, request: Request, db: Session = Depends(get_db)):
     s = get_settings()
     ip = client_ip(request)
     rate_limit(f"signup:{ip}", s.signup_limit_per_ip_per_hour, 3600)
+    if s.require_terms_acceptance and body.accept_policies is not True:
+        raise ApiError(422, "terms_required", "Send accept_policies: true to accept the Terms of Service, Privacy "
+                                              "Policy and Acceptable Use Policy (GET /v1/legal/policies).")
     email = body.email.strip().lower()
     if email.rsplit("@", 1)[-1] in DISPOSABLE:
         raise ApiError(422, "email_not_allowed", "Please sign up with a permanent email address.")
@@ -105,6 +120,8 @@ def signup(body: Credentials, request: Request, db: Session = Depends(get_db)):
     except IntegrityError:
         db.rollback()
         raise ApiError(409, "email_taken", "An account with this email already exists.") from None
+    if body.accept_policies is True:
+        legal.record(db, account.id, legal.current_versions(), "signup")
     if s.auto_verify_email:
         mark_verified(db, account)
     db.commit()

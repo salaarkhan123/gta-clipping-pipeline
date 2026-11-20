@@ -165,6 +165,21 @@ def remap_words(words: list[tuple[float, float, str]], segments: list[Segment]) 
     return out
 
 
+def source_words(words: list[tuple[float, float, str]], segments: list[Segment],
+                 flash: bool = False) -> list[tuple[float, float, str]]:
+    """The inverse of remap_words: words on a rendered timeline back in source seconds. Words in a flash-forward
+    (the first segment, when `flash`) are left out: they are said again where the moment really happens."""
+    out, at = [], 0.0
+    for k, (s, e) in enumerate(segments):
+        length = e - s
+        if not (flash and k == 0):
+            for ws, we, text in words:
+                if at <= ws < at + length:
+                    out.append((round(s + ws - at, 3), round(s + min(we, at + length) - at, 3), text))
+        at += length
+    return sorted(out)
+
+
 def zoom_peaks(db: list[float], segments: list[Segment], flash: bool = False, max_peaks: int = 3) -> list[float]:
     """Rendered-timeline times for punch-in zooms: the loudest seconds of the clip that stand out from the rest
     of it, at least ZOOM_GAP apart. `db` is the source's loudness per second. Never inside the flash-forward."""

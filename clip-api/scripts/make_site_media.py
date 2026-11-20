@@ -1,0 +1,908 @@
+#!/usr/bin/env python3
+"""Website media made by the real clipping engine: loops, posters, stills and a manifest.json per site section.
+
+Each step can be rerun. `--work` holds everything in between (audio, segments, scout results). The flow is
+scout, then render (which fetches what it needs), then the owner picks in the featured picker, then publish.
+
+  python scripts/make_site_media.py scout  --sources S.json --work W
+      For each source, the engine (run_pipeline, no AI judge) ranks the whole video and stops before rendering.
+      A link source is scored from its audio only: the audio is downloaded (public content, no cookies or
+      logins), scored, then deleted. Writes W/scout/<source>.json: the engine's moments, best first, each with
+      its signal-only rating and the display rating the app would show for that video (app/scoring.py).
+
+  python scripts/make_site_media.py fetch  --sources S.json --shots H.json --work W
+      Downloads (yt-dlp --download-sections) or cuts only the pieces the shot list uses into W/seg/.
+
+  python scripts/make_site_media.py render --sources S.json --shots H.json --work W --out OUT
+                                           [--only a,b] [--featured F]
+      Renders every shot through the engine (run_pipeline on the segment with the shot's options) as candidates:
+      OUT/<section>/<cid>.mp4 (H.264, muted, faststart), <cid>.webm (VP9), <cid>.webp (poster) or a still, and
+      OUT/<section>/candidates.json. A cid is "<source>-m<rank>", or "<variant>--<source>-m<rank>" in the sections
+      that show one moment several ways (captions, reframe, templates, setup). With --featured, the picker's
+      open requests are served first.
+
+  python scripts/make_site_media.py more --section S --like CID [--count N] ...
+      "Find another moment like this": the same shot on the source's next-best scouted moment.
+  python scripts/make_site_media.py requests --featured F ...
+      Serves every request in F ("find another moment like this", from the picker) that no candidate answers yet.
+
+  python scripts/make_site_media.py publish --sources S.json --work W --out OUT --featured F --public P
+      Copies only the featured candidates, in the owner's order, into P/<section>/ under the ids the site reads
+      (clip-1.., hook-1.., or the variant name) and writes P/<section>/manifest.json, the shape
+      clip-api/web-src/lib/media.ts reads, with the permission and a credit per item.
+
+  python scripts/make_site_media.py clean --work W     Deletes the downloads and segments in W.
+
+Ratings are signal-only (app.ai.signal_meta): this script never calls a paid AI. A shot that needs hook text
+gives it in the shot list, and the manifest records that the text came from the shot list, not from the AI.
+Use only footage the owner has the rights to publish. Exit 0 = ok, 1 = a step failed, 2 = bad input.
+"""
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from app.ai import signal_meta  # noqa: E402
+from app.pipeline import Deadline, PipelineError, PipelineOptions, probe, run_pipeline  # noqa: E402
+from app.pipeline.ff import SAFE_IN, run  # noqa: E402
+from app.scoring import display_scores  # noqa: E402
+from app.templates import TEMPLATES  # noqa: E402
+
+PAD = 2.0                       # seconds fetched either side of a moment
+LOOP_SECONDS = 8.0
+MAX_BYTES = 1_450_000           # each loop file (mp4, webm) stays under ~1.5 MB
+POSTER_BYTES = 120_000
+STILL_BYTES = 60_000
+VERTICAL, WIDE = (540, 960), (960, 540)
+CAP = 900                       # seconds any one ffmpeg or download may take
+FORMAT = "bv*[height<=1080][vcodec^=avc1]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]/b"
+FORMAT_RETRY = "bv*[height<=1080][vcodec^=avc1]+139/bv*[height<=1080]+wa/b"
+AUDIO_FORMAT = "ba[abr<=80]/wa/ba"
+
+
+class Stop(Exception):
+    """Raised from on_moments: scouting needs the ranked moments, not the renders."""
+
+
+def load(path: Path) -> dict:
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        sys.exit(f"cannot read {path}: {e}")
+
+
+def ytdlp(*args: str) -> None:
+    # Public content only: no cookies, no logins, no proxies. A refusal is reported and the step fails.
+    cmd = ["yt-dlp", "--no-playlist", "--no-cookies", "--no-cookies-from-browser", "-q", "--no-warnings", *args]
+    res = subprocess.run(cmd, capture_output=True, text=True, timeout=CAP * 4)
+    if res.returncode:
+        raise PipelineError("download_refused", (res.stderr.strip().splitlines() or ["download failed"])[-1][:300])
+
+
+def ffmpeg(*args, cap: float = CAP) -> None:
+    run(["ffmpeg", "-loglevel", "error", "-y", *args], Deadline(cap))
+
+
+def transcriber(model: str):
+    if model == "none":
+        return None
+    from app.pipeline.transcribe import FasterWhisperTranscriber
+    return FasterWhisperTranscriber(model)
+
+
+# ---------------------------------------------------------------- scout
+
+def scout(sources: dict, work: Path, only: set | None, model: str) -> None:
+    (work / "scout").mkdir(parents=True, exist_ok=True)
+    stt = transcriber(model)
+    for sid, src in sources.items():
+        if (only and sid not in only) or (not only and (work / "scout" / f"{sid}.json").exists()):
+            continue            # without --only, a source already scouted is kept
+        print(f"scout {sid}", flush=True)
+        tmp = Path(tempfile.mkdtemp(prefix=f"scout-{sid}-", dir=work))
+        try:
+            video = Path(src["file"]).expanduser() if src.get("file") else _audio_proxy(src["url"], tmp)
+            info = probe(video)
+            s = src.get("scout", {})
+            options = PipelineOptions(limit=s.get("limit", 12), clip_length=s.get("clip_length", 20), vertical=False,
+                                      captions=False, tighten=False, flash_forward=False, hook_overlay=False,
+                                      punch_zoom=False, range=s.get("range"))
+            found: list = []
+
+            def keep(moments):
+                found.extend(moments)
+                raise Stop()
+
+            try:
+                run_pipeline(video, options, tmp, transcriber=stt, on_moments=keep)
+            except Stop:
+                pass
+            raws = [signal_meta(m.score)["virality"]["score"] for m in found]
+            shown = display_scores(raws)
+            moments = [{"rank": i + 1, "start": m.start, "end": m.end, "score": m.score, "rating_raw": raw,
+                        "rating": dis, "signals": m.signals,
+                        "exclamations": m.features.get("exclamation_hits", 0), "words": m.features.get("words")}
+                       for i, (m, raw, dis) in enumerate(zip(found, raws, shown))]
+            out = {"source": sid, "duration_sec": round(info.duration, 1), "rating_source": "signals",
+                   "options": {"limit": options.limit, "clip_length": options.clip_length, "range": options.range},
+                   "moments": moments}
+            (work / "scout" / f"{sid}.json").write_text(json.dumps(out, indent=1))
+            for m in moments:
+                print(f"  #{m['rank']:>2} {_hms(m['start'])}-{_hms(m['end'])} rating {m['rating']} "
+                      f"(raw {m['rating_raw']}, words {m['words']}, excl {m['exclamations']})")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _audio_proxy(url: str, tmp: Path) -> Path:
+    """The source's audio under a 1 fps, 64x36 black picture: what run_pipeline needs to score a link without
+    downloading its video."""
+    ytdlp("-f", AUDIO_FORMAT, "-o", str(tmp / "audio.%(ext)s"), url)
+    audio = next(tmp.glob("audio.*"))
+    proxy = tmp / "proxy.mkv"
+    ffmpeg(*SAFE_IN, "-f", "lavfi", "-i", "color=black:s=64x36:r=1", *SAFE_IN, "-i", audio, "-map", "0:v", "-map", "1:a",
+           "-c:v", "libx264", "-preset", "ultrafast", "-tune", "stillimage", "-c:a", "copy", "-shortest", proxy,
+           cap=CAP * 2)
+    audio.unlink()
+    return proxy
+
+
+def _hms(t: float) -> str:
+    t = int(t)
+    return f"{t // 3600}:{t // 60 % 60:02d}:{t % 60:02d}"
+
+
+# ---------------------------------------------------------------- fetch
+
+def moment_of(work: Path, sid: str, rank: int) -> dict:
+    data = load(work / "scout" / f"{sid}.json")
+    for m in data["moments"]:
+        if m["rank"] == rank:
+            return m
+    sys.exit(f"{sid} has no scouted moment #{rank}")
+
+
+def piece(shot: dict, work: Path) -> tuple[str, float, float]:
+    """(name, start, end) of the segment a shot is cut from, in source seconds."""
+    sid = shot["source"]
+    if "moment" in shot:
+        m = moment_of(work, sid, shot["moment"])
+        return f"{sid}-m{shot['moment']}", max(0.0, m["start"] - PAD), m["end"] + PAD
+    at, seconds = float(shot["at"]), float(shot.get("seconds", 12))
+    return f"{sid}-at{int(at)}", at, at + seconds
+
+
+def fetch(sources: dict, shots: list, work: Path) -> None:
+    seg = work / "seg"
+    seg.mkdir(parents=True, exist_ok=True)
+    wanted = {}
+    for shot in shots:
+        name, a, b = piece(shot, work)
+        wanted[name] = (shot["source"], a, b)
+    for name, (sid, a, b) in sorted(wanted.items()):
+        out = seg / f"{name}.mp4"
+        if (seg / f"{name}.json").exists() and _complete(out, b - a):
+            continue
+        src = sources[sid]
+        print(f"fetch {name} {_hms(a)}-{_hms(b)}", flush=True)
+        # Two tries. The second asks for the small AAC audio: on some live-stream VODs ffmpeg cannot open
+        # YouTube's other audio stream at a seek point, and a section download now and then drops mid-way.
+        for fmt in (FORMAT, FORMAT_RETRY):
+            try:
+                if src.get("file"):
+                    ffmpeg("-ss", f"{a:.3f}", "-t", f"{b - a:.3f}", *SAFE_IN, "-i", Path(src["file"]).expanduser(),
+                           "-c", "copy", "-avoid_negative_ts", "make_zero", out)
+                else:
+                    out.unlink(missing_ok=True)
+                    ytdlp("-f", fmt, "--merge-output-format", "mp4", "--download-sections", f"*{a:.2f}-{b:.2f}",
+                          "-o", str(out), src["url"])
+                if not _complete(out, b - a):
+                    raise PipelineError("short_segment", "the downloaded piece is much shorter than asked for")
+                (seg / f"{name}.json").write_text(json.dumps({"source": sid, "start": a, "end": b}))
+                break
+            except PipelineError as e:
+                (seg / f"{name}.json").unlink(missing_ok=True)
+                if fmt is FORMAT_RETRY:      # the shots that need it fail at render; the rest go on
+                    print(f"  FAILED fetch {name}: {e.message}", file=sys.stderr)
+
+
+def _complete(path: Path, seconds: float) -> bool:
+    """The segment exists, has audio, and is at least 70% of the length asked for."""
+    try:
+        info = probe(path)
+    except PipelineError:
+        return False
+    return info.has_audio and info.duration >= 0.7 * seconds
+
+
+# ---------------------------------------------------------------- render
+
+def options_for(shot: dict) -> PipelineOptions:
+    opts = {"limit": 1, "max_side": 540, "facecam_region": "auto", "caption_style": "impact",
+            "flash_forward": False, "hook_overlay": bool(shot.get("hook"))}
+    if shot.get("template"):
+        t = TEMPLATES[shot["template"]]
+        opts.update(t["options"], template=shot["template"])
+        panels = t.get("panels") or {}
+        if panels.get("camera"):
+            opts.update(camera=panels["camera"], split_ratio=panels.get("split_ratio"))
+    opts.update(shot.get("options", {}))
+    return PipelineOptions(**opts)
+
+
+def render_shot(shot: dict, seg_file: Path, seg: dict, tmp: Path, stt, budget: float):
+    """The engine's render of one shot: (video, clip-relative words, ClipResult or None)."""
+    if shot.get("kind", "clip") == "source":
+        return seg_file, [], None
+    options = options_for(shot)
+    length = seg["end"] - seg["start"]
+    options.clip_length = int(shot.get("clip_length", max(6, length - 2 * PAD)))
+    options.range = None
+    judge = None
+    if shot.get("hook"):
+        # No AI: the shot list supplies the hook. The pipeline only burns a hook the judge's meta carries, so
+        # this judge hands over that text and the signal rating, and rates nothing itself.
+        def judge(_text, _frame, _ctx, hook=shot["hook"]):
+            return {"virality": {"score": 60}, "hook": hook, "source": "shot-list"}
+    clips = run_pipeline(seg_file, options, tmp, transcriber=None if shot.get("output") in ("still", "strip") else stt,
+                         deadline=Deadline(budget), judge=judge)
+    if not clips:
+        raise PipelineError("no_clip", "the engine returned no clip")
+    clip = clips[0]
+    words = []
+    if clip.captions_path:
+        words = json.loads(Path(clip.captions_path).read_text())["words"]
+    return clip.video_path, words, clip
+
+
+def plan_boxes(video: Path, layout_shots: list) -> dict:
+    """What the engine's layout plans (facecam.resolve_plan, the plan render_clip draws) take from this 16:9
+    source, as fractions of the frame: the detected camera box, and per layout shot the gameplay crop."""
+    from app.pipeline.facecam import resolve_plan
+    info = probe(video)
+    out = {"facecam": None, "crop": {}}
+    for s in layout_shots:
+        plan = resolve_plan(video, info, options_for(s))
+        if plan is None:
+            continue
+        game = next((p for p in plan.panels if p.kind == "gameplay"), None)
+        if game:
+            x, y, w, h = game.src
+            out["crop"][s["variant"]] = [round(x / info.width, 4), round(y / info.height, 4),
+                                         round(w / info.width, 4), round(h / info.height, 4)]
+        if plan.cam and out["facecam"] is None:
+            out["facecam"] = [round(float(v), 4) for v in plan.cam]
+    return out
+
+
+PEAKS = 200
+
+
+def peaks(video: Path, start: float, seconds: float) -> list[float]:
+    """The rendered clip's loudness envelope over [start, start + seconds]: PEAKS values, 0 to 1."""
+    import numpy as np
+    from app.pipeline.ff import run_bytes
+    raw = run_bytes(["ffmpeg", "-loglevel", "error", "-ss", f"{start:.3f}", "-t", f"{seconds:.3f}", *SAFE_IN,
+                     "-i", video, "-vn", "-ac", "1", "-ar", "8000", "-f", "s16le", "-"], Deadline(CAP))
+    x = np.abs(np.frombuffer(raw, dtype=np.int16).astype(np.float32))
+    if not x.size:
+        return [0.0] * PEAKS
+    buckets = np.array_split(x, PEAKS)
+    vals = np.array([b.max() if b.size else 0.0 for b in buckets])
+    return [round(float(v), 3) for v in vals / (vals.max() or 1.0)]
+
+
+SIGNAL_STEP = 10
+
+
+def signals_curve(sources: dict, work: Path, out: Path, sid: str) -> int:
+    """The engine's own highlight score for a whole source (the audio signal run_pipeline ranks moments by:
+    signals.audio_rms_db, baseline_z, normalise), max-pooled to SIGNAL_STEP seconds and scaled 0 to 1. Written
+    to work/scout/<sid>.signals.json and onto the source's hero-long-video candidates for the moment finder."""
+    import numpy as np
+    from app.pipeline.signals import audio_rms_db, baseline_z, normalise
+    src = sources[sid]
+    tmp = Path(tempfile.mkdtemp(prefix=f"signals-{sid}-", dir=work))
+    try:
+        video = Path(src["file"]).expanduser() if src.get("file") else _audio_proxy(src["url"], tmp)
+        info = probe(video)
+        db = audio_rms_db(video, Deadline(CAP * 2))
+        n = int(info.duration) + 1
+        series = normalise(baseline_z(db, floor=1.0), n)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    pooled = [float(series[i:i + SIGNAL_STEP].max()) for i in range(0, len(series), SIGNAL_STEP)]
+    top = max(pooled) or 1.0
+    data = {"source": sid, "step_sec": SIGNAL_STEP, "duration_sec": round(info.duration, 1),
+            "what": "the engine's audio highlight score (what run_pipeline ranks moments by), max per step, 0-1",
+            "values": [round(v / top, 3) for v in pooled]}
+    (work / "scout" / f"{sid}.signals.json").write_text(json.dumps(data))
+    section = "hero-long-video"
+    path = out / section / "candidates.json"
+    by_cid = read_candidates(path, section)
+    for c in by_cid.values():
+        if c.get("source", {}).get("id") == sid:
+            (out / section / f"{c['cid']}.signals.json").write_text(json.dumps(data))
+            c["signals"] = f"{c['cid']}.signals.json"
+    write_candidates(path, section, by_cid, CONFIRMED, sources)
+    print(f"signals {sid}: {len(pooled)} values every {SIGNAL_STEP} s")
+    return 0
+
+
+def encode_loop(src: Path, out: Path, start: float, seconds: float, size: tuple[int, int]) -> dict:
+    """<out>.mp4 (muted) under MAX_BYTES, <out>.webm when VP9 fits under it too (the site treats it as optional),
+    and <out>.webp poster. Returns the file names."""
+    w, h = size
+    vf = (f"scale={w}:{h}:force_original_aspect_ratio=increase:flags=lanczos,crop={w}:{h},fps=30,"
+          f"format=yuv420p")
+    files = {}
+    for ext, codec, crf, worst in (
+            ("mp4", ["-c:v", "libx264", "-profile:v", "high", "-preset", "slow", "-movflags", "+faststart"], 26, 44),
+            ("webm", ["-c:v", "libvpx-vp9", "-b:v", "0", "-row-mt", "1", "-cpu-used", "2"], 36, 54)):
+        path = out.with_suffix(f".{ext}")
+        while True:
+            ffmpeg("-ss", f"{start:.3f}", "-t", f"{seconds:.3f}", *SAFE_IN, "-i", src, "-an", "-vf", vf, *codec,
+                   "-crf", str(crf), path)
+            if path.stat().st_size <= MAX_BYTES or crf >= worst:
+                break
+            crf += 3
+        if path.stat().st_size > MAX_BYTES:
+            if ext == "webm":
+                path.unlink()
+                continue
+            raise PipelineError("too_big", f"{path.name} is over {MAX_BYTES} bytes even at crf {crf}")
+        files["src" if ext == "mp4" else "webm"] = path.name
+    poster = out.with_suffix(".webp")
+    still(src, poster, start + min(1.0, seconds / 2), size, POSTER_BYTES)
+    files["poster"] = poster.name
+    return files
+
+
+def still(src: Path, out: Path, at: float, size: tuple[int, int], limit: int, vf_extra: str = "") -> None:
+    w, h = size
+    vf = f"scale={w}:{h}:force_original_aspect_ratio=increase:flags=lanczos,crop={w}:{h}" + vf_extra
+    for q in (82, 72, 62, 52, 42, 32):
+        ffmpeg("-ss", f"{at:.3f}", *SAFE_IN, "-i", src, "-frames:v", "1", "-vf", vf, "-c:v", "libwebp",
+               "-quality", str(q), out)
+        if out.stat().st_size <= limit:
+            return
+    raise PipelineError("too_big", f"{out.name} is over {limit} bytes")
+
+
+def strip(frames: list[tuple[Path, float]], out: Path, size: tuple[int, int], limit: int) -> None:
+    """One row of frames, each `size`, from (file, second) pairs."""
+    w, h = size
+    tmp = Path(tempfile.mkdtemp(prefix="strip"))
+    try:
+        parts = []
+        for i, (f, at) in enumerate(frames):
+            p = tmp / f"{i:02d}.png"
+            ffmpeg("-ss", f"{at:.3f}", *SAFE_IN, "-i", f, "-frames:v", "1", "-vf",
+                   f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}", p)
+            parts.append(p)
+        inputs = [a for p in parts for a in (*SAFE_IN, "-i", p)]
+        for q in (80, 65, 50, 35):
+            ffmpeg(*inputs, "-filter_complex", f"hstack=inputs={len(parts)}", "-c:v", "libwebp", "-quality", str(q), out)
+            if out.stat().st_size <= limit:
+                return
+        raise PipelineError("too_big", f"{out.name} is over {limit} bytes")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+# Candidates: every rendered shot is a candidate with an id (cid) the owner's picker (featured.json) refers to.
+# A section of variants shows one moment several ways (cid "<variant>--<source>-m<rank>"); the other sections show
+# one clip per moment (cid "<source>-m<rank>"). `publish` renames them to the ids the site reads.
+VARIANT_SECTIONS = ("captions", "reframe", "templates", "setup")
+ORDINAL = {"hero-long-video": "vod", "hero-vertical-clips": "clip", "hook": "hook", "editor": "editor",
+           "clip-finding": "find"}
+
+
+def cid_of(shot: dict) -> str:
+    where = f"{shot['source']}-m{shot['moment']}" if "moment" in shot else f"{shot['source']}-at{int(shot['at'])}"
+    return f"{shot['variant']}--{where}" if shot.get("variant") else where
+
+
+def expand(shots: list) -> list:
+    """One concrete shot per candidate: a shot whose `moment` is a list becomes one shot per moment."""
+    out = []
+    for shot in shots:
+        if shot["section"] in VARIANT_SECTIONS and not shot.get("variant"):
+            sys.exit(f"a {shot['section']} shot needs a variant")
+        for m in (shot["moment"] if isinstance(shot.get("moment"), list) else [shot.get("moment")]):
+            one = {**shot, **({"moment": m} if m is not None else {})}
+            if not one.get("moment"):
+                one.pop("moment", None)
+            one["cid"] = cid_of(one)
+            if one.get("words_from"):
+                one["words_from"] = cid_of({**one, "variant": one["words_from"]})
+            out.append(one)
+    return out
+
+
+def read_candidates(path: Path, section: str) -> dict:
+    data = load(path) if path.exists() else {"section": section, "version": 1, "candidates": []}
+    return {c["cid"]: c for c in data["candidates"]}
+
+
+CONFIRMED = "owner-confirmed"
+
+
+def write_candidates(path: Path, section: str, by_cid: dict, permission: str, sources: dict) -> None:
+    """Several runs (each with its own sources file) share one candidates.json, so permission is per candidate
+    (`commercial_permission`, stamped from the run that rendered it). The file-level `permission`, which the
+    picker warns on, is a confirmed one only when every candidate is confirmed."""
+    for c in by_cid.values():
+        if "commercial_permission" not in c and c.get("source", {}).get("id") in sources:
+            c["commercial_permission"] = sources[c["source"]["id"]].get("permission", permission)
+    unconfirmed = [cid for cid, c in by_cid.items() if not str(c.get("commercial_permission", "")).startswith(CONFIRMED)]
+    level = f"NOT CONFIRMED for: {', '.join(unconfirmed)}" if unconfirmed else permission
+    path.write_text(json.dumps({"section": section, "version": 1, "permission": level,
+                                "candidates": list(by_cid.values())}, indent=1) + "\n")
+
+
+def render(sources: dict, shots: list, work: Path, out: Path, only: set | None, model: str, permission: str) -> int:
+    stt = transcriber(model)
+    failed = 0
+    scouts = {sid: load(work / "scout" / f"{sid}.json") for sid in sources if (work / "scout" / f"{sid}.json").exists()}
+    for shot in shots:
+        section, sid, cid = shot["section"], shot["source"], shot["cid"]
+        if only and not only & {section, cid, shot.get("variant"), sid}:
+            continue
+        src = sources[sid]
+        name, a, b = piece(shot, work)
+        seg_file = work / "seg" / f"{name}.mp4"
+        if not (work / "seg" / f"{name}.json").exists():
+            failed += 1
+            print(f"  FAILED {section}/{cid}: segment {name} was not fetched", file=sys.stderr)
+            continue
+        seg = load(work / "seg" / f"{name}.json")
+        dest = out / section
+        dest.mkdir(parents=True, exist_ok=True)
+        print(f"render {section}/{cid}", flush=True)
+        tmp = Path(tempfile.mkdtemp(prefix="shot-", dir=work))
+        try:
+            video, words, clip = render_shot(shot, seg_file, seg, tmp, stt, budget=CAP)
+            info = probe(video)
+            outputs = shot.get("output", "loop")
+            item = {"cid": cid, "label": shot.get("label", cid), "kind": "image" if outputs in ("still", "strip") else "video"}
+            loop_start = float(shot.get("loop_start", 0.0))
+            if clip is None:            # a 16:9 cut straight from the source: skip the fetch padding
+                loop_start += float(shot.get("offset", PAD if "moment" in shot else 0.0))
+            seconds = 0.0
+            if outputs == "loop":
+                seconds = min(float(shot.get("seconds", LOOP_SECONDS)), info.duration - loop_start)
+                size = VERTICAL if info.height > info.width else WIDE
+                item.update(encode_loop(video, dest / cid, loop_start, seconds, size))
+                item.update(width=size[0], height=size[1], duration_sec=round(seconds, 2))
+            elif outputs == "still":
+                size = tuple(shot["size"])
+                path = dest / f"{cid}.webp"
+                still(video, path, loop_start + float(shot.get("still_at", 1.0)), size,
+                      int(shot.get("max_bytes", STILL_BYTES)), shot.get("vf", ""))
+                item.update(src=path.name, width=size[0], height=size[1])
+            elif outputs == "strip":
+                n, size = int(shot.get("frames", 10)), tuple(shot["size"])
+                segs = sorted((work / "seg").glob(f"{sid}-*.mp4"), key=lambda p: load(p.with_suffix(".json"))["start"])
+                per = -(-n // len(segs))          # frames per segment, spread evenly over the strip
+                pool = [(f, 1.0 + 2.5 * r) for f in segs for r in range(per)]
+                path = dest / f"{cid}.webp"
+                strip([pool[i * len(pool) // n] for i in range(n)], path, size, int(shot.get("max_bytes", STILL_BYTES)))
+                item.update(src=path.name, width=size[0] * n, height=size[1])
+            else:
+                sys.exit(f"unknown output {outputs!r}")
+            if shot.get("words") and words:
+                end = loop_start + seconds
+                kept = [{"start": round(w["start"] - loop_start, 3), "end": round(w["end"] - loop_start, 3),
+                         "text": w["text"]} for w in words if loop_start <= w["start"] < end]
+                (dest / f"{cid}.words.json").write_text(json.dumps({"words": kept}))
+                item["words"] = f"{cid}.words.json"
+            if shot.get("peaks") and clip is not None:
+                (dest / f"{cid}.peaks.json").write_text(json.dumps({"peaks": peaks(video, loop_start, seconds)}))
+                item["peaks"] = f"{cid}.peaks.json"
+            if shot.get("words_from"):         # the same moment and cut, rendered with captions: its words fit here
+                item["words"] = f"{shot['words_from']}.words.json"
+            inner = (clip.start if clip else 0.0) + loop_start      # seconds into the segment
+            scouted = moment_of(work, sid, shot["moment"]) if "moment" in shot else None
+            opts = options_for(shot)
+            item.update({k: v for k, v in {
+                "like": shot.get("like"), "request": shot.get("request"),
+                "game": shot.get("game", src.get("game")),
+                "aspect": "9:16" if item.get("height", 0) > item.get("width", 0) else "16:9",
+                "layout": opts.layout if clip else "original",
+                "caption_style": opts.caption_style if clip and opts.captions else None,
+                "template": shot.get("template"),
+                "hook": shot.get("hook"), "hook_source": "shot-list" if shot.get("hook") else None,
+                "rank": scouted["rank"] if scouted else None,
+                "rating": scouted["rating"] if scouted else None,
+                "rating_source": scouts.get(sid, {}).get("rating_source") if scouted else None,
+                "credit": src["credit"],
+                "commercial_permission": src.get("permission", permission),
+                "source": {"id": sid, "creator": src["creator"], "title": src.get("title"), "url": src.get("url"),
+                           "start_sec": round(seg["start"] + inner, 2),
+                           "end_sec": round(seg["start"] + inner + seconds, 2)},
+            }.items() if v is not None})
+            if shot.get("boxes"):
+                item["boxes"] = plan_boxes(seg_file, [s for s in shots if s["section"] == section
+                                                      and s["source"] == sid and s.get("moment") == shot.get("moment")
+                                                      and s.get("variant") in shot["boxes"]])
+            curve = work / "scout" / f"{sid}.signals.json"
+            if shot.get("duration") == "source" and curve.exists():      # the whole video's highlight curve
+                shutil.copy2(curve, dest / f"{cid}.signals.json")
+                item["signals"] = f"{cid}.signals.json"
+            if shot.get("duration") == "source":
+                item["duration_sec"] = scouts.get(sid, {}).get("duration_sec") or src.get("duration_sec")
+                item["loop_sec"] = round(seconds, 2)
+            path = dest / "candidates.json"
+            by_cid = read_candidates(path, section)
+            same = by_cid.get(shot.get("rating_from", ""), {})
+            if same.get("rating_source") == "ai":          # the same moment, already judged: its AI rating
+                item.update({k: same[k] for k in ("rating", "rating_raw", "rating_source", "ai_model", "ai_scores",
+                                                  "scoring_version", "ai_reason", "ai_kind") if k in same},
+                            rating_of_candidate=same["cid"])
+            by_cid[cid] = item
+            write_candidates(path, section, by_cid, permission, sources)
+        except PipelineError as e:
+            failed += 1
+            print(f"  FAILED {section}/{cid}: {e.message}", file=sys.stderr)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    return 1 if failed else 0
+
+
+def more_like(sources: dict, raw_shots: list, work: Path, out: Path, section: str, like: str, count: int,
+              model: str, permission: str, moment: int | None = None, request: str | None = None) -> int:
+    """"Find another moment like this": the shot behind candidate `like`, on scouted moment `moment`, or on the
+    source's next-best scouted moments this section has no candidate for yet. The new candidates carry `like`
+    and the picker's `request` id, which is how the picker sees the request is done."""
+    variant, _, where = like.rpartition("--")
+    sid = where.rsplit("-m", 1)[0]
+    base = next((s for s in raw_shots if s["section"] == section and s["source"] == sid
+                 and (s.get("variant") or "") == variant), None)
+    if base is None:
+        print(f"no shot in the shot list makes {section}/{like}", file=sys.stderr)
+        return 1
+    have = read_candidates(out / section / "candidates.json", section)
+    taken = {c.get("rank") for c in have.values() if c.get("source", {}).get("id") == sid
+             and c["cid"].rpartition("--")[0] == variant}
+    ranks = [m["rank"] for m in load(work / "scout" / f"{sid}.json")["moments"]]
+    free = [moment] if moment else [r for r in ranks if r not in taken][:count]
+    if not free or free[0] not in ranks:
+        print(f"{sid} has no scouted moment left for {section}", file=sys.stderr)
+        return 1
+    shots = expand([{**base, "moment": free, "like": like, **({"request": request} if request else {})}])
+    fetch(sources, shots, work)
+    code = render(sources, shots, work, out, None, model, permission)
+    print("new: " + ", ".join(s["cid"] for s in shots))
+    return code
+
+
+def requests(sources: dict, raw_shots: list, work: Path, out: Path, featured: Path, model: str, permission: str) -> int:
+    """The picker's open "find another moment like this" requests (featured.json `requests`): each one that no
+    candidate answers yet is rendered."""
+    if not featured.exists():
+        return 0
+    code = 0
+    for req in load(featured).get("requests", []):
+        if req["cid"].rpartition("--")[2].rsplit("-m", 1)[0] not in sources:
+            continue          # another sources file (another media run) serves this one
+        answered = read_candidates(out / req["section"] / "candidates.json", req["section"])
+        if any(c.get("request") == req["id"] for c in answered.values()):
+            continue
+        print(f"request {req['id']}: {req['section']} like {req['cid']}", flush=True)
+        code |= more_like(sources, raw_shots, work, out, req["section"], req["cid"], 1, model, permission,
+                          moment=req.get("moment"), request=req["id"])
+    return code
+
+
+HERO_CLIPS = 6
+
+
+def default_picks(out: Path, exclude: set) -> dict:
+    """featured.json's shape for when the owner has saved no picks: every confirmed candidate except `exclude`,
+    in the engine's rank order, taking each source's best before any source's second best (so the hero's six
+    clips mix games and creators); the hero's six then go best AI rating first when all six have one. A hero
+    variant (cid "wide--...") is published beside the six as clip-<variant>. Variant sections keep render order."""
+    sections = {}
+    for path in sorted(out.glob("*/candidates.json")):
+        cands = [c for c in load(path)["candidates"] if c["cid"] not in exclude
+                 and str(c.get("commercial_permission", "")).startswith(CONFIRMED)]
+        section = path.parent.name
+        extra = [c for c in cands if "--" in c["cid"]] if section == "hero-vertical-clips" else []
+        cands = [c for c in cands if c not in extra]
+        if section not in VARIANT_SECTIONS:
+            order = {}
+            for c in cands:
+                order.setdefault(c.get("source", {}).get("id"), []).append(c)
+            seen = [sorted(v, key=lambda c: c.get("rank") or 99) for v in order.values()]
+            cands = []
+            for tier in range(max(map(len, seen), default=0)):
+                cands += [v[tier] for v in seen if tier < len(v)]
+        if section == "hero-vertical-clips":
+            # Six different games where there are six: each game's best AI-rated clip, best first; then the
+            # best of what is left when there are fewer games.
+            rated = sorted((c for c in cands if c.get("rating_source") == "ai"), key=lambda c: -c["rating"])
+            top, games = [], set()
+            for c in rated:
+                if c.get("game") not in games:
+                    top.append(c)
+                    games.add(c.get("game"))
+            top += [c for c in rated if c not in top]
+            top = sorted(top[:HERO_CLIPS], key=lambda c: -c["rating"]) if len(rated) >= HERO_CLIPS else cands[:HERO_CLIPS]
+            cands = top + extra
+        pick = {"clips": [c["cid"] for c in cands]}
+        if pick["clips"]:
+            sections[section] = pick
+    return {"version": 1, "updated_by": "make_site_media.py defaults (no owner picks saved)", "sections": sections}
+
+
+def publish(featured: Path, out: Path, public: Path) -> int:
+    """Copy only the featured candidates (each section's `clips[:show]`, in the owner's order) into
+    public/<section>/ under the ids the site reads, and write that section's manifest.json. A section the picker
+    left out is not touched; a featured cid with no candidate is skipped with a warning. Nothing is written when
+    any featured candidate lacks the owner's confirmed permission to publish its footage."""
+    plan = {}
+    for section, pick in load(featured).get("sections", {}).items():
+        have = read_candidates(out / section / "candidates.json", section)
+        cids = pick.get("clips", [])
+        for c in cids:
+            if c not in have:
+                print(f"warning: {section}/{c} is featured but not rendered; skipped", file=sys.stderr)
+        cids = [c for c in cids if c in have]          # a missing pick does not use up one of the `show` slots
+        plan[section] = (have, cids[:pick["show"]] if pick.get("show") is not None else cids)
+    refused = [f"{s}/{c}" for s, (have, cids) in plan.items() for c in cids
+               if not str(have[c].get("commercial_permission", "")).startswith(CONFIRMED)]
+    if refused:
+        print(f"refused, nothing published: no confirmed permission for {', '.join(refused)}", file=sys.stderr)
+        return 1
+    for section, (have, cids) in plan.items():
+        dest = public / section
+        if dest.exists():
+            shutil.rmtree(dest)       # the folder is this step's output: what is not featured any more goes
+        dest.mkdir(parents=True)
+        items, used = [], set()
+        n = 0
+        for cid in cids:
+            c = dict(have[cid])
+            if section not in VARIANT_SECTIONS and "--" in cid:      # a hero variant: clip-wide
+                pid = f"{ORDINAL[section]}-{cid.rpartition('--')[0]}"
+            elif section in VARIANT_SECTIONS:
+                pid = base = cid.rpartition("--")[0]
+                k = 2
+                while pid in used:          # two featured candidates of one variant: impact, impact-2
+                    pid, k = f"{base}-{k}", k + 1
+            elif section == "hero-long-video":
+                n += 1
+                pid = "vod" if n == 1 else f"vod-{n}"
+            else:
+                n += 1
+                pid = f"{ORDINAL[section]}-{n}"
+            used.add(pid)
+            if c.get("webm") and c.get("src") and \
+                    (out / section / c["webm"]).stat().st_size >= (out / section / c["src"]).stat().st_size:
+                del c["webm"]         # the site tries webm first only to save bytes: one no smaller is dead weight
+            for key, ext in (("src", None), ("webm", None), ("poster", None), ("words", ".words.json"),
+                             ("peaks", ".peaks.json"), ("signals", ".signals.json")):
+                if c.get(key):        # a words file may belong to another candidate (captions "plain")
+                    name = f"{pid}{ext or Path(c[key]).suffix}"
+                    shutil.copy2(out / section / c[key], dest / name)
+                    c[key] = name
+            c.pop("request", None)
+            c.pop("like", None)
+            items.append({"id": pid, "candidate": c.pop("cid"), **c})
+        credits = {}
+        for i in items:
+            credits.setdefault(i["source"]["creator"], i["source"].get("url"))
+        (dest / "manifest.json").write_text(json.dumps(
+            {"section": section, "version": 1,
+             "permission": sorted({i["commercial_permission"] for i in items})[0] if items else CONFIRMED,
+             "credits": [{"creator": k, "url": v} for k, v in credits.items()], "items": items}, indent=1) + "\n")
+        print(f"published {section}: {', '.join(i['id'] for i in items)}")
+    return 0
+
+
+# The AI judge: the app's own (app.ai.ClaudeAI.clip_meta, the call the worker makes for a rendered clip with no
+# judge meta), run on published hero clips. USD per million tokens, input / output, for prompts up to 100K tokens.
+# Source: Anthropic's price table as shipped in the claude-api skill (cached 2026-11-03), checked 2026-11-18.
+PRICES = {"claude-haiku-5-5": (0.10, 0.50)}
+JUDGE_CAP_USD = 0.50
+CALL_CEILING_TOKENS = (20_000, 1024)      # the most one call could use: a generous input bound, and MAX_TOKENS out
+
+
+def judge_hero(work: Path, out: Path, public: Path, model_name: str, section: str = "hero-vertical-clips",
+               cids: list | None = None) -> int:
+    """Rate each published hero clip with the app's judge: the clip's spoken words, its length and signal shares,
+    and a frame of the rendered clip. Stores the four sub-scores, the raw score and the display rating (app.scoring
+    across these clips, as across one job's clips) on the candidate, with rating_source "ai". Every API response is
+    logged with its tokens and cost; no call starts that could take the total past JUDGE_CAP_USD. A clip the judge
+    fails on keeps its signal-only rating."""
+    import httpx
+    from app.ai import ClaudeAI
+    try:
+        from app.ai import rating_of        # the one reader of a judge reply (scoring v2, PR #153)
+    except ImportError:
+        print("this engine has no app.ai.rating_of: run the judge from the scoring-v2 code (PR #153)", file=sys.stderr)
+        return 1
+    from app.config import get_settings
+    from app.pipeline.render import render_thumb
+    from app.pipeline.transcribe import extract_wav
+
+    settings = get_settings()                 # the app's own settings loading supplies the key; never printed
+    if not settings.anthropic_api_key:
+        print("no ANTHROPIC_API_KEY configured: nothing rated", file=sys.stderr)
+        return 1
+    model = settings.ai_model
+    if model not in PRICES:
+        print(f"no price on file for {model}: nothing rated", file=sys.stderr)
+        return 1
+    price_in, price_out = PRICES[model]
+    worst = (CALL_CEILING_TOKENS[0] * price_in + CALL_CEILING_TOKENS[1] * price_out) / 1e6
+    log_path = work / "judge-log.json"
+    calls = json.loads(log_path.read_text()) if log_path.exists() else []
+    spent = sum(c["cost_usd"] for c in calls)
+    run_start = len(calls)            # the log keeps earlier runs; an auth error counts only in this one
+    current: dict = {}
+
+    def record(response: httpx.Response) -> None:
+        response.read()
+        usage = (response.json() or {}).get("usage", {}) if response.headers.get("content-type", "").startswith(
+            "application/json") else {}
+        tin, tout = int(usage.get("input_tokens") or 0), int(usage.get("output_tokens") or 0)
+        calls.append({"cid": current["cid"], "model": model, "status": response.status_code, "input_tokens": tin,
+                      "output_tokens": tout, "cost_usd": round((tin * price_in + tout * price_out) / 1e6, 6),
+                      "price_per_mtok": [price_in, price_out], "pricing_source": "claude-api skill table, cached "
+                      "2026-11-03, checked 2026-11-18"})
+
+    def refuse_after_auth_error(request: httpx.Request) -> None:
+        # A rejected key fails every call the same way: after one 401/403, nothing more is sent (the judge's own
+        # retry included) and the run stops.
+        if any(x["status"] in (401, 403) for x in calls[run_start:]):
+            raise RuntimeError("the API key was rejected; not sending more requests")
+
+    ai = ClaudeAI(settings.anthropic_api_key, model, client=httpx.Client(
+        timeout=45, event_hooks={"request": [refuse_after_auth_error], "response": [record]}))
+    stt = transcriber(model_name)
+    cands_path = out / section / "candidates.json"
+    by_cid = read_candidates(cands_path, section)
+    wanted = cids or [i["candidate"] for i in load(public / section / "manifest.json")["items"]]
+    hero = [c for c in wanted if by_cid[c].get("rating_source") != "ai"]      # a rated clip is never re-rated
+    rated = {}
+    for cid in hero:
+        if spent + 2 * worst > JUDGE_CAP_USD:          # clip_meta may retry once: two calls at most
+            print(f"stopped before {cid}: ${spent:.4f} spent, the next call could pass ${JUDGE_CAP_USD}")
+            break
+        c = by_cid[cid]
+        sid, rank = c["source"]["id"], c["rank"]
+        m = moment_of(work, sid, rank)
+        seg = load(work / "seg" / f"{sid}-m{rank}.json")
+        tmp = Path(tempfile.mkdtemp(prefix="judge-", dir=work))
+        try:
+            wav, thumb = tmp / "clip.wav", tmp / "thumb.jpg"
+            extract_wav(work / "seg" / f"{sid}-m{rank}.mp4", m["start"] - seg["start"], m["end"] - m["start"], wav)
+            text = " ".join(w[2] for w in stt.transcribe(wav).words)
+            render_thumb(out / section / c["src"], thumb)
+            current["cid"] = cid
+            before = len(calls)
+            meta = ai.clip_meta(text, {"length": m["end"] - m["start"], "signals": m["signals"]}, thumb)
+            spent = sum(x["cost_usd"] for x in calls)
+            print(f"{cid}: {len(calls) - before} call(s), total ${spent:.5f}", flush=True)
+            if any(x["status"] in (401, 403) for x in calls[before:]):
+                print("the API key was rejected (401/403): run stopped, nothing rated", file=sys.stderr)
+                log_path.write_text(json.dumps(calls, indent=1) + "\n")
+                return 1
+            score = rating_of(meta) if meta else None
+            if score and score.get("scores"):          # five sub-scores, or it is not a v2 rating
+                rated[cid] = (meta, score)
+            else:
+                print(f"  judge gave no rating for {cid}: it stays signal-only", file=sys.stderr)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+            log_path.write_text(json.dumps(calls, indent=1) + "\n")
+    by_cid = read_candidates(cands_path, section)    # again: a render may have added candidates meanwhile
+    for cid, (meta, score) in rated.items():
+        by_cid[cid].update(rating_raw=score["rating"], rating_source="ai", ai_model=model,
+                           ai_scores=score["scores"], scoring_version=score["scoring_version"],
+                           ai_reason=meta.get("reason"), ai_kind=meta.get("kind"),
+                           ai_calls=[x for x in calls if x["cid"] == cid])
+    # The display rating is calibrated across every AI-rated clip of the section, as across one job's clips.
+    judged = [c for c in by_cid.values() if c.get("rating_source") == "ai" and "rating_raw" in c]
+    for c, display in zip(judged, display_scores([c["rating_raw"] for c in judged])):
+        c["rating"] = display
+    for cid in rated:
+        print(f"  {cid}: display {by_cid[cid]['rating']}, raw {by_cid[cid]['rating_raw']}, {by_cid[cid]['ai_scores']}"
+              f" {by_cid[cid].get('ai_kind')}")
+    write_candidates(cands_path, section, by_cid, CONFIRMED, {})
+    print(f"rated {len(rated)} of {len(hero)}; {len(calls)} calls; "
+          f"{sum(x['input_tokens'] for x in calls)} in / {sum(x['output_tokens'] for x in calls)} out tokens; "
+          f"${spent:.5f}")
+    return 0 if len(rated) == len(hero) else 1
+
+
+def clean(work: Path) -> None:
+    for sub in ("seg", "raw"):
+        shutil.rmtree(work / sub, ignore_errors=True)
+    for tmp in work.glob("scout-*"):
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def main(argv=None) -> int:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("step", choices=("scout", "fetch", "render", "more", "requests", "publish", "judge", "signals", "clean"))
+    p.add_argument("--sources", type=Path)
+    p.add_argument("--shots", type=Path)
+    p.add_argument("--work", type=Path, required=True)
+    p.add_argument("--out", type=Path, help="where candidates go, one folder per section")
+    p.add_argument("--only", help="comma-separated source ids (scout), or sections, variants or cids (render)")
+    p.add_argument("--whisper", default="small.en", help="faster-whisper model for captions, or none")
+    p.add_argument("--section", help="more: the section")
+    p.add_argument("--like", help="more: the candidate id to find another moment like")
+    p.add_argument("--count", type=int, default=1, help="more: how many new moments")
+    p.add_argument("--featured", type=Path, help="publish: the owner's featured.json")
+    p.add_argument("--public", type=Path, help="publish: clip-api/web-src/public/media")
+    p.add_argument("--exclude", help="publish without featured.json: comma-separated cids to leave out")
+    a = p.parse_args(argv)
+    only = set(a.only.split(",")) if a.only else None
+    work = a.work.expanduser()
+    if a.step == "clean":
+        clean(work)
+        return 0
+    if not a.sources:
+        p.error("--sources is required")
+    conf = load(a.sources)
+    sources, permission = conf["sources"], conf.get("permission", "unconfirmed")
+    if a.step == "scout":
+        scout(sources, work, only, "base.en" if a.whisper != "none" else "none")
+        return 0
+    if a.step == "signals":
+        if not (a.out and only):
+            p.error("signals needs --out and --only <source ids>")
+        return max(signals_curve(sources, work, a.out.expanduser(), sid) for sid in sorted(only))
+    if a.step not in ("publish", "judge") and not a.shots:
+        p.error("--shots is required")
+    if a.step == "requests" and not a.featured:
+        p.error("requests needs --featured")
+    if a.step != "fetch" and not a.out:
+        p.error("--out is required")
+    out = a.out.expanduser() if a.out else None
+    if a.step == "judge":
+        if not a.public:
+            p.error("judge needs --out and --public")
+        return judge_hero(work, out, a.public.expanduser(), a.whisper, a.section or "hero-vertical-clips",
+                          sorted(only) if only else None)
+    if a.step == "publish":
+        if not (a.featured and a.public):
+            p.error("publish needs --featured and --public")
+        # Every confirmed candidate, best first, for each section the owner has not picked; the owner's picks
+        # (featured.json) win for the sections they cover.
+        picks = default_picks(out, set(a.exclude.split(",")) if a.exclude else set())
+        owner = a.featured.expanduser()
+        if owner.exists():
+            picks["sections"].update(load(owner).get("sections", {}))
+            picks["owner_sections"] = sorted(load(owner).get("sections", {}))
+        featured = work / "default-featured.json"
+        featured.write_text(json.dumps(picks, indent=1) + "\n")
+        print(f"owner picks for: {', '.join(picks.get('owner_sections', [])) or 'none'}; defaults elsewhere")
+        return publish(featured, out, a.public.expanduser())
+    raw = load(a.shots)["shots"]
+    if a.step == "more":
+        if not (a.section and a.like):
+            p.error("more needs --section and --like")
+        return more_like(sources, raw, work, out, a.section, a.like, a.count, a.whisper, permission)
+    code = 0
+    if a.featured and a.step in ("render", "requests"):      # the picker's open requests go first
+        code = requests(sources, raw, work, out, a.featured.expanduser(), a.whisper, permission)
+    if a.step == "requests":
+        return code
+    shots = expand(raw)
+    fetch(sources, shots, work)
+    if a.step == "fetch":
+        return 0
+    return render(sources, shots, work, out, only, a.whisper, permission) | code
+
+if __name__ == "__main__":
+    sys.exit(main())

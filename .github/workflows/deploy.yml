@@ -1,0 +1,181 @@
+name: deploy
+
+# Deploys one commit on main to production. Every step fails closed. The deploy job uses the `production`
+# environment, so the owner approves each run in GitHub before anything reaches the server. Setup and the
+# full design: docs/devops/setup.md, docs/devops/current-state.md.
+run-name: "deploy ${{ inputs.ref || github.sha }}${{ inputs.dry_run && ' (dry run)' || '' }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit sha or tag on main (empty: main's head)"
+        type: string
+        required: false
+        default: ""
+      confirm:
+        description: "Owner only: the first 7 characters of the target commit (the approval when PROD_APPROVAL is not 'environment')"
+        type: string
+        required: false
+        default: ""
+      dry_run:
+        description: "Run every check and print the plan; back up, deploy and restart nothing"
+        type: boolean
+        default: false
+      backup_data:
+        description: "Also back up the data volume (uploads and clips; can be large; free disk is checked first)"
+        type: boolean
+        default: false
+  push:
+    branches: [main]   # runs only when the repo variable AUTO_DEPLOY_ON_PUSH is 'true'; still needs approval
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production   # shared with rollback.yml: one production change at a time, never cancelled midway
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    if: github.event_name == 'workflow_dispatch' || vars.AUTO_DEPLOY_ON_PUSH == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      checks: read
+      pull-requests: read
+    outputs:
+      sha: ${{ steps.gate.outputs.sha }}
+      pr: ${{ steps.gate.outputs.pr }}
+      evidence: ${{ steps.gate.outputs.evidence }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Target is on main and CI passed on its exact tree
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ inputs.ref || github.sha }}
+          REPO: ${{ github.repository }}
+          APPROVAL: ${{ vars.PROD_APPROVAL }}
+          DRY: ${{ inputs.dry_run && 'yes' || 'no' }}
+          CONFIRM: ${{ inputs.confirm }}
+          OWNER: ${{ vars.OPS_OWNER || github.repository_owner }}
+        run: |
+          flags=(); [ "$DRY" = yes ] && flags+=(--dry-run)
+          python3 .github/ops/opsctl.py gate --ref "$REF" --repo "$REPO" --approval "$APPROVAL" \
+            --event "$GITHUB_EVENT_NAME" --actor "$GITHUB_ACTOR" --owner "$OWNER" --confirm "$CONFIRM" "${flags[@]}"
+
+  deploy:
+    needs: gate
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      TARGET: ${{ needs.gate.outputs.sha }}
+      DRY_RUN: ${{ inputs.dry_run && 'yes' || 'no' }}
+      BACKUP_KIND: ${{ inputs.backup_data && 'full' || 'db' }}
+      PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+      PROD_HOST: ${{ secrets.PROD_HOST }}
+      PROD_KNOWN_HOSTS: ${{ secrets.PROD_KNOWN_HOSTS }}
+      PROD_SSH_USER: ${{ vars.PROD_SSH_USER }}
+      PROD_SSH_PORT: ${{ vars.PROD_SSH_PORT }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Prepare
+        run: |
+          echo "OPS_DIR=$RUNNER_TEMP/ops" >> "$GITHUB_ENV"
+          echo "BACKUP_KEEP=$(jq -r .backups.keep .github/ops/config.json)" >> "$GITHUB_ENV"
+          echo "Target $TARGET · dry run $DRY_RUN · backup $BACKUP_KIND"
+
+      - name: Preflight on the server (no running job, current commit and DB revision)
+        id: preflight
+        timeout-minutes: 5
+        run: .github/ops/ssh_ops.sh preflight preflight "$TARGET"
+
+      - name: Deploy moves forward only
+        env:
+          RELATION: ${{ steps.preflight.outputs.target_relation }}
+        run: |
+          case "$RELATION" in
+            newer|same) echo "target is $RELATION" ;;
+            *) echo "::error::target is '$RELATION' relative to the server's checkout; going back is rollback.yml"; exit 1 ;;
+          esac
+
+      - name: No destructive migration pending (runner check; the server checks again)
+        env:
+          CURRENT: ${{ steps.preflight.outputs.db_revision }}
+        run: python3 .github/ops/opsctl.py migrations --sha "$TARGET" --current "$CURRENT"
+
+      - name: Plan (dry run)
+        if: env.DRY_RUN == 'yes'
+        env:
+          BEFORE: ${{ steps.preflight.outputs.commit }}
+          PENDING: ${{ steps.preflight.outputs.migration_pending }}
+          FREE: ${{ steps.preflight.outputs.disk_free_mb }}
+        run: |
+          echo "Would back up ($BACKUP_KIND, keep $BACKUP_KEEP; $FREE MB free), then run deploy.sh for $BEFORE -> $TARGET,"
+          echo "migrating: ${PENDING:-nothing}; restart api and worker; verify; roll back the code on a failure after the restart."
+
+      - name: Back up and verify the backup
+        id: backup
+        if: env.DRY_RUN == 'no'
+        timeout-minutes: 60
+        run: .github/ops/ssh_ops.sh backup backup "$BACKUP_KIND" "$BACKUP_KEEP"
+
+      - name: Deploy (scripts/deploy.sh via ops.sh)
+        id: deploy
+        if: env.DRY_RUN == 'no'
+        timeout-minutes: 60
+        run: .github/ops/ssh_ops.sh deploy deploy "$TARGET"
+
+      - name: Verify
+        id: verify
+        if: env.DRY_RUN == 'no'
+        timeout-minutes: 10
+        env:
+          HEALTH_URL: ${{ vars.PROD_HEALTH_URL }}
+        run: |
+          rc=0
+          .github/ops/ssh_ops.sh verify verify "$TARGET" || rc=$?
+          if [ -n "$HEALTH_URL" ]; then
+            if curl -fsS --max-time 10 "$HEALTH_URL" | grep -Eq '"ok": *true'; then echo "public /health ok"
+            else echo "::error::public $HEALTH_URL is not ok"; rc=1; fi
+          fi
+          exit "$rc"
+
+      - name: Roll back the code (never the database)
+        id: rollback
+        if: >-
+          failure() && env.DRY_RUN == 'no' && steps.preflight.outputs.commit != '' &&
+          (steps.deploy.outputs.restarted == 'yes' || steps.verify.outcome == 'failure')
+        timeout-minutes: 30
+        env:
+          PREVIOUS: ${{ steps.preflight.outputs.commit }}
+        run: |
+          echo "::warning::deploy of $TARGET failed after the restart; rolling the code back to $PREVIOUS"
+          .github/ops/ssh_ops.sh rollback rollback "$PREVIOUS"
+          .github/ops/ssh_ops.sh verify_rollback verify "$PREVIOUS" rollback
+
+      - name: Report
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ needs.gate.outputs.pr }}
+          EVIDENCE: ${{ needs.gate.outputs.evidence }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          mkdir -p "$OPS_DIR"
+          flags=(); [ "$DRY_RUN" = yes ] && flags+=(--dry-run)
+          python3 .github/ops/opsctl.py report --kind deploy --dir "$OPS_DIR" --target "$TARGET" \
+            --pr "$PR" --evidence "$EVIDENCE" --run-url "$RUN_URL" "${flags[@]}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$PR" ] && [ "$DRY_RUN" = no ]; then
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file "$OPS_DIR/comment.md" || echo "::warning::could not comment on #$PR"
+          fi

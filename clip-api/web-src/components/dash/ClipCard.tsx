@@ -2,8 +2,11 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { API, api, ApiError, clock, getToken } from "@/lib/api";
-import { Icon, IconName } from "./Icon";
+import { ExportFull } from "./ExportFull";
+import { Icon, IconName, Soon } from "./Icon";
+import { BACKDROP, CARD_ROW, MEDIA, Shape, thumbVar, useShape } from "./ProjectCard";
 import { useDash } from "./Shell";
+import { scoreLabel } from "@/lib/scores";
 
 export async function downloadSubtitles(clipId: string, format = "srt") {
   const res = await fetch(`${API}/v1/clips/${clipId}/subtitles?format=${format}`, { headers: { Authorization: `Bearer ${getToken()}` } });
@@ -27,12 +30,20 @@ export function numbering(clips: any[]): Map<string, number> {
   return new Map(made.map((c, i) => [c.id, i + 1]));
 }
 
+const BADGE = "pointer-events-none absolute top-2 z-[2] rounded-full bg-[rgba(0,0,0,.66)] px-2 py-[2px] font-body text-[11.5px] font-medium leading-[1.5] tabular-nums text-text [backdrop-filter:blur(6px)]";
+const ACTION = "grid h-8 w-8 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-soft enabled:hover:bg-chip-hover enabled:hover:text-text hover:bg-chip-hover hover:text-text disabled:cursor-default disabled:opacity-[.4] narrow:h-10 narrow:w-10";
 const SOON: [IconName, string][] = [["calendar", "Schedule"]];
 
-// One clip as a card: tick box, rank and title, the preview with its time range, the score, and its actions.
+// One clip as a card: the picture in the clip's own shape with its AI rating and time range on it, then the
+// title and its actions. Clicking the picture plays the clip in place.
 // `project` links back to where it came from (Library). `lit` marks the card the timeline just jumped to.
 // `onSelect` adds the tick box (the project page's bulk actions).
 // `uploadId` (or `project`) gives the card its Edit action: the editor needs the source video.
+// The results grid: cards shaped like their clip (see ProjectCard's `useShape`), same picture height, wrapping.
+export const CLIP_GRID = CARD_ROW;
+// Same picture height for both shapes: a tall card is 216 px wide (384 px high), a wide one 683 px.
+const CLIP_WIDTH: Record<Shape, string> = { tall: "w-[216px] flex-none narrow:w-[calc((100%-12px)/2)]", wide: "w-[683px] max-w-full flex-none narrow:w-full" };
+
 export function ClipCard({ clip, onChange, project, uploadId, lit, number, selected, onSelect }: { clip: any; onChange: (c: any) => void;
   project?: { id: string; name: string }; uploadId?: string; lit?: boolean; number?: number; selected?: boolean; onSelect?: (id: string, on: boolean) => void }) {
   const { fail } = useDash();
@@ -47,37 +58,55 @@ export function ClipCard({ clip, onChange, project, uploadId, lit, number, selec
   const retitle = (title: string) => api(`/v1/clips/${clip.id}`, { method: "PATCH", body: { title } }).then(merge).catch(fail);
   const name = nameOf(clip, number), rank = rankOf(clip);
   const source = uploadId || project?.id;
+  const shape = useShape(clip.thumb_url, "tall");
+  const [play, setPlay] = useState(false);
   return (
     <article id={`clip-${clip.id}`} tabIndex={-1} aria-label={name}
-      className={`clip ${clip.kept === false ? "dropped" : ""} ${lit ? "lit" : ""} ${selected ? "picked" : ""}`}>
-      <header className="clip-top">
-        {onSelect && <input type="checkbox" checked={!!selected} aria-label={`Select ${name}`} onChange={(e) => onSelect(clip.id, e.target.checked)} />}
-        <h3 title={name}>{rank && <b>#{rank}</b>} {name}</h3>
-      </header>
-      <div className="clip-media">
-        <video controls preload="none" poster={clip.thumb_url || undefined} src={clip.video_url} />
-        <span className="clip-time">{clock(clip.start_sec)} – {clock(clip.end_sec)}</span>
-        {clip.edited === true && <span className="clip-edited">Edited</span>}
-        <div className="clip-rate" role="group" aria-label="Rate this clip">
-          <IconToggle icon="like" label="Like" on={clip.reaction === "like"} onClick={() => react("like")} />
-          <IconToggle icon="dislike" label="Dislike" on={clip.reaction === "dislike"} onClick={() => react("dislike")} />
-          <IconToggle icon="bookmark" label="Bookmark" on={!!clip.bookmarked} onClick={() => send({ bookmarked: !clip.bookmarked })} />
+      className={`clip group/card grid min-w-0 scroll-mt-24 content-start gap-[10px] ${CLIP_WIDTH[shape]} rounded-16 focus:outline-none
+        ${clip.kept === false ? "opacity-[.45]" : ""} ${lit ? "outline outline-2 outline-offset-[6px] outline-lime" : ""}`}>
+      <div className="relative">
+        <div style={clip.thumb_url ? thumbVar(clip.thumb_url) : undefined}
+          className={`relative ${MEDIA[shape]} overflow-hidden rounded-16 bg-card-2 ring-1 ring-inset transition-shadow duration-200 ${selected ? "ring-2 ring-lime" : "ring-[rgba(255,255,255,.06)] group-hover/card:ring-[rgba(255,255,255,.18)]"} ${clip.thumb_url ? BACKDROP : ""}`}>
+          {play ? <video controls autoPlay playsInline preload="auto" poster={clip.thumb_url || undefined} src={clip.video_url} className="relative z-[1] block h-full w-full bg-black object-contain" />
+            : <button type="button" onClick={() => setPlay(true)} aria-label={`Play ${name}`} className="group/play relative block h-full w-full cursor-pointer border-0 bg-transparent p-0">
+                {clip.thumb_url ? <img src={clip.thumb_url} alt="" loading="lazy" className="relative block h-full w-full object-contain" />
+                  : <span className="grid h-full place-items-center text-muted"><Icon name="film" size={30} /></span>}
+                <span className="pointer-events-none absolute inset-x-0 bottom-0 h-[42%] bg-[linear-gradient(transparent,rgba(0,0,0,.8))]" aria-hidden="true" />
+                <span className="absolute left-1/2 top-1/2 grid h-12 w-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[rgba(0,0,0,.55)] text-text opacity-0
+                  transition-opacity duration-150 [backdrop-filter:blur(6px)] group-hover/play:opacity-100 group-focus-visible/play:opacity-100" aria-hidden="true"><Icon name="play" size={20} /></span>
+              </button>}
+          {!play && <span className={`${BADGE} right-2`}>{clock(clip.start_sec)} – {clock(clip.end_sec)}</span>}
+          {!play && clip.edited === true && <span className={`${BADGE} bottom-2 right-2 top-auto text-cyan`}>Edited</span>}
+          {!play && <div className="absolute right-2 top-10 z-[2] grid gap-[6px] opacity-0 transition-opacity duration-150 group-hover/card:opacity-100 group-focus-within/card:opacity-100
+            has-[[aria-pressed=true]]:opacity-100 [@media(hover:none)]:opacity-100" role="group" aria-label="Rate this clip">
+            <IconToggle icon="like" label="Like" on={clip.reaction === "like"} onClick={() => react("like")} />
+            <IconToggle icon="dislike" label="Dislike" on={clip.reaction === "dislike"} onClick={() => react("dislike")} />
+            <IconToggle icon="bookmark" label="Bookmark" on={!!clip.bookmarked} onClick={() => send({ bookmarked: !clip.bookmarked })} />
+          </div>}
         </div>
+        {onSelect && <input type="checkbox" checked={!!selected} aria-label={`Select ${name}`} onChange={(e) => onSelect(clip.id, e.target.checked)}
+          className="absolute left-2 top-2 z-[3] h-5 w-5 cursor-pointer p-0 accent-lime narrow:h-6 narrow:w-6" />}
+        {!play && <div className="absolute bottom-2 left-[10px] z-[3] grid leading-none">
+          <span className="font-body text-[9.5px] font-semibold uppercase tracking-[.08em] text-soft" aria-hidden="true">{typeof clip.display_score === "number" ? "AI rating" : "Rank"}</span>
+          <ScoreBadge clip={clip} />
+        </div>}
       </div>
-      <div className="clip-bar">
-        <ScoreBadge clip={clip} />
-        <div className="clip-icons" role="group" aria-label="Clip actions">
-          <a className="icon-btn go" href={clip.video_url} download aria-label={`Download ${name}`} title="Download"><Icon name="download" size={18} /></a>
-          <button type="button" className="icon-btn" disabled={!clip.captions_url} aria-label={clip.captions_url ? `Download the captions file for ${name}` : "No captions file: this clip has no captions"}
-            title={clip.captions_url ? "Captions file (SRT)" : "This clip has no captions"} onClick={() => downloadSubtitles(clip.id).catch(fail)}><Icon name="captions" size={18} /></button>
-          {source && <Link className="btn small ghost clip-edit" href={`/dashboard/edit/?project=${source}&clip=${clip.id}`} aria-label={`Edit ${name}`}
-            title="Trim, cut by transcript, captions and look"><Icon name="sliders" size={16} />Edit</Link>}
-        </div>
+      <div className="grid min-w-0 gap-1 px-[2px]">
+        <h3 title={name} className="m-0 line-clamp-2 min-h-[2.6em] font-body text-[14px] font-semibold leading-[1.3] tracking-[-0.005em]">
+          {rank && <span className="tabular-nums text-muted">#{rank} </span>}{name}</h3>
+        {project && <Link className="muted overflow-hidden text-ellipsis whitespace-nowrap text-[12.5px]" href={`/dashboard/project/?id=${project.id}`}>From {project.name}</Link>}
       </div>
-      <p className="clip-desc" title={clip.description || undefined}>{clip.description || <span className="muted">No description for this clip.</span>}</p>
-      {project && <Link className="muted clip-from" href={`/dashboard/project/?id=${project.id}`}>From {project.name}</Link>}
+      <div className="flex min-h-[34px] flex-wrap items-center gap-1" role="group" aria-label="Clip actions">
+        {source && <Link className="btn small ghost min-h-[32px] gap-[6px] px-3 py-1 text-[13px]" href={`/dashboard/edit/?project=${source}&clip=${clip.id}`} aria-label={`Edit ${name}`}
+          title="Trim, cut by transcript, captions and look"><Icon name="sliders" size={16} />Edit</Link>}
+        {clip.rendered && clip.rendered !== "full" && <ExportFull clip={clip} onDone={(n) => onChange({ ...clip, ...n })} />}
+        <a className={`${ACTION} ml-auto`} href={clip.video_url} download aria-label={`Download ${name}`} title="Download"><Icon name="download" size={18} /></a>
+        <button type="button" className={ACTION} disabled={!clip.captions_url}
+          aria-label={clip.captions_url ? `Download the captions file for ${name}` : "No captions file: this clip has no captions"}
+          title={clip.captions_url ? "Captions file (SRT)" : "This clip has no captions"} onClick={() => downloadSubtitles(clip.id).catch(fail)}><Icon name="captions" size={18} /></button>
+      </div>
       <details className="clip-more">
-        <summary>More</summary>
+        <summary>Details</summary>
         <div className="clip-more-body">
           {titles.length > 1 && <label className="title-pick">Title
             <select value={clip.title} onChange={(e) => retitle(e.target.value)}>
@@ -91,7 +120,7 @@ export function ClipCard({ clip, onChange, project, uploadId, lit, number, selec
             <button className="btn small ghost" aria-pressed={clip.kept === true} onClick={() => keep(true)}>Keep</button>
             <button className="btn small ghost" aria-pressed={clip.kept === false} onClick={() => keep(false)}>Discard</button>
           </div>
-          <p className="muted small">Coming soon: {SOON.map(([, label]) => label.toLowerCase()).join(", ")}.</p>
+          <p className="muted small flex flex-wrap items-center gap-2">{SOON.map(([, label]) => label).join(", ")} <Soon short /></p>
           {clip.captions_url && <div className="clip-actions" role="group" aria-label="Captions file">
             <span className="muted">Captions file</span>
             {["srt", "vtt", "txt"].map((f) => <button key={f} className="btn small ghost" onClick={() => downloadSubtitles(clip.id, f).catch(fail)}>{f.toUpperCase()}</button>)}
@@ -102,8 +131,11 @@ export function ClipCard({ clip, onChange, project, uploadId, lit, number, selec
   );
 }
 
+
+// Like, dislike, bookmark: round buttons over the preview.
 function IconToggle({ icon, label, on, onClick }: { icon: IconName; label: string; on: boolean; onClick: () => void }) {
-  return <button type="button" className="icon-btn" aria-pressed={on} aria-label={label} title={label} onClick={onClick}><Icon name={icon} size={18} /></button>;
+  return <button type="button" aria-pressed={on} aria-label={label} title={label} onClick={onClick}
+    className={`grid h-8 w-8 cursor-pointer place-items-center rounded-full border-0 ${on ? "bg-lime text-ink" : "bg-[rgba(7,8,10,.78)] text-[#e9edf1]"}`}><Icon name={icon} size={18} /></button>;
 }
 
 export type ClipSort = "score" | "time" | "newest";
@@ -155,7 +187,6 @@ export function useSteadyOrder(clips: any[], sort: ClipSort, filter: ClipFilter,
 }
 
 const TIER_NAMES: Record<string, string> = { top: "Top pick", strong: "Strong", solid: "Solid", long_shot: "Long shot" };
-const PART_NAMES: Record<string, string> = { hook: "Hook", flow: "Flow", story: "Story", value: "Value", trend: "Trend", engagement: "Engagement", reach: "Reach" };
 const SIGNAL_NAMES: Record<string, string> = { audio: "Loud reaction", chat_motion: "Chat activity", transcript: "What was said" };
 
 // The score on the card: "N /100" once the API sends a calibrated `display_score`, the rank and tier until then.
@@ -188,13 +219,13 @@ export function ScoreBadge({ clip }: { clip: any }) {
       </button>
       <span role="tooltip" id={tip} className="score-tip">
         {rated
-          ? <><strong>{raw !== null ? `AI score ${raw} of 100` : "Rated by the AI"}{rank ? ` · #${rank}${clip.rank_of ? ` of ${clip.rank_of}` : ""}` : ""}</strong>
-              {parts.length > 0 && <span className="parts">{parts.map(([k, n]) => <span key={k}>{PART_NAMES[k] || k} <b>{n}</b></span>)}</span>}</>
+          ? <><strong>{raw !== null ? `AI rating ${raw} of 100` : "Rated by the AI"}{rank ? ` · #${rank}${clip.rank_of ? ` of ${clip.rank_of}` : ""}` : ""}</strong>
+              {parts.length > 0 && <span className="parts">{parts.map(([k, n]) => <span key={k}>{scoreLabel(k)} <b>{n}</b></span>)}</span>}</>
           : <strong>Ranked by how strongly this moment stood out in the video. It has no AI rating.</strong>}
-        {shown !== null && <span>The {shown} on the card is the AI score scaled across this video's clips, so the best one lands in the 90s. The order is the AI's own.</span>}
+        {shown !== null && <span>The {shown} on the card is the AI rating scaled across this video's clips, so the best one lands in the 90s. The order is the AI's own.</span>}
         {signals.length > 0 && <span>Picked for: {signals.map(([k, share]) => `${SIGNAL_NAMES[k] || k} ${Math.round((share as number) * 100)}%`).join(", ")}</span>}
         {(clip.reason || clip.why) && <span>{clip.reason || clip.why}</span>}
-        {rated && <span className="muted">The score is an AI opinion of the clip, not a forecast of views.</span>}
+        {rated && <span className="muted">The rating is the AI's opinion of the clip. It does not say how many views a clip will get.</span>}
       </span>
     </span>
   );

@@ -6,12 +6,16 @@
   grant EMAIL CREDITS [--note TEXT]             add (or with a negative number, remove) credits
   balance EMAIL                                 show balance and recent ledger rows
   suspend EMAIL / unsuspend EMAIL               block or unblock an account
-  stuck                                         list QUEUED/RUNNING jobs
+  stuck                                         list WAITING/QUEUED/RUNNING jobs
+  make-admin EMAIL / revoke-admin EMAIL         let an account use the admin routes (/v1/admin/...) from its login
+  ops-status                                    queue and worker health as key=value lines (read-only; ops.sh status)
   send-test-email --to ADDRESS                  send one email through the configured provider, Resend or SMTP
                                                 (exit 2: not configured, 1: failed)
   bump-token-epoch                              void every password-reset and email-verification link already sent
   selftest                                      load every model and tool once (run in the worker container)
   db-status                                     schema revision and differences from the models (read-only)
+  stripe-check                                  Stripe key mode, key accepted, each plan's Price matches app/plans.py,
+                                                webhook secret set (read-only; prints no secret)
   migrate                                       upgrade the schema to the latest revision (deploy.sh runs it)
   takedown --url URL | --account ID_OR_EMAIL [--dry-run]
                                                 remove every upload, clip and file imported from a source URL, or all
@@ -29,7 +33,7 @@ from sqlalchemy import select  # noqa: E402
 
 from app import ledger  # noqa: E402
 from app.db import init_db, new_session  # noqa: E402
-from app.models import Account, ApiKey, CreditLedger, Job, new_id  # noqa: E402
+from app.models import Account, ApiKey, CreditLedger, Job, new_id, utcnow  # noqa: E402
 from app.security import hash_password, new_api_key  # noqa: E402
 
 
@@ -109,6 +113,50 @@ def selftest() -> int:
     return 1 if failed else 0
 
 
+def stripe_check() -> int:
+    """Read-only check of the Stripe settings after a deploy or a key rotation. Prints no secret. Exit 2: no key."""
+    import stripe
+    from app.config import get_settings
+    from app.deps import ApiError
+    from app.plans import PLANS, stripe_price_id
+    from app.routes_billing import _check_price
+    s, failed = get_settings(), 0
+    print(f"stripe library {stripe.VERSION}, API version {stripe.api_version}")
+    key = s.stripe_secret_key
+    if not key:
+        print("FAIL  STRIPE_SECRET_KEY is not set")
+        return 2
+    print(f"key mode: {'live' if '_live_' in key else 'test' if '_test_' in key else 'unknown'}")
+    try:
+        print(f"OK    key accepted (account {stripe.Account.retrieve(api_key=key).id})")
+    except Exception as e:
+        failed += 1
+        print(f"FAIL  key refused: {type(e).__name__}")
+    for plan in PLANS:
+        for interval in ("month", "year"):
+            cents = plan.get(f"price_{interval}_cents") or 0
+            if cents <= 0:
+                continue
+            name, price_id = f"{plan['id']}/{interval}", stripe_price_id(plan, interval)
+            if not price_id:
+                failed += 1
+                print(f"FAIL  {name}: no Price ID configured")
+                continue
+            try:
+                _check_price(stripe.Price.retrieve(price_id, api_key=key, expand=["product"]), plan, interval, s.currency)
+                print(f"OK    {name}: {price_id}")
+            except ApiError:
+                failed += 1
+                print(f"FAIL  {name}: {price_id} does not match app/plans.py (the log line above says how)")
+            except Exception as e:
+                failed += 1
+                print(f"FAIL  {name}: {price_id}: {type(e).__name__}")
+    print("OK    STRIPE_WEBHOOK_SECRET is set" if s.stripe_webhook_secret else "FAIL  STRIPE_WEBHOOK_SECRET is not set")
+    failed += 0 if s.stripe_webhook_secret else 1
+    print("ALL OK" if not failed else f"{failed} CHECK(S) FAILED")
+    return 1 if failed else 0
+
+
 def send_test_email(to: str) -> int:
     """Sends one message through app/emailer.py (Resend or SMTP). Never prints a password or an API key."""
     from app.config import get_settings
@@ -155,6 +203,35 @@ def db_status() -> int:
     return 0 if now == latest else 1
 
 
+def ops_status() -> int:
+    """Read-only queue and config health for monitoring. Ages in whole minutes; -1 when there is nothing to measure.
+    Config lines are 1/0 for "is it set": names only, never a value."""
+    from sqlalchemy import func
+
+    from app.config import get_settings
+    from app.emailer import missing_smtp_keys
+
+    def minutes(t) -> int:
+        return -1 if t is None else int((utcnow() - t).total_seconds() // 60)
+
+    with new_session() as db:
+        counts = dict(db.execute(select(Job.status, func.count()).where(Job.status.in_(("QUEUED", "RUNNING")))
+                                 .group_by(Job.status)).all())
+        oldest = db.execute(select(func.min(Job.created_at)).where(Job.status == "QUEUED")).scalar_one()
+        stalest = db.execute(select(func.min(Job.heartbeat_at)).where(Job.status == "RUNNING")).scalar_one()
+        last = db.execute(select(func.max(Job.started_at))).scalar_one()
+    print(f"jobs_running={counts.get('RUNNING', 0)}")
+    print(f"jobs_queued={counts.get('QUEUED', 0)}")
+    print(f"oldest_queued_min={minutes(oldest)}")
+    print(f"stalest_heartbeat_min={minutes(stalest)}")
+    print(f"last_claim_min={minutes(last)}")
+    s = get_settings()
+    print(f"email_configured={int(not missing_smtp_keys())}")
+    print(f"stripe_configured={int(bool(s.stripe_secret_key))}")
+    print(f"stripe_webhook_configured={int(bool(s.stripe_webhook_secret))}")
+    return 0
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -164,9 +241,13 @@ def main() -> None:
     c = sub.add_parser("balance"); c.add_argument("email")
     c = sub.add_parser("suspend"); c.add_argument("email")
     c = sub.add_parser("unsuspend"); c.add_argument("email")
+    c = sub.add_parser("make-admin"); c.add_argument("email")
+    c = sub.add_parser("revoke-admin"); c.add_argument("email")
     sub.add_parser("stuck")
+    sub.add_parser("ops-status")
     sub.add_parser("selftest")
     sub.add_parser("db-status")
+    sub.add_parser("stripe-check")
     sub.add_parser("migrate")
     c = sub.add_parser("send-test-email"); c.add_argument("--to", required=True)
     sub.add_parser("bump-token-epoch")
@@ -184,8 +265,12 @@ def main() -> None:
         from app import token_epoch
         print(f"token epoch is now {token_epoch.bump()}: every reset and verification link sent before is void")
         sys.exit(0)
+    if args.cmd == "stripe-check":
+        sys.exit(stripe_check())
     if args.cmd == "db-status":
         sys.exit(db_status())
+    if args.cmd == "ops-status":
+        sys.exit(ops_status())
     if args.cmd == "migrate":
         from app.db import get_engine
         from app.migrate import migrate
@@ -236,8 +321,13 @@ def main() -> None:
             account.status = "suspended" if args.cmd == "suspend" else "active"
             db.commit()
             print(f"{account.email}: {account.status}")
+        elif args.cmd in ("make-admin", "revoke-admin"):
+            account = find(db, args.email)
+            account.is_admin = args.cmd == "make-admin"
+            db.commit()
+            print(f"{account.email}: {'admin' if account.is_admin else 'not an admin'}")
         elif args.cmd == "stuck":
-            jobs = db.execute(select(Job).where(Job.status.in_(("QUEUED", "RUNNING"))).order_by(Job.created_at)).scalars()
+            jobs = db.execute(select(Job).where(Job.status.in_(("WAITING", "QUEUED", "RUNNING"))).order_by(Job.created_at)).scalars()
             for j in jobs:
                 print(f"{j.id} {j.status:8} stage={j.stage} progress={j.progress} created={j.created_at:%m-%d %H:%M} "
                       f"heartbeat={j.heartbeat_at}")
