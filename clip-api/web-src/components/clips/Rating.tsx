@@ -1,22 +1,34 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
+import { coachingFor } from "../../lib/coaching";
 import { Rating, ratingOf } from "./model";
 
-// The sub-scores as bars, with the AI's reason. Shared by the card's pop-over and the player's side panel.
+// The sub-scores as bars, with per-dimension coaching and the AI's overall reason.
+// Shared by the card's pop-over and the player's side panel.
 export function RatingParts({ r, compact }: { r: Rating; compact?: boolean }) {
   return (
     <div className="grid gap-[10px]">
       {r.parts.length > 0 ? (
         <ul className="m-0 grid list-none gap-[7px] p-0" aria-label="Sub-scores, out of 100">
-          {r.parts.map((p) => (
-            <li key={p.key} className="grid grid-cols-[72px_1fr_28px] items-center gap-[10px] text-[12.5px]">
-              <span className="text-fg-2">{p.label}</span>
-              <span className="h-[5px] overflow-hidden rounded-pill bg-[rgba(255,255,255,.08)]" aria-hidden="true">
-                <span className="block h-full rounded-pill bg-lime" style={{ width: `${Math.max(2, Math.min(100, p.value))}%` }} />
-              </span>
-              <b className="text-right font-mono text-[12px] font-medium tabular-nums text-text">{p.value}</b>
-            </li>
-          ))}
+          {r.parts.map((p) => {
+            const tip = coachingFor(p.key, p.value);
+            return (
+              <li key={p.key} className="grid gap-[3px]" title={tip ?? undefined}>
+                <div className="grid grid-cols-[72px_1fr_28px] items-center gap-[10px] text-[12.5px]">
+                  <span className="text-fg-2">{p.label}</span>
+                  <span className="h-[5px] overflow-hidden rounded-pill bg-[rgba(255,255,255,.08)]" aria-hidden="true">
+                    <span className="block h-full rounded-pill bg-lime" style={{ width: `${Math.max(2, Math.min(100, p.value))}%` }} />
+                  </span>
+                  <b className="text-right font-mono text-[12px] font-medium tabular-nums text-text">{p.value}</b>
+                </div>
+                {tip && (
+                  <p className={`m-0 pl-[82px] leading-[1.35] text-fg-3 ${compact ? "text-[10.5px] line-clamp-1" : "text-[11.5px]"}`}>
+                    {tip}
+                  </p>
+                )}
+              </li>
+            );
+          })}
         </ul>
       ) : <p className="m-0 text-[12.5px] text-fg-2">No sub-scores for this clip.</p>}
       {r.why && !compact && <p className="m-0 text-[12.5px] leading-[1.45] text-soft">{r.why}</p>}
