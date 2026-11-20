@@ -308,6 +308,8 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
         exported: list[tuple[str, str, str, str]] = []      # (render, agent B) export jobs: (export_id, clip_id, key, resolution)
         export_sec = 0.0                                    # (render, agent B) export jobs: quoted seconds rendered
         handed_over: set[int] = set()      # clips already stored (by object), so none is stored twice
+        # (S1 / B2) Moment rows published before encodes: (start, end) → clip id, so on_clip updates them.
+        early_clips: dict[tuple[float, float], str] = {}
         # (languages, agent F) The spoken language: asked for, known, or detected now. English or unknown leaves
         # the transcribers exactly as they were; any other language hands over to the multilingual models.
         asked = options.pop("source_lang", None)
@@ -338,6 +340,28 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             except Exception:
                 log.exception("could not set the title on a thumbnail of %s", job_id)
 
+        def save_moments(moments) -> None:
+            """(S1) Store times, scores and copy for every chosen moment before any encode runs."""
+            if not moments:
+                return
+            # Indices match ClipResult.index: chosen moments in source order (pipeline sorts by start).
+            ordered = sorted(moments, key=lambda m: (m.start, m.end))
+            with new_session() as db:
+                job = db.execute(select(Job).where(Job.id == job_id).with_for_update()).scalar_one()
+                if job.status != "RUNNING":
+                    raise Lost()
+                if job.cancel_requested:
+                    raise Canceled()
+                for idx, m in enumerate(ordered, 1):
+                    clip_id = new_id("clip")
+                    early_clips[(m.start, m.end)] = clip_id
+                    db.add(Clip(id=clip_id, job_id=job_id, idx=idx, start_sec=m.start, end_sec=m.end,
+                                score=m.score, signals=m.signals or {}, features=dict(m.features or {}),
+                                video_key="", kind=m.kind, meta=m.meta))
+                # Moments are listable now; encodes (or thumbnails for render=none) still follow.
+                job.stage, job.progress, job.heartbeat_at = "rendering", max(job.progress, 70), utcnow()
+                db.commit()
+
         def save_clip(r, idx: int) -> None:
             """Store one finished clip and make it visible now, while the job is still running."""
             meta = getattr(r, "meta", None)             # the judge already rated it, or:
@@ -360,7 +384,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                     log.exception("caption translation failed for a clip of %s", job_id)
                     translation["status"] = "partial"
             # No AI, no score: a number made from loudness alone would mislead.
-            clip_id = new_id("clip")
+            clip_id = early_clips.get((r.start, r.end)) or new_id("clip")
             base = f"clips/{job_id}/{clip_id}"
             thumb_key = caps_key = None
             # (render, agent B) render "preview": the video is the preview; "none": there is no video yet.
@@ -394,9 +418,18 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                     raise Lost()
                 if job.cancel_requested:
                     raise Canceled()
-                db.add(Clip(id=clip_id, job_id=job_id, idx=idx, start_sec=r.start, end_sec=r.end, score=r.score,
-                            signals=r.signals, features=r.features, video_key=video_key, preview_key=preview_key,
-                            thumb_key=thumb_key, captions_key=caps_key, meta=meta))
+                row = db.get(Clip, clip_id) if (r.start, r.end) in early_clips else None
+                if row is not None and row.deleted_at is None:
+                    # Same row published at on_moments: fill in media (and final features/copy).
+                    row.score, row.signals, row.features = r.score, r.signals, r.features
+                    row.video_key, row.preview_key = video_key, preview_key
+                    row.thumb_key, row.captions_key, row.meta = thumb_key, caps_key, meta
+                    if row.kind is None and isinstance(meta, dict):
+                        row.kind = meta.get("kind")
+                else:
+                    db.add(Clip(id=clip_id, job_id=job_id, idx=idx, start_sec=r.start, end_sec=r.end, score=r.score,
+                                signals=r.signals, features=r.features, video_key=video_key, preview_key=preview_key,
+                                thumb_key=thumb_key, captions_key=caps_key, meta=meta))
                 db.commit()
             if not handed_over:
                 first_clip.append(time.monotonic() - t_start)
@@ -505,7 +538,8 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 heard, _ = load_heard(storage, upload_id, language or "en", work)     # the whole one, then the pieces
                 extra["source_audio"] = audio
             results = pipeline(src, opts, work / "out", progress, transcriber, deadline, timer=timer,
-                               on_clip=lambda r: save_clip(r, r.index), transcript=heard, **extra)
+                               on_clip=lambda r: save_clip(r, r.index), on_moments=save_moments,
+                               transcript=heard, **extra)
             save_parts(storage, upload_id, heard, work)
 
         progress("uploading", 99)
