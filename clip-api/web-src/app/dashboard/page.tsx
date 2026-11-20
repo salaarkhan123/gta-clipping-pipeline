@@ -87,7 +87,8 @@ function Home() {
         </div>
         {projects === null ? <p className="muted">Loading your projects…</p>
           : !projects.length ? <p className="empty-note">No projects yet. Paste a link or upload a recording above; it shows up here with its clips.</p>
-          : <ProjectGrid projects={projects.slice(0, RECENT)} row />}
+          : <ProjectGrid projects={projects.slice(0, RECENT)} row
+              onDeleted={(id) => setProjects((list) => (list || []).filter((p) => p.upload_id !== id))} />}
       </section>
       {chooser.element}
     </div>
