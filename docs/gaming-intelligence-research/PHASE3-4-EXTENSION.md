@@ -23,6 +23,8 @@ cursor:
 
 Desk research may proceed. **Live model downloads, serverless GPU rental, and product integration wait** until #238 is deployed (or owner explicitly waives) **and** labelled eval media exist for any quality claim.
 
+**Architectural correction (2026-11-20).** Serverless GPU is **not** limited to Tier-2 multimodal inference. On-demand GPU workers may accelerate ffmpeg decode/encode, CUDA Faster-Whisper, embeddings, HUD/OCR, multimodal verify, and render/export — while the website/API/DB/billing stay on a CPU control plane and workers scale 0→N→0. Full design: [serverless GPU pipeline architecture](../performance-research/SERVERLESS-GPU-PIPELINE.md) (Project store mirror: `docs/serverless-gpu-pipeline-architecture.md`).
+
 ---
 
 ## 1. What already exists (do not rebuild)
@@ -167,19 +169,20 @@ Reuse `EVALUATION-FRAMEWORK.md` metrics. Add a **hierarchical cost card** per ar
 
 ## 6. Serverless GPU architecture fit
 
-Align with performance research `docs/performance-research/GPU-INFRASTRUCTURE.md` (#222): **keep ffmpeg** as the media path; GPU is for optional inference workers, not a second decode stack.
+Align with performance research `docs/performance-research/GPU-INFRASTRUCTURE.md` (#222) and the pipeline-wide note [serverless GPU pipeline architecture](../performance-research/SERVERLESS-GPU-PIPELINE.md) (Project store mirror: `docs/serverless-gpu-pipeline-architecture.md`): **keep ffmpeg** as the media path; avoid duplicate full-VOD decodes; account for prod ffmpeg OOM on undersized host RAM.
 
 | Concern | Design choice |
 | --- | --- |
-| Default Clip Maker | Stays on current CPU worker; experimental off |
-| Serverless role | Ephemeral GPU worker for Tier-2 verify or batch embedding backfill |
-| Cold start | Amortize only when shortlist size justifies; measure cold vs warm |
-| Data plane | Pull shortlisted frame JPEGs / PCM snippets by signed URL; no full VOD to GPU by default |
-| Isolation | Research runner / feature flag; production ranking weight 0 until enablement review |
-| Failures | Timeout → preceding Tier-1 score; never fail the job solely because Tier-2 OOM’d |
-| Cost control | Hard cap: max Tier-2 calls per job; max tokens; owner spending limit before any provision |
+| Default Clip Maker | Stays on current CPU worker until a measured hybrid win; experimental detectors off |
+| Control plane | Web, API, DB, billing, orchestration **never** on GPU hosts |
+| Serverless role | Ephemeral GPU workers for **any** measured stage: NVDEC/NVENC, CUDA Whisper, embeddings, OCR, Tier-2 VLM, render/export — scale **0→N→0** |
+| Cold start | First-class metric; amortize across the job, not only Tier-2 |
+| Data plane | Signed URLs to source + artifacts; prefer one shared decode schedule per job |
+| Isolation | Feature flags per stage; ranking weight 0 for unvalidated gaming signals |
+| Failures | Stage timeout falls back; host RAM floor ≫ prod 8 GB OOM case; keep #238 progressive-clip semantics |
+| Cost control | Owner spending limit before any provision; $/successful recording includes cold starts |
 
-**Do not provision** Runpod/Modal/DO GPU until Phase 3A shows a named failure mode that Tier-1 cannot fix and a dated quote exists (`IMPLEMENTATION-ROADMAP` 4A).
+**Do not provision** Runpod/Modal/DO GPU until production priority (#238 / perf RC) is handled and an owner-approved bench quotes a SKU with sufficient host RAM (L4 / 4090 / A40 / L40S matrix in the GPU pipeline doc).
 
 ---
 
@@ -190,7 +193,7 @@ Align with performance research `docs/performance-research/GPU-INFRASTRUCTURE.md
 | **3A+** | Hierarchical fusion harness on research sidecar; family caps; ablations B/A/V/T/G/F | Labels 1A; adapters 1C/1D or 2A/2B outputs | Weight > 0 in product |
 | **3E** | Persistent PTS embedding store + Find fusion flag | Heard + CLIP; optional CLAP | Replacing CLIP |
 | **3P** | UniVTG / prompt-localization pilot vs #203 control | #197 prompt labels | Shipping prompt nomination without bench |
-| **4A+** | Qwen3-VL (vs 2.5-VL) and optional V-JEPA/InternVideo on **capped** shortlist; serverless shape | Owner GPU OK; 3A failure mode named | Always-on VLM; VideoLLaMA3 unless Qwen fails |
+| **4A+** | Qwen3-VL (vs 2.5-VL) on **capped** shortlist **after** pipeline GPU benches (ffmpeg/Whisper/embed) land or are scheduled | Owner GPU OK; production #238 first | Always-on VLM; VideoLLaMA3 unless Qwen fails |
 | **4B** | Unchanged competitive protocol | Paid vendor OK | Fabricated parity claims |
 
 ---
@@ -202,7 +205,7 @@ Align with performance research `docs/performance-research/GPU-INFRASTRUCTURE.md
 3. Add **CLAP** as audio-language challenger on the same PCM windows.
 4. Implement **3A+** fusion on sidecar observations only.
 5. Prototype **3E** embedding persistence for Find (CLIP first).
-6. Only if 3A leaves a documented ambiguity class: authorize **4A+** Qwen3-VL shortlist verify on serverless GPU; compare V-JEPA embeddings offline if visual-search misses dominate.
+6. After production priority and ffmpeg/Whisper GPU A/Bs: if 3A leaves a documented ambiguity class, authorize **4A+** Qwen3-VL shortlist verify on the same scale-to-zero workers; compare V-JEPA embeddings offline if visual-search misses dominate.
 7. Promote one class/profile at a time after paired ranking + cost gates.
 
 ---
@@ -221,6 +224,6 @@ Align with performance research `docs/performance-research/GPU-INFRASTRUCTURE.md
 ## 10. Sources
 
 - PR [#237](https://github.com/salaarkhan123/gta-clipping-pipeline/pull/237) research tree: `MULTIMODAL-ARCHITECTURE.md`, `IMPLEMENTATION-ROADMAP.md`, `REPOSITORY-EVALUATION.md`, `GPU-REQUIREMENTS.md`, `EVALUATION-FRAMEWORK.md`, `PHASE1-FINDINGS.md`
-- Perf: `docs/performance-research/GPU-INFRASTRUCTURE.md` on [#222](https://github.com/salaarkhan123/gta-clipping-pipeline/pull/222)
+- Perf: `docs/performance-research/GPU-INFRASTRUCTURE.md` on [#222](https://github.com/salaarkhan123/gta-clipping-pipeline/pull/222); pipeline-wide serverless: [serverless GPU pipeline architecture](../performance-research/SERVERLESS-GPU-PIPELINE.md) (Project store mirror: `docs/serverless-gpu-pipeline-architecture.md`)
 - Parity context: `docs/opusclip-212-*` in Project store (CPR-37), `docs/opusclip-212-*` in Project store (CPR-37)
 - Publisher pages (2026-11-20): [Qwen3-VL](https://github.com/QwenLM/Qwen3-VL/), [V-JEPA 2](https://github.com/facebookresearch/vjepa2), [InternVideo](https://github.com/OpenGVLab/InternVideo), [VideoLLaMA3](https://github.com/DAMO-NLP-SG/VideoLLaMA3/), [MMAction2](https://github.com/open-mmlab/mmaction2), [LAION CLAP](https://github.com/LAION-AI/CLAP), [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR), YAMNet (TF / MediaPipe)
