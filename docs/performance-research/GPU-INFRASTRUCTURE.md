@@ -10,6 +10,10 @@ Research note for ClutchClips, 2026-11-20. The question is whether NVIDIA's Acce
 
 Claim labels used below are `measured`, `verified`, `inferred`, `hypothesis`, `public-source`, and `not measured`. A label applies to the sentence it sits in.
 
+## Pipeline-wide serverless GPU (extension)
+
+On-demand GPU is **not** limited to multimodal Tier-2. Evaluate acceleration across ffmpeg decode/encode, CUDA Faster-Whisper, embeddings, HUD/OCR, multimodal verify, and render/export, with a CPU control plane and workers that scale to zero. See [SERVERLESS-GPU-PIPELINE.md](SERVERLESS-GPU-PIPELINE.md). No paid provision in that note.
+
 ## Overview
 
 ClutchClips turns a long gameplay upload into short vertical clips. The section 14 goal is 30 to 50 ranked previews from a 2-hour VOD in 10 minutes, and one 1080p export in 30 seconds. Ticket #99 is the speed-track item that would time a GPU, and it is still an unwritten benchmark, not a library swap.
