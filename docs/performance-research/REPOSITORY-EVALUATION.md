@@ -19,14 +19,15 @@ Activity, license, dependencies, hardware, overlap with ClutchClips, production 
 | PyNvVideoCodec | MIT wrapper; Video Codec SDK EULA underneath (`public-source`) | no | medium–high on NVIDIA | S5 candidate; patent/codec diligence |
 | NVIDIA AV-for-AI playbook | sample/docs; follow NVIDIA notices | no | reference only | patterns for NVDEC, not a dependency |
 | Decord | Apache-2.0 | no | medium; build friction | optional sparse decode experiment |
-| WhisperX | BSD-ish + heavy torch/pyannote deps (`public-source`) | no | low for our CPU image | do not replace faster-whisper without eval proof |
+| WhisperX | BSD-2-Clause code; FR/DE/ES/IT aligners **CC-BY-NC 4.0** (`public-source` Agent 8) | no | low for our CPU image; NC aligners block commercial | do not replace faster-whisper without eval proof |
 | Silero VAD | MIT | via faster-whisper | high as-is | standalone only if pre-segment helps measured |
 | PySceneDetect | BSD-3 | no (#218 timeline covers scenes) | medium | compare to timeline scene signal; do not dual-run |
 | MediaPipe | Apache-2.0 | no | medium | facecam alternative; measure vs Haar |
-| Remotion | Remotion license (company + commons) | no | **poor** for server clip worker | reject for core pipeline (`inferred` Agent 5) |
+| Remotion | Source-available Remotion License; Free License only through 3 people, else Automators $0.01/render + $100/mo min (`public-source` Agent 8) | no | **poor** for server clip worker | reject for core pipeline (`inferred` Agent 5; license headcount `not measured`) |
 | Streamlink | BSD-2 | no | low for VOD + our no-browser rule | skip for VOD; live is out of scope now |
-| ClipGen | check repo LICENSE before use | no | research reference | study ideas only; no copy |
-| PANNs / YAMNet | Apache-2.0 (typical AudioSet models) | no | medium local audio events | feed #199 at weight 0 |
+| ClipGen (`azmifauzan/clipgen`) | **No LICENSE** in repo (`public-source` Agent 8) | no | research reference | do not copy source |
+| YAMNet | Apache-2.0 example under tensorflow/models (`public-source`) | no | medium local audio events | first #199 model at weight 0 |
+| PANNs (`audioset_tagging_cnn`) | **MIT** code; Zenodo weights CC BY 4.0 (`public-source` Agent 8) | no | medium; larger than YAMNet | second #199 experiment only |
 | PaddleOCR / EasyOCR | Apache-2.0 | no | medium | feed #202 HUD OCR at weight 0 |
 
 ## In production deep notes

@@ -20,7 +20,7 @@ Scores are coordinator judgments from evidence in this directory. Speed/quality 
 | R8 | S5 NVENC/NVDEC A/B on approved GPU | High? | None | M | High fixed $ | SDK EULA | Med–High | Faster exports | `not measured` |
 | R9 | faster-whisper CUDA / batched ASR | Med? | Must not drop | M | Med | MIT | Med | Faster jobs | replace only if measured |
 | R10 | Hosted ASR (#167) | Med | TBD | M | $/min | vendor ToS | Med (privacy) | Speed vs Terms | SPEC |
-| R11 | Weight-0 sound events PANNs/YAMNet (#199) | Low (CPU) | High potential | M | Low–Med image | Apache | Med | Better shootouts | Agent 4 |
+| R11 | Weight-0 sound events: **YAMNet first**, PANNs later (#199) | Low (CPU) | High potential | M | Low–Med image | YAMNet Apache-2.0; PANNs MIT + CC BY 4.0 weights | Med | Better shootouts | Agent 4; license fix Agent 8 |
 | R12 | Weight-0 HUD OCR (#202) | Low–Med decode | High potential | M | Low–Med | Apache | Med | Kill-feed clips | Agent 4 |
 | R13 | Raise yt-dlp fragment concurrency carefully | Low–Med ingest | None | S | Low | Unlicense | Med (rate limits) | Faster imports | Agent 1; keep no-evasion |
 | R14 | Overlap HLS download with early analysis | Med TTFC | None | L | Low | — | High eng | First clips sooner | hypothesis; policy OK if no evasion |
@@ -47,7 +47,7 @@ Start after owner approval. Each PR ends with `job_timings.py` and/or eval metri
 
 ### Wave C — understanding (quality), weight 0
 
-8. **PR-C1 (#199):** Local sound-event tensor on existing WAV; weight 0; precision/recall sheet; no ranking change.
+8. **PR-C1 (#199):** YAMNet (not PANNs first) on existing WAV; weight 0; precision/recall on a **new** label sheet (not `labels-v2.csv`); no ranking change.
 9. **PR-C2 (#202):** OCR on measured HUD ROIs only; weight 0; exact-match rate; no ranking change until ≥0.9.
 
 ### Wave D — GPU (owner OK required)
