@@ -1,0 +1,37 @@
+{
+  "fixture": "synthetic testsrc 1280x720 12s",
+  "fixture_duration_sec": 12.0,
+  "hardware": {
+    "vcpus": 4,
+    "gpu": "none"
+  },
+  "ffmpeg": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers",
+  "stages": {
+    "audio_extract_16k": {
+      "sec": 0.061,
+      "ok": true,
+      "per_realtime": 197.14
+    },
+    "sparse_decode_2fps": {
+      "sec": 0.2,
+      "ok": true,
+      "per_realtime": 60.08
+    },
+    "keyframes_only": {
+      "sec": 0.063,
+      "ok": true,
+      "per_realtime": 189.53
+    },
+    "preview_540x960_ultrafast": {
+      "sec": 0.414,
+      "ok": true,
+      "per_realtime": 28.96
+    },
+    "full_veryfast_crf20": {
+      "sec": 0.779,
+      "ok": true,
+      "per_realtime": 15.4
+    }
+  },
+  "note": "measured 2026-11-20 on Cloud Agent VM; do not extrapolate to 2h gaming VOD without caveat"
+}

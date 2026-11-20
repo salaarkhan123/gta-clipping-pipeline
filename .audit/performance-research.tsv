@@ -1,0 +1,12 @@
+ts	phase	decision	why	evidence	result
+2026-11-20T02:19:00Z	start	opened performance research run on cursor/performance-research-6ad0 from main	isolated research branch so PR 218 and production stay untouched	branch cursor/performance-research-6ad0	open
+2026-11-20T02:19:30Z	frame	docs live under docs/performance-research/ with claim labels measured inferred hypothesis public-source	reviewer must see evidence strength on every claim	plan performance_research_initiative	open
+2026-11-20T02:19:45Z	frame	GPU and full 2h benches gated on owner OK; this VM is 4 vCPU 15GiB no NVIDIA	do not provision paid infra without approval	nproc free nvidia-smi missing	blocked pending OK
+2026-11-20T02:20:30Z	scaffold	allowlisted docs/performance-research in .gitignore	repo ignores /docs/* except named files; research docs must be tracked	.gitignore	open
+2026-11-20T02:30:00Z	fanout	agents 1 3 5 7 wrote drafts; 2 4 6 8 coordinator-filled after model quota blocked opus/fable	keep research moving without paid model upgrade	docs/performance-research/drafts/	open
+2026-11-20T02:32:00Z	baseline	CPU ffmpeg microbench on 12s synthetic recorded	no GPU and no 2h VOD on this VM	docs/performance-research/bench/cpu-microbench-12s.json	measured
+2026-11-20T02:35:00Z	consolidate	wrote eight deliverables plus recommendation matrix Wave A-D	owner stop gate before implementation	docs/performance-research/INTEGRATION-ROADMAP.md	open
+2026-11-20T02:36:00Z	isolation	recovered onto cursor/performance-research-6ad0 after poteto agents checked out sibling branches	shared worktree must not leave research branch	git branch	open
+2026-11-20T02:31:00Z	consolidate	promoted Agent 6 infra cost draft into COST-ANALYSIS.md	draft had dated public prices and break-even math the stub lacked	docs/performance-research/drafts/agent6-infra-cost.md	open
+2026-11-20T02:34:00Z	consolidate	merged Agent 4 gaming draft and Agent 2 GPU draft into research branch	agent drafts were richer than coordinator stubs	docs/performance-research/drafts/agent4-gaming.md	open
+2026-11-20T02:35:00Z	consolidate	applied Agent 8 license corrections to REPOSITORY and ROADMAP matrices	PANNs is MIT not Apache; WhisperX NC aligners; Remotion headcount; ClipGen no LICENSE	docs/performance-research/drafts/agent8-licensing.md	open
