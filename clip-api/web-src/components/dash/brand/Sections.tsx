@@ -84,7 +84,7 @@ export function KitForm({ kit, listed, set }: { kit: Kit; listed: Listed; set: (
             <Switch on={kit.captions} label="Captions" onChange={(v) => set({ captions: v, ...(v ? {} : { caption_emoji: false }) })} />
           </SettingRow>}
           {has("hook_overlay") && <SettingRow icon="hook" name="Hook" hint="A short opening line on screen for the first seconds, written by the AI in the tone you pick."
-            under={has("hook_style") && <HookTones tones={listed.hook_style.values || []} value={kit.hook_style} onChange={(s) => set({ hook_style: s })} />}>
+            under={has("hook_style") && <HookTones tones={listed.hook_style.values || []} catalogue={listed.hook_style.catalogue} value={kit.hook_style} onChange={(s) => set({ hook_style: s })} />}>
             <Switch on={kit.hook_overlay} label="Hook" onChange={(v) => set({ hook_overlay: v })} />
           </SettingRow>}
         </div>
