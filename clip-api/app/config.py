@@ -183,6 +183,9 @@ class Settings(BaseSettings):
     # Jobs one worker process runs at once. 2 is the most a 4 vCPU / 8 GB server holds (ffmpeg and Whisper
     # both use every core); raise the limit only with a bigger server and a new benchmark.
     worker_concurrency: int = Field(1, ge=1, le=2)
+    # Chat-band decode density for onscreen_chat_motion: "dense" (fps=2, default) or "sparse" (fps=1).
+    # Sparse roughly halves chat_motion decode work; leave dense until timings on a real VOD say otherwise.
+    chat_motion_sample: str = "dense"
     sentry_dsn: str = ""
 
     @property
