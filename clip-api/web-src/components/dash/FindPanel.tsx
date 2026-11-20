@@ -1,6 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, clock } from "@/lib/api";
+import { findHandoffFromSearch } from "@/lib/globalFind";
 import { inside, useClipOptions } from "@/lib/options";
 import { tidy } from "@/lib/templates";
 import { JobNote } from "./JobNote";
@@ -11,15 +12,20 @@ import { captionStyles, firstStyle, framing } from "./ToolPanel";
 
 // Find moments: Video Finder for this one video. Type what was said or shown; each search lists where it was
 // found and cuts a clip of each match into the Clips tab.
-export function FindPanel({ upload, jobs, finds, onStarted, onCancel }: { upload: any; jobs: any[]; finds: Record<string, any>;
-  onStarted: (job: any) => void; onCancel: (jobId: string) => void }) {
+export function FindPanel({ upload, jobs, finds, onStarted, onCancel, handoffQuery }: { upload: any; jobs: any[]; finds: Record<string, any>;
+  onStarted: (job: any) => void; onCancel: (jobId: string) => void; handoffQuery?: string }) {
   const { reloadMe, fail } = useDash();
   const listed = useClipOptions();
+  const initialQ = handoffQuery ?? findHandoffFromSearch(
+    typeof window === "undefined" ? "" : window.location.search,
+  ).query;
   const [o, setO] = useState<{ query: string; clip_length: number; aspect: string; caption_style: string | null; captions: boolean; censor: boolean }>(
-    () => {
-      const q = typeof window === "undefined" ? "" : (new URLSearchParams(window.location.search).get("q") || "");
-      return { query: q.slice(0, 200), clip_length: 30, aspect: "9:16", caption_style: null, captions: true, censor: false };
-    });
+    () => ({ query: initialQ.slice(0, 200), clip_length: 30, aspect: "9:16", caption_style: null, captions: true, censor: false }));
+  useEffect(() => {
+    if (handoffQuery === undefined) return;
+    const next = handoffQuery.slice(0, 200);
+    setO((x) => (x.query === next ? x : { ...x, query: next }));
+  }, [handoffQuery]);
   const [starting, setStarting] = useState(false), [problem, setProblem] = useState("");
   const set = (k: string, v: any) => setO((x) => ({ ...x, [k]: v }));
   if (!listed) return <p className="muted">Loading the options…</p>;

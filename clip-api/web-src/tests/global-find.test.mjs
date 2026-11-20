@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  defaultFindBody, filterProjects, findProjectHref, isFindShortcut, projectIdFromLocation, searchPath,
+  applyFindHandoff, defaultFindBody, filterProjects, findHandoffFromSearch, findProjectHref,
+  isFindShortcut, projectIdFromLocation, searchPath,
 } from "../lib/globalFind.ts";
 
 test("project id comes from the dashboard ?id= query", () => {
@@ -18,6 +19,23 @@ test("search path encodes the query for GET /v1/uploads/{id}/search", () => {
 test("find project href opens the Find moments tab and keeps the query", () => {
   assert.equal(findProjectHref("up_9"), "/dashboard/project/?id=up_9&tool=find");
   assert.equal(findProjectHref("up_9", " police "), "/dashboard/project/?id=up_9&tool=find&q=police");
+});
+
+test("findHandoffFromSearch reads tool=find and q (trimmed to 200)", () => {
+  assert.deepEqual(findHandoffFromSearch("?id=up_1&tool=find&q=police"), { openFind: true, query: "police" });
+  assert.deepEqual(findHandoffFromSearch("?id=up_1&tool=auto"), { openFind: false, query: "" });
+  assert.equal(findHandoffFromSearch(`?tool=find&q=${"x".repeat(250)}`).query.length, 200);
+});
+
+test("applyFindHandoff re-applies tool/q after the project page is already mounted", () => {
+  // Mount-only useState would keep "old" on a same-path router.push; re-application must win.
+  let state = { view: "clips", query: "old" };
+  state = applyFindHandoff(state, "?id=up_1&tool=find&q=police");
+  assert.deepEqual(state, { view: "find", query: "police" });
+  state = applyFindHandoff(state, "?id=up_1&tool=find&q=chase");
+  assert.deepEqual(state, { view: "find", query: "chase" });
+  state = applyFindHandoff(state, "?id=up_1&tool=auto&q=ignored");
+  assert.deepEqual(state, { view: "find", query: "chase" });
 });
 
 test("Cmd+K and Ctrl+K are the Find shortcut; plain K is not", () => {

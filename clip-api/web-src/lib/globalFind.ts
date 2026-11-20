@@ -16,6 +16,25 @@ export const projectIdFromLocation = (search: string): string | null => {
   try { return new URLSearchParams(search).get("id"); } catch { return null; }
 };
 
+// Soft-nav handoff: tool=find opens the tab; q prefills the query (max 200).
+export type FindHandoff = { openFind: boolean; query: string };
+export type FindHandoffState = { view: "clips" | "find"; query: string };
+
+export const findHandoffFromSearch = (search: string): FindHandoff => {
+  const params = new URLSearchParams(search);
+  return {
+    openFind: params.get("tool") === "find",
+    query: (params.get("q") || "").slice(0, 200),
+  };
+};
+
+// Re-apply tool/q after the project page is already mounted (same-path router.push).
+export const applyFindHandoff = (current: FindHandoffState, search: string): FindHandoffState => {
+  const handoff = findHandoffFromSearch(search);
+  if (!handoff.openFind) return current;
+  return { view: "find", query: handoff.query };
+};
+
 export const searchPath = (uploadId: string, query: string, limit = 10) =>
   `/v1/uploads/${uploadId}/search?q=${encodeURIComponent(query.trim())}&limit=${limit}`;
 
