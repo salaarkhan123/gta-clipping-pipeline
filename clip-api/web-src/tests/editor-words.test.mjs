@@ -18,8 +18,9 @@ test("word menu and caption look appear only when the API has them; otherwise Co
   const routes = source("lib/routes.ts"), editor = source("components/dash/Editor.tsx"), words = source("components/dash/editor/Words.tsx");
   assert.match(routes, /paths\?\.\["\/v1\/clips\/\{clip_id\}\/words"\]\?\.get/);           // feature-detected in /openapi.json
   assert.match(routes, /components\?\.schemas\?\.CaptionLook/);
-  assert.match(editor, /const model: EditWord\[\] \| null = known\.words \?/);
-  assert.match(words, /if \(!on \|\| !words\) return \([\s\S]{0,200}<ComingSoonBadge short \/>/);
+  assert.match(editor, /loadEditWords\(clip\.id\)/);
+  assert.match(editor, /const menuOn = !!model && wordEditReady\(model\)/);
+  assert.match(words, /if \(!on \|\| !wordEditReady\(words\)\) return \([\s\S]{0,200}<ComingSoonBadge short \/>/);
   assert.match(words, /if \(!spec\) return <p [^>]*>Font, weight, colours, size, italic, underline, case and row <ComingSoonBadge short \/>/);
   for (const item of ["Edit word", "Split here", "Highlight", "Remove caption", "Remove caption &amp; video", "Add emoji"]) assert.ok(words.includes(item), item);
 });

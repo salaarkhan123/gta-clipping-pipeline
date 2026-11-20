@@ -1,34 +1,36 @@
 "use client";
 // Text-based caption editing (#215) and the caption look (#213) in the editor: the word menu, the look controls of
 // the Captions tool, and the caption drawn over the preview with the same font, size, colours and row the renderer
-// uses. Each part shows the Coming soon mark when this API does not have its route or option yet.
+// uses. Word edits (emoji, highlight, split, text, hide) use EditWord fields via lib/wordEdits. Coming soon only
+// when this API has no word-edit path yet. True gaps (B-roll, Music, …) stay on the planned rail.
 import { useState } from "react";
 import { ComingSoonBadge } from "@/components/ComingSoonBadge";
 import type { EditWord } from "@/lib/edit";
 import type { CaptionLookSpec } from "@/lib/routes";
 import { tidy } from "@/lib/templates";
+import { applyWordOp, WORD_EMOJI_PICKS, wordEditReady } from "@/lib/wordEdits";
 import { CAPTION_FONTS, DEFAULT_FONT, EMOJI_FAMILY, WEIGHT_CSS } from "./captionFonts";
 
 export type CaptionLook = { font?: string | null; weight?: string | null; italic?: boolean; underline?: boolean; colour?: string | null;
   outline_colour?: string | null; size?: number | null; case?: string; y?: number | null };
 
-const EMOJI = ["🔥", "😂", "💀", "😱", "🏆", "👀", "🎯", "💥"];
 const ITEM = "inline-flex min-h-[34px] cursor-pointer items-center gap-[6px] rounded-full border border-solid border-line bg-transparent px-3 font-sans text-[13px] text-label hover:border-line-strong hover:text-text disabled:cursor-default disabled:opacity-40 aria-pressed:border-text aria-pressed:text-text";
 
 // ---------- the word menu ----------
 // `picked` are the indexes of the selected words. Edit word works on one word; the rest work on all of them.
+// `on` is true once GET /v1/clips/{id}/words (EditWord) is available for this clip.
 export function WordMenu({ on, words, picked, onWords, onCutWithVideo }: { on: boolean; words: EditWord[] | null; picked: number[];
   onWords: (next: EditWord[]) => void; onCutWithVideo: () => void }) {
   const [typing, setTyping] = useState<string | null>(null);
   if (!picked.length) return null;
-  if (!on || !words) return (
+  if (!on || !wordEditReady(words)) return (
     <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-muted" aria-label="Word menu">
       Edit word, split, emoji, highlight and remove caption <ComingSoonBadge short />
     </div>
   );
   const sel = picked.map((i) => words[i]).filter(Boolean);
-  const all = (k: keyof EditWord) => sel.every((w) => !!w[k]);
-  const change = (fn: (w: EditWord, i: number) => EditWord) => onWords(words.map((w, i) => (picked.includes(i) ? fn(w, i) : w)));
+  const allHidden = sel.every((w) => !!w.hidden);
+  const change = (op: Parameters<typeof applyWordOp>[2]) => onWords(applyWordOp(words, picked, op));
   const first = Math.min(...picked), last = Math.max(...picked), one = picked.length === 1 ? words[first] : null;
   const colour = sel.find((w) => w.highlight)?.highlight || "#ffd400";
   return (
@@ -36,25 +38,24 @@ export function WordMenu({ on, words, picked, onWords, onCutWithVideo }: { on: b
       <div className="flex flex-wrap items-center gap-2">
         {one && (typing === null
           ? <button type="button" className={ITEM} onClick={() => setTyping(one.text)}>Edit word</button>
-          : <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); const v = typing.trim().replace(/[{}\\]/g, "");
-              if (v) change((w) => ({ ...w, text: v.slice(0, 60) })); setTyping(null); }}>
+          : <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); change({ kind: "text", text: typing }); setTyping(null); }}>
               <input autoFocus value={typing} maxLength={60} aria-label="The word as shown" onChange={(e) => setTyping(e.target.value)}
                 className="w-40 rounded-full px-3 py-[6px] text-[14px]" />
               <button className="btn small primary">Save</button>
               <button type="button" className="btn small ghost" onClick={() => setTyping(null)}>Cancel</button>
             </form>)}
-        <button type="button" className={ITEM} aria-pressed={!!words[first]?.break_before} onClick={() => onWords(words.map((w, i) => (i === first ? { ...w, break_before: !w.break_before } : w)))}>
+        <button type="button" className={ITEM} aria-pressed={!!words[first]?.break_before} onClick={() => change({ kind: "split" })}>
           Split here</button>
         <label className={`${ITEM} relative m-0 font-normal`}>Highlight
-          <input type="color" value={colour} aria-label="Highlight colour" onChange={(e) => change((w) => ({ ...w, highlight: e.target.value }))}
+          <input type="color" value={colour} aria-label="Highlight colour" onChange={(e) => change({ kind: "highlight", colour: e.target.value })}
             className="h-5 w-6 cursor-pointer border-0 bg-transparent p-0" /></label>
-        {sel.some((w) => w.highlight) && <button type="button" className={ITEM} onClick={() => change((w) => ({ ...w, highlight: null }))}>No highlight</button>}
-        <button type="button" className={ITEM} aria-pressed={all("hidden")} onClick={() => { const v = !all("hidden"); change((w) => ({ ...w, hidden: v })); }}>Remove caption</button>
-        <button type="button" className={ITEM} aria-pressed={all("cut")} onClick={onCutWithVideo}>Remove caption &amp; video</button>
+        {sel.some((w) => w.highlight) && <button type="button" className={ITEM} onClick={() => change({ kind: "highlight", colour: null })}>No highlight</button>}
+        <button type="button" className={ITEM} aria-pressed={allHidden} onClick={() => change({ kind: "hide", hidden: !allHidden })}>Remove caption</button>
+        <button type="button" className={ITEM} aria-pressed={sel.every((w) => !!w.cut)} onClick={onCutWithVideo}>Remove caption &amp; video</button>
       </div>
       <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Add emoji after the last selected word">
         <span className="mr-1 text-[12.5px] text-muted">Add emoji</span>
-        {EMOJI.map((e) => <button key={e} type="button" aria-pressed={words[last]?.emoji === e} onClick={() => onWords(words.map((w, i) => (i === last ? { ...w, emoji: w.emoji === e ? null : e } : w)))}
+        {WORD_EMOJI_PICKS.map((e) => <button key={e} type="button" aria-pressed={words[last]?.emoji === e} onClick={() => change({ kind: "emoji", emoji: e })}
           className="grid h-8 w-8 cursor-pointer place-items-center rounded-full border border-solid border-transparent bg-transparent text-[17px] hover:bg-chip-hover aria-pressed:border-text"
           style={{ fontFamily: EMOJI_FAMILY }} aria-label={`Emoji ${e}`}>{e}</button>)}
       </div>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { addCut, cutsInside, dropDraft, Edit, EditWord, forApi, inCut, keptLength, Line, linesOf, loadDraft, loadWords, MIN_LENGTH, removeSpan, round,
   loadEditWords, saveDraft, saveOnClip, sameEdit, sourceTime, Span, startEdit, Word } from "@/lib/edit";
+import { isEditWordList, wordEditReady } from "@/lib/wordEdits";
 import { CaptionLook, CaptionLookControls, CaptionOverlay, captionAt, tidyLook, WordFace, WordMenu } from "./editor/Words";
 import { creditWords, exportBody, followJob, useQuote } from "@/lib/exporting";
 import { layoutsFor, Listed, onlyListed } from "@/lib/options";
@@ -66,6 +67,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
   const [restored, setRestored] = useState<number | null>(null), [draftAt, setDraftAt] = useState<number | null>(null);
   const [words, setWords] = useState<Word[] | null>(null), [wordsProblem, setWordsProblem] = useState("");
   const [apiWords, setApiWords] = useState<EditWord[] | null>(null);            // GET /v1/clips/{id}/words (#215)
+  const [wordEditsOn, setWordEditsOn] = useState(false);                        // EditWord path ready (emoji/highlight/split)
   const [tab, setTab] = useState<Tab>("transcript");
   const [tool, setTool] = useState<Tool | null>(null);
   const [view, setView] = useState<"edit" | "file">("edit");
@@ -97,8 +99,15 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
 
   useEffect(() => {
     let on = true;
-    const fromApi = known.words ? loadEditWords(clip.id).then((r) => { if (on) setApiWords(r.words); return r.words as Word[]; }) : loadWords(clip);
-    fromApi.then((w) => on && setWords(w)).catch((e) => { if (on) { setWords([]); setWordsProblem(e.message); } });
+    setWordEditsOn(false); setApiWords(null);
+    // Always try GET /words (EditWord). A live route enables emoji/highlight/split even when OpenAPI probe missed.
+    const takeEditWords = (list: EditWord[]) => {
+      if (!on) return;
+      setApiWords(list); setWords(list); setWordEditsOn(isEditWordList(list)); setWordsProblem("");
+    };
+    const fallback = () => loadWords(clip).then((w) => { if (on) { setWords(w); setWordEditsOn(false); } })
+      .catch((e) => { if (on) { setWords([]); setWordEditsOn(false); setWordsProblem(e.message); } });
+    loadEditWords(clip.id).then((r) => takeEditWords(r.words)).catch(() => fallback());
     return () => { on = false; };
   }, [clip.id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -149,8 +158,10 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
   // Cutting words also marks them `cut` in the word edit (#215): the caption and the video leave together.
   const cutSelection = () => { if (selSpan) { set({ cuts: addCut(edit.cuts, selSpan), ...(model ? { words: model.map((w) => (w.start >= selSpan[0] && w.end <= selSpan[1] ? { ...w, cut: true } : w)) } : {}) }); setSel(null); } };
   const restoreSelection = () => { if (selSpan) { set({ cuts: removeSpan(edit.cuts, selSpan), ...(model ? { words: model.map((w) => (w.start >= selSpan[0] && w.end <= selSpan[1] ? { ...w, cut: false } : w)) } : {}) }); setSel(null); } };
-  // Text-based editing (#215): the words as the user edits them; null when this API can't take them.
-  const model: EditWord[] | null = known.words ? (edit.words ?? apiWords) : null;
+  // Text-based editing (#215): EditWord list once GET /words succeeded (or a saved edit already has words).
+  const model: EditWord[] | null = wordEditsOn || wordEditReady(edit.words) || wordEditReady(apiWords)
+    ? (edit.words ?? apiWords) : null;
+  const menuOn = !!model && wordEditReady(model);
   const pickedIdx = sel ? Array.from({ length: Math.abs(sel.b - sel.a) + 1 }, (_, k) => Math.min(sel.a, sel.b) + k) : [];
   const captionLook = ((edit.options.caption_look as CaptionLook | null) || {}) as CaptionLook;
 
@@ -260,7 +271,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
                           onClick={(e) => pickWord(i, e.shiftKey)}>{model?.[i] ? <WordFace w={model[i]} /> : w.text}</button>;
                       })}
                     </div>}
-                {!!words?.length && <WordMenu on={!!known.words} words={model} picked={pickedIdx} onWords={(next) => set({ words: next })} onCutWithVideo={cutSelection} />}
+                {!!words?.length && <WordMenu on={menuOn} words={model} picked={pickedIdx} onWords={(next) => set({ words: next })} onCutWithVideo={cutSelection} />}
                 <p className="muted m-0 text-[12.5px]">Click a word to jump to it. Shift-click another to select everything between, then press Cut or Delete.</p>
                 {!mapping.exact && (job?.options?.tighten || job?.options?.flash_forward) && !!words?.length &&
                   <p className="muted m-0 text-[12.5px]">Word times may be off by a moment: dead air was cut from this clip when it was made, and the exact parts aren&apos;t known yet.</p>}
