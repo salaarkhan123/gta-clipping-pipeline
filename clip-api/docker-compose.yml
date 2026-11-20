@@ -64,6 +64,34 @@ services:
     depends_on:
       - api
 
+  # ---------------------------------------------------------------------------
+  # Optional dedicated render worker (SPEC setup B / S4). FULLY COMMENTED —
+  # default `docker compose up` is unchanged. Owner provisions the host; agents
+  # must not enable paid cloud GPUs. See docs/render-worker.md and DEPLOY.md.
+  #
+  # Until S4 (#98) WORKER_STAGES ships, this is the same full pipeline as
+  # `worker` (useful only as a second replica on a larger host with shared
+  # storage). After S4, set render-only stages on this service.
+  #
+  # render-worker:
+  #   build: .
+  #   restart: unless-stopped
+  #   command: ["python", "-m", "app.worker"]
+  #   env_file: .env
+  #   environment:
+  #     DATABASE_URL: postgresql+psycopg://clip:${POSTGRES_PASSWORD}@db:5432/clip
+  #     DATA_DIR: /srv/data
+  #     # On a 16-vCPU host, try RENDER_WORKERS=4 (or higher) only after
+  #     # scripts/job_timings.py; leave WORKER_CONCURRENCY at 1 until measured.
+  #     # RENDER_WORKERS: "4"
+  #     # WORKER_CONCURRENCY: "1"
+  #   volumes:
+  #     - data:/srv/data
+  #   depends_on:
+  #     api:
+  #       condition: service_healthy
+  # ---------------------------------------------------------------------------
+
 volumes:
   pgdata:
   data:
