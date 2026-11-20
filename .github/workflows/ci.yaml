@@ -26,8 +26,8 @@ jobs:
     # Same base as clip-api/Dockerfile and ci/local-ci.sh so renders use production ffmpeg 7.1.
     container:
       image: python:3.12-slim-trixie
-      # Use the full ubuntu-latest runner (4 vCPU / 16 GB); a 2-CPU cap caused the 45m timeout on 2f296f4.
-      options: --cpus 4 --memory 7g
+      # No cpu/memory caps: --cpus 4 --memory 7g failed docker create on ubuntu-latest (80b3830);
+      # --cpus 2 --memory 5g ran but was too slow for the old 45m timeout.
     services:
       postgres:
         image: postgres:16
