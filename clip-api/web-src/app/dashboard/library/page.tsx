@@ -55,7 +55,8 @@ function AllProjects() {
   return (
     <>
       <p className="muted small">Each video is a project. Videos and their clips are kept for 7 days.</p>
-      <ProjectGrid projects={projects} />
+      <ProjectGrid projects={projects}
+        onDeleted={(id) => setProjects((list) => (list || []).filter((p) => p.upload_id !== id))} />
       {more && <div><button className="btn ghost" disabled={busy} onClick={() => load(projects.length)}>{busy ? "Loading…" : "Show more"}</button></div>}
     </>
   );
