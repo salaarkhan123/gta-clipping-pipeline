@@ -192,6 +192,8 @@ def test_coarse_parallelizes_long_spans(monkeypatch, tmp_path):
 
     monkeypatch.setattr(sig, "probe", fake_probe)
     monkeypatch.setattr(sig, "run", fake_run)
+    # Cap parallel workers by cpu_count; pin to 4 so CI (often 2 vCPU) matches the design.
+    monkeypatch.setattr(sig.os, "cpu_count", lambda: 4)
 
     out = onscreen_chat_motion(tmp_path / "fake.mp4", "top-right", sample="coarse")
     assert out is not None and len(out) == 300
