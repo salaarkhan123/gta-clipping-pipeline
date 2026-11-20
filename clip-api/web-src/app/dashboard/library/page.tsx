@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { CLIP_GRID, ClipCard, ClipFilter, ClipSort, ClipToolbar } from "@/components/dash/ClipCard";
+import { CLIP_GRID, CLIP_LIST, ClipCard, ClipFilter, ClipSort, ClipToolbar, LayoutToggle, useClipLayout } from "@/components/dash/ClipCard";
 import { ProjectGrid } from "@/components/dash/ProjectCard";
 import { useDash } from "@/components/dash/Shell";
 import { BackTitle, PAGE_HEAD, SECTION_HEAD } from "@/components/dash/ui";
@@ -67,6 +67,7 @@ function AllClips() {
   const { fail } = useDash();
   const [clips, setClips] = useState<any[] | null>(null), [total, setTotal] = useState(0), [busy, setBusy] = useState(false);
   const [sort, setSort] = useState<ClipSort>("newest"), [filter, setFilter] = useState<ClipFilter>("all");
+  const [layout, setLayout] = useClipLayout();
 
   const more = useCallback(async (offset: number) => {
     setBusy(true);
@@ -82,13 +83,16 @@ function AllClips() {
     <>
       <div className={SECTION_HEAD}>
         <p className="muted small">{clips?.length ? `${total} clip${total === 1 ? "" : "s"}. Clips are kept for 7 days.` : ""}</p>
-        <ClipToolbar sort={sort} filter={filter} sorts={["newest", "score", "time"]} onSort={setSort} onFilter={setFilter} />
+        <div className="flex flex-wrap items-center gap-[10px]">
+          <ClipToolbar sort={sort} filter={filter} sorts={["newest", "score", "time"]} onSort={setSort} onFilter={setFilter} />
+          <LayoutToggle value={layout} onChange={setLayout} />
+        </div>
       </div>
       {clips === null ? <p className="muted">Loading your clips…</p>
         : !clips.length ? <p className="empty-note">{filter === "all" ? "No clips yet. Open a project and make some." : "No clips match this filter."}</p>
         : <>
-            <div className={CLIP_GRID}>
-              {clips.map((c) => <ClipCard key={c.id} clip={c} project={{ id: c.upload_id, name: c.filename }}
+            <div className={layout === "list" ? CLIP_LIST : CLIP_GRID}>
+              {clips.map((c) => <ClipCard key={c.id} clip={c} layout={layout} project={{ id: c.upload_id, name: c.filename }}
                 onChange={(n) => setClips((list) => list!.map((x) => (x.id === n.id ? n : x)))} />)}
             </div>
             {clips.length < total && <div><button className="btn ghost" disabled={busy} onClick={() => more(clips.length)}>{busy ? "Loading…" : "Show more"}</button></div>}
