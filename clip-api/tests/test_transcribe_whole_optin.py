@@ -50,6 +50,26 @@ def test_job_opt_in_runs_whole_transcript_when_env_is_off(client, user, three_bu
     assert stored(up["upload_id"])["model"] == "base.en"
 
 
+def test_env_true_still_pops_transcribe_whole_before_pipeline_options():
+    """Regression: settings.transcribe_whole True must still pop the key (or short-circuit left it in)."""
+    from app.pipeline import PipelineOptions
+
+    options = {"max_clips": 1, "clip_length": 10, "transcribe_whole": True}
+    # Buggy pattern (env True → pop never runs) leaves the key and PipelineOptions raises.
+    leaked = dict(options)
+    _ = bool(True or leaked.pop("transcribe_whole", False))
+    assert "transcribe_whole" in leaked
+    with pytest.raises(TypeError, match="transcribe_whole"):
+        PipelineOptions(**leaked)
+
+    # Fixed pattern in worker.py: pop first, then OR.
+    job_whole = bool(options.pop("transcribe_whole", False))
+    want_whole = bool(True or job_whole)
+    assert want_whole is True
+    assert "transcribe_whole" not in options
+    PipelineOptions(**options)  # must not TypeError
+
+
 def test_without_heard_coverage_llm_pass_is_skipped(video, tmp_path):
     """U3: proposer is not called when Heard does not cover the analysed range (existing gate)."""
     calls = []

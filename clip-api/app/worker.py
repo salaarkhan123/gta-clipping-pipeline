@@ -474,8 +474,10 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
         else:
             weights, weights_version = game_weights(options.get("template"), s.score_weights)
             # Whole-transcript mode: global TRANSCRIBE_WHOLE or this job's ClipOptions.transcribe_whole (default false).
-            # Pop before PipelineOptions: the pipeline does not take this field.
-            want_whole = bool(s.transcribe_whole or options.pop("transcribe_whole", False))
+            # Always pop first: `or` short-circuits when s.transcribe_whole is True and would leave the key
+            # for PipelineOptions(**options), which does not accept transcribe_whole.
+            job_whole = bool(options.pop("transcribe_whole", False))
+            want_whole = bool(s.transcribe_whole or job_whole)
             opts = PipelineOptions(caption_font=s.caption_font, source_lang=language, target_lang=target,
                                    moment_layout=s.provisional_layouts, quality_floor=s.clip_quality_floor,
                                    score_weights=weights, score_weights_version=weights_version,
