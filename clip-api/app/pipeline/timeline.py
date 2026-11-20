@@ -9,6 +9,7 @@ scores each against its own rolling baseline (signals.baseline_z) and adds it to
 | audio_flux | the loudness decode (no second decode) | how fast the sound's spectrum changes: impacts, shouts, laughs starting |
 | audio_bursts | the loudness decode | loudness pulsing 3 to 7 times a second, the rhythm of laughter |
 | scene | key frames, one every 2 s (an extra decode) | how much the picture changes between key frames |
+| gunshot, explosion, siren, crash, scream, laughter | sound_events.py, and only when that event's weight is above 0 | whether that named sound is in the second |
 | standby | the key frames inside each candidate, and its words | seconds where nothing happens: the picture does not change and nobody speaks (starting-soon and BRB screens, an empty chair, menus left open) |
 
 A candidate that is standby for STANDBY_REJECT of its seconds or more never becomes a clip (pipeline: its
