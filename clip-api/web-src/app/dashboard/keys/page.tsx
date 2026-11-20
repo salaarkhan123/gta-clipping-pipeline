@@ -13,8 +13,9 @@ export default function Keys() {
   return (
     <>
       <h1 className="dash-title">API</h1>
-      <p className="muted">Use a key to make clips from your own code. The website uses the same API.</p>
-      <div><a className="btn small ghost" href={`${API}/docs`} target="_blank" rel="noreferrer">Read the API docs <Icon name="external" size={16} /></a></div>
+      <p className="muted">Use a key to call the same public <code>/v1</code> API the website uses. Interactive OpenAPI docs are at <code>/docs</code>; the machine-readable schema is <code>/openapi.json</code>.</p>
+      <div><a className="btn small ghost" href={`${API}/docs`} target="_blank" rel="noreferrer">OpenAPI reference <Icon name="external" size={16} /></a></div>
+      <p className="muted">Core endpoints: <code>POST /v1/uploads</code>, <code>POST /v1/clips</code> (and <code>/quote</code>), <code>{`GET /v1/jobs/{id}`}</code>, <code>GET /v1/options</code>, <code>GET /v1/credits</code>, <code>GET|POST /v1/keys</code>. No separate SDK is shipped here.</p>
       <section className="panel" aria-labelledby="keys-title">
         <h2 id="keys-title">API keys</h2>
         {fresh && <p className="notice" role="status">Copy this key now. It won't be shown again.<br /><code>{fresh}</code></p>}
