@@ -8,9 +8,9 @@ Claim labels used below are `measured`, `verified`, `inferred`, `hypothesis`, `p
 
 ## Overview
 
-ClutchClips turns a long gameplay upload into short vertical clips. The section 14 goal is 30 to 50 ranked previews from a 2-hour VOD in 10 minutes, and one 1080p export in 30 seconds. Ticket #99 is the speed-track item that would time a GPU, and it is still an unwritten benchmark, not a library swap.
+ClutchClips turns a long gameplay upload into short vertical clips. The section 14 goal is 30 to 50 ranked previews from a 2-hour VOD in 10 minutes, and one 1080p export in 30 seconds. Ticket #99 is the speed-track item that would time a GPU. Its acceptance criteria block still says the criteria are written when the ticket starts.
 
-The shipping path decodes, filters, and encodes with one ffmpeg subprocess per call. `clip-api/app/pipeline/ff.py` puts `-protocol_whitelist file,pipe` on every input and kills the process when the job deadline runs out. `render.py` encodes with `libx264`. `signals.py` either skips video (`-vn`) or decodes a long stretch for on-screen chat. Captions, blur, and crops are CPU filters. A GPU decoder that hands frames back to that graph has to download them first.
+The shipping path decodes, filters, and encodes with one ffmpeg subprocess per call. `clip-api/app/pipeline/ff.py` puts `-protocol_whitelist file,pipe` on every input and, when a deadline is set, kills the process on that deadline. `render.py` encodes with `libx264`. `signals.py` either skips video (`-vn`) or decodes a long stretch for on-screen chat. Captions, blur, and crops are CPU filters. A GPU decoder that hands frames back to that graph has to download them first.
 
 S5 should stay a benchmark of this ffmpeg binary on a GPU the owner provides. PyNvVideoCodec, TorchCodec, and Decord are different processes with different failure modes. They do not earn a place in the image until one of them wins a timed run of the real graph, and this note does not have that run.
 
@@ -26,7 +26,7 @@ S5 is GitHub issue 99, "GPU and NVENC benchmark behind a flag (S5)". The issue b
 
 ## How the CPU path works
 
-`run_pipeline` in `clip-api/app/pipeline/__init__.py` probes, detects a facecam, builds per-second signals, and later renders each chosen window. Every media read goes through `ff.run` or `ff.run_bytes`. Both pass the remaining deadline as the subprocess timeout, close stdin, and on a non-zero exit raise `PipelineError`. `verified` in `ff.py`.
+`run_pipeline` in `clip-api/app/pipeline/__init__.py` probes, detects a facecam, builds per-second signals, and later renders each chosen window. Probe, signals, facecam, loudness, and `render_clip` go through `ff.run` or `ff.run_bytes`. Both pass the remaining deadline as the subprocess timeout, close stdin, and on a non-zero exit raise `PipelineError`. `iter_frames` does not. It starts ffmpeg with `Popen`, discards stderr, and kills the process from a timer. `verified` in `ff.py` and `visual.py`.
 
 Probe is `ffprobe` with the protocol whitelist, a 120 second cap, and a JSON read of duration, size, and whether an audio stream exists. It does not decode the picture.
 
@@ -71,7 +71,7 @@ A hardware decode only removes the first box. The caption and blur filters still
 
 ## What this ffmpeg build can already name
 
-Measured on this Cloud Agent VM, Ubuntu ffmpeg `6.1.1-3ubuntu5`, configure line includes `--enable-gpl` and `--enable-libx264` and does not include `--enable-nonfree`.
+On this Cloud Agent VM, `ffmpeg -version` prints Ubuntu ffmpeg `6.1.1-3ubuntu5`. The configure line includes `--enable-gpl` and `--enable-libx264`. It does not include `--enable-nonfree`. `measured`.
 
 `ffmpeg -encoders` lists `h264_nvenc`, `hevc_nvenc`, and `av1_nvenc`. `ffmpeg -decoders` lists `h264_cuvid`, `hevc_cuvid`, and `av1_cuvid`. `ffmpeg -hwaccels` lists `cuda`. `ffmpeg -filters` lists `scale_cuda`, `overlay_cuda`, and `hwupload_cuda`. It also lists CPU `ass`, `subtitles`, `boxblur`, `crop`, `edgedetect`, `fade`, `fps`, `gblur`, `signalstats`, and `tblend`, and it does not list a `_cuda` twin for any of those. `boxblur_opencl` is present. The layout uses `boxblur`, not the OpenCL filter. `measured`.
 
@@ -88,7 +88,7 @@ The production Dockerfile installs distro ffmpeg and never mentions a NVIDIA pac
 | PyNvVideoCodec | MIT for the Python library | NVIDIA says it is the supported successor of archived VPF. PyPI lists 2.2.4 | NVIDIA GPU, Turing or newer, driver and CUDA | Encode and decode to tensors. No libass, no our graph, in-process | `SimpleDecoder` index API | `ThreadedDecoder` prefetch |
 | TorchCodec | BSD-3. CUDA wheels add the CUDA EULA | Meta. README documents 0.17 against torch 2.11 and newer | CPU, or NVIDIA GPU for NVDEC | Pulls PyTorch into an ONNX pipeline. Still FFmpeg underneath | `get_frames_at`, `get_frames_played_at` | Iteration and slice syntax |
 | Decord `dmlc/decord` | Apache-2.0 | Last GitHub release v0.6.0 on 2021-06-14. Last push 2024-07-17. Issue 333 still asking for a maintainer in 2025 | CPU wheels. GPU only from source | Stale, no layout encode, in-process | `get_batch` by index | Iterator and `next` |
-| FFmpeg NVDEC and NVENC | Same ffmpeg binary. Header package `nv-codec-headers` is described as MIT by Fedora. NVIDIA's own compile example still passes `--enable-nonfree` | FFmpeg upstream plus the driver | NVIDIA GPU, driver present, `libcuda.so.1` loadable | Only option that keeps `ff.run`, the whitelist, and libass | `-ss` before `-i`, same as today | `-hwaccel cuda` on a long read |
+| FFmpeg NVDEC and NVENC | Same ffmpeg binary. Header package `nv-codec-headers` is described as MIT by Fedora. NVIDIA's own compile example still passes `--enable-nonfree` | FFmpeg upstream plus the driver | NVIDIA GPU, driver present, `libcuda.so.1` loadable | Only option that stays an ffmpeg command, with the whitelist and libass | `-ss` before `-i`, same as today | `-hwaccel cuda` on a long read |
 
 The playbook, PyNvVideoCodec, TorchCodec, and Decord rows are `public-source` for license and hardware, and `inferred` for production fit from our code plus those pages. The ffmpeg rows mix `measured` build facts with `verified` call sites. No row has a ClutchClips frames-per-second number.
 
@@ -126,7 +126,7 @@ PyPI lists `pynvvideocodec` 2.2.4, MIT, Python `>=3.8`, maintainer nvidia. `publ
 
 **Production fit.** It decodes and encodes on the GPU and can hand a frame to PyTorch through DLPack. It does not run `ass`, `boxblur`, or our crop graph. Using it for `render_clip` means writing a second compositor or downloading frames into ffmpeg, which puts the CPU graph back in the middle. It is an in-process library, so `ff.run`'s timeout does not cover it unless we add one. A stuck decode would sit inside the worker until something else notices. `inferred`. It also does not apply `-protocol_whitelist`. A wrapper would have to refuse anything that is not a local file. `hypothesis` that a path-only API is safe if we only pass paths we already store. Untested.
 
-**Sparse frames.** `SimpleDecoder` supports index, slice, `get_batch_frames_by_index`, and `seek_to_index`. The API page says it needs a seekable container and will not take a raw elementary stream. `ThreadedDecoder` is the sequential prefetch class. `public-source`. https://docs.nvidia.com/video-technologies/pynvvideocodec/pynvc-api-reference/latest/decoder.html Random indexes still decode from the previous keyframe. Their own sampling note says a GOP of 250 frames leaves direct sampling only about 1.05 times the speed of decoding sequentially, on their 1080p clip. See the vendor section. That pattern matches a long-GOP upload better than a short-GOP training clip. `hypothesis` for our files, because this session did not measure their keyframe gaps.
+**Sparse frames.** `SimpleDecoder` supports index, slice, `get_batch_frames_by_index`, and `seek_to_index`. The API page says it needs a seekable container and will not take a raw elementary stream. `ThreadedDecoder` is the sequential prefetch class. `public-source`. https://docs.nvidia.com/video-technologies/pynvvideocodec/pynvc-api-reference/latest/decoder.html Their sampling note says a GOP of 250 leaves uniform sampling about 1.05 times sequential decode on their 1080p clip, because more frames must be decoded to reach each seek. See the vendor section. `public-source`. Treating that ratio as ours is a `hypothesis`, because this session did not measure keyframe gaps on our uploads.
 
 **Full decode.** `ThreadedDecoder` is the class they point at for sequential pipelines. Chat motion is the call site that looks like that, and it then runs `edgedetect` and `signalstats`, which are CPU filters in the build measured above. The frames would come back to the CPU anyway. `inferred`.
 
@@ -148,7 +148,7 @@ The 0.17 decoder docstring says a CUDA device uses the `"nvdec"` backend unless 
 
 **Production fit.** Weak for this service. `visual.py` states the embedder is CPU only and does not use PyTorch. `requirements.txt` has no torch. A CUDA wheel on the slim image is a new base image, a new license review, and a new failure mode inside the worker process rather than a killed subprocess. TorchCodec can replace the decode step of the visual index and still must copy tensors to NumPy for ONNX. It cannot burn ASS or draw the layout. Encoding from tensors would bypass `layouts.py`. `verified` for the PyTorch absence, `inferred` for the fit.
 
-**Sparse frames.** `get_frames_played_at(seconds=[...])` is the closest API to `sample_gray`. Exact seek mode is the one that matches a facecam sample. It still decodes from the previous keyframe inside FFmpeg. Twelve separate `VideoDecoder` objects would repeat open and index costs. One decoder and twelve timestamps is the shape worth timing, and it was not timed. `hypothesis`.
+**Sparse frames.** `get_frames_played_at(seconds=[...])` is the closest API to `sample_gray`. Exact seek mode asks for a timestamp. This note did not read a guarantee of how many compressed frames that read decodes. Twelve separate `VideoDecoder` objects would repeat open costs. One decoder and twelve timestamps is the shape worth timing, and it was not timed. `hypothesis`.
 
 **Full decode.** Slicing and iteration are the sequential API. Chat motion and `iter_frames` are the call sites. Both need CPU pixels for filters or for ONNX. A CUDA tensor would be copied off the device before either consumer. `inferred`.
 
@@ -176,23 +176,23 @@ A different project, `decord2` on PyPI, showed later uploads during the same sea
 
 ## FFmpeg NVDEC and NVENC
 
-This is the only option that stays inside `ff.run`. The binary on this VM already lists the encoders, the CUVID decoders, and `cuda` hwaccel. It cannot open them, because `libcuda.so.1` is not installed. `measured`.
+This is the only option that stays an ffmpeg command. The binary on this VM already lists the encoders, the CUVID decoders, and `cuda` hwaccel. It cannot open them, because `libcuda.so.1` is not installed. `measured`.
 
 NVIDIA's SDK 13.1 FFmpeg chapter says Turing and newer GPUs, a driver that matches the SDK headers, and frames kept on the GPU with `-hwaccel cuda -hwaccel_output_format cuda` plus `scale_cuda` and `h264_nvenc`. The chapter's configure example includes `--enable-nonfree`. This VM's Ubuntu build lists the NVENC encoders without that flag in `ffmpeg -version`. Both observations stand. This note does not pick a license interpretation beyond them. `public-source` for the chapter, `measured` for the local configure line. Fedora's `nv-codec-headers` package page calls those headers MIT. `public-source`. https://packages.fedoraproject.org/pkgs/nv-codec-headers/nv-codec-headers/index.html
 
-**License.** We already ship a GPL ffmpeg because of libx264. Turning on an encoder that the same binary already compiled does not add a Python package. It does add the NVIDIA driver on the machine that runs it. Whether a given build needs `--enable-nonfree` depends on that build. Ours, on this VM, did not use the flag and still lists the encoder. The production image was not opened. `measured` here, `not measured` in the image.
+**License.** This VM's ffmpeg is a GPL build. The configure line enables GPL and libx264. `measured`. Using an encoder that same binary already lists adds the NVIDIA driver on the machine that runs it, and it adds no Python package. Whether some other build needs `--enable-nonfree` is a property of that build. The production image was not opened. `not measured` in the image.
 
-**Maintenance.** FFmpeg and `nv-codec-headers` are upstream projects we would not vendor. The worker keeps calling `/usr/bin/ffmpeg`. Driver upgrades become the owner's problem on the GPU box, which SPEC already assigns to the owner. `verified` for the SPEC sentence that the owner provisions and pays, and that an agent does not sign up for infrastructure.
+**Maintenance.** FFmpeg and `nv-codec-headers` are upstream projects we would not vendor. The code calls `ffmpeg` on `PATH`. `verified`. Driver upgrades become the owner's problem on the GPU box. SPEC says the owner provisions and pays, and that an agent does not sign up for infrastructure. `verified`.
 
 **Dependencies.** A GPU, a driver, and `libcuda.so.1`. No new Python dependency. The protocol whitelist can stay on the same command line, because the input is still a local file. Whether `cuda` hwaccel accepts that flag was not run. `hypothesis` that it does, because the whitelist limits protocols and the file is a file. Do not ship the flag on that guess.
 
-**Hardware.** NVIDIA GPU with NVENC and NVDEC for the codecs we actually receive. Gameplay uploads are commonly H.264 or HEVC. AV1 exists on the encoder list and was not surveyed in our objects. Codec mix of real uploads is `not measured` in this session.
+**Hardware.** A GPU whose NVDEC and NVENC support the codecs in the upload. This VM's encoder list includes AV1. Which codecs real uploads use was not surveyed. `not measured`.
 
 **Production fit.** Best of the GPU options, and still not good enough to turn on. `render_clip` would pass `-c:v h264_nvenc` instead of `libx264`, or add `-hwaccel cuda` in front of the input. The graph would then hit a CPU filter with no CUDA twin. From the filter list measured above, `scale` and `overlay` could move to `scale_cuda` and `overlay_cuda`. `crop`, `boxblur`, `fade`, `fps`, and `ass` could not. `ass` is the caption burn. A legal command downloads the frame, runs those filters, and uploads again if the encoder wants CUDA input. That download sits on the critical path of every captioned preview. `inferred` from the filter list. Speed of that round trip is `not measured`.
 
 NVENC does not take `-crf 20`. NVIDIA's chapter shows bitrate and NVENC presets. A quality match to `veryfast` CRF 20 and to preview CRF 30 was not compared. Shipping a faster encoder that looks different is a product change, not a free speedup. `public-source` that the controls differ, `not measured` for our pictures.
 
-**Sparse frames.** The facecam command is already a one-frame `-ss` seek. NVDEC would still start at the previous keyframe, decode to the target, and download one 640-wide gray frame. Twelve process startups plus twelve session inits can cost more than twelve CPU seeks. `hypothesis`. The visual index is not this shape. It is one sequential process.
+**Sparse frames.** The facecam command is already a one-frame `-ss` seek. A hardware decode of that seek still has to produce one 640-wide gray frame for OpenCV. Twelve process starts can cost more than twelve short CPU seeks. `hypothesis`. The visual index is not this shape. It is one sequential process.
 
 **Full decode.** Chat motion and a render window are sequential reads. NVDEC can decode those streams. Chat motion's consumers are CPU filters with no CUDA twin, so the decode win is only the decode itself, and only if download of 2 frames per second is cheaper than software decode of the source. Render windows are short relative to a 2-hour file. SPEC section 14 says not to decode two hours into a proxy, because decoding the whole file costs more than rendering the preview windows from the source. A full-file GPU decode fights that sentence. `verified` for the SPEC sentence, `hypothesis` for which side would win on a GPU.
 
@@ -205,7 +205,7 @@ Preview encode is already `ultrafast`. The export encode is `veryfast`. If a lat
 | `audio_rms_db`, `extract_audio`, `measure_loudness` | `-vn` | No video | No |
 | `onscreen_chat_motion` | one process, `fps=2`, no skip | The analysed span, then 2 frames per second kept | Only if the download of those frames beats software decode. `hypothesis` |
 | `iter_frames` | one process, `fps=1/2`, optional `-skip_frame nokey` | Whole file, or keyframes when the gap is 4 seconds or less | Same, and the next step is CPU ONNX. `hypothesis` |
-| `sample_gray` | 12 processes, `-ss` then one frame | About one GOP per seek | Unlikely. Startup can dominate. `hypothesis` |
+| `sample_gray` | 12 processes, `-ss` then one frame | One frame after an input seek | Unlikely. Startup can dominate. `hypothesis` |
 | `render_clip` | `-ss` and `-t` around one window | That window, then the CPU graph, then `libx264` | Encode might, after a profile says encode is the large part. `hypothesis` |
 | `render_thumb` | one frame of the finished clip | One frame | No |
 
@@ -219,9 +219,9 @@ The decision a speed number would change is "stop calling `libx264`". The bar is
 
 **Decoder cache, short clips.** Cached decoder versus a new decoder, 2-second videos, many reuses, on their GPU. At 360p they report 7.2 times the frames per second, 12679 versus 1760. At 1080p they report 1.8 times, 2602 versus 1461. For 30-second videos they report about 1.02 to 1.3 times. They attribute the gap to decoder startup. The page does not print a repeat count or a spread. Our previews are longer than 2 seconds and they spend their time in CPU filters this library does not run. The 7.2 times figure measures startup on a tiny synthetic clip.
 
-**Segmented transcode versus hardware ffmpeg.** One L40G, Ubuntu 22.04, a generated 1080p H.264 mandelbrot source, GOP 250, ten segments of 5 seconds, NVENC preset P1, zero B-frames. PyNvVideoCodec 2.31 seconds and 1072 frames per second. "FFmpeg without map", which the page says is hardware ffmpeg, 6.36 seconds and 389 frames per second. About 2.8 times in their table. One published row. No libass, no boxblur, no crop, no loudness, and not `libx264`. The page says the gap is persistent GPU context versus starting the encoder again. That is a real mechanism to remember when S5 times many short exports. It is not a measurement of our graph, and the ffmpeg side is not our CPU encoder.
+**Segmented transcode versus hardware ffmpeg.** One L40G, Ubuntu 22.04, a generated 1080p H.264 mandelbrot source, GOP 250, ten segments of 5 seconds, NVENC preset P1, zero B-frames. PyNvVideoCodec 2.31 seconds and 1072 frames per second. "FFmpeg without map", which the page says is hardware ffmpeg, 6.36 seconds and 389 frames per second. The page's key observations call that pair about 2.8 times. One published pair. No libass, no boxblur, no crop, no loudness, and the ffmpeg side is not `libx264`. The page says the gap is persistent GPU context versus starting the encoder again. That is a real mechanism to remember when S5 times many short exports. It is not a measurement of our graph, and the ffmpeg side is not our CPU encoder.
 
-**Seek versus sequential, same library.** On a 1080p, 30-second clip, uniform sampling of 30 frames at GOP 250 is 1.05 times sequential decode. At GOP 30 it is 1.44 times. Random sampling at GOP 250 is described as barely ahead of sequential, and at GOP 30 about 2.14 times, one thread. They state the limiter as how many frames sit between keyframes. `keyframe_gap` in `visual.py` already measures that gap for an upload and was not run on a real VOD in this session. `not measured` for our sources.
+**Seek versus sequential, same library.** On a 1080p, 30-second clip, one thread, uniform sampling of 30 frames at GOP 250 is 1.05 times sequential decode. At GOP 30 it is 1.44 times. The page gives the large-GOP case 1.02 to 1.05 times. Random sampling at GOP 30 is about 2.14 times on one thread. They state the limiter as how many frames sit between keyframes. `keyframe_gap` in `visual.py` already measures that gap for an upload and was not run on a real VOD in this session. `not measured` for our sources.
 
 The playbook README says its own notebooks are not a professional benchmark. This note does not import any frames-per-second figure from those notebooks.
 
@@ -233,7 +233,7 @@ The render stage in the 2026-11-15 server table is the whole ffmpeg invocation. 
 
 In-process decoders do not inherit `Deadline`. The worker heartbeat is not a substitute for a kill on a stuck GPU session. Any non-ffmpeg experiment has to grow a timeout before it is allowed near a paid job. `verified` for `ff.run`, `inferred` for the gap.
 
-`-protocol_whitelist file,pipe` exists because uploads are untrusted. A library that opens a path with its own demuxer must get the same local-file rule. This note did not audit those demuxers. `verified` for our rule, unknown for theirs.
+`-protocol_whitelist file,pipe` exists because uploads are untrusted. A library that opens a path with its own demuxer must get the same local-file rule. This note did not audit those demuxers. `verified` for our rule, `not measured` for theirs.
 
 Issue 99 names GPU Whisper in the same benchmark as NVENC. A decode library does not answer the Whisper half. SPEC setup B is still one 16-vCPU CPU render worker. An agent does not provision the GPU. `verified`.
 
@@ -243,7 +243,7 @@ NVENC preset P1 in the vendor transcode test is their fastest preset, not a qual
 
 `iter_frames` discards ffmpeg's stderr. A GPU failure in that process would look like a short index. `verified` in `visual.py`.
 
-SPEC section 14 says previews use a fast preset. `render.py` uses libx264 `ultrafast` and CRF 30. NVIDIA's FFmpeg chapter says `-preset fast` on NVENC maps to `p1`, which that chapter calls the fastest and lowest-quality NVENC preset. Copying the word "fast" from the spec onto `h264_nvenc` would not reproduce today's preview. `verified` for the spec sentence and the constant, `public-source` for the NVENC preset map.
+SPEC section 14 says previews use a fast preset. `render.py` uses libx264 `ultrafast` and CRF 30. NVIDIA's FFmpeg chapter says `-preset fast` on NVENC maps to `p1`, which that chapter calls the fastest and lowest-quality NVENC preset. Copying the word "fast" from the spec onto `h264_nvenc` would select `p1`, and that would not reproduce today's `ultrafast` CRF 30 preview. `verified` for the spec sentence and the constant, `public-source` for the preset map, `inferred` for the mismatch.
 
 ## What we do not know
 
