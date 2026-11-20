@@ -16,7 +16,10 @@ export function FindPanel({ upload, jobs, finds, onStarted, onCancel }: { upload
   const { reloadMe, fail } = useDash();
   const listed = useClipOptions();
   const [o, setO] = useState<{ query: string; clip_length: number; aspect: string; caption_style: string | null; captions: boolean; censor: boolean }>(
-    { query: "", clip_length: 30, aspect: "9:16", caption_style: null, captions: true, censor: false });
+    () => {
+      const q = typeof window === "undefined" ? "" : (new URLSearchParams(window.location.search).get("q") || "");
+      return { query: q.slice(0, 200), clip_length: 30, aspect: "9:16", caption_style: null, captions: true, censor: false };
+    });
   const [starting, setStarting] = useState(false), [problem, setProblem] = useState("");
   const set = (k: string, v: any) => setO((x) => ({ ...x, [k]: v }));
   if (!listed) return <p className="muted">Loading the options…</p>;

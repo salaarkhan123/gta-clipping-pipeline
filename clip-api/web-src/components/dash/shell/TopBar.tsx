@@ -1,12 +1,14 @@
 "use client";
-// The bar above every signed-in page: on a phone the menu button and the logo, then notifications, the credit
+// The bar above every signed-in page: on a phone the menu button and the logo, then Find, notifications, the credit
 // balance and Add credits. It sits beside the sidebar, never over it.
 import Link from "next/link";
 import { Logo } from "@/components/Chrome";
 import { ComingSoonBadge } from "@/components/ComingSoonBadge";
+import { shortcutLabel } from "@/lib/globalFind";
 import { Icon } from "../Icon";
 
-export function TopBar({ me, onMenu }: { me: any; onMenu: () => void }) {
+export function TopBar({ me, onMenu, onFind }: { me: any; onMenu: () => void; onFind: () => void }) {
+  const keys = shortcutLabel();
   return (
     <header className="sticky top-0 z-40 flex h-topbar items-center justify-end gap-2 bg-[rgba(0,0,0,.85)] px-5 [backdrop-filter:blur(12px)]
       narrow:justify-between narrow:border-0 narrow:border-b narrow:border-solid narrow:border-line-soft narrow:pl-2 narrow:pr-3">
@@ -16,6 +18,11 @@ export function TopBar({ me, onMenu }: { me: any; onMenu: () => void }) {
         <Logo small />
       </div>
       <div className="flex items-center gap-2 tiny:gap-1">
+        <button type="button" onClick={onFind} title={`Find moments (${keys})`}
+          className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-8 border-0 bg-transparent px-2 text-fg-2 hover:bg-chip hover:text-text">
+          <Icon name="search" size={18} /><span className="text-[13.5px] font-medium tiny:hidden">Find</span>
+          <kbd className="rounded-8 border border-solid border-line-soft px-[6px] py-px font-mono text-[11px] text-fg-3 tiny:hidden">{keys}</kbd>
+        </button>
         {/* No notifications API yet: the bell is shown as planned and does nothing. */}
         <span aria-disabled="true" title="Notifications: coming soon" className="relative inline-flex h-9 items-center gap-1 rounded-8 px-2 text-fg-3 tiny:hidden">
           <Icon name="bell" size={19} /><span className="sr-only">Notifications</span><ComingSoonBadge short /></span>
