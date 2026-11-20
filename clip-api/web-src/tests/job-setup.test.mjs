@@ -46,3 +46,19 @@ test("start card: polish chips preset real options; B-roll and the two unbuilt t
 test("job setup: only options the API lists are sent", () => {
   assert.match(setup, /return onlyListed\(listed, o\);/);
 });
+
+test("job setup: whole-recording transcript is off by default and only sent when listed", () => {
+  assert.match(setup, /transcribe_whole: false \}/);
+  assert.match(setup, /transcribe_whole: f\.transcribe_whole/);
+  assert.match(setup, /\{has\("transcribe_whole"\) && <SettingRow icon="transcript" name="Whole-recording transcript"/);
+  assert.match(setup, /on=\{f\.transcribe_whole\} label="Whole-recording transcript"/);
+  assert.match(setup, /Transcribes the whole recording first so the AI can propose moments from the dialogue\. Takes longer on long VODs\. Same credit price\./);
+  assert.doesNotMatch(setup, /viral|guaranteed|OpusClip|letter.?grade/i);
+
+  // onlyListed is the send path: a key that is not on GET /v1/options is never invented.
+  assert.match(source("lib/options.ts"), /Object\.entries\(options\)\.filter\(\(\[k\]\) => k in listed\)/);
+  const onlyListed = (listed, options) => Object.fromEntries(Object.entries(options).filter(([k]) => k in listed));
+  assert.deepEqual(onlyListed({ transcribe_whole: { type: "boolean", default: false } }, { transcribe_whole: true, extra: 1 }), { transcribe_whole: true });
+  assert.deepEqual(onlyListed({ transcribe_whole: {} }, { transcribe_whole: false }), { transcribe_whole: false });
+  assert.equal("transcribe_whole" in onlyListed({}, { transcribe_whole: true }), false);
+});

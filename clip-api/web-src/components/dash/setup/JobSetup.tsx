@@ -49,7 +49,7 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
   const onLook = (c: Partial<Look>) => setLook((x) => ({ ...x, ...c }));
   const [f, setF] = useState({ limit: null as number | null, duration: allows(listed, "duration", AUTO) ? AUTO : String(listed.duration?.values?.[0] || AUTO),
     prompt: "", range: null as Span | null, source_lang: "", chat_region: "none", hook_style: String(listed.hook_style?.default || "serious"),
-    translate: false, target_lang: "", caption_display: "translation", game: "" });
+    translate: false, target_lang: "", caption_display: "translation", game: "", transcribe_whole: false });
   const set = (c: Partial<typeof f>) => setF((x) => ({ ...x, ...c }));
   const [templates, setTemplates] = useState<{ presets: any[]; games: any[] }>({ presets: [], games: [] }), [saved, setSaved] = useState<Saved[] | null>(null);
   const [picked, setPicked] = useState("");                      // "" none, "t:<id>" a template, "s:<id>" a saved look
@@ -84,7 +84,8 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
   const options = useMemo(() => {
     const o: Record<string, unknown> = { facecam_region: "auto", zoom: 1, resolution: "1080", render: RENDER, chat_region: f.chat_region,
       ...look, template: chosen ? chosen.id : null, ...(chosen ? extrasFrom(chosen, listed) : {}),
-      prompt: f.prompt.trim() || null, range: f.range, source_lang: f.source_lang || null, limit: f.limit, duration: f.duration };
+      prompt: f.prompt.trim() || null, range: f.range, source_lang: f.source_lang || null, limit: f.limit, duration: f.duration,
+      transcribe_whole: f.transcribe_whole };
     if (look.hook_overlay) o.hook_style = f.hook_style;
     o.target_lang = f.translate && f.target_lang ? f.target_lang : null;
     if (f.translate && f.target_lang) o.caption_display = f.caption_display;
@@ -219,6 +220,9 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
                     className="cursor-pointer rounded-full border border-solid border-line bg-transparent px-3 py-[6px] font-sans text-[12.5px] text-label hover:border-line-strong aria-pressed:border-text aria-pressed:text-text">{q}</button>)}</div>
                 </div>}
               </div>}><Switch on label="Clipping" disabled /></SettingRow>
+              {has("transcribe_whole") && <SettingRow icon="transcript" name="Whole-recording transcript"
+                hint="Transcribes the whole recording first so the AI can propose moments from the dialogue. Takes longer on long VODs. Same credit price.">
+                <Switch on={f.transcribe_whole} label="Whole-recording transcript" onChange={(v) => set({ transcribe_whole: v })} /></SettingRow>}
 
               <h3 className={`m-0 pt-5 ${LABEL}`}>Essentials</h3>
               {has("captions") ? <SettingRow icon="captions" name="Captions" hint="Word-by-word captions burned into each clip." under={look.captions && <div className="grid gap-3">
