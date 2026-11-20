@@ -186,6 +186,9 @@ class Settings(BaseSettings):
     # Chat-band decode density for onscreen_chat_motion: "dense" (fps=2, default) or "sparse" (fps=1).
     # Sparse roughly halves chat_motion decode work; leave dense until timings on a real VOD say otherwise.
     chat_motion_sample: str = "dense"
+    # How many clip encodes one Clip Maker job may run at once (Wave B1). 1 = serial (default, safe on 4 vCPU).
+    # Raise on a machine with spare cores after measuring with scripts/job_timings.py; cap 8.
+    render_workers: int = Field(1, ge=1, le=8)
     sentry_dsn: str = ""
 
     @property
