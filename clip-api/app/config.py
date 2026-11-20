@@ -183,6 +183,9 @@ class Settings(BaseSettings):
     # Jobs one worker process runs at once. 2 is the most a 4 vCPU / 8 GB server holds (ffmpeg and Whisper
     # both use every core); raise the limit only with a bigger server and a new benchmark.
     worker_concurrency: int = Field(1, ge=1, le=2)
+    # How many clip encodes one Clip Maker job may run at once (Wave B1). 1 = serial (default, safe on 4 vCPU).
+    # Raise on a machine with spare cores after measuring with scripts/job_timings.py; cap 8.
+    render_workers: int = Field(1, ge=1, le=8)
     sentry_dsn: str = ""
 
     @property

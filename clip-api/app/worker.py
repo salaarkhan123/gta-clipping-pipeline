@@ -477,6 +477,8 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                                    moment_layout=s.provisional_layouts, quality_floor=s.clip_quality_floor,
                                    score_weights=weights, score_weights_version=weights_version,
                                    **options)   # (render, agent B; U4 quality floor; per-game rank weights)
+            # Wave B1: encode concurrency is an ops knob (RENDER_WORKERS), not a per-job client option.
+            opts.render_workers = s.render_workers
             # The pipeline's judge takes (text, frame, context); the AI client takes (text, context, frame).
             extra = ({"judge": lambda text, frame, ctx: ai.clip_meta(text, {**ctx, **lang_ctx}, frame),
                       "fast_transcriber": indexer} if ai is not None else {})

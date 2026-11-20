@@ -29,8 +29,9 @@ import time
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
+import threading
 
 import numpy as np
 
@@ -130,6 +131,9 @@ class PipelineOptions:
     caption_display: str = "original"     # original | translation | both (recorded: burned captions are the original)
     # (render, agent B)
     render: str = "full"                  # full | preview (fast and small) | none (no video: times, copy, thumbnail)
+    # (render, Wave B1) how many clip encodes may run at once. 1 = previous serial behaviour (default).
+    # Cap is applied against the number of chosen clips; progress and on_clip stay serial under a lock.
+    render_workers: int = 1
     hook_style: str = "serious"           # the tone the judge writes the hook in (render_options.HookStyle)
     hook_position: str = "beginning"      # beginning | end: where the burned hook shows
     hook_duration_ms: int | None = None   # how long it shows; None = 2.5 s
@@ -487,9 +491,16 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
 
     # 4. Render, best first: with `on_clip` each clip is handed over the moment it is done, so the strongest
     #    ones can be watched while the rest are still rendering. Clip numbers stay in the order of the video.
+    #    render_workers > 1 runs several encodes at once; progress and on_clip stay serial under a lock so the
+    #    worker's DB hand-off cannot race. Default workers=1 keeps the historical serial, score-ordered hand-off.
+    jobs = list(sorted(enumerate(chosen, 1), key=lambda ic: -ic[1].final))
+    workers = max(1, min(int(options.render_workers or 1), len(jobs) or 1))
+    handoff = threading.Lock()
     results: list[ClipResult] = []
-    for done, (i, c) in enumerate(sorted(enumerate(chosen, 1), key=lambda ic: -ic[1].final)):
-        progress("rendering", 70 + int(28 * done / len(chosen)))
+    handed = [0]
+    first_marked = [False]
+
+    def finish_one(i: int, c) -> ClipResult:
         spoken = [(s + c.offset, e + c.offset, w) for s, e, w in c.transcript.words
                   if c.start <= s + c.offset < c.end]                     # source seconds
         segments = [(round(c.start, 3), round(c.end, 3))]
@@ -565,14 +576,36 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         if words:
             caps = out_dir / f"clip-{i}.captions.json"
             caps.write_text(json.dumps({"words": [{"start": s, "end": e, "text": t} for s, e, t in words]}))
-        results.append(ClipResult(start=round(c.start, 3), end=round(c.end, 3), score=round(c.final, 4),
-                                  signals=c.signals, features=c.features, video_path=video,
-                                  thumb_path=thumb, captions_path=caps, meta=c.meta, index=i,
-                                  frame_path=frame))
-        if done == 0:
-            timer.count("first_clip_sec", round(time.monotonic() - t_begin, 1))
-        if on_clip is not None:
-            on_clip(results[-1])
+        return ClipResult(start=round(c.start, 3), end=round(c.end, 3), score=round(c.final, 4),
+                          signals=c.signals, features=c.features, video_path=video,
+                          thumb_path=thumb, captions_path=caps, meta=c.meta, index=i,
+                          frame_path=frame)
+
+    def hand_over(result: ClipResult) -> None:
+        with handoff:
+            results.append(result)
+            n = handed[0]
+            handed[0] = n + 1
+            progress("rendering", 70 + int(28 * n / len(jobs)))
+            if not first_marked[0]:
+                first_marked[0] = True
+                timer.count("first_clip_sec", round(time.monotonic() - t_begin, 1))
+            if on_clip is not None:
+                on_clip(result)
+
+    # Enter "rendering" before the first encode so the worker's coarse `timings` bill encode
+    # wall to rendering (main called progress at the top of each serial iteration; B1's
+    # hand_over-only progress ran after finish and left rendering ≈ 0 for a single clip).
+    if jobs:
+        progress("rendering", 70)
+    if workers == 1:
+        for i, c in jobs:
+            hand_over(finish_one(i, c))
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futs = [pool.submit(finish_one, i, c) for i, c in jobs]
+            for fut in as_completed(futs):
+                hand_over(fut.result())
     progress("done", 100)
     return sorted(results, key=lambda r: r.index)
 
