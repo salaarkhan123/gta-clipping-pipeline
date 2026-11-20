@@ -231,7 +231,7 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
                 </div>}><Switch on={look.captions} label="Captions" onChange={(v) => onLook({ captions: v, ...(v ? {} : { caption_emoji: false }) })} /></SettingRow>
                 : <SettingRow icon="captions" name="Captions" soon />}
               {has("hook_overlay") ? <SettingRow icon="hook" name="Auto hook" hint="A short opening line on screen for the first seconds." under={look.hook_overlay && has("hook_style") &&
-                  <HookTones tones={listed.hook_style.values || []} value={f.hook_style} onChange={(s) => set({ hook_style: s })} />}>
+                  <HookTones tones={listed.hook_style.values || []} catalogue={listed.hook_style.catalogue} value={f.hook_style} onChange={(s) => set({ hook_style: s })} />}>
                   <Switch on={look.hook_overlay} label="Auto hook" onChange={(v) => onLook({ hook_overlay: v })} /></SettingRow>
                 : <SettingRow icon="hook" name="Auto hook" soon />}
               {has("flash_forward") && <SettingRow icon="rewind" name="Open on the peak" hint="Starts with a flash of the best moment, then plays from the start.">
