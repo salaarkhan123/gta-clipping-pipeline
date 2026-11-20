@@ -10,6 +10,7 @@ scores each against its own rolling baseline (signals.baseline_z) and adds it to
 | audio_bursts | the loudness decode | loudness pulsing 3 to 7 times a second, the rhythm of laughter |
 | scene | key frames, one every 2 s (an extra decode) | how much the picture changes between key frames |
 | gunshot, explosion, siren, crash, scream, laughter | sound_events.py, and only when that event's weight is above 0 | whether that named sound is in the second |
+| hud_killfeed, hud_banner | HUD OCR on measured crops (`screen_text.py`) | kill-feed line changes and banner lexicon hits. Weight 0: not computed. |
 | standby | the key frames inside each candidate, and its words | seconds where nothing happens: the picture does not change and nobody speaks (starting-soon and BRB screens, an empty chair, menus left open) |
 
 A candidate that is standby for STANDBY_REJECT of its seconds or more never becomes a clip (pipeline: its
@@ -33,6 +34,7 @@ from .ff import SAFE_IN, Deadline, PipelineError, PipelineTimeout
 RATE = 8000                     # samples per second of the decoded audio, as signals.audio_rms_db
 AUDIO = ("audio_flux", "audio_bursts")
 FRAMES = ("scene",)
+HUD = ("hud_killfeed", "hud_banner")    # weight 0: not computed. Observation path: screen_text.read_hud
 SCENE_STEP = 2.0                # seconds between the frames the scene signal compares
 STILL = 1.0                     # mean grey-level change (0-255) between key frames below which nothing moved
 STANDBY_REJECT = 0.9            # share of a candidate's seconds that are standby at which it is never a clip

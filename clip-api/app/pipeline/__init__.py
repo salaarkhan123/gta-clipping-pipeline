@@ -43,8 +43,8 @@ from .timing import Timer
 from .stt import SourceAudio, slice_wav
 from .heard import Heard, model_of
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
-from .timeline import AUDIO as TIMELINE_AUDIO, STANDBY_REJECT, audio_timeline, keyframes, scene_changes, \
-    standby_seconds, wav_timeline
+from .timeline import AUDIO as TIMELINE_AUDIO, HUD as TIMELINE_HUD, STANDBY_REJECT, audio_timeline, keyframes, \
+    scene_changes, standby_seconds, wav_timeline
 from .sound_events import EVENTS as SOUND_EVENTS, score_wav as score_sound_events
 from .transcribe import (Transcriber, Transcript, exclamation_hits, extract_wav, in_language, snap_to_sentences,
                          snap_to_speech)
@@ -60,7 +60,9 @@ from .windows import fits, pick_spread, pick_windows
 # Hand-set; the learned ranker replaces these later. The timeline signals (timeline.py) and the named
 # sound events (sound_events.py) are computed only when their weight is above 0. The U2 defaults come from
 # the check against the labelled tuning moments. Each sound event stays at 0 until that class is measured.
+# HUD OCR (#202): observation only until eval/labels-hud-ocr.csv ≥ 0.9 — weights stay 0.
 WEIGHTS = {"chat_motion": 1.0, "audio": 0.7, "audio_flux": 0.35, "audio_bursts": 0.35, "scene": 0.0,
+           "hud_killfeed": 0.0, "hud_banner": 0.0,
            **{name: 0.0 for name in SOUND_EVENTS}}
 TRANSCRIPT_BONUS = 0.15                        # max re-rank bonus from exclamation phrases
 PAD = 4.0                                      # seconds of audio transcribed either side of a candidate
@@ -140,6 +142,7 @@ class PipelineOptions:
     score_weights: dict | None = None     # the game's weights for the five sub-scores (ranking.py); None: equal
     score_weights_version: str = EQUAL    # ... and their name, recorded on every clip they ranked
     moment_layout: bool = False           # auto: draw each moment for what it shows (PROVISIONAL; off: one layout)
+    observe_hud_ocr: bool = False         # #202: run HUD OCR for logs/eval only; never ranks while weights stay 0
 
 
 @dataclass
@@ -341,6 +344,19 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                     dest.unlink(missing_ok=True)
         for name in active_sounds:
             series[name] = _scored(list(raw.get(name) or []), n)
+    # HUD OCR (#202): computed only when a hud_* weight is above 0, or when observe_hud_ocr is on for logs/eval.
+    # Default weights are 0, so ranking never decodes HUD frames (timeline.py rule).
+    hud_events = []
+    hud_live = any(weights.get(k, 0) > 0 for k in TIMELINE_HUD)
+    if hud_live or options.observe_hud_ocr:
+        from .screen_text import read_hud, series_from_events
+        with timer.stage("hud_ocr"):
+            hud_events = read_hud(input_path, _template_game(options.template), t0, t1,
+                                  width=info.width, height=info.height, deadline=deadline)
+        if hud_live:
+            for name, vals in series_from_events(hud_events, n, base).items():
+                if weights.get(name, 0) > 0:
+                    series[name] = _scored(vals, n)
     if not series:
         raise PipelineError("no_signal", "This video has no audio track and no chat region was set, "
                                          "so there is nothing to score moments with.")
@@ -475,6 +491,11 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         if dropped:
             timer.count("repeat_" + reason.split()[1], dropped)
     chosen = sorted(distinct, key=lambda c: c.start)
+    if hud_events:
+        for c in chosen:
+            hits = [e.as_dict() for e in hud_events if c.start <= e.t < c.end]
+            if hits:
+                c.features["scene"] = {**(c.features.get("scene") or {}), "text_events": hits}
     if judge is not None:
         for i, c in enumerate(chosen):
             progress("transcribing", 62 + int(8 * i / len(chosen)))
