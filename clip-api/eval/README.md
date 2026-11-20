@@ -6,6 +6,7 @@ selection PR (understanding track U1 to U5) reports precision@20, precision@40 a
 | File | What |
 |---|---|
 | `labels-v2.csv` | **eval set v2**: about 100 rated moments over 3 videos, one held out |
+| `labels-hud-ocr.csv` | **HUD OCR exact-match** (#202): labelled kill-feed and banner frames. Empty template until frames are labelled. Not `labels-v2.csv`. |
 | `labeller.html` | the local page for rating moments (open it in Chrome) |
 | `runs/` | saved runs (moments, best first) that the sheet was filled from, and baselines to compare with |
 | `benchmark-2h-labels.csv`, `wayin-zias-iceman.csv` | eval set v1 (below); still scored the same |
@@ -230,3 +231,21 @@ python scripts/eval_clips.py eval/benchmark-2h-labels.csv run.json
 
 v1 labels: **3** would post as-is · **2** good (a trim away) · **1** weak · **0** nothing / junk. Rows you leave
 unlabelled are ignored. `python scripts/make_label_sheet.py <video> <out.csv>` writes a new v1 sheet.
+
+## HUD OCR exact-match (`labels-hud-ocr.csv`)
+
+Kill-feed and banner frames for #202. A new sheet, not extra columns on `labels-v2.csv`. Ranking stays at
+weight 0 until exact-match on this sheet is 0.9 or better.
+
+Columns: `id, vod, game, t, region, expected_text, notes`. `t` is the labelled frame (`h:mm:ss` or seconds).
+`region` is `killfeed` or `banner`. `expected_text` is the line to match after a case fold; empty means not
+labelled yet. A prediction hits a row when the video, the region and the text match and `|t - t'|` is at most
+2 s.
+
+```bash
+python scripts/eval_clips.py eval/labels-hud-ocr.csv                  # check the sheet (empty template is valid)
+python scripts/eval_clips.py eval/labels-hud-ocr.csv events.json      # score a run of screen_text.read_hud events
+```
+
+`events.json` is `{"events": [{"vod": "gta-online-1", "t": 12.0, "region": "killfeed", "text": "..."}]}`.
+The intended OCR backend is PaddleOCR mobile (Apache-2.0). CI uses the stub and does not download model weights.

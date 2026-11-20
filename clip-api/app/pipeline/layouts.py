@@ -685,6 +685,7 @@ def plan_layout(info, frames, requested: str, aspect: str, *, zoom: float = 1.0,
 # Where each game's HUD sits in a 16:9 source, as fractions [x, y, w, h], measured on the owner's eval footage
 # (docs/REFRAME_EVAL.md). Only HUD a caption must not cover: the kill feed, the minimap, the speedometer.
 # Empty until the first measured entries land: an unmeasured game has no HUD rather than a guessed one.
+# screen_text.py OCRs the `killfeed` and `banner` kinds only (#202); other kinds stay caption-avoidance.
 HUD_REGIONS: dict[str, tuple[tuple[str, Rect], ...]] = {}
 HUD_GAMES = {"gta6": "gta5", "gta-online": "gta5"}      # games that share another game's HUD
 
