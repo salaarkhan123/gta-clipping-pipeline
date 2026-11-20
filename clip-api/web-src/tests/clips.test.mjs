@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { arrange, kindsIn, lengthOf, outcomeOf, parseVtt, ratingOf, resolutionChoices, shapeOf, stageName, steady } from "../components/clips/model.ts";
+import { arrange, aspectFromOptions, aspectRatioOf, ASPECT_FRAME, isLowResPreview, kindsIn, lengthOf, outcomeOf, OVERLAY_ASPECTS, parseVtt, ratingOf, resolutionChoices, shapeOf, stageName, steady } from "../components/clips/model.ts";
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -56,6 +56,39 @@ test("a card takes its run's aspect; its length is the rendered parts", () => {
   assert.equal(shapeOf(undefined), null);
   assert.equal(lengthOf({ start_sec: 10, end_sec: 40, segments: [[10, 20], [25, 40]] }), 25);
   assert.equal(lengthOf({ start_sec: 10, end_sec: 40 }), 30);
+});
+
+test("overlay aspect ratios stay distinct and map from the job options", () => {
+  assert.deepEqual([...OVERLAY_ASPECTS], ["9:16", "1:1", "4:5", "16:9"]);
+  assert.equal(aspectFromOptions("9:16"), "9:16");
+  assert.equal(aspectFromOptions("1:1"), "1:1");
+  assert.equal(aspectFromOptions("4:5"), "4:5");
+  assert.equal(aspectFromOptions("16:9"), "16:9");
+  assert.equal(aspectFromOptions(undefined, true), "9:16");
+  assert.equal(aspectFromOptions(undefined, false), "16:9");
+  assert.equal(aspectFromOptions(undefined), "9:16");
+  assert.equal(aspectRatioOf("tall"), "9:16");
+  assert.equal(aspectRatioOf("square"), "4:5");
+  assert.equal(aspectRatioOf("wide"), "16:9");
+  assert.equal(ASPECT_FRAME["1:1"], "aspect-square");
+  assert.equal(ASPECT_FRAME["4:5"], "aspect-[4/5]");
+});
+
+test("low-res preview is only when the API says rendered preview", () => {
+  assert.equal(isLowResPreview({ rendered: "preview" }), true);
+  assert.equal(isLowResPreview({ rendered: "full" }), false);
+  assert.equal(isLowResPreview({ rendered: "none" }), false);
+  assert.equal(isLowResPreview({}), false);
+  assert.equal(isLowResPreview({ preview_url: "https://x/p.mp4" }), false);
+});
+
+test("the clip player shows a low-res preview badge and an aspect toggle, not a fake duplicate", () => {
+  const player = source("components/clips/ClipPlayer.tsx");
+  assert.match(player, /isLowResPreview/);
+  assert.match(player, /Low-res preview/);
+  assert.match(player, /OVERLAY_ASPECTS/);
+  assert.match(player, /aria-label="Aspect"/);
+  assert.doesNotMatch(player, /Duplicate/);
 });
 
 test("a failed or cancelled run says what was refunded, from the job's own numbers", () => {
