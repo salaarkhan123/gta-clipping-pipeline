@@ -255,7 +255,8 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
     stop = threading.Event()
     threading.Thread(target=_heartbeat, args=(job_id, stop), daemon=True).start()
     status, error = "FAILED", ("processing_failed", "Something went wrong while processing this video.")
-    stored: list[str] = []   # storage keys written so far, removed again if the job does not succeed
+    stored: list[str] = []   # storage keys written so far; removed only on cancel / empty failure
+    handed_over: set[int] = set()      # clips already stored (by object id); kept on recoverable failure
     # Two views of where the time went: `timings` follows the stage shown to the user; `timer` has the finer
     # pipeline stages and work counts used for benchmarks (scripts/job_timings.py).
     timings: dict[str, float] = {}
@@ -307,7 +308,6 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
         render_mode = options.get("render", "full")         # (render, agent B) full | preview | none
         exported: list[tuple[str, str, str, str]] = []      # (render, agent B) export jobs: (export_id, clip_id, key, resolution)
         export_sec = 0.0                                    # (render, agent B) export jobs: quoted seconds rendered
-        handed_over: set[int] = set()      # clips already stored (by object), so none is stored twice
         # (languages, agent F) The spoken language: asked for, known, or detected now. English or unknown leaves
         # the transcribers exactly as they were; any other language hands over to the multilingual models.
         asked = options.pop("source_lang", None)
@@ -504,14 +504,30 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 storage.put(transcript_key(upload_id), work / "transcript.json")
                 heard, _ = load_heard(storage, upload_id, language or "en", work)     # the whole one, then the pieces
                 extra["source_audio"] = audio
+            def hand_over(r) -> None:
+                """Store one clip. A single storage/DB glitch skips that clip; cancel/lost still stop the job."""
+                try:
+                    save_clip(r, r.index)
+                except (Canceled, Lost):
+                    raise
+                except Exception:
+                    log.exception("could not store clip %s of %s; continuing with the rest",
+                                  getattr(r, "index", "?"), job_id)
+
             results = pipeline(src, opts, work / "out", progress, transcriber, deadline, timer=timer,
-                               on_clip=lambda r: save_clip(r, r.index), transcript=heard, **extra)
+                               on_clip=hand_over, transcript=heard, **extra)
             save_parts(storage, upload_id, heard, work)
 
         progress("uploading", 99)
         for i, r in enumerate(results, 1):          # tools that hand their clips over at the end
             if id(r) not in handed_over:
-                save_clip(r, r.index or i)
+                try:
+                    save_clip(r, r.index or i)
+                except (Canceled, Lost):
+                    raise
+                except Exception:
+                    log.exception("could not store clip %s of %s at finalise; continuing",
+                                  getattr(r, "index", i), job_id)
         with new_session() as db:
             job = db.execute(select(Job).where(Job.id == job_id).with_for_update()).scalar_one()
             if job.status != "RUNNING":
@@ -556,27 +572,62 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
         shutil.rmtree(work, ignore_errors=True)
 
     if status != "SUCCEEDED":
+        status = _finish_failed_job(job_id, status, error, stored, handed_over, measured, waited)
+    send_webhook(job_id)
+    return status
+
+
+def _finish_failed_job(job_id: str, status: str, error: tuple[str, str] | None, stored: list[str],
+                       handed_over: set, measured, waited) -> str:
+    """Refund and hide clips on cancel or a true empty failure. When clips were already handed over,
+    keep them, charge the reservation, and mark the job SUCCEEDED (partial) so a late crash cannot
+    erase progressive results the customer already saw."""
+    storage = get_storage()
+    with new_session() as db:
+        job = db.execute(select(Job).where(Job.id == job_id).with_for_update()).scalar_one()
+        live = list(db.execute(select(Clip).where(Clip.job_id == job_id, Clip.deleted_at.is_(None))).scalars())
+        keep = status != "CANCELED" and (bool(handed_over) or bool(live))
+
+        if job.status != "RUNNING":
+            # Already finalised (e.g. stale sweep). Never delete clips the other finisher kept.
+            return job.status
+
+        if keep:
+            code, message = error or ("ended_early",
+                                      "Processing stopped early. The clips already generated were kept.")
+            if status == "LOST":
+                code, message = ("ended_early",
+                                 "Processing was interrupted. The clips already generated were kept.")
+            job.status, job.progress, job.stage, job.finished_at = "SUCCEEDED", 100, "done", utcnow()
+            job.error_code, job.error_message = None, None
+            job.result = {**measured(), **waited(job), "partial": True,
+                          "ended_early_code": code, "ended_early_message": message}
+            if job.upload_id:
+                up = db.get(Upload, job.upload_id)
+                if up is not None:
+                    up.analyzed = True
+            ledger.settle(db, job, success=True)
+            db.commit()
+            log.warning("job %s ended early after %d clip(s); kept them and charged (%s)",
+                        job_id, len(live) or len(handed_over), code)
+            return "SUCCEEDED"
+
         for key in stored:
             try:
                 storage.delete(key)
             except Exception:
                 log.exception("could not remove %s", key)
-        with new_session() as db:
-            job = db.execute(select(Job).where(Job.id == job_id).with_for_update()).scalar_one()
-            # Clips stored while the job ran are gone with it: a job that did not succeed shows nothing.
-            db.execute(update(Clip).where(Clip.job_id == job_id, Clip.deleted_at.is_(None)).values(deleted_at=utcnow()))
-            if job.status == "RUNNING":
-                job.status, job.finished_at = status, utcnow()
-                if error:
-                    job.error_code, job.error_message = error
-                job.result = {**measured(), **waited(job)}   # where a failed or cancelled job spent its time
-                ledger.settle(db, job, success=False)   # refund
-                db.commit()
-            else:
-                status = job.status   # already finalised and settled elsewhere; leave it alone
-                db.commit()           # (the clips above still go)
-    send_webhook(job_id)
-    return status
+        db.execute(update(Clip).where(Clip.job_id == job_id, Clip.deleted_at.is_(None)).values(deleted_at=utcnow()))
+        job.status, job.finished_at = (status if status != "LOST" else "FAILED"), utcnow()
+        if status == "LOST" and not error:
+            job.error_code, job.error_message = ("worker_lost",
+                                                 "Processing was interrupted. Your credits were refunded.")
+        elif error:
+            job.error_code, job.error_message = error
+        job.result = {**measured(), **waited(job)}
+        ledger.settle(db, job, success=False)
+        db.commit()
+        return job.status
 
 
 def send_webhook(job_id: str) -> None:
@@ -607,7 +658,8 @@ def send_webhook(job_id: str) -> None:
 
 
 def sweep_stale_jobs() -> int:
-    """RUNNING jobs whose worker died (no heartbeat) are failed and refunded."""
+    """RUNNING jobs whose worker died (no heartbeat). With no clips: failed and refunded. With clips already
+    stored: keep them, charge, and mark SUCCEEDED (partial) so a dead worker cannot erase progressive results."""
     from . import url_clips
     cutoff = utcnow() - timedelta(minutes=get_settings().stale_job_minutes)
     n, ended = 0, []
@@ -616,16 +668,29 @@ def sweep_stale_jobs() -> int:
                            .with_for_update(skip_locked=True)).scalars().all()
         orphans: list[str] = []
         for job in stale:
-            job.status, job.finished_at = "FAILED", utcnow()
-            job.error_code, job.error_message = "worker_lost", "Processing was interrupted. Your credits were refunded."
-            ledger.settle(db, job, success=False)
-            if job.id.startswith("imp_"):
-                ended += url_clips.resolve(db, job)     # link clip jobs waiting for this import: refunded
-            # Clips the dead worker had already stored: hide them and remove their files.
-            for clip in db.execute(select(Clip).where(Clip.job_id == job.id, Clip.deleted_at.is_(None))).scalars():
-                orphans += [k for k in (clip.video_key, clip.thumb_key, clip.captions_key, clip.preview_key,
-                                        frame_key_of(clip.features)) if k]
-                clip.deleted_at = utcnow()
+            clips = list(db.execute(select(Clip).where(Clip.job_id == job.id, Clip.deleted_at.is_(None))).scalars())
+            if clips and not job.id.startswith("imp_"):
+                job.status, job.progress, job.stage, job.finished_at = "SUCCEEDED", 100, "done", utcnow()
+                job.error_code, job.error_message = None, None
+                job.result = {**(job.result or {}), "partial": True, "ended_early_code": "ended_early",
+                              "ended_early_message": "Processing was interrupted. The clips already generated were kept."}
+                if job.upload_id:
+                    up = db.get(Upload, job.upload_id)
+                    if up is not None:
+                        up.analyzed = True
+                ledger.settle(db, job, success=True)
+                log.warning("stale job %s had %d clip(s); kept them and charged", job.id, len(clips))
+            else:
+                job.status, job.finished_at = "FAILED", utcnow()
+                job.error_code, job.error_message = ("worker_lost",
+                                                     "Processing was interrupted. Your credits were refunded.")
+                ledger.settle(db, job, success=False)
+                if job.id.startswith("imp_"):
+                    ended += url_clips.resolve(db, job)     # link clip jobs waiting for this import: refunded
+                for clip in clips:
+                    orphans += [k for k in (clip.video_key, clip.thumb_key, clip.captions_key, clip.preview_key,
+                                            frame_key_of(clip.features)) if k]
+                    clip.deleted_at = utcnow()
             n += 1
         db.commit()
     storage = get_storage()
