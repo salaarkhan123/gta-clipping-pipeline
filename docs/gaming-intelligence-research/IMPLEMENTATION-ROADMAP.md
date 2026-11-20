@@ -1,6 +1,6 @@
 # Proposed implementation PRs
 
-**Approval requested for Phase 1 only.** It buys information: permissioned labels, a replayable control and measurements of two existing signal interfaces. All later PRs below are conditional proposals. This research PR authorizes no deployment, model installation, rental or purchase.
+**Phase 1 engineering is on this branch** ([findings](PHASE1-FINDINGS.md), [harness](phase1/README.md)). **Approval requested for owner labelling (1A human pass) before Phase 2 code.** The B0 baseline is frozen; experimental weights stay zero. All later PRs below remain conditional proposals. This research PR authorizes no deployment, model installation, rental or purchase.
 
 ## Ownership and dependency boundary
 

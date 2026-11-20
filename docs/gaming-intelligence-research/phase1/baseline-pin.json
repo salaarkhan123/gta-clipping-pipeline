@@ -1,0 +1,36 @@
+{
+  "name": "clutchclips-production-selector-b0",
+  "pinned_at": "2026-11-20T08:30:00Z",
+  "selector_merge_sha": "8e0d9bad187a3e26486ccc2d8efcff72d3afd8e8",
+  "research_branch_sha_at_pin": "8f04543b854e76eaced8e97555484ad645e87628",
+  "entry_point": "clip-api/app/pipeline/__init__.py:run_pipeline",
+  "production_weights": {
+    "chat_motion": 1.0,
+    "audio": 0.7,
+    "audio_flux": 0.35,
+    "audio_bursts": 0.35,
+    "scene": 0.0
+  },
+  "experimental_weights_remain_zero": [
+    "sound_gunshot",
+    "sound_explosion",
+    "sound_siren",
+    "sound_crash",
+    "sound_scream",
+    "sound_laughter",
+    "hud_killfeed",
+    "hud_banner"
+  ],
+  "hud_regions": {},
+  "notes": [
+    "B0 = local signal-only selection (no judge, no ASR proposer, no render).",
+    "B1 = same selector with authorized cached judge/ASR when available; not required to freeze B0.",
+    "YAMNet (#231) and HUD OCR (#232) live on Cursor performance branches; evaluate offline only until weight-zero integration lands.",
+    "Do not change these production weights in this research branch."
+  ],
+  "reproduce": {
+    "sheet_check": "cd clip-api && python3 scripts/eval_clips.py eval/labels-v2.csv",
+    "wayin_historical": "cd clip-api && python3 scripts/eval_clips.py eval/wayin-zias-iceman.csv eval/runs/zias-iceman.staging-347ca2f.json",
+    "baseline_cli": "cd clip-api && python3 -m scripts.gaming_phase1 baseline --help"
+  }
+}

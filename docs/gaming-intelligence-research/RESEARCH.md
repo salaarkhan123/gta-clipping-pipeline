@@ -1,6 +1,6 @@
 # ClutchClips gaming intelligence research
 
-**Decision requested, November 20, 2026.** Approve Phase 1: collect permissioned labels, freeze a release baseline and test the named-sound and HUD readers that Cursor has already scaffolded. Keep ranking weights at zero. Defer a GPU rental or purchase until a measured quality gain and bottleneck justify one.
+**Decision requested, November 20, 2026 (updated after Phase 1 engineering).** Baseline B0 is frozen and the offline harness is in-tree ([Phase 1 findings](PHASE1-FINDINGS.md)). **Approve owner labelling next** (rate v2 sheet, supply held-out + second game, sound/HUD text labels, consent records). Keep ranking weights at zero. Defer Phase 2 detectors, GPU rental and paid vendor runs until those labels exist.
 
 The best near-term hypothesis is that **identifying what changed in the game and preserving what made it interesting are two different tasks**. A score increment can identify a Rocket League goal and suppress its replay. Whether the goal won in overtime, or provoked a reaction worth keeping, determines its rank and boundaries. In GTA RP, a quiet reversal in dialogue can carry the entire clip. Use shared transcript, sound and timing features plus measured per-game state profiles. A large video model is a later candidate for uncertain moments.
 
