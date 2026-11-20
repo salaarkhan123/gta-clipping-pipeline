@@ -10,7 +10,10 @@ import { useDash } from "@/components/dash/Shell";
 import { Feedback } from "./ClipTile";
 import { ExportPanel } from "./ExportPanel";
 import { RatingParts } from "./Rating";
-import { ASPECT_CLASS, Cue, cueAt, kindName, lengthOf, parseVtt, ratingOf, Shape } from "./model";
+import {
+  ASPECT_FRAME, AspectRatio, Cue, cueAt, aspectFromOptions, isLowResPreview, kindName, lengthOf,
+  OVERLAY_ASPECTS, parseVtt, ratingOf, Shape,
+} from "./model";
 
 // Not built yet: shown so people know they are coming, never clickable.
 const SOON: [IconName, string][] = [["send", "Publish to socials"], ["calendar", "Schedule"], ["image", "AI B-roll"]];
@@ -43,12 +46,13 @@ export function ClipPlayer(p: PlayerProps) {
   const [cues, setCues] = useState<Cue[] | string | null>(null), [now, setNow] = useState(0);
   const [cc, setCc] = useState(false), [track, setTrack] = useState<string | null>(null);
   const [naming, setNaming] = useState<string | null>(null);
+  const [frame, setFrame] = useState<AspectRatio | null>(null);
 
   useEffect(() => { dialog.current?.showModal(); }, []);
   useEffect(() => {
     if (!clip) return;
     let on = true;
-    setCues(null); setNow(0); setNaming(null);
+    setCues(null); setNow(0); setNaming(null); setFrame(null);
     if (clip.captions_url) transcriptOf(clip.id).then((r) => on && setCues(r));
     else setCues("This clip has no transcript: it was made with captions off, or nobody speaks in it.");
     return () => { on = false; };
@@ -77,11 +81,14 @@ export function ClipPlayer(p: PlayerProps) {
   }, [p]);
   if (!clip) return null;
 
-  const r = ratingOf(clip), name = p.nameOf(clip), shape = p.shapeOf(clip), game = p.gameOf(clip);
+  const r = ratingOf(clip), name = p.nameOf(clip), game = p.gameOf(clip);
+  const job = p.jobOf(clip);
   // A link imported with a range: clip times count from the start of the imported part (job `import.range`).
-  const start = p.jobOf(clip)?.import?.range?.start_sec, offset = typeof start === "number" ? start : 0;
+  const start = job?.import?.range?.start_sec, offset = typeof start === "number" ? start : 0;
   const lit = Array.isArray(cues) ? cueAt(cues, now) : -1;
   const titles: string[] = Array.isArray(clip.titles) ? clip.titles.filter((t: string) => t && t !== clip.title) : [];
+  const aspect = frame ?? aspectFromOptions(job?.options?.aspect, job?.options?.vertical);
+  const preview = isLowResPreview(clip);
   const rename = (title: string) => {
     const t = title.trim();
     if (!t || t === clip.title) { setNaming(null); return; }
@@ -90,7 +97,7 @@ export function ClipPlayer(p: PlayerProps) {
       .catch(fail);
   };
   const seek = (s: number) => { if (video.current) { video.current.currentTime = s; video.current.play().catch(() => {}); } };
-  const tall = shape !== "wide";
+  const tall = aspect !== "16:9";
 
   return (
     <dialog ref={dialog} aria-label={name} onCancel={(e) => { e.preventDefault(); p.onClose(); }}
@@ -107,11 +114,12 @@ export function ClipPlayer(p: PlayerProps) {
         </header>
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_420px] gap-5 mid:grid-cols-[minmax(0,1fr)_360px] narrow:flex narrow:flex-col narrow:gap-0 narrow:overflow-y-auto">
           <div className="grid min-h-0 place-items-center rounded-24 bg-[#050505] p-4 narrow:flex-none narrow:rounded-none narrow:p-0">
-            <div className={`relative ${ASPECT_CLASS[shape]} ${tall ? "h-full max-h-[calc(100dvh-120px)] narrow:h-[62dvh] narrow:max-h-none narrow:w-auto" : "w-full max-w-full"} max-w-full overflow-hidden rounded-16 bg-black narrow:rounded-none`}>
+            <div className={`relative ${ASPECT_FRAME[aspect]} ${tall ? "h-full max-h-[calc(100dvh-120px)] narrow:h-[62dvh] narrow:max-h-none narrow:w-auto" : "w-full max-w-full"} max-w-full overflow-hidden rounded-16 bg-black narrow:rounded-none`}>
+              {preview && <span className="pointer-events-none absolute left-3 top-3 z-[2] rounded-8 border border-solid border-line-strong bg-[rgba(0,0,0,.72)] px-2.5 py-1 font-sans text-[11px] font-semibold uppercase tracking-[.06em] text-text">Low-res preview</span>}
               {clip.video_url ? (
                 <video key={clip.id} ref={video} controls autoPlay playsInline preload="auto" src={clip.video_url} poster={clip.thumb_url || undefined}
                   onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} className="absolute inset-0 h-full w-full bg-black object-contain">
-                  {track && <track kind="subtitles" src={track} srcLang={p.jobOf(clip)?.options?.source_lang || "und"} label="Transcript" />}
+                  {track && <track kind="subtitles" src={track} srcLang={job?.options?.source_lang || "und"} label="Transcript" />}
                 </video>
               ) : <p className="absolute inset-0 m-0 grid place-items-center p-6 text-center text-[14px] text-fg-2">This clip has no video yet. Export it to render it.</p>}
             </div>
@@ -158,6 +166,15 @@ export function ClipPlayer(p: PlayerProps) {
               {clip.video_url && <a className="btn small ghost" href={clip.video_url} download title="The file as it is now. Free, as often as you like."><Icon name="download" size={15} />Download</a>}
               {cues && Array.isArray(cues) && <button type="button" className="btn small ghost" aria-pressed={cc} onClick={() => setCc(!cc)} title="Show the transcript as subtitles on the player"><Icon name="captions" size={15} />CC</button>}
             </div>
+            <div role="radiogroup" aria-label="Aspect" className="flex flex-wrap items-center gap-[6px]">
+              <span className="text-[12px] text-fg-2">Aspect</span>
+              {OVERLAY_ASPECTS.map((a) => (
+                <button key={a} type="button" role="radio" aria-checked={aspect === a} onClick={() => setFrame(a)}
+                  title={`Show the player as ${a}. Does not re-render the file; export or the editor changes the real shape.`}
+                  className={`min-h-[32px] cursor-pointer rounded-pill border border-solid px-3 font-sans text-[12.5px] font-medium tabular-nums
+                    ${aspect === a ? "border-lime bg-lime text-ink" : "border-line-strong bg-transparent text-soft hover:bg-[rgba(255,255,255,.06)] hover:text-text"}`}>{a}</button>
+              ))}
+            </div>
             <div className="flex flex-wrap items-center gap-[6px]" role="group" aria-label="Your feedback">
               <Pill on={clip.kept === true} onClick={() => p.onFeedback(clip, { kept: clip.kept === true ? null : true })}>Keep</Pill>
               <Pill on={clip.kept === false} onClick={() => p.onFeedback(clip, { kept: clip.kept === false ? null : false })}>Discard</Pill>
@@ -185,7 +202,7 @@ export function ClipPlayer(p: PlayerProps) {
               {tab === "rating" && (r.shown !== null ? <RatingParts r={r} />
                 : <p className="m-0 text-[13px] leading-[1.5] text-fg-2">The AI did not rate this clip. It is #{r.rank ?? "?"}{r.of ? ` of ${r.of}` : ""} in its run, placed by how strongly the moment stood out (loudness, chat, speech).</p>)}
               {tab === "export" && (p.known?.exportQuote && p.known.exportRoute
-                ? <ExportPanel clip={clip} job={p.jobOf(clip)} sourceSide={p.sourceSide} cap={p.cap} resolutions={p.resolutions} known={p.known} onDone={p.onReload} />
+                ? <ExportPanel clip={clip} job={job} sourceSide={p.sourceSide} cap={p.cap} resolutions={p.resolutions} known={p.known} onDone={p.onReload} />
                 : <p className="m-0 text-[13px] text-fg-2">{p.known ? "Export isn't available on this server yet." : "Loading…"}</p>)}
             </div>
 
