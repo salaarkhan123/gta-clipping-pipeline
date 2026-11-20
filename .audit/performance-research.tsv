@@ -1,0 +1,5 @@
+ts	phase	decision	why	evidence	result
+2026-11-20T02:19:00Z	start	opened performance research run on cursor/performance-research-6ad0 from main	isolated research branch so PR 218 and production stay untouched	branch cursor/performance-research-6ad0	open
+2026-11-20T02:19:30Z	frame	docs live under docs/performance-research/ with claim labels measured inferred hypothesis public-source	reviewer must see evidence strength on every claim	plan performance_research_initiative	open
+2026-11-20T02:19:45Z	frame	GPU and full 2h benches gated on owner OK; this VM is 4 vCPU 15GiB no NVIDIA	do not provision paid infra without approval	nproc free nvidia-smi missing	blocked pending OK
+2026-11-20T02:20:30Z	scaffold	allowlisted docs/performance-research in .gitignore	repo ignores /docs/* except named files; research docs must be tracked	.gitignore	open
