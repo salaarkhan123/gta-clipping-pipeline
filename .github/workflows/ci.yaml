@@ -21,13 +21,13 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # Hosted 2-vCPU container is slower than local parity (~25m); 45m cancelled mid-pytest on 2f296f4.
-    timeout-minutes: 75
+    # Run 44657037485 annotation: "exceeded the maximum execution time of 45m0s" (job timeout-minutes).
+    # Not concurrency (no newer run until after cancel), not billing. Pytest alone ~43m to ~87% under
+    # --cpus 2 --memory 5g. Owner-requested 90m headroom; no cpu/memory caps (4/7g broke docker create).
+    timeout-minutes: 90
     # Same base as clip-api/Dockerfile and ci/local-ci.sh so renders use production ffmpeg 7.1.
     container:
       image: python:3.12-slim-trixie
-      # No cpu/memory caps: --cpus 4 --memory 7g failed docker create on ubuntu-latest (80b3830);
-      # --cpus 2 --memory 5g ran but was too slow for the old 45m timeout.
     services:
       postgres:
         image: postgres:16
