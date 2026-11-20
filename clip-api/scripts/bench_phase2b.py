@@ -74,6 +74,10 @@ CONFIGS: dict[str, dict[str, Any]] = {
         "render": "preview", "render_workers": 1, "chat_motion_sample": "sparse",
         "chat_region": "top-right",
     },
+    "preview-chat-coarse": {
+        "render": "preview", "render_workers": 1, "chat_motion_sample": "coarse",
+        "chat_region": "top-right",
+    },
 }
 
 

@@ -189,8 +189,11 @@ class Settings(BaseSettings):
     # Jobs one worker process runs at once. 2 is the most a 4 vCPU / 8 GB server holds (ffmpeg and Whisper
     # both use every core); raise the limit only with a bigger server and a new benchmark.
     worker_concurrency: int = Field(1, ge=1, le=2)
-    # Chat-band decode density for onscreen_chat_motion: "dense" (fps=2, default) or "sparse" (fps=1).
-    # Sparse roughly halves chat_motion decode work; leave dense until timings on a real VOD say otherwise.
+    # Chat-band sample mode for onscreen_chat_motion (signals.CHAT_MOTION_SAMPLES).
+    # Default "dense" (fps=2) keeps historical behaviour. For preview latency with chat_region set,
+    # prefer "coarse" (fps=0.5 + interpolate, parallel on long VODs) or "sparse" (fps=1); "lite" is
+    # sparse-rate at scale=240. Measured on synth-30min: coarse ≈1.8× faster than sparse at equal
+    # chat-burst ranking quality; H.264 decode is the floor so density alone cannot reach 2×.
     chat_motion_sample: str = "dense"
     # How many clip encodes one Clip Maker job may run at once (Wave B1). 1 = serial (default, safe on 4 vCPU).
     # Raise on a machine with spare cores after measuring with scripts/job_timings.py; cap 8.

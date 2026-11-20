@@ -100,7 +100,7 @@ class PipelineOptions:
     aspect: str = "9:16"          # 9:16 | 4:5 | 1:1 | 16:9 (used when vertical/reframing is on)
     max_side: int | None = None   # plan resolution cap: short side in pixels
     chat_region: str = "none"     # "none" or a key of CHAT_REGIONS
-    chat_motion_sample: str = "dense"  # dense | sparse: how densely the chat band is decoded (signals.py)
+    chat_motion_sample: str = "dense"  # dense|sparse|coarse|lite — see signals.CHAT_MOTION_SAMPLES
     zoom: float = 1.0
     captions: bool = True
     caption_font: str = "DejaVu Sans"
