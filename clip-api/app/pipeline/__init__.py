@@ -24,6 +24,7 @@ Three options change what is selected (all optional; without them nothing change
 - `range`: only this part of the source is measured, transcribed and clipped. Clip times stay source times.
 """
 import json
+import logging
 import math
 import time
 from contextlib import nullcontext
@@ -33,6 +34,8 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
 import numpy as np
+
+log = logging.getLogger("clipapi.pipeline")
 
 from .ff import SAFE_IN, Deadline, PipelineError, PipelineTimeout, probe, run  # noqa: F401 (re-exported)
 from .render import CHAT_REGIONS, FACECAM_REGIONS, render_clip, resolve_layout
@@ -530,23 +533,31 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         timer.count("clips")
         lay, cam = layout, facecam
         if video is not None:
-            if options.moment_layout and options.layout == "auto" and options.vertical and layout != "classic":
-                with timer.stage("moment_scene"):
-                    lay, cam = moment_facecam(input_path, info, c.start, c.end, layout, facecam, deadline)
-            t0 = time.monotonic()
-            with timer.stage("render"):
-                render_clip(input_path, c.start, c.end, video, src_w=info.width, src_h=info.height,
-                            vertical=options.vertical, zoom=options.zoom, chat=options.chat_region,
-                            words=words, font=options.caption_font, layout=lay, facecam=cam,
-                            style=options.caption_style, aspect=options.aspect, max_side=options.max_side,
-                            deadline=deadline, segments=segments, punch=zoom_expr(zooms), has_audio=info.has_audio,
-                            hook=hook, flash=flash, resolution=options.resolution, position=options.caption_position,
-                            accent=options.caption_accent, camera=options.camera, split_ratio=options.split_ratio,
-                            look=options.caption_look, custom_font=_font_file(options),
-                            preview=options.render == "preview", hook_position=options.hook_position,
-                            hook_ms=options.hook_duration_ms)
-            c.features["edit"]["render_sec"] = round(time.monotonic() - t0, 2)
-            timer.count("rendered_sec", round(kept_duration(segments), 1))
+            try:
+                if options.moment_layout and options.layout == "auto" and options.vertical and layout != "classic":
+                    with timer.stage("moment_scene"):
+                        lay, cam = moment_facecam(input_path, info, c.start, c.end, layout, facecam, deadline)
+                t0 = time.monotonic()
+                with timer.stage("render"):
+                    render_clip(input_path, c.start, c.end, video, src_w=info.width, src_h=info.height,
+                                vertical=options.vertical, zoom=options.zoom, chat=options.chat_region,
+                                words=words, font=options.caption_font, layout=lay, facecam=cam,
+                                style=options.caption_style, aspect=options.aspect, max_side=options.max_side,
+                                deadline=deadline, segments=segments, punch=zoom_expr(zooms), has_audio=info.has_audio,
+                                hook=hook, flash=flash, resolution=options.resolution, position=options.caption_position,
+                                accent=options.caption_accent, camera=options.camera, split_ratio=options.split_ratio,
+                                look=options.caption_look, custom_font=_font_file(options),
+                                preview=options.render == "preview", hook_position=options.hook_position,
+                                hook_ms=options.hook_duration_ms)
+                c.features["edit"]["render_sec"] = round(time.monotonic() - t0, 2)
+                timer.count("rendered_sec", round(kept_duration(segments), 1))
+            except PipelineTimeout:
+                raise
+            except PipelineError as e:
+                # One bad encode must not wipe clips already handed over (progressive results).
+                log.warning("skipping clip %s at %.1f-%.1fs: %s %s", i, c.start, c.end, e.code, e.message[:200])
+                timer.count("render_failed")
+                continue
         # (U7) The thumbnail is drawn from the source in the clip's layout, so a clip with no video yet has one too.
         thumb = frame = None
         try:
@@ -573,6 +584,9 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
             timer.count("first_clip_sec", round(time.monotonic() - t_begin, 1))
         if on_clip is not None:
             on_clip(results[-1])
+    if chosen and not results:
+        raise PipelineError("render_failed",
+                            "None of the selected moments could be rendered. Your credits were refunded.")
     progress("done", 100)
     return sorted(results, key=lambda r: r.index)
 

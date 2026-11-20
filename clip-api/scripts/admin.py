@@ -20,6 +20,9 @@
   takedown --url URL | --account ID_OR_EMAIL [--dry-run]
                                                 remove every upload, clip and file imported from a source URL, or all
                                                 of one account's link imports; cancels and refunds their jobs
+  inspect-upload UPLOAD_ID                      jobs, clips (including soft-deleted), ledger and transcript keys
+                                                for one upload (read-only)
+  recover-clips JOB_ID [--dry-run]              undelete soft-deleted clips whose video/preview file still exists
 """
 import argparse
 import secrets
@@ -33,8 +36,10 @@ from sqlalchemy import select  # noqa: E402
 
 from app import ledger  # noqa: E402
 from app.db import init_db, new_session  # noqa: E402
-from app.models import Account, ApiKey, CreditLedger, Job, new_id, utcnow  # noqa: E402
+from app.models import Account, ApiKey, Clip, CreditLedger, Job, Upload, new_id, utcnow  # noqa: E402
 from app.security import hash_password, new_api_key  # noqa: E402
+from app.storage import get_storage, transcript_key, transcript_parts_key  # noqa: E402
+from app.thumbnails import frame_key_of  # noqa: E402
 
 
 def find(db, email: str) -> Account:
@@ -42,6 +47,70 @@ def find(db, email: str) -> Account:
     if not account:
         sys.exit(f"No account with email {email}")
     return account
+
+
+def inspect_upload(upload_id: str) -> int:
+    """Read-only dump of jobs/clips/ledger/transcript presence for one upload (incident forensics)."""
+    storage = get_storage()
+    with new_session() as db:
+        up = db.get(Upload, upload_id)
+        if up is None:
+            print(f"upload {upload_id}: not found")
+            return 1
+        print(f"upload {up.id} account={up.account_id} duration={up.duration_sec}s "
+              f"deleted={up.deleted_at} analyzed={up.analyzed} key={up.storage_key}")
+        print(f"  transcript_whole={storage.exists(transcript_key(up.id))} "
+              f"transcript_parts={storage.exists(transcript_parts_key(up.id))} "
+              f"source_exists={storage.exists(up.storage_key)}")
+        jobs = db.execute(select(Job).where(Job.upload_id == upload_id).order_by(Job.created_at)).scalars().all()
+        for j in jobs:
+            print(f"job {j.id} {j.status} stage={j.stage} progress={j.progress} "
+                  f"reserved={j.credits_reserved} charged={j.credits_charged} "
+                  f"error={j.error_code}:{j.error_message}")
+            print(f"  created={j.created_at} started={j.started_at} finished={j.finished_at} "
+                  f"heartbeat={j.heartbeat_at}")
+            if j.result:
+                counts = (j.result or {}).get("counts") or {}
+                print(f"  result.partial={j.result.get('partial')} counts={counts} "
+                      f"stages={list((j.result.get('stages') or j.result.get('timings') or {}).keys())}")
+            for c in db.execute(select(Clip).where(Clip.job_id == j.id).order_by(Clip.idx)).scalars():
+                media = c.video_key or c.preview_key
+                print(f"  clip {c.id} idx={c.idx} deleted={c.deleted_at} "
+                      f"media={media} media_exists={storage.exists(media) if media else False} "
+                      f"thumb_exists={storage.exists(c.thumb_key) if c.thumb_key else False}")
+            for r in db.execute(select(CreditLedger).where(CreditLedger.job_id == j.id)
+                                .order_by(CreditLedger.id)).scalars():
+                print(f"  ledger {r.kind} {r.delta:+d} key={r.idempotency_key} note={r.note}")
+    return 0
+
+
+def recover_clips(job_id: str, dry_run: bool = False) -> int:
+    """Undelete soft-deleted clips whose primary media object is still in storage."""
+    storage = get_storage()
+    with new_session() as db:
+        job = db.get(Job, job_id)
+        if job is None:
+            print(f"job {job_id}: not found")
+            return 1
+        restored, missing = 0, 0
+        for c in db.execute(select(Clip).where(Clip.job_id == job_id).order_by(Clip.idx)).scalars():
+            media = c.video_key or c.preview_key
+            if c.deleted_at is None:
+                print(f"  keep {c.id} (already live)")
+                continue
+            if not media or not storage.exists(media):
+                missing += 1
+                print(f"  skip {c.id} (deleted, media missing: {media})")
+                continue
+            print(f"  restore {c.id} media={media}")
+            if not dry_run:
+                c.deleted_at = None
+            restored += 1
+        if not dry_run and restored:
+            db.commit()
+        print(f"{'would restore' if dry_run else 'restored'}={restored} missing_media={missing} job={job_id} "
+              f"status={job.status}")
+    return 0 if restored or missing == 0 else 1
 
 
 def selftest() -> int:
@@ -255,6 +324,8 @@ def main() -> None:
     target = c.add_mutually_exclusive_group(required=True)
     target.add_argument("--url"); target.add_argument("--account")
     c.add_argument("--dry-run", action="store_true")
+    c = sub.add_parser("inspect-upload"); c.add_argument("upload_id")
+    c = sub.add_parser("recover-clips"); c.add_argument("job_id"); c.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
 
     if args.cmd == "selftest":
@@ -286,6 +357,10 @@ def main() -> None:
             sys.exit(str(e))
         print("\n".join(report.lines()))
         sys.exit(0)
+    if args.cmd == "inspect-upload":
+        sys.exit(inspect_upload(args.upload_id))
+    if args.cmd == "recover-clips":
+        sys.exit(recover_clips(args.job_id, dry_run=args.dry_run))
     with new_session() as db:
         if args.cmd == "create-account":
             if len(args.password) < 8:

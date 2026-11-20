@@ -87,7 +87,8 @@ def test_the_first_clip_is_visible_and_playable_while_the_job_is_still_running(c
     assert 0 < r["first_clip_sec"] < r["elapsed_sec"] and r["counts"]["clips"] == 3
 
 
-def test_a_job_that_crashes_after_storing_a_clip_leaves_nothing_and_refunds(client, user, rising):
+def test_a_job_that_crashes_after_storing_a_clip_keeps_it_and_charges(client, user, rising):
+    """Late crash after progressive handoff must not erase clips the customer already saw."""
     headers, _ = user
     upload_id, job_id = submit(client, headers, rising)
     seen = {}
@@ -95,13 +96,14 @@ def test_a_job_that_crashes_after_storing_a_clip_leaves_nothing_and_refunds(clie
     def crash():
         seen["files"] = stored(job_id)
         raise RuntimeError("disk fell off")
-    assert worker.run_once(None, pipeline=after_first_clip(crash)) == "FAILED"
+    assert worker.run_once(None, pipeline=after_first_clip(crash)) == "SUCCEEDED"
     assert len(seen["files"]) >= 2                                          # the clip really was stored first
     job = client.get(f"/v1/jobs/{job_id}", headers=headers).json()
-    assert job["status"] == "FAILED" and job["clips"] == [] and job["credits_charged"] == 0
-    assert client.get(f"/v1/projects/{upload_id}", headers=headers).json()["clips"] == []
-    assert client.get("/v1/clips", headers=headers).json()["total"] == 0
-    assert stored(job_id) == [] and balance(client, headers) == 30
+    assert job["status"] == "SUCCEEDED" and len(job["clips"]) == 1 and job["credits_charged"] == 1
+    assert job["result"].get("partial") is True and job["result"].get("ended_early_code") == "processing_failed"
+    assert len(client.get(f"/v1/projects/{upload_id}", headers=headers).json()["clips"]) == 1
+    assert client.get("/v1/clips", headers=headers).json()["total"] == 1
+    assert stored(job_id) and balance(client, headers) == 29                 # charged, not refunded
 
 
 def test_cancelling_mid_run_removes_the_clips_already_shown_and_refunds(client, user, rising):
@@ -113,7 +115,7 @@ def test_cancelling_mid_run_removes_the_clips_already_shown_and_refunds(client, 
     assert job["status"] == "CANCELED" and job["clips"] == [] and stored(job_id) == [] and balance(client, headers) == 30
 
 
-def test_a_dead_workers_clips_are_swept_and_it_cannot_add_more_when_it_comes_back(client, user, rising):
+def test_a_dead_workers_clips_are_kept_and_it_cannot_add_more_when_it_comes_back(client, user, rising):
     headers, _ = user
     _, job_id = submit(client, headers, rising)
     seen = {}
@@ -123,15 +125,36 @@ def test_a_dead_workers_clips_are_swept_and_it_cannot_add_more_when_it_comes_bac
             db.get(Job, job_id).heartbeat_at = utcnow().replace(year=utcnow().year - 1)
             db.commit()
         seen["swept"] = worker.sweep_stale_jobs()
-        seen["clips"] = client.get(f"/v1/jobs/{job_id}", headers=headers).json()["clips"]
-        seen["files"] = stored(job_id)
-    assert worker.run_once(None, pipeline=after_first_clip(presumed_dead)) == "FAILED"
-    assert seen == {"swept": 1, "clips": [], "files": []}                    # the sweep hid the clip and removed its files
+        snap = client.get(f"/v1/jobs/{job_id}", headers=headers).json()
+        seen["status"] = snap["status"]
+        seen["clips"] = len(snap["clips"])
+        seen["files"] = len(stored(job_id))
+    # Returning worker sees LOST (already finalised) and must not wipe the kept clips.
+    assert worker.run_once(None, pipeline=after_first_clip(presumed_dead)) == "SUCCEEDED"
+    assert seen["swept"] == 1 and seen["status"] == "SUCCEEDED" and seen["clips"] == 1 and seen["files"] >= 2
     job = client.get(f"/v1/jobs/{job_id}", headers=headers).json()
-    assert job["error"]["code"] == "worker_lost" and job["clips"] == [] and stored(job_id) == []
-    assert balance(client, headers) == 30                                    # refunded exactly once
+    assert job["status"] == "SUCCEEDED" and len(job["clips"]) == 1 and job["result"].get("partial") is True
+    assert stored(job_id) and balance(client, headers) == 29                 # charged exactly once
     with new_session() as db:
-        assert db.query(Clip).filter(Clip.job_id == job_id, Clip.deleted_at.is_(None)).count() == 0
+        assert db.query(Clip).filter(Clip.job_id == job_id, Clip.deleted_at.is_(None)).count() == 1
+
+
+def test_a_crash_at_finalise_99_keeps_all_handed_over_clips(client, user, rising):
+    """Reproduce the production failure mode: clips visible, then a late error at uploading/99."""
+    headers, _ = user
+    _, job_id = submit(client, headers, rising)
+    n = [0]
+
+    def pipeline(*a, on_clip=None, **k):
+        out = run_pipeline(*a, on_clip=on_clip, **k)
+        n[0] = len(out)
+        raise RuntimeError("finalise failed at 99")
+
+    assert worker.run_once(None, pipeline=pipeline) == "SUCCEEDED"
+    job = client.get(f"/v1/jobs/{job_id}", headers=headers).json()
+    assert job["status"] == "SUCCEEDED" and len(job["clips"]) == n[0] == 3
+    assert job["result"].get("partial") is True and job["credits_charged"] == 1
+    assert balance(client, headers) == 29
 
 
 def test_the_timing_script_reports_the_first_clip(tmp_path, capsys):
