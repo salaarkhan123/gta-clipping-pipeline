@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { ImportTakedown } from "@/components/dash/ImportTakedown";
 import { useDash } from "@/components/dash/Shell";
-import { PAGE_HEAD, PAGE_TITLE } from "@/components/dash/ui";
+import { BackTitle, PAGE_HEAD } from "@/components/dash/ui";
 import { CounterNoticeForm } from "@/components/trust/CounterNoticeForm";
 import { LINK } from "@/components/trust/Field";
 import { api, ApiError } from "@/lib/api";
@@ -29,7 +29,7 @@ function Cases() {
 
   return (
     <div className="stack">
-      <div className={PAGE_HEAD}><h1 className={PAGE_TITLE}>Reports about my content</h1></div>
+      <div className={PAGE_HEAD}><BackTitle title="Reports about my content" crumbs={[{ label: "Home", href: "/dashboard/" }, { label: "Reports about my content" }]} /></div>
       <p className="muted">Copyright and likeness reports that point at your uploads or clips. A person at ClutchClips reviews every report;
         we email you when one is forwarded to you or when your content is disabled, removed or restored.</p>
       {cases === null ? <p className="muted">Loading…</p>

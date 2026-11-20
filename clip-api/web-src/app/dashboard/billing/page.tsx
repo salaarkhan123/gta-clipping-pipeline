@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useDash } from "@/components/dash/Shell";
-import { BALANCE, PAGE_HEAD, PAGE_TITLE } from "@/components/dash/ui";
+import { BackTitle, BALANCE, PAGE_HEAD } from "@/components/dash/ui";
 import { api } from "@/lib/api";
 import { tidy } from "@/lib/templates";
 
@@ -22,7 +22,7 @@ export default function Billing() {
 
   return (
     <div className="stack">
-      <div className={PAGE_HEAD}><h1 className={PAGE_TITLE}>Billing and credits</h1></div>
+      <div className={PAGE_HEAD}><BackTitle title="Billing and credits" crumbs={[{ label: "Home", href: "/dashboard/" }, { label: "Billing and credits" }]} /></div>
       {UNPAID.includes(me.subscription_status) && <div className="error bill-note" role="alert">
         <p><strong>Your last payment failed.</strong> Update your payment method to keep your {plan} plan.</p>
         <button className="btn small ghost" onClick={portal}>Manage billing</button>

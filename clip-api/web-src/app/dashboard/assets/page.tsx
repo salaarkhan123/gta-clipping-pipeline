@@ -8,7 +8,7 @@ import { ComingSoonBadge } from "@/components/ComingSoonBadge";
 import { Icon, IconName } from "@/components/dash/Icon";
 import { useDash } from "@/components/dash/Shell";
 import { Tabs } from "@/components/dash/Tabs";
-import { PAGE_TITLE } from "@/components/dash/ui";
+import { BackTitle } from "@/components/dash/ui";
 import { api, clock } from "@/lib/api";
 import { DeleteUploadControl } from "@/components/dash/DeleteUploadControl";
 
@@ -90,7 +90,7 @@ export default function Assets() {
   return (
     <div className="grid gap-9">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-        <h1 className={PAGE_TITLE}>Asset library</h1>
+        <BackTitle title="Asset library" crumbs={[{ label: "Home", href: "/dashboard/" }, { label: "Asset library" }]} />
         <span className="inline-flex items-center gap-2 text-[14px] text-muted" title="How much storage you use and your plan's limit">
           <Icon name="folder" size={16} />Storage used<ComingSoonBadge short /></span>
       </div>
