@@ -21,11 +21,13 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Hosted 2-vCPU container is slower than local parity (~25m); 45m cancelled mid-pytest on 2f296f4.
+    timeout-minutes: 75
     # Same base as clip-api/Dockerfile and ci/local-ci.sh so renders use production ffmpeg 7.1.
     container:
       image: python:3.12-slim-trixie
-      options: --cpus 2 --memory 5g
+      # Use the full ubuntu-latest runner (4 vCPU / 16 GB); a 2-CPU cap caused the 45m timeout on 2f296f4.
+      options: --cpus 4 --memory 7g
     services:
       postgres:
         image: postgres:16
