@@ -40,6 +40,28 @@ test("library and templates trail Home then the current page", () => {
   assert.match(templates, /<BackTitle title="Game templates" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Game templates" \}\]\} \/>/);
 });
 
+test("remaining dashboard PAGE_TITLE pages trail Home then the current page", () => {
+  const brand = source("app/dashboard/brand-kit/page.tsx");
+  assert.match(brand, /<BackTitle title="Brand kit" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Brand kit" \}\]\} \/>/);
+  const assets = source("app/dashboard/assets/page.tsx");
+  assert.match(assets, /<BackTitle title="Asset library" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Asset library" \}\]\} \/>/);
+  const billing = source("app/dashboard/billing/page.tsx");
+  assert.match(billing, /<BackTitle title="Billing and credits" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Billing and credits" \}\]\} \/>/);
+  const credits = source("app/dashboard/credits/page.tsx");
+  assert.match(credits, /<BackTitle title="Credit usage" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Credit usage" \}\]\} \/>/);
+  const cases = source("app/dashboard/cases/page.tsx");
+  assert.match(cases, /<BackTitle title="Reports about my content" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Reports about my content" \}\]\} \/>/);
+  const admin = source("app/dashboard/admin/cases/page.tsx");
+  assert.match(admin, /<BackTitle title="Admins only" id="admins-only" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Admins only" \}\]\} \/>/);
+  assert.match(admin, /<BackTitle title="Admin: cases" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Admin: cases" \}\]\} \/>/);
+  assert.match(admin, /\{ label: "Admin: cases", href: "\/dashboard\/admin\/cases\/" \}/);
+  assert.match(admin, /\{ label: c\.reference \}/);
+  for (const src of [brand, assets, billing, credits, cases, admin]) {
+    assert.doesNotMatch(src, /PAGE_TITLE/);
+    assert.doesNotMatch(src, /OpusClip|opusclip/i);
+  }
+});
+
 test("nested editor and text tools: Home then project then current, existing project route only", () => {
   const editor = source("components/dash/Editor.tsx");
   assert.match(editor, /<Breadcrumb crumbs=\{\[/);
