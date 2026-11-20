@@ -101,8 +101,9 @@ def send_verification(a: Account) -> bool:
                       "If you didn't sign up, ignore this message.", idempotency_key=f"verify:{uuid.uuid4().hex}")
 
 
-@router.post("/v1/auth/signup", status_code=201)
+@router.post("/v1/auth/signup", status_code=201, summary="Sign up")
 def signup(body: SignupRequest, request: Request, db: Session = Depends(get_db)):
+    """Create an account. Returns a session token. Free signup credits land after email verification (when required)."""
     s = get_settings()
     ip = client_ip(request)
     rate_limit(f"signup:{ip}", s.signup_limit_per_ip_per_hour, 3600)
@@ -130,8 +131,9 @@ def signup(body: SignupRequest, request: Request, db: Session = Depends(get_db))
     return {"token": session_token(account), "account": account_json(db, account)}
 
 
-@router.post("/v1/auth/login")
+@router.post("/v1/auth/login", summary="Log in")
 def login(body: Credentials, request: Request, db: Session = Depends(get_db)):
+    """Exchange email and password for a session token used as `Authorization: Bearer`."""
     rate_limit(f"login:{client_ip(request)}", get_settings().login_limit_per_ip_per_minute, 60)
     account = db.execute(select(Account).where(Account.email == body.email.strip().lower())).scalar_one_or_none()
     if not account or not verify_password(account.password_hash, body.password):
@@ -187,16 +189,18 @@ def reset(body: ResetRequest, db: Session = Depends(get_db)):
     return {"reset": True}
 
 
-@router.get("/v1/me")
+@router.get("/v1/me", summary="Current account")
 def me(p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
+    """Plan, credit balance, and verification state for the caller. Session auth also returns `webhook_secret`."""
     out = account_json(db, p.account)
     if p.via == "session":
         out["webhook_secret"] = p.account.webhook_secret
     return out
 
 
-@router.post("/v1/keys", status_code=201)
+@router.post("/v1/keys", status_code=201, summary="Create API key")
 def create_key(body: KeyCreate, p: Principal = Depends(session_principal), db: Session = Depends(get_db)):
+    """Mint a key (`gck_…`) for programmatic access. The full key is returned once and never stored again."""
     active = db.execute(select(ApiKey).where(ApiKey.account_id == p.account.id,
                                              ApiKey.revoked_at.is_(None))).scalars().all()
     if len(active) >= 10:
@@ -209,8 +213,9 @@ def create_key(body: KeyCreate, p: Principal = Depends(session_principal), db: S
     return {"id": key.id, "name": key.name, "prefix": prefix, "key": raw}
 
 
-@router.get("/v1/keys")
+@router.get("/v1/keys", summary="List API keys")
 def list_keys(p: Principal = Depends(session_principal), db: Session = Depends(get_db)):
+    """Active keys for the account (prefix and metadata only; the secret is never shown again)."""
     keys = db.execute(select(ApiKey).where(ApiKey.account_id == p.account.id,
                                            ApiKey.revoked_at.is_(None)).order_by(ApiKey.created_at)).scalars()
     return {"keys": [{"id": k.id, "name": k.name, "prefix": k.prefix,
@@ -219,8 +224,9 @@ def list_keys(p: Principal = Depends(session_principal), db: Session = Depends(g
                      for k in keys]}
 
 
-@router.delete("/v1/keys/{key_id}")
+@router.delete("/v1/keys/{key_id}", summary="Revoke API key")
 def revoke_key(key_id: str, p: Principal = Depends(session_principal), db: Session = Depends(get_db)):
+    """Revoke a key. Existing Bearer tokens with that key stop working immediately."""
     key = db.get(ApiKey, key_id)
     if not key or key.account_id != p.account.id or key.revoked_at:
         raise ApiError(404, "not_found", "No such API key.")

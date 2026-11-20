@@ -71,9 +71,9 @@ def _clip_options(_provisional: bool) -> dict:
     return out
 
 
-@router.get("/v1/options")
+@router.get("/v1/options", summary="List clip options")
 def list_options():
-    """Every option `POST /v1/clips` accepts, with its allowed values, default and limits. Public, no key needed.
+    """Every option `POST /v1/clips` accepts, with allowed values, defaults and limits. Public, no key needed.
     Send only options listed here: an unknown option is rejected with 422."""
     premium = premium_thumbnail_listing()      # (#140) listed only while PREMIUM_THUMBNAILS is on
     return {"clips": clip_options(), **({"premium_thumbnail": premium} if premium else {})}

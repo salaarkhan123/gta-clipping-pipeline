@@ -44,4 +44,4 @@ Finds the best moments in a long video and renders captioned clips. Costs 1 cred
 
 ## Direct API use
 
-`POST /v1/uploads?filename=NAME` (raw file body) -> `upload_id`; `POST /v1/clips {upload_id, options}` -> `job_id`; `GET /v1/jobs/{job_id}` until `status` is `SUCCEEDED`, `FAILED` or `CANCELED`. All requests need `Authorization: Bearer $CLIPAPI_KEY`. Full reference: `$CLIPAPI_URL/docs`.
+`POST /v1/uploads?filename=NAME` (raw file body) -> `upload_id`; `POST /v1/clips {upload_id, options}` -> `job_id`; `GET /v1/jobs/{job_id}` until `status` is `SUCCEEDED`, `FAILED` or `CANCELED`. All requests need `Authorization: Bearer $CLIPAPI_KEY`. The website uses this same public `/v1` API. Full OpenAPI reference: `$CLIPAPI_URL/docs` (schema: `$CLIPAPI_URL/openapi.json`).

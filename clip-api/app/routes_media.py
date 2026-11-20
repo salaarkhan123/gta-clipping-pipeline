@@ -367,10 +367,10 @@ def open_job(db: Session, p: Principal, upload_id: str, options: dict, processed
     return job
 
 
-@router.post("/v1/uploads", status_code=201)
+@router.post("/v1/uploads", status_code=201, summary="Upload a video")
 async def create_upload(request: Request, response: Response, filename: str = Query("upload.mp4", max_length=255),
                         p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
-    """Send the video as the raw request body (e.g. `curl -T video.mp4`). Streamed to disk with a size cap."""
+    """Send the video as the raw request body (e.g. `curl -T video.mp4`). Streamed with a size cap. Returns `upload_id`."""
     s = get_settings()
     declared = request.headers.get("content-length")
     if declared and declared.isdigit() and int(declared) > s.max_upload_bytes:
@@ -440,9 +440,10 @@ def record_upload(db: Session, p: Principal, upload_id: str, key: str, filename:
     return upload
 
 
-@router.get("/v1/uploads")
+@router.get("/v1/uploads", summary="List uploads")
 def list_uploads(limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0),
                  p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
+    """Uploads still retained for this account (newest first)."""
     rows = db.execute(select(Upload).where(Upload.account_id == p.account.id, Upload.deleted_at.is_(None),
                                            Upload.expires_at > utcnow())
                       .order_by(Upload.created_at.desc()).limit(limit).offset(offset)).scalars()
@@ -473,9 +474,9 @@ def clip_plan(body: "ClipRequest"):
     return plan
 
 
-@router.post("/v1/clips/quote")
+@router.post("/v1/clips/quote", summary="Quote a clip job")
 def quote_job(body: ClipRequest, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
-    """(render, agent B) What POST /v1/clips with the same body would reserve. Nothing is reserved or started."""
+    """Credits `POST /v1/clips` with the same body would reserve. Nothing is reserved or started."""
     options, _sec, cost = clip_plan(body)(own_upload(db, p, body.upload_id))
     rendered = options.get("charge_basis") == "rendered"
     return {"credits_reserved": cost,
@@ -483,10 +484,10 @@ def quote_job(body: ClipRequest, p: Principal = Depends(current_principal), db: 
                      if rendered else "One credit per started minute of the video.")}
 
 
-@router.post("/v1/clips", status_code=202)
+@router.post("/v1/clips", status_code=202, summary="Start a clip job")
 def create_job(body: ClipRequest, p: Principal = Depends(current_principal), db: Session = Depends(get_db),
                idempotency_key: str | None = Header(default=None, max_length=200)):
-    """AI Clip Maker: find the best moments in an upload and render them."""
+    """Find the best moments in an upload and render captioned clips. Reserves credits; poll `GET /v1/jobs/{job_id}`."""
     out = submit_job(db, p, body.upload_id, body.webhook_url, idempotency_key, clip_plan(body))
     if body.options.project_name:
         job = db.get(Job, out["job_id"])
@@ -496,21 +497,24 @@ def create_job(body: ClipRequest, p: Principal = Depends(current_principal), db:
     return out
 
 
-@router.get("/v1/jobs/{job_id}")
+@router.get("/v1/jobs/{job_id}", summary="Get a job")
 def get_job(job_id: str, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
+    """Status, progress, and finished clips for one job you own."""
     return job_json(db, own_job(db, p, job_id))
 
 
-@router.get("/v1/jobs")
+@router.get("/v1/jobs", summary="List jobs")
 def list_jobs(limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0),
               p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
+    """Recent jobs for the account (without embedded clip payloads)."""
     jobs = db.execute(select(Job).where(Job.account_id == p.account.id)
                       .order_by(Job.created_at.desc()).limit(limit).offset(offset)).scalars()
     return {"jobs": [job_json(db, j, with_clips=False) for j in jobs]}
 
 
-@router.post("/v1/jobs/{job_id}/cancel")
+@router.post("/v1/jobs/{job_id}/cancel", summary="Cancel a job")
 def cancel_job(job_id: str, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
+    """Cancel a queued or waiting job (refunds now) or request cancel of a running one (refunds at the next stage)."""
     job = db.execute(select(Job).where(Job.id == job_id, Job.account_id == p.account.id)
                      .with_for_update()).scalar_one_or_none()
     if not job:
@@ -652,8 +656,9 @@ def clip_subtitles(clip_id: str, format: Literal["srt", "vtt", "txt"] = "srt",
     return PlainTextResponse(body, headers={"content-disposition": f'attachment; filename="{clip.id}.{format}"'})
 
 
-@router.get("/v1/credits")
+@router.get("/v1/credits", summary="Credits balance and history")
 def credits(p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
+    """Current balance and the latest ledger rows (newest first, up to 50). Append-only; never invents spend outside the ledger."""
     rows = db.execute(select(CreditLedger).where(CreditLedger.account_id == p.account.id,
                                                  CreditLedger.kind != "commit")
                       .order_by(CreditLedger.id.desc()).limit(50)).scalars()
