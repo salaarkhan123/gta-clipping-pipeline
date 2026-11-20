@@ -239,7 +239,11 @@ Issue 99 names GPU Whisper in the same benchmark as NVENC. A decode library does
 
 NVENC preset P1 in the vendor transcode test is their fastest preset, not a quality match for CRF 20. Copying that preset into export would change pictures. `public-source` for P1 in their method, `not measured` for our quality bar.
 
-`sample_gray` swallows a per-frame `PipelineError` and continues. A GPU seek that fails closed would change facecam behavior. That is a behavior change, not only a speed change. `verified` in `facecam.py`.
+`sample_gray` swallows a per-frame `PipelineError` and continues. A GPU seek that fails the whole call would change facecam behavior. That is a behavior change as well as a speed change. `verified` in `facecam.py`.
+
+`iter_frames` discards ffmpeg's stderr. A GPU failure in that process would look like a short index. `verified` in `visual.py`.
+
+SPEC section 14 says previews use a fast preset. `render.py` uses libx264 `ultrafast` and CRF 30. NVIDIA's FFmpeg chapter says `-preset fast` on NVENC maps to `p1`, which that chapter calls the fastest and lowest-quality NVENC preset. Copying the word "fast" from the spec onto `h264_nvenc` would not reproduce today's preview. `verified` for the spec sentence and the constant, `public-source` for the NVENC preset map.
 
 ## What we do not know
 
@@ -255,7 +259,7 @@ Whether `cuda` hwaccel works with our protocol whitelist was not run. `not measu
 
 PyNvVideoCodec, TorchCodec, and Decord were not installed. Import, license files inside the wheels, and soname mismatches were not checked on disk. `not measured`.
 
-Issue 99 has no acceptance criteria yet. What "enough faster" means is not written down. `verified` that the criteria are the placeholder.
+Issue 99's acceptance criteria block still says the criteria are written when the ticket starts. The same block says every speed PR reports before and after from `scripts/job_timings.py`. The gap that counts as success is not written. `verified`.
 
 ## Sources consulted
 
@@ -273,7 +277,7 @@ Error tracking. No error-tracker connector. Skipped.
 
 Product analytics. No warehouse connector. Skipped.
 
-This session could not spawn the parallel readers the investigation workflow asks for. The code, the issue, SPEC, and the public pages were read in one pass. Public pages were fetched this session rather than recalled.
+This session could not spawn the parallel readers the investigation workflow asks for. The code, the issue, SPEC, and the public pages were read in one pass. Pages listed below were fetched, or returned in search results, during this session. They were not recalled from memory.
 
 Public pages read or fetched:
 
