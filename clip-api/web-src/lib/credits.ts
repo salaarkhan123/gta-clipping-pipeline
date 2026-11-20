@@ -38,3 +38,12 @@ export function byDay(rows: LedgerRow[]): { day: string; rows: LedgerRow[] }[] {
   }
   return out;
 }
+
+// Per-day added/used totals for the account usage chart. Oldest day first so bars read left→right in time.
+// Numbers come only from the ledger (`totals` / `byDay`); nothing about views or publish performance.
+export type DayUsage = { day: string; added: number; used: number };
+export function usageSeries(rows: LedgerRow[]): DayUsage[] {
+  return byDay(rows)
+    .map(({ day, rows: dayRows }) => ({ day, ...totals(dayRows) }))
+    .reverse();
+}

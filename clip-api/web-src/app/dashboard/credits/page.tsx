@@ -55,6 +55,7 @@ export default function Credits() {
           <p className="m-0 text-[14px] text-muted">One credit is one minute of video. A failed or cancelled job is refunded in full.</p>
         </div>
         <div className="flex gap-2">
+          <Link href="/dashboard/analytics/" className="btn small ghost">Usage charts</Link>
           <Link href="/dashboard/billing/" className="btn small ghost">Subscription</Link>
           <Link href="/dashboard/pricing/" className="btn small primary">Add credits</Link>
         </div>

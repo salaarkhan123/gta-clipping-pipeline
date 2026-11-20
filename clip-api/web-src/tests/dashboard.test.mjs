@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { byDay, sideOf, totals } from "../lib/credits.ts";
+import { byDay, sideOf, totals, usageSeries } from "../lib/credits.ts";
 import { change, HISTORY_MAX, redo, startHistory, undo } from "../lib/history.ts";
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -10,10 +10,11 @@ const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "u
 test("sidebar: every built page is a link, every planned one is Coming soon and never a link", () => {
   const nav = source("components/dash/shell/nav.ts");
   for (const [label, href] of [["Home", "/dashboard/"], ["Projects", "/dashboard/library/"], ["Brand kit", "/dashboard/brand-kit/"],
-    ["Asset library", "/dashboard/assets/"], ["Templates", "/dashboard/templates/"], ["API access", "/dashboard/keys/"]]) {
+    ["Asset library", "/dashboard/assets/"], ["Templates", "/dashboard/templates/"], ["Analytics", "/dashboard/analytics/"],
+    ["API access", "/dashboard/keys/"]]) {
     assert.match(nav, new RegExp(`label: "${label}", icon: "[a-zA-Z]+", href: "${href.replace(/\//g, "\\/")}"`), label);
   }
-  for (const label of ["Calendar", "Analytics", "Social accounts", "Labs", "Learning centre"]) {
+  for (const label of ["Calendar", "Social accounts", "Labs", "Learning centre"]) {
     assert.match(nav, new RegExp(`\\{ label: "${label}", icon: "[a-zA-Z]+" \\}`), label);
   }
   const side = source("components/dash/shell/Sidebar.tsx");
@@ -87,11 +88,38 @@ test("credit usage: jobs count as used net of refunds, grants and purchases as a
   assert.equal(byDay(rows)[0].rows.length, 2);
 });
 
+test("usageSeries: oldest day first with per-day added and used from the ledger", () => {
+  const rows = [
+    { delta: -12, kind: "reserve", job_id: "job_1", note: null, created_at: "2026-11-18T10:00:00Z" },
+    { delta: 4, kind: "release", job_id: "job_1", note: null, created_at: "2026-11-18T10:05:00Z" },
+    { delta: 500, kind: "topup", job_id: null, note: null, created_at: "2026-11-17T09:00:00Z" },
+    { delta: 30, kind: "grant", job_id: null, note: "Free signup credits", created_at: "2026-11-16T09:00:00Z" },
+    { delta: -5, kind: "adjust", job_id: null, note: null, created_at: "2026-11-16T08:00:00Z" },
+  ];
+  const series = usageSeries(rows);
+  assert.equal(series.length, 3);
+  // Chronological: 16th → 17th → 18th (local calendar labels from byDay).
+  assert.deepEqual(series.map((d) => [d.added, d.used]), [[30, 5], [500, 0], [0, 8]]);
+  assert.deepEqual(usageSeries([]), []);
+});
+
 test("credit usage and assets: numbers only from the API", () => {
   const credits = source("app/dashboard/credits/page.tsx");
   assert.match(credits, /api<Ledger>\("\/v1\/credits"\)/);
+  assert.match(credits, /href="\/dashboard\/analytics\/"/);
   const assets = source("app/dashboard/assets/page.tsx");
   assert.match(assets, /api<\{ projects: Video\[\] \}>\(`\/v1\/projects\?limit=\$\{PAGE\}&offset=\$\{from\}`\)/);
   // Storage, own censor list, vocabulary, fonts, images and audio are planned.
   assert.equal((assets.match(/<ComingSoonBadge/g) || []).length + (assets.match(/<SoonAdd /g) || []).length >= 6, true);
+});
+
+test("analytics page: ledger charts only, honest copy, no publish metrics", () => {
+  const page = source("app/dashboard/analytics/page.tsx");
+  assert.match(page, /api<Ledger>\("\/v1\/credits"\)/);
+  assert.match(page, /usageSeries/);
+  assert.match(page, /LEDGER_PAGE/);
+  assert.match(page, /Credits spent and refunded from your ledger/);
+  assert.match(page, /not views, virality, or how clips performed after you publish/);
+  assert.doesNotMatch(page, /\/v1\/(social|publish|analytics|views)/i);
+  assert.doesNotMatch(page, /\b(impressions|engagement|followers)\b/i);
 });
