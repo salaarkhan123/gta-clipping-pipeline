@@ -45,6 +45,7 @@
     { "method": "GET", "path": "/v1/jobs/{job_id}" },
     { "method": "POST", "path": "/v1/jobs/{job_id}/cancel" },
     { "method": "POST", "path": "/v1/find", "body": ["upload_id", "query", "mode", "max_results", "make_clips", "clip_length", "options", "source_lang"] },
+    { "method": "GET", "path": "/v1/uploads/{upload_id}/search", "query": ["q", "limit"] },
     { "method": "POST", "path": "/v1/captions", "body": ["upload_id", "options", "segments"] },
     { "method": "POST", "path": "/v1/reframe", "body": ["upload_id", "options", "segments"] },
     { "method": "POST", "path": "/v1/transcripts", "body": ["upload_id", "source_lang", "target_lang"] },
