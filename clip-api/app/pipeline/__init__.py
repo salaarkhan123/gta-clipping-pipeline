@@ -397,6 +397,7 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         made = _transcribe(c, i, rough, input_path, t1, out_dir, deadline, pad=pad, audio=audio, floor=t0,
                            heard=heard, any_model=second_pass, timed=timer.stage("transcribe_rough"))
         if made:
+            timer.count("transcript_transcribed")
             timer.count("transcribed_rough_sec", round(c.end - c.start + 2 * pad, 1))
         else:
             timer.count("transcript_reused")
@@ -463,6 +464,7 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                 made = _transcribe(c, 100 + i, transcriber, input_path, t1, out_dir, deadline, audio=audio,
                                    floor=t0, heard=heard, timed=timer.stage("transcribe_final"))
                 if made:
+                    timer.count("transcript_transcribed")
                     timer.count("transcribed_final_sec", round(c.end - c.start + 2 * PAD, 1))
                 else:
                     timer.count("transcript_reused")
