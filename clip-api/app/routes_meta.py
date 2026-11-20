@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from .render_options import provisional_on
 from .routes_media import ClipOptions
+from .templates import hook_style_catalogue
 from .thumbnail_jobs import listing as premium_thumbnail_listing
 
 router = APIRouter()
@@ -68,12 +69,15 @@ def _clip_options(_provisional: bool) -> dict:
     by_aspect = {a: [x for x in layouts if accepted("layout", x, aspect=a)] for a in aspects}
     out["layout"]["values"] = [x for x in layouts if any(x in by_aspect[a] for a in aspects)]
     out["layout"]["by_aspect"] = by_aspect
+    # Hook styles: values stay the 13 ids (forms keep working); catalogue adds label + description per style.
+    out["hook_style"]["catalogue"] = hook_style_catalogue()
     return out
 
 
 @router.get("/v1/options")
 def list_options():
     """Every option `POST /v1/clips` accepts, with its allowed values, default and limits. Public, no key needed.
+    `clips.hook_style.catalogue` is the hook-styles resource (id, label, description); default stays `serious`.
     Send only options listed here: an unknown option is rejected with 422."""
     premium = premium_thumbnail_listing()      # (#140) listed only while PREMIUM_THUMBNAILS is on
     return {"clips": clip_options(), **({"premium_thumbnail": premium} if premium else {})}

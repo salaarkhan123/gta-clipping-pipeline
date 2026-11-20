@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.routes_media import ClipOptions
 from app.routes_meta import clip_options
+from app.templates import HOOK_STYLE_INFO, HOOK_STYLES, hook_style_catalogue
 
 
 def test_options_are_public_and_match_the_request_model():
@@ -13,6 +14,32 @@ def test_options_are_public_and_match_the_request_model():
     assert set(opts) == set(ClipOptions.model_fields)                        # every option, nothing else
     for name, o in opts.items():
         assert o["default"] == ClipOptions.model_fields[name].default, name
+
+
+def test_hook_style_catalogue_matches_hook_styles_order_count_and_default():
+    """C2: clients read the 13 hook styles + default from options (no /v1/hooks, no A/B)."""
+    assert list(HOOK_STYLE_INFO) == list(HOOK_STYLES) and len(HOOK_STYLES) == 13
+    catalogue = hook_style_catalogue()
+    assert [e["id"] for e in catalogue] == list(HOOK_STYLES)
+    for entry in catalogue:
+        assert set(entry) == {"id", "label", "description"}
+        assert entry["label"] and entry["description"] and "\n" not in entry["description"]
+
+    opts = clip_options()
+    hook = opts["hook_style"]
+    assert hook["default"] == "serious"
+    assert hook["values"] == list(HOOK_STYLES)
+    assert hook["catalogue"] == catalogue
+
+    r = TestClient(app).get("/v1/options")
+    assert r.status_code == 200
+    public = r.json()["clips"]["hook_style"]
+    assert public["default"] == "serious"
+    assert [e["id"] for e in public["catalogue"]] == list(HOOK_STYLES)
+    assert len(public["catalogue"]) == 13
+    # values stay plain ids so existing clients (HookTones) keep working
+    assert public["values"] == list(HOOK_STYLES)
+    assert all(isinstance(v, str) for v in public["values"])
 
 
 def test_allowed_values_and_limits_are_listed():
