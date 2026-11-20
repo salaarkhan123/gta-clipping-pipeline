@@ -4,9 +4,11 @@ name: ci
 # required checks (.github/ops/config.json). Do not rename those jobs.
 on:
   pull_request:
-    branches: [staging, main]
+    branches: [staging, main]  # includes perf-integration PRs targeting these
   push:
-    branches: [main]   # post-merge Check Runs on main (deploy gate); does not deploy
+    branches:
+      - main                         # post-merge Check Runs on main (deploy gate); does not deploy
+      - cursor/perf-integration-6ad0 # CPR-14 integration branch CI on every push
   workflow_dispatch:   # re-run on a chosen ref without a new commit
 
 permissions:
