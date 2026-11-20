@@ -28,7 +28,8 @@ HookStyle = Literal["serious", "casual", "informative", "conversational", "humor
 RenderMode = Literal["none", "preview", "full"]
 # Stored with a job only when the request sent them: a job without them renders exactly as before, and the option
 # dicts the worker hands to the pipeline do not grow keys it does not know.
-ONLY_WHEN_SENT = ("resolution", "render", "hook_style", "hook_position", "hook_duration_ms", "caption_look")
+ONLY_WHEN_SENT = ("resolution", "render", "hook_style", "hook_position", "hook_duration_ms", "caption_look",
+                  "transcribe_whole")
 # Built but not yet checked on real gaming footage: offered only with PROVISIONAL_LAYOUTS on (DEPLOY.md). The
 # same setting turns on the auto layout chosen per moment (facecam.moment_facecam).
 PROVISIONAL = ("trio", "grid4", "ots")

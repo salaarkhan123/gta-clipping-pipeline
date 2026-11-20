@@ -87,16 +87,18 @@ uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-cl
 - `TRANSCRIBE_WHOLE` (default `false`): Clip Maker transcribes the whole recording first, with word timings, and
   every candidate reads it. Off by default because the local model makes a 2-hour job slower on the droplet
   (numbers in the U1 PR); turn it on with a hosted provider or a bigger machine. It helps only with the AI judge
-  (without one, candidates are transcribed by the caption model anyway).
+  (without one, candidates are transcribed by the caption model anyway). A single job can also opt in with
+  `options.transcribe_whole: true` on `POST /v1/clips` (listed on `GET /v1/options`); that does not change
+  credits. The worker runs whole mode when the env **or** the job option is true.
 - `LLM_PASS` (default `true`, U3): with `ANTHROPIC_API_KEY` set and a whole transcript of the upload (whole mode
   above, or an earlier Video Finder or transcript job), the AI reads the transcript in 5-minute chunks (1 minute
   overlap, 8 at a time) and proposes moments; the judge rates them mixed with the strongest signal windows, the
   same number of candidates as before. Without a whole transcript, or when the AI fails (3 tries per chunk,
   60 s each, 150 s for the whole pass), candidates come from the signals exactly as before. A job's counts
   show what happened: `llm_chunks`, `llm_chunks_failed`, `llm_tokens_in`, `llm_tokens_out`, `llm_pass_skipped`,
-  `llm_pass_failed`. `false` turns it off. **U1's transcript reuse and this pass only run with
-  `TRANSCRIBE_WHOLE=true`**: set it in the Step 2 deploy, or make it the default once hosted transcription lands
-  (the local model is the bottleneck on CPU).
+  `llm_pass_failed`. `false` turns it off. **U3 only runs when Heard covers the analysed range** (whole mode
+  via env or per-job opt-in, or an earlier full transcript): keep the global default false on CPU; opt in per
+  job or set `TRANSCRIBE_WHOLE=true` once hosted transcription lands.
 - `CLIP_QUALITY_FLOOR` (default 40, U4): with a clip-length bucket and no clip count (automatic discovery), a moment
   becomes a clip only when the AI rates it at least this (0-100; an ordinary clip is about 50). There is no quota: a
   long video gets as many clips as it has moments this good, at most 50, and none becomes filler; a job with none is
