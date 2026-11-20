@@ -66,3 +66,8 @@ Unfit to replace ffmpeg layouts/ASS in the Python worker: Chromium cost, duplica
 2. Replacing faster-whisper with WhisperX for **speed** (`inferred`).
 3. Streamlink for Twitch VOD under no-impersonation rules (`public-source` conflict risk).
 4. Remotion for batch preview encodes (`inferred`).
+
+
+## Licensing deep dive
+
+Dated LICENSE matrix and falsifiability checks: [drafts/agent8-licensing.md](drafts/agent8-licensing.md).

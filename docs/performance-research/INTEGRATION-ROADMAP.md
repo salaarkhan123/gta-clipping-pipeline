@@ -74,6 +74,10 @@ Start after owner approval. Each PR ends with `job_timings.py` and/or eval metri
 | Highlight improvement | **Only via eval-gated weight-0→weight PRs** (C1/C2). |
 | Sustainable cost | **Requires** preview-first + export discipline; GPU only if $/h wins. |
 
+## Gaming signals detail
+
+Full model picks (YAMNet first for #199, PaddleOCR mobile for #202, no NC emotion nets) are in [drafts/agent4-gaming.md](drafts/agent4-gaming.md). New labels go in a new sheet, not `labels-v2.csv`.
+
 ## Stop gate
 
 This research pack is complete when the owner has reviewed the eight docs and approved which Wave A–D PRs to schedule. Implementation is a separate initiative on product branches, never on PR #218’s release branch mid-flight.

@@ -8,3 +8,4 @@ ts	phase	decision	why	evidence	result
 2026-11-20T02:35:00Z	consolidate	wrote eight deliverables plus recommendation matrix Wave A-D	owner stop gate before implementation	docs/performance-research/INTEGRATION-ROADMAP.md	open
 2026-11-20T02:36:00Z	isolation	recovered onto cursor/performance-research-6ad0 after poteto agents checked out sibling branches	shared worktree must not leave research branch	git branch	open
 2026-11-20T02:31:00Z	consolidate	promoted Agent 6 infra cost draft into COST-ANALYSIS.md	draft had dated public prices and break-even math the stub lacked	docs/performance-research/drafts/agent6-infra-cost.md	open
+2026-11-20T02:34:00Z	consolidate	merged Agent 4 gaming draft and Agent 2 GPU draft into research branch	agent drafts were richer than coordinator stubs	docs/performance-research/drafts/agent4-gaming.md	open
