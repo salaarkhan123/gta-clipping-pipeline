@@ -487,12 +487,18 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             # (U1) What this upload already has transcribed (a whole transcript, pieces of earlier clip jobs) is read
             # instead of transcribed again, and what this job transcribes is kept for the next one.
             heard, whole = load_heard(storage, upload_id, language or "en", work)
-            if (s.transcribe_whole and has_audio and (indexer or transcriber) is not None
-                    and (whole is None or transcript_language(whole) != (language or "en"))):
-                progress("transcribing", 5)
-                # One decode gives the WAV for the whole transcript and the loudness the pipeline needs.
+            # One decode: loudness for scoring, slices for candidate ASR, silence edits, and (when enabled) the
+            # whole-file transcript. Avoids a second RMS pass plus per-window extract_wav seeks (research A2 / S3).
+            # The WAV lives under work/ and is removed with the job temp dir.
+            audio = None
+            if has_audio:
+                progress("audio", 4)
                 with timer.stage("audio_signal"):
                     audio = extract_audio(src, work / "source-audio.wav", deadline)
+                extra["source_audio"] = audio
+            if (s.transcribe_whole and audio is not None and (indexer or transcriber) is not None
+                    and (whole is None or transcript_language(whole) != (language or "en"))):
+                progress("transcribing", 5)
                 stt = provider_for(s.transcription_provider, timing_words(indexer or transcriber),
                                    s.transcribe_chunk_sec, s.transcribe_parallel)
                 with timer.stage("transcribe_whole"):
@@ -503,7 +509,6 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 (work / "transcript.json").write_text(json.dumps(doc))
                 storage.put(transcript_key(upload_id), work / "transcript.json")
                 heard, _ = load_heard(storage, upload_id, language or "en", work)     # the whole one, then the pieces
-                extra["source_audio"] = audio
             results = pipeline(src, opts, work / "out", progress, transcriber, deadline, timer=timer,
                                on_clip=lambda r: save_clip(r, r.index), transcript=heard, **extra)
             save_parts(storage, upload_id, heard, work)
