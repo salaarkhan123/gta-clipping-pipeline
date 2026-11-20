@@ -45,6 +45,7 @@ from .heard import Heard, model_of
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
 from .timeline import AUDIO as TIMELINE_AUDIO, STANDBY_REJECT, audio_timeline, keyframes, scene_changes, \
     standby_seconds, wav_timeline
+from .sound_events import EVENTS as SOUND_EVENTS, score_wav as score_sound_events
 from .transcribe import (Transcriber, Transcript, exclamation_hits, extract_wav, in_language, snap_to_sentences,
                          snap_to_speech)
 from .edit import FLASH_LEN, KEEP_PAUSE, MAX_REMOVED, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, select_cuts, to_output, with_flash_forward, zoom_expr, zoom_peaks
@@ -56,9 +57,11 @@ from .llm_pass import PASS_BUDGET_SEC, PassResult, Proposal, Proposer, mix, run_
 from .variety import HORIZON, min_gap_for, pick_distinct, picture_hash
 from .windows import fits, pick_spread, pick_windows
 
-# Hand-set; the learned ranker replaces these later. The timeline signals (timeline.py) are computed only when their
-# weight is above 0; their defaults come from the U2 check against the labelled tuning moments.
-WEIGHTS = {"chat_motion": 1.0, "audio": 0.7, "audio_flux": 0.35, "audio_bursts": 0.35, "scene": 0.0}
+# Hand-set; the learned ranker replaces these later. The timeline signals (timeline.py) and the named
+# sound events (sound_events.py) are computed only when their weight is above 0. The U2 defaults come from
+# the check against the labelled tuning moments. Each sound event stays at 0 until that class is measured.
+WEIGHTS = {"chat_motion": 1.0, "audio": 0.7, "audio_flux": 0.35, "audio_bursts": 0.35, "scene": 0.0,
+           **{name: 0.0 for name in SOUND_EVENTS}}
 TRANSCRIPT_BONUS = 0.15                        # max re-rank bonus from exclamation phrases
 PAD = 4.0                                      # seconds of audio transcribed either side of a candidate
 JUDGE_PAD = 15.0                               # ... when a judge chooses the cut: room to grow a 30 s window to 60 s
@@ -322,6 +325,22 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     if weights.get("scene", 0) > 0:
         with timer.stage("scene"):
             series["scene"] = _scored(scene_changes(input_path, deadline, **part), n)
+    # Named sounds are a separate model. Weight 0 skips the call, so the default job never loads it.
+    active_sounds = [name for name in SOUND_EVENTS if weights.get(name, 0) > 0]
+    if active_sounds and info.has_audio:
+        with timer.stage("sound_events"):
+            if audio is not None:
+                raw = score_sound_events(audio, **part)
+            else:
+                dest = out_dir / "sound-events.wav"
+                try:
+                    extract_wav(input_path, float(base) if ranged else 0.0,
+                                span if ranged else info.duration, dest, deadline)
+                    raw = score_sound_events(dest)
+                finally:
+                    dest.unlink(missing_ok=True)
+        for name in active_sounds:
+            series[name] = _scored(list(raw.get(name) or []), n)
     if not series:
         raise PipelineError("no_signal", "This video has no audio track and no chat region was set, "
                                          "so there is nothing to score moments with.")
