@@ -15,7 +15,7 @@ export const NAV: NavItem[][] = [
   ],
   [
     { label: "Calendar", icon: "calendar" },
-    { label: "Analytics", icon: "chart" },
+    { label: "Analytics", icon: "chart", href: "/dashboard/analytics/" },
     { label: "Social accounts", icon: "share" },
   ],
   [
