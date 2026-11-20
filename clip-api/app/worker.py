@@ -79,21 +79,26 @@ def claim_job(prefix: str | None = None) -> str | None:
 
 
 def default_transcriber() -> Transcriber | None:
-    model = get_settings().whisper_model
+    s = get_settings()
+    model = s.whisper_model
     if model.lower() == "none":
         return None
     other = languages.caption_model()          # (languages) for speech that is not English
-    return FasterWhisperTranscriber(model, multilingual=None if other.lower() in ("none", model) else other)
+    # device defaults to cpu (S5 CUDA stub stays off until Settings.whisper_device=cuda).
+    return FasterWhisperTranscriber(model, multilingual=None if other.lower() in ("none", model) else other,
+                                    device=s.whisper_device)
 
 
 def default_indexer() -> Transcriber | None:
     """Faster, smaller model used only to build the full-video search transcript."""
-    model = get_settings().whisper_index_model
+    s = get_settings()
+    model = s.whisper_index_model
     if model.lower() == "none":
         return None
     other = languages.index_model()            # (languages) for speech that is not English
     return FasterWhisperTranscriber(model, beam_size=1, words=False,
-                                    multilingual=None if other.lower() in ("none", model) else other)
+                                    multilingual=None if other.lower() in ("none", model) else other,
+                                    device=s.whisper_device)
 
 
 def spoken_language(upload_id: str, asked: str | None, has_audio: bool, src: Path, duration: float, work: Path,
