@@ -473,6 +473,9 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 storage.put(vkey, work / "vindex.npz")
         else:
             weights, weights_version = game_weights(options.get("template"), s.score_weights)
+            # Whole-transcript mode: global TRANSCRIBE_WHOLE or this job's ClipOptions.transcribe_whole (default false).
+            # Pop before PipelineOptions: the pipeline does not take this field.
+            want_whole = bool(s.transcribe_whole or options.pop("transcribe_whole", False))
             opts = PipelineOptions(caption_font=s.caption_font, source_lang=language, target_lang=target,
                                    moment_layout=s.provisional_layouts, quality_floor=s.clip_quality_floor,
                                    score_weights=weights, score_weights_version=weights_version,
@@ -487,7 +490,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             # (U1) What this upload already has transcribed (a whole transcript, pieces of earlier clip jobs) is read
             # instead of transcribed again, and what this job transcribes is kept for the next one.
             heard, whole = load_heard(storage, upload_id, language or "en", work)
-            if (s.transcribe_whole and has_audio and (indexer or transcriber) is not None
+            if (want_whole and has_audio and (indexer or transcriber) is not None
                     and (whole is None or transcript_language(whole) != (language or "en"))):
                 progress("transcribing", 5)
                 # One decode gives the WAV for the whole transcript and the loudness the pipeline needs.

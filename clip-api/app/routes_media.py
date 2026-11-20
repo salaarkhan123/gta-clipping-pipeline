@@ -83,6 +83,9 @@ class ClipOptions(LayoutOptions):
     source_lang: SourceLanguage | None = None
     target_lang: LanguageCode | None = None
     caption_display: Literal["original", "translation", "both"] = "original"
+    # (U1/U3) Transcribe the whole analysed range first so the LLM pass can run. Default false: same as the
+    # TRANSCRIBE_WHOLE env. True enables it for this job only (no credit change). Global env still ORs in.
+    transcribe_whole: bool = False
 
     @field_validator("project_name")
     @classmethod
