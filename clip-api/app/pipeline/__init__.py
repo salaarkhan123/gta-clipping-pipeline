@@ -637,6 +637,11 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
             if on_clip is not None:
                 on_clip(result)
 
+    # Enter "rendering" before the first encode so the worker's coarse `timings` bill encode
+    # wall to rendering (main called progress at the top of each serial iteration; B1's
+    # hand_over-only progress ran after finish and left rendering ≈ 0 for a single clip).
+    if jobs:
+        progress("rendering", 70)
     if workers == 1:
         for i, c in jobs:
             hand_over(finish_one(i, c))
