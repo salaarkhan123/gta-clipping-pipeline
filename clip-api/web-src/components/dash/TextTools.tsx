@@ -98,7 +98,11 @@ export function TextTool({ kind }: { kind: Kind }) {
   }
   const cancel = (jobId: string) => api(`/v1/jobs/${jobId}/cancel`, { body: {} }).then(reload).catch(fail);
 
-  const head = <BackTitle title={NAME[kind]} id={title} />;
+  const head = <BackTitle title={NAME[kind]} id={title} crumbs={project ? [
+    { label: "Home", href: "/dashboard/" },
+    { label: project.filename, href: `/dashboard/project/?id=${project.upload_id}` },
+    { label: NAME[kind] },
+  ] : undefined} />;
   if (gone) return <div className="form-col">{head}<p className="empty-note">This video isn't here any more. Videos are kept for 7 days. <Link href="/dashboard/">Pick another one</Link></p></div>;
   if (!project || result === undefined || !langs) return <div className="form-col">{head}<p className="muted">Loading…</p></div>;
   const off = kind === "summary" && !langs.summaries;

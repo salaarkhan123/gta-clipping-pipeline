@@ -127,7 +127,7 @@ export default function Templates() {
   return (
     <div className="wide stack">
       <div className="grid gap-2">
-        <BackTitle title="Game templates" />
+        <BackTitle title="Game templates" crumbs={[{ label: "Home", href: "/dashboard/" }, { label: "Game templates" }]} />
         <p className="muted m-0 max-w-[720px] text-[14px]">A template tunes what we look for in a game and sets the clip length, caption style and editing. You can still change every setting before you start.</p>
       </div>
       {templates === null ? <p className="muted">Loading templates…</p> : !templates.length ? <p className="muted">No templates to show right now.</p> : <>

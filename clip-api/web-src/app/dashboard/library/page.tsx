@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CLIP_GRID, ClipCard, ClipFilter, ClipSort, ClipToolbar } from "@/components/dash/ClipCard";
 import { ProjectGrid } from "@/components/dash/ProjectCard";
 import { useDash } from "@/components/dash/Shell";
-import { PAGE_HEAD, PAGE_TITLE, SECTION_HEAD } from "@/components/dash/ui";
+import { BackTitle, PAGE_HEAD, SECTION_HEAD } from "@/components/dash/ui";
 import { Tabs } from "@/components/dash/Tabs";
 import { api } from "@/lib/api";
 
@@ -22,7 +22,7 @@ export default function Library() {
   return (
     <div className="wide stack">
       <div className={PAGE_HEAD}>
-        <h1 className={PAGE_TITLE}>Library</h1>
+        <BackTitle title="Library" crumbs={[{ label: "Home", href: "/dashboard/" }, { label: "Library" }]} />
         <Tabs seg label="Library view" panel="library-view" value={view} onChange={show} tabs={[["projects", "Projects"], ["clips", "Clips"]]} />
       </div>
       <div id="library-view" role="tabpanel" aria-label={view === "projects" ? "Projects" : "Clips"} className="stack">

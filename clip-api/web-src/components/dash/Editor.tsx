@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { addCut, cutsInside, dropDraft, Edit, EditWord, forApi, inCut, keptLength, Line, linesOf, loadDraft, loadWords, MIN_LENGTH, removeSpan, round,
@@ -17,6 +16,7 @@ import { Custom, Section } from "./PreEdit";
 import { useDash } from "./Shell";
 import { QuoteLine } from "./StartRow";
 import { Tabs } from "./Tabs";
+import { Breadcrumb } from "./ui";
 
 // Tenths of a second: "1:02.4".
 export const stamp = (s: number) => {
@@ -215,13 +215,13 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
   return (
     <div className="grid min-w-0 gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Link href={`/dashboard/project/?id=${project.upload_id}`} aria-label={`Back to ${project.filename}`}
-            className="grid h-9 w-9 flex-none place-items-center rounded-full text-muted hover:bg-chip hover:text-text"><Icon name="back" size={20} /></Link>
-          <div className="grid min-w-0">
-            <h1 title={name} className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[18px] font-semibold leading-[1.3] tracking-[-0.01em]">{name}</h1>
-            <p className="m-0 overflow-hidden text-ellipsis whitespace-nowrap text-[12.5px] text-muted" aria-live="polite">{project.filename} · {status}</p>
-          </div>
+        <div className="grid min-w-0">
+          <Breadcrumb crumbs={[
+            { label: "Home", href: "/dashboard/" },
+            { label: project.filename, href: `/dashboard/project/?id=${project.upload_id}` },
+            { label: name },
+          ]} />
+          <p className="m-0 overflow-hidden text-ellipsis whitespace-nowrap text-[12.5px] text-muted" aria-live="polite">{status}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 narrow:w-full narrow:[&>*]:flex-1">
           <button type="button" className="btn small ghost" disabled={!unsaved} onClick={() => { setEdit(base); setSel(null); }}><Icon name="undo" size={16} />Undo all</button>
