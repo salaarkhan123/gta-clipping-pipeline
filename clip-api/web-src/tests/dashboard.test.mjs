@@ -41,7 +41,12 @@ test("global Find: Cmd+K / Ctrl+K opens the shell palette that hits search and f
   assert.match(find, /not_transcribed/);
   assert.match(find, /findProjectHref/);
   const panel = source("components/dash/FindPanel.tsx");
-  assert.match(panel, /URLSearchParams\(window\.location\.search\)\.get\("q"\)/);
+  assert.match(panel, /handoffQuery/);
+  assert.match(panel, /findHandoffFromSearch/);
+  const project = source("app/dashboard/project/page.tsx");
+  assert.match(project, /useSearchParams/);
+  assert.match(project, /applyFindHandoff/);
+  assert.match(project, /handoffQuery=\{findQuery\}/);
 });
 
 test("account menu: subscription, credit usage, language, API keys, log out", () => {
