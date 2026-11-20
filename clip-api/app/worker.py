@@ -487,8 +487,10 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             # (U1) What this upload already has transcribed (a whole transcript, pieces of earlier clip jobs) is read
             # instead of transcribed again, and what this job transcribes is kept for the next one.
             heard, whole = load_heard(storage, upload_id, language or "en", work)
-            if (s.transcribe_whole and has_audio and (indexer or transcriber) is not None
-                    and (whole is None or transcript_language(whole) != (language or "en"))):
+            if heard.pieces:
+                timer.count("heard_pieces", len(heard.pieces))
+            whole_ok = whole is not None and transcript_language(whole) == (language or "en")
+            if s.transcribe_whole and has_audio and (indexer or transcriber) is not None and not whole_ok:
                 progress("transcribing", 5)
                 # One decode gives the WAV for the whole transcript and the loudness the pipeline needs.
                 with timer.stage("audio_signal"):
@@ -504,6 +506,8 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 storage.put(transcript_key(upload_id), work / "transcript.json")
                 heard, _ = load_heard(storage, upload_id, language or "en", work)     # the whole one, then the pieces
                 extra["source_audio"] = audio
+            elif s.transcribe_whole and whole_ok:
+                timer.count("transcript_whole_reused")
             results = pipeline(src, opts, work / "out", progress, transcriber, deadline, timer=timer,
                                on_clip=lambda r: save_clip(r, r.index), transcript=heard, **extra)
             save_parts(storage, upload_id, heard, work)

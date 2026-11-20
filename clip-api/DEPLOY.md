@@ -64,6 +64,10 @@ A job from before stage timing existed has only the coarse stages shown in the d
 uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-clips 10` runs the pipeline locally
 (no AI judge) and prints the same stages.
 
+**Transcript reuse (U1).** Repeat jobs on the same upload report `transcript_reused` /
+`transcript_transcribed` / `transcript_reuse_rate` in the rates line (and `transcript_cached` for Finder /
+transcript tools). How to confirm a hit on a re-run: [docs/transcript-reuse.md](docs/transcript-reuse.md).
+
 ## Transcription settings
 
 - `TRANSCRIPTION_PROVIDER=local` (the only provider so far): whole recordings are transcribed by the local Whisper
