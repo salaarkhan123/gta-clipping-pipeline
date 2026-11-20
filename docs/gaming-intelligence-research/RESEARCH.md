@@ -49,5 +49,6 @@ Approve **1A–1D** in the [implementation roadmap](IMPLEMENTATION-ROADMAP.md) a
 | When could renting or buying compute be justified? | [Hardware and cost](GPU-REQUIREMENTS.md) |
 | What do competitors document and how would we test them fairly? | [Competitive analysis](COMPETITIVE-ANALYSIS.md) |
 | What would each PR prove, and when would we stop? | [Phased implementation roadmap](IMPLEMENTATION-ROADMAP.md) |
+| How do Phases 3–4 extend hierarchy, models, embeddings and serverless GPU? | [Phase 3–4 extension](PHASE3-4-EXTENSION.md) |
 
 The independent workstreams examined vision, audio, HUD/OCR, temporal models, datasets, engagement, competitors, infrastructure and licensing. The coordinator checked repository claims against pinned code, replayed the existing scorer, ran the local selection probe and reconciled source-specific licenses and historical measurements. The empirical limits are material: three short ungraded gameplay excerpts, observational reach proxies, no blind vendor comparison and no measured GPU workload.
