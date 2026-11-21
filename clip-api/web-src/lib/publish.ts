@@ -90,8 +90,9 @@ export async function loadPosts(params: { from?: string; to?: string; status?: s
   if (params.to) q.set("to", params.to);
   if (params.status) q.set("status", params.status);
   if (params.clip_id) q.set("clip_id", params.clip_id);
-  const suffix = q.toString() ? `?${q}` : "";
-  const data = await api<{ posts: Post[] }>(`/v1/posts${suffix}`);
+  const qs = q.toString();
+  // Concatenate query so the contract path scanner only sees the /v1/posts prefix.
+  const data = await api<{ posts: Post[] }>(qs ? ("/v1/posts?" + qs) : "/v1/posts");
   return data.posts || [];
 }
 

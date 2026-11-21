@@ -41,11 +41,11 @@ test("usageSeries orders days oldest-first for left-to-right charts", () => {
   for (const d of series) assert.ok(d.day && d.day.length > 0);
 });
 
-test("Analytics nav is wired; Calendar and Social stay Coming soon", () => {
+test("Analytics, Calendar, and Social accounts nav are wired", () => {
   const nav = source("components/dash/shell/nav.ts");
   assert.match(nav, /label: "Analytics", icon: "chart", href: "\/dashboard\/analytics\/"/);
-  assert.match(nav, /\{ label: "Calendar", icon: "calendar" \}/);
-  assert.match(nav, /\{ label: "Social accounts", icon: "share" \}/);
+  assert.match(nav, /label: "Calendar", icon: "calendar", href: "\/dashboard\/calendar\/"/);
+  assert.match(nav, /label: "Social accounts", icon: "share", href: "\/dashboard\/social-accounts\/"/);
 });
 
 test("analytics page reads only GET /v1/credits and discloses the 50-row window", () => {
