@@ -13,7 +13,7 @@
 | --- | --- | --- |
 | `docker-build` @ `213f65b` | **success** | First push |
 | `test` @ `213f65b` | **cancelled** | Superseded when eval commit `43bc4dd` pushed mid-run (not a code failure) |
-| `docker-build` / `test` @ `43bc4dd` | **in_progress** (re-run) | Watching via CI subscription; local GI **20 passed** |
+| `docker-build` + `test` @ `fe3cfbf` | **success** (2/2) | Hosted CI notification 2026-11-21; local GI **20 passed** |
 
 Local GI suites do not wait on hosted full pytest completion to ship research docs; hosted result is recorded when terminal.
 
