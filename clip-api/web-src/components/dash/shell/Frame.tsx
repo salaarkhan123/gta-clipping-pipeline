@@ -1,6 +1,8 @@
 "use client";
 // The frame around every signed-in page: the sidebar (a drawer on a phone), the top bar, and the page's own column.
 import { useEffect, useRef, useState } from "react";
+import { isFindShortcut } from "@/lib/globalFind";
+import { GlobalFind } from "./GlobalFind";
 import { SIDE_OPEN, SIDE_SHUT, Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 
@@ -10,6 +12,7 @@ const write = (shut: boolean) => { try { window.localStorage.setItem(KEY, shut ?
 
 export function Frame({ me, path, onLogout, children }: { me: any; path: string; onLogout: () => void; children: React.ReactNode }) {
   const [shut, setShut] = useState(false), [drawer, setDrawer] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
   const drawerBox = useRef<HTMLDivElement>(null);
   useEffect(() => { setShut(read()); }, []);
   useEffect(() => { setDrawer(false); }, [path]);
@@ -22,6 +25,15 @@ export function Frame({ me, path, onLogout, children }: { me: any; path: string;
     document.body.style.overflow = "hidden";
     return () => { document.removeEventListener("keydown", key); document.body.style.overflow = was; };
   }, [drawer]);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (!isFindShortcut(e)) return;
+      e.preventDefault();
+      setFindOpen((open) => !open);
+    };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, []);
   const toggle = () => { setShut(!shut); write(!shut); };
   const side = shut ? SIDE_SHUT : SIDE_OPEN;
 
@@ -38,8 +50,9 @@ export function Frame({ me, path, onLogout, children }: { me: any; path: string;
           <Sidebar me={me} path={path} compact={false} onClose={() => setDrawer(false)} onLogout={onLogout} />
         </div>
       </div>}
-      <TopBar me={me} onMenu={() => setDrawer(true)} />
+      <TopBar me={me} onMenu={() => setDrawer(true)} onFind={() => setFindOpen(true)} />
       {children}
+      <GlobalFind open={findOpen} onClose={() => setFindOpen(false)} />
     </div>
   );
 }

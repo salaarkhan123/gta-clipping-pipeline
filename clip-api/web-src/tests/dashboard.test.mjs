@@ -26,6 +26,27 @@ test("top bar: credits come from the account, Add credits goes to pricing, the b
   assert.match(bar, /Number\(me\.credits\)\.toLocaleString\(\)/);
   assert.match(bar, /href="\/dashboard\/pricing\/"[^>]*>Add credits</);
   assert.match(bar, /title="Notifications: coming soon"[\s\S]{0,200}<ComingSoonBadge short \/>/);
+  assert.match(bar, /onFind/);
+  assert.match(bar, /Find moments/);
+});
+
+test("global Find: Cmd+K / Ctrl+K opens the shell palette that hits search and find", () => {
+  const frame = source("components/dash/shell/Frame.tsx");
+  assert.match(frame, /isFindShortcut/);
+  assert.match(frame, /<GlobalFind open=\{findOpen\}/);
+  assert.match(frame, /onFind=\{\(\) => setFindOpen\(true\)\}/);
+  const find = source("components/dash/shell/GlobalFind.tsx");
+  assert.match(find, /searchPath\(uploadId, q\)/);
+  assert.match(find, /api\("\/v1\/find"/);
+  assert.match(find, /not_transcribed/);
+  assert.match(find, /findProjectHref/);
+  const panel = source("components/dash/FindPanel.tsx");
+  assert.match(panel, /handoffQuery/);
+  assert.match(panel, /findHandoffFromSearch/);
+  const project = source("app/dashboard/project/page.tsx");
+  assert.match(project, /useSearchParams/);
+  assert.match(project, /applyFindHandoff/);
+  assert.match(project, /handoffQuery=\{findQuery\}/);
 });
 
 test("account menu: subscription, credit usage, language, API keys, log out", () => {
