@@ -45,7 +45,29 @@ DURATIONS = {"0-30": (0, 30), "0-90": (0, 90), "30-60": (30, 60), "60-90": (60, 
              "180-300": (180, 300)}
 HOOK_STYLES = ("serious", "casual", "informative", "conversational", "humorous", "parody", "inspirational",
                "dramatic", "empathetic", "persuasive", "neutral", "excited", "calm")
+# Public catalogue for GET /v1/options → clips.hook_style.catalogue (id, label, one-line description).
+# Order matches HOOK_STYLES. One style per clip; default remains "serious". Not an A/B or multi-hook API.
+HOOK_STYLE_INFO: dict[str, tuple[str, str]] = {
+    "serious": ("Serious", "Straight, no-nonsense wording with no hype."),
+    "casual": ("Casual", "Relaxed and everyday, like talking to a friend."),
+    "informative": ("Informative", "A plain fact about what happens, without hype."),
+    "conversational": ("Conversational", "A direct line to the viewer, like a question or aside."),
+    "humorous": ("Humorous", "Funny, with a light joke about the moment."),
+    "parody": ("Parody", "Playful exaggeration that mocks the moment affectionately."),
+    "inspirational": ("Inspirational", "Uplifting, about effort, skill, or a comeback."),
+    "dramatic": ("Dramatic", "Suspense and stakes, as if something big is about to happen."),
+    "empathetic": ("Empathetic", "Warm, sharing what the person on screen feels."),
+    "persuasive": ("Persuasive", "A reason the viewer should keep watching."),
+    "neutral": ("Neutral", "Flat and descriptive, with no emotion."),
+    "excited": ("Excited", "High energy and hyped, with an exclamation."),
+    "calm": ("Calm", "Quiet and understated."),
+}
 HOOK_POSITIONS = ("beginning", "end")
+
+
+def hook_style_catalogue() -> list[dict[str, str]]:
+    """Every hook style as a client resource: id, human label, one-line description. Same order as HOOK_STYLES."""
+    return [{"id": s, "label": HOOK_STYLE_INFO[s][0], "description": HOOK_STYLE_INFO[s][1]} for s in HOOK_STYLES]
 
 # The stacked layouts: where the camera panel sits and the top panel's share of the frame height, as the renderer
 # draws them in a tall frame today (app/pipeline/layouts.py; a test compares the two). Every other layout has no

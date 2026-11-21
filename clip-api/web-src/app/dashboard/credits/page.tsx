@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Icon, IconName } from "@/components/dash/Icon";
 import { useDash } from "@/components/dash/Shell";
 import { Tabs } from "@/components/dash/Tabs";
-import { PAGE_HEAD, PAGE_TITLE } from "@/components/dash/ui";
+import { BackTitle, PAGE_HEAD } from "@/components/dash/ui";
 import { api } from "@/lib/api";
 import { byDay, Ledger, LEDGER_PAGE, LedgerRow, rowName, Side, sideOf, totals } from "@/lib/credits";
 
@@ -51,10 +51,11 @@ export default function Credits() {
     <div className="grid gap-6">
       <div className={PAGE_HEAD}>
         <div className="grid gap-1">
-          <h1 className={PAGE_TITLE}>Credit usage</h1>
+          <BackTitle title="Credit usage" crumbs={[{ label: "Home", href: "/dashboard/" }, { label: "Credit usage" }]} />
           <p className="m-0 text-[14px] text-muted">One credit is one minute of video. A failed or cancelled job is refunded in full.</p>
         </div>
         <div className="flex gap-2">
+          <Link href="/dashboard/analytics/" className="btn small ghost">Usage charts</Link>
           <Link href="/dashboard/billing/" className="btn small ghost">Subscription</Link>
           <Link href="/dashboard/pricing/" className="btn small primary">Add credits</Link>
         </div>

@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import { clock } from "@/lib/api";
 import { Icon, IconName } from "@/components/dash/Icon";
+import type { ClipLayout } from "@/lib/clip-layout";
 import { RatingBadge } from "./Rating";
 import { ASPECT_CLASS, kindName, lengthOf, Shape } from "./model";
 
@@ -12,15 +13,44 @@ export type Feedback = { kept?: boolean | null; reaction?: "like" | "dislike" | 
 // One clip in the results grid, in its own shape (9:16, 4:5 or 16:9). Pointing at it plays a muted preview; a click
 // or Enter opens the player. The AI rating sits on the picture with its sub-scores on hover; under it the title,
 // length, game and kind. Like, dislike and bookmark are on the picture (always shown on touch screens).
-export function ClipTile({ clip, name, shape, game, selected, onSelect, onOpen, onFeedback }: {
+export function ClipTile({ clip, name, shape, game, selected, onSelect, onOpen, onFeedback, layout = "grid" }: {
   clip: any; name: string; shape: Shape; game: string | null; selected: boolean;
   onSelect: (id: string, on: boolean) => void; onOpen: () => void; onFeedback: (f: Feedback) => void;
+  layout?: ClipLayout;
 }) {
   const [hover, setHover] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
   const preview = clip.preview_url || clip.video_url;
   const length = lengthOf(clip);
   const discarded = clip.kept === false;
+  if (layout === "list") {
+    return (
+      <article id={`clip-${clip.id}`} aria-label={name} tabIndex={-1}
+        className={`group/tile flex min-w-0 scroll-mt-24 items-center gap-3 rounded-12 bg-card px-2 py-2 ring-1 ring-inset focus:outline-none
+          ${selected ? "ring-2 ring-lime" : "ring-[rgba(255,255,255,.06)] hover:ring-[rgba(255,255,255,.14)]"}
+          ${discarded ? "opacity-50" : ""}`}>
+        <input type="checkbox" checked={selected} aria-label={`Select ${name}`} onChange={(e) => onSelect(clip.id, e.target.checked)}
+          className="h-5 w-5 flex-none cursor-pointer accent-lime" />
+        <button type="button" onClick={onOpen} aria-label={`Play ${name}`}
+          className="relative h-14 w-10 flex-none cursor-pointer overflow-hidden rounded-8 border-0 bg-card-2 p-0">
+          {clip.thumb_url
+            ? <img src={clip.thumb_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+            : <span className="grid h-full place-items-center text-dim"><Icon name="film" size={18} /></span>}
+        </button>
+        <button type="button" onClick={onOpen} aria-label={`Play ${name}`}
+          className="grid min-w-0 flex-1 cursor-pointer gap-[2px] border-0 bg-transparent p-0 text-left">
+          <h3 title={name} className="m-0 truncate font-sans text-[14px] font-semibold leading-[1.32] tracking-[-0.01em] text-text">{name}</h3>
+          <p className="m-0 flex min-w-0 flex-wrap items-center gap-x-[6px] text-[12.5px] text-fg-2">
+            {game && <span className="truncate">{game}</span>}
+            {game && clip.kind && <Dot />}
+            {clip.kind && <span>{kindName(clip.kind)}</span>}
+          </p>
+        </button>
+        <span className="flex-none tabular-nums text-[12.5px] text-fg-2">{clock(length)}</span>
+        <RatingBadge clip={clip} />
+      </article>
+    );
+  }
   return (
     <article id={`clip-${clip.id}`} aria-label={name} tabIndex={-1}
       className={`group/tile grid min-w-0 scroll-mt-24 content-start gap-[10px] focus:outline-none ${discarded ? "opacity-50" : ""}`}>
@@ -76,7 +106,17 @@ function Toggle({ icon, label, on, onClick }: { icon: IconName; label: string; o
 }
 
 // A card-shaped placeholder while a run is still finding clips.
-export function TileSkeleton({ shape }: { shape: Shape }) {
+export function TileSkeleton({ shape, layout = "grid" }: { shape: Shape; layout?: ClipLayout }) {
+  if (layout === "list") {
+    return (
+      <div aria-hidden="true" className="flex items-center gap-3 rounded-12 bg-card px-2 py-2">
+        <span className="h-5 w-5 flex-none animate-pulse rounded bg-card-2" />
+        <span className="h-14 w-10 flex-none animate-pulse rounded-8 bg-card-2" />
+        <span className="h-[14px] min-w-0 flex-1 animate-pulse rounded-pill bg-card-2" />
+        <span className="h-[12px] w-10 flex-none animate-pulse rounded-pill bg-card-2" />
+      </div>
+    );
+  }
   return (
     <div aria-hidden="true" className="grid content-start gap-[10px]">
       <div className={`${ASPECT_CLASS[shape]} animate-pulse rounded-16 bg-card`} />

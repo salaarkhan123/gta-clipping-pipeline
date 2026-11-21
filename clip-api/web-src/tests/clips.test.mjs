@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { arrange, kindsIn, lengthOf, outcomeOf, parseVtt, ratingOf, resolutionChoices, shapeOf, stageName, steady } from "../components/clips/model.ts";
+import { arrange, aspectFromOptions, aspectRatioOf, ASPECT_FRAME, isLowResPreview, kindsIn, lengthOf, outcomeOf, OVERLAY_ASPECTS, parseVtt, ratingOf, resolutionChoices, shapeOf, stageName, steady } from "../components/clips/model.ts";
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -58,6 +58,39 @@ test("a card takes its run's aspect; its length is the rendered parts", () => {
   assert.equal(lengthOf({ start_sec: 10, end_sec: 40 }), 30);
 });
 
+test("overlay aspect ratios stay distinct and map from the job options", () => {
+  assert.deepEqual([...OVERLAY_ASPECTS], ["9:16", "1:1", "4:5", "16:9"]);
+  assert.equal(aspectFromOptions("9:16"), "9:16");
+  assert.equal(aspectFromOptions("1:1"), "1:1");
+  assert.equal(aspectFromOptions("4:5"), "4:5");
+  assert.equal(aspectFromOptions("16:9"), "16:9");
+  assert.equal(aspectFromOptions(undefined, true), "9:16");
+  assert.equal(aspectFromOptions(undefined, false), "16:9");
+  assert.equal(aspectFromOptions(undefined), "9:16");
+  assert.equal(aspectRatioOf("tall"), "9:16");
+  assert.equal(aspectRatioOf("square"), "4:5");
+  assert.equal(aspectRatioOf("wide"), "16:9");
+  assert.equal(ASPECT_FRAME["1:1"], "aspect-square");
+  assert.equal(ASPECT_FRAME["4:5"], "aspect-[4/5]");
+});
+
+test("low-res preview is only when the API says rendered preview", () => {
+  assert.equal(isLowResPreview({ rendered: "preview" }), true);
+  assert.equal(isLowResPreview({ rendered: "full" }), false);
+  assert.equal(isLowResPreview({ rendered: "none" }), false);
+  assert.equal(isLowResPreview({}), false);
+  assert.equal(isLowResPreview({ preview_url: "https://x/p.mp4" }), false);
+});
+
+test("the clip player shows a low-res preview badge and an aspect toggle, not a fake duplicate", () => {
+  const player = source("components/clips/ClipPlayer.tsx");
+  assert.match(player, /isLowResPreview/);
+  assert.match(player, /Low-res preview/);
+  assert.match(player, /OVERLAY_ASPECTS/);
+  assert.match(player, /aria-label="Aspect"/);
+  assert.doesNotMatch(player, /Duplicate/);
+});
+
 test("a failed or cancelled run says what was refunded, from the job's own numbers", () => {
   assert.deepEqual(outcomeOf({ status: "FAILED", credits_reserved: 12, credits_charged: 0, error: { message: "No speech." } }),
     { kind: "failed", refunded: 12, message: "No speech." });
@@ -84,6 +117,19 @@ test("the export price is the server's quote; nothing about credits is worked ou
 test("the transcript is read from the clip's WebVTT subtitles", () => {
   const cues = parseVtt("WEBVTT\n\n00:00:00.000 --> 00:00:01.500\nno way\n\n00:00:01.500 --> 00:01:02.250\nhe actually did it\n");
   assert.deepEqual(cues, [{ start: 0, end: 1.5, text: "no way" }, { start: 1.5, end: 62.25, text: "he actually did it" }]);
+});
+
+test("results chrome shares Library's grid/list toggle; list rows still open the player", () => {
+  const results = source("components/clips/Results.tsx");
+  const tile = source("components/clips/ClipTile.tsx");
+  assert.match(results, /import \{ CLIP_LIST, LayoutToggle, nameOf, numbering, useClipLayout \} from "@\/components\/dash\/ClipCard"/);
+  assert.match(results, /<ResultsBar view=\{view\} onView=\{setView\} kinds=\{kinds\} total=\{clips\.length\}>/);
+  assert.match(results, /<LayoutToggle value=\{layout\} onChange=\{setLayout\} \/>/);
+  assert.match(results, /layout === "list" \? CLIP_LIST : GRID\[shape\]/);
+  assert.match(results, /onOpen=\{\(\) => setPlaying\(c\.id\)\}/);
+  assert.match(tile, /if \(layout === "list"\)/);
+  assert.match(tile, /onClick=\{onOpen\}/);
+  assert.match(tile, /<RatingBadge clip=\{clip\} \/>/);
 });
 
 test("unbuilt actions carry the Coming soon badge and are not links", () => {

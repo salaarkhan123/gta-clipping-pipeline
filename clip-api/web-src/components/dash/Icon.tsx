@@ -43,6 +43,7 @@ const PATHS = {
   globe: <><circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c2.4 2.6 3.5 5.4 3.5 8.5s-1.1 5.9-3.5 8.5c-2.4-2.6-3.5-5.4-3.5-8.5s1.1-5.9 3.5-8.5Z" /></>,
   chevron: <path d="m7 10 5 5 5-5" />,
   grid: <><rect x="4" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" /></>,
+  list: <><path d="M8 7h12M8 12h12M8 17h12" /><rect x="4" y="6" width="2" height="2" rx="0.5" /><rect x="4" y="11" width="2" height="2" rx="0.5" /><rect x="4" y="16" width="2" height="2" rx="0.5" /></>,
   play: <path d="M7.5 5v14l11-7-11-7Z" />,
   pause: <path d="M8 5v14M16 5v14" />,
   music: <><path d="M9 17.5V6l10-2v11.5" /><circle cx="6.5" cy="17.5" r="2.5" /><circle cx="16.5" cy="15.5" r="2.5" /></>,

@@ -12,6 +12,7 @@ import { videoFileProblem } from "@/lib/api";
 import { POLISH, Polish, polishQuery } from "@/lib/polish";
 import { Icon, IconName } from "./Icon";
 import { ImportBox, RecentImports, useImportSources } from "./ImportBox";
+import { ImportTakedown } from "./ImportTakedown";
 import { useDash } from "./Shell";
 import { ACCEPT, UploadProgress, useUpload } from "./Upload";
 import { linkPhrase } from "@/lib/platforms";
@@ -135,6 +136,10 @@ export function SourceBar({ onUploaded, pending }: { onUploaded: (uploadId: stri
         <ImportBox key={box.n} sources={sources} start={box} onReady={(u) => onUploaded(u.upload_id, query)} />
       </div>}
       {!box && sources && <div className="w-full [&_.import-recent_h3]:text-[14px] [&_.import-recent_h3]:text-muted"><RecentImports reload={0} /></div>}
+      <details className="w-full rounded-16 border border-solid border-line bg-panel px-4 py-2">
+        <summary className="cursor-pointer py-2 text-[14px] font-medium text-label">Remove an imported video from this account</summary>
+        <div className="pb-3 pt-1"><ImportTakedown /></div>
+      </details>
     </div>
   );
 }

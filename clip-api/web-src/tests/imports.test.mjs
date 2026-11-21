@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { importStep, optionsForUpload } from "../lib/imports.ts";
+import { importStep, optionsForUpload, takedownBody } from "../lib/imports.ts";
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -27,6 +27,12 @@ test("the same options on the uploaded original: the part picked for the import 
   assert.deepEqual(optionsForUpload(chosen, { start: 600, end: 660 }), { ...chosen, range: { start: 600, end: 660 } });
   assert.deepEqual(optionsForUpload(chosen, null), chosen);              // no part was picked: nothing changes
   assert.equal(chosen.range, null);                                      // the chosen options are not modified
+});
+
+test("self-service takedown body: consent and exactly one of url or all_imports", () => {
+  assert.deepEqual(takedownBody({ consent: true, url: "https://kick.com/x" }), { consent: true, url: "https://kick.com/x" });
+  assert.deepEqual(takedownBody({ consent: true, all_imports: true }), { consent: true, all_imports: true });
+  assert.throws(() => takedownBody({ consent: true, url: "", all_imports: false }), /Choose a source URL/);
 });
 
 test("a refused or failed import keeps the settings and offers Upload original video", () => {

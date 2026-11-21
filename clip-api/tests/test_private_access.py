@@ -59,6 +59,7 @@ ROUTES: dict[tuple[str, str], Case] = {
     ("POST", "/v1/clips/{clip_id}/feedback"): Case(body={"kept": False, "reaction": "dislike"}),
     ("PATCH", "/v1/clips/{clip_id}"): Case(body={"title": "taken over"}),
     ("GET", "/v1/clips/{clip_id}/subtitles"): Case(owner=(200, None)),
+    ("DELETE", "/v1/uploads/{upload_id}"): Case(),   # A3 soft-delete; B must get 404, not wipe A's upload
     ("GET", "/v1/uploads/{upload_id}/search"): Case(query="?q=god", owner=(200, None)),
     ("GET", "/v1/transcripts/{upload_id}"): Case(owner=(200, None)),
     ("GET", "/v1/transcripts/{upload_id}/download"): Case(owner=(200, None)),

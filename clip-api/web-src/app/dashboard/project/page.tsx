@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { numbering } from "@/components/dash/ClipCard";
 import { FindPanel } from "@/components/dash/FindPanel";
 import { Icon } from "@/components/dash/Icon";
@@ -13,6 +13,7 @@ import { isTool, Tool } from "@/components/dash/ToolPanel";
 import { isActive } from "@/components/clips/model";
 import { Results } from "@/components/clips/Results";
 import { api, ApiError, clock } from "@/lib/api";
+import { applyFindHandoff, findHandoffFromSearch } from "@/lib/globalFind";
 
 type View = "clips" | "find";
 const TAB = "relative inline-flex min-h-[36px] cursor-pointer items-center gap-2 rounded-pill border-0 bg-transparent px-4 font-sans text-[14px] font-medium text-fg-2 hover:text-text "
@@ -34,14 +35,21 @@ function keepLinks(old: any, next: any) {
 
 // One project (one uploaded video, GET /v1/projects/{upload_id}): the runs working on it and every clip made from it,
 // the source video with where each clip came from, and the job-setup screen (MakeView) to make more.
-export default function Project() {
+// useSearchParams needs a Suspense boundary in a static export (Global Find soft-nav updates ?tool=&q= without remount).
+export default function ProjectPage() { return <Suspense><Project /></Suspense>; }
+
+function Project() {
   const { fail, reloadMe } = useDash();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const search = searchParams.toString();
   const [id, setId] = useState<string | null>(null);
   const [open, setOpen] = useState<{ tool?: Tool; template?: string }>({});   // handed over by Home or the template gallery
   const [project, setProject] = useState<any>(null), [gone, setGone] = useState(false);
   const [finds, setFinds] = useState<Record<string, any>>({});
   const [view, setView] = useState<View>("clips");
+  const [findQuery, setFindQuery] = useState(() => findHandoffFromSearch(
+    typeof window === "undefined" ? "" : window.location.search).query);
   const [jump, setJump] = useState<{ id: string; n: number } | null>(null);
   // null until the project loads: a project with nothing made yet opens on the setup screen.
   const [making, setMaking] = useState<boolean | null>(null);
@@ -51,13 +59,26 @@ export default function Project() {
     catch (e) { if (e instanceof ApiError && e.status === 404) setGone(true); else fail(e); }
   }, [fail]);
 
+  const idParam = searchParams.get("id");
+  const toolParam = searchParams.get("tool");
+  const templateParam = searchParams.get("template");
+
+  // Re-read id when Global Find (or Home) soft-navs to another project without remounting.
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search), pid = q.get("id"), tool = q.get("tool");
-    setId(pid);
-    setOpen({ tool: isTool(tool) ? tool : undefined, template: q.get("template") || undefined });
-    if (tool === "find") setView("find");
-    if (pid) load(pid); else setGone(true);
-  }, [load]);
+    setId(idParam);
+    if (idParam) load(idParam); else setGone(true);
+  }, [load, idParam]);
+
+  useEffect(() => {
+    setOpen({ tool: isTool(toolParam) ? toolParam : undefined, template: templateParam || undefined });
+  }, [toolParam, templateParam]);
+
+  // Re-apply Find handoff after mount: switch tab and prefill q on every ?tool=find&q= change.
+  useEffect(() => {
+    const applied = applyFindHandoff({ view, query: findQuery }, search ? `?${search}` : "");
+    if (applied.view !== view) setView(applied.view);
+    if (applied.query !== findQuery) setFindQuery(applied.query);
+  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps -- only URL handoffs; typing stays local in FindPanel
 
   // Clips are stored one by one while a run works, so polling shows each as soon as it is finished.
   const anyActive = !!project?.jobs.some(isActive);
@@ -112,8 +133,8 @@ export default function Project() {
     <div className="mx-auto grid w-full max-w-wide grid-cols-1 gap-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
-          <BackTitle title={project.filename} />
-          <p className="m-0 pl-[46px] text-[13px] tabular-nums text-fg-2">
+          <BackTitle title={project.filename} crumbs={[{ label: "Home", href: "/dashboard/" }, { label: project.filename }]} />
+          <p className="m-0 text-[13px] tabular-nums text-fg-2">
             {clock(project.duration_sec)} · {clips.length} clip{clips.length === 1 ? "" : "s"} · kept until {until}</p>
         </div>
         <button type="button" className="btn small primary" onClick={() => setMaking(true)}><Icon name="plus" size={16} />Make more</button>
@@ -137,7 +158,8 @@ export default function Project() {
       </div>
       <div role="tabpanel" aria-label={view === "clips" ? "Clips" : "Find moments"}>
         {view === "find"
-          ? <FindPanel upload={project} jobs={findJobs} finds={finds} onStarted={reload} onCancel={cancel} />
+          ? <FindPanel upload={project} jobs={findJobs} finds={finds} onStarted={reload} onCancel={cancel}
+              handoffQuery={findQuery} />
           : <Results project={project} reload={reload} onMake={() => setMaking(true)} jump={jump}
               onChange={(update) => setProject((p: any) => ({ ...p, clips: update(p.clips) }))} />}
       </div>

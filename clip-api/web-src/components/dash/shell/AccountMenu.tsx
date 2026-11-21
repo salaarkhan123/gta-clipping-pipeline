@@ -65,6 +65,7 @@ export function AccountMenu({ me, onLogout, compact }: { me: any; onLogout: () =
         </div>
         <Row href="/dashboard/billing/" icon="card">Subscription</Row>
         <Row href="/dashboard/credits/" icon="bolt">Credit usage history</Row>
+        <Row href="/dashboard/cases/#remove-imports" icon="shield">Remove my imports</Row>
         <span className={OFF} aria-disabled="true" title="The app is in English for now. Captions follow the language spoken in your video.">
           <Icon name="globe" size={18} />Language<span className="ml-auto text-[13px] font-normal">English</span><ComingSoonBadge short /></span>
         <Row href="/dashboard/keys/" icon="key">API keys</Row>

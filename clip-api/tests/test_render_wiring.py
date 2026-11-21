@@ -9,13 +9,20 @@ from tests.test_punchier_clips import gappy  # noqa: F401  (fixture)
 from tests.test_tools import fetch, run
 
 
+# Worker pops these before PipelineOptions(**options). They are ClipOptions (API/store) only.
+WORKER_POPPED = frozenset({"transcribe_whole"})
+
+
 def test_the_pipeline_knows_every_option_a_clip_request_can_store():
     """The worker builds PipelineOptions(**stored options): a stored key it does not know crashes the job."""
     known = {f.name for f in fields(PipelineOptions)}
-    assert set(ClipOptions.model_fields) <= known
+    assert set(ClipOptions.model_fields) - WORKER_POPPED <= known
     sent = ClipOptions(resolution="720", layout="gameplay_b").model_dump()
     assert sent["resolution"] == "720" and set(sent) <= known
     PipelineOptions(caption_font="DejaVu Sans", **sent)
+    # Opt-in whole-transcript is stored on the job, then popped before PipelineOptions (see worker).
+    whole = ClipOptions(transcribe_whole=True).model_dump()
+    assert whole["transcribe_whole"] is True and "transcribe_whole" not in known
 
 
 def test_run_pipeline_renders_at_the_resolution_asked(video, tmp_path):

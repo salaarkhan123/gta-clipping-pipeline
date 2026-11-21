@@ -2,6 +2,7 @@
 
     python scripts/admin.py takedown --url <source url> [--dry-run]
     python scripts/admin.py takedown --account <account id or email> [--dry-run]
+    POST /v1/imports/takedown  (account-scoped; only_account_id on a URL, or account=self)
 
 For each imported upload it finds: jobs still waiting are cancelled and refunded, running jobs are told to stop
 (the worker cancels and refunds them at its next step), every clip is marked deleted and its files removed, and
@@ -142,17 +143,25 @@ def _take_down(db, storage, upload: Upload, dry_run: bool) -> Removed:
     return out
 
 
-def takedown(url: str | None = None, account: str | None = None, dry_run: bool = False) -> Report:
-    """Remove everything imported from `url` (any account), or everything `account` imported by link.
-    Exactly one of the two. Raises LookupError for an unknown account."""
+def takedown(url: str | None = None, account: str | None = None, dry_run: bool = False,
+             *, only_account_id: str | None = None) -> Report:
+    """Remove everything imported from `url` (any account, or only `only_account_id` when set), or everything
+    `account` imported by link. Exactly one of url and account. Raises LookupError for an unknown account.
+    `only_account_id` scopes a URL takedown to one account (self-service); it is refused with account=."""
     if (url is None) == (account is None):
         raise ValueError("give exactly one of url and account")
+    if account is not None and only_account_id is not None:
+        raise ValueError("only_account_id scopes a URL takedown; do not pass it with account")
     storage = get_storage()
     with new_session() as db:
         if url is not None:
             urls = {u for u in (url.strip(), canonical(url)) if u}
             target = f"source URL {sorted(urls, key=len)[0]}"
             where, log_where = Upload.source_url.in_(urls), ImportLog.source_url.in_(urls)
+            if only_account_id is not None:
+                where = where & (Upload.account_id == only_account_id)
+                log_where = log_where & (ImportLog.account_id == only_account_id)
+                target = f"account {only_account_id}: {target}"
         else:
             acct = find_account(db, account)
             target = f"account {acct.id} ({acct.email}): every link import"
@@ -170,3 +179,24 @@ def takedown(url: str | None = None, account: str | None = None, dry_run: bool =
             else:
                 db.commit()
     return Report(target, dry_run, log_rows, removed)
+
+
+def report_json(report: Report) -> dict:
+    """Public shape of a takedown Report for the self-service API."""
+    return {
+        "target": report.target,
+        "dry_run": report.dry_run,
+        "import_log_rows": report.log_rows,
+        "uploads_removed": sum(1 for r in report.removed if r.upload_removed),
+        "clips_removed": sum(r.clips for r in report.removed),
+        "files_removed": sum(len(r.files) for r in report.removed if r.changed),
+        "jobs_cancelled": [{"job_id": j, "credits_returned": c}
+                           for r in report.removed for j, c in r.cancelled],
+        "jobs_stopping": [j for r in report.removed for j in r.stopping],
+        "jobs_still_stopping": [j for r in report.removed for j in r.still_stopping],
+        "removed": [{"upload_id": r.upload_id, "source_url": r.source_url, "platform": r.platform,
+                     "upload_removed": r.upload_removed, "clips": r.clips, "files": len(r.files),
+                     "cancelled": [{"job_id": j, "credits_returned": c} for j, c in r.cancelled],
+                     "stopping": list(r.stopping), "still_stopping": list(r.still_stopping)}
+                    for r in report.removed if r.changed],
+    }

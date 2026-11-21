@@ -27,26 +27,59 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="Clip API", version="1.0.0", lifespan=lifespan,
-              description="Turn long gameplay recordings into short captioned clips. 1 credit = 1 minute of source video.")
+# Commercial OpenAPI: versioned public customer API under /v1. The website uses these same routes
+# (no private website-only endpoints). Interactive docs: /docs · machine-readable: /openapi.json.
+OPENAPI_TAGS = [
+    {"name": "auth", "description": "Sign up, log in, account profile, and API keys (Bearer `gck_…`)."},
+    {"name": "clips", "description": "Upload video, quote and start clip jobs, poll jobs, credits balance, and clip edits."},
+    {"name": "projects", "description": "Project library and clip listings for an account."},
+    {"name": "tools", "description": "Reframe, burn captions, and find moments by what was said."},
+    {"name": "imports", "description": "Authorized public-link import (Twitch/Kick first; YouTube best effort)."},
+    {"name": "templates", "description": "Game templates, caption fonts, and saved brand looks."},
+    {"name": "thumbnails", "description": "Clip thumbnail variants and optional premium styles."},
+    {"name": "languages", "description": "Transcripts, translations, and summaries."},
+    {"name": "billing", "description": "Credit packs, plans, checkout, and Stripe webhooks."},
+    {"name": "legal", "description": "Published policies and account consent records."},
+    {"name": "trust", "description": "Copyright and likeness reports; admin case review (session + admin only)."},
+    {"name": "ops", "description": "Service health for load balancers and monitors."},
+]
+
+app = FastAPI(
+    title="ClutchClips API",
+    version="1.0.0",
+    lifespan=lifespan,
+    openapi_tags=OPENAPI_TAGS,
+    description=(
+        "Versioned commercial API (`/v1`) for turning long gameplay recordings into short captioned clips.\n\n"
+        "**Credits:** 1 credit = 1 minute of source video. Failed jobs are refunded. Quote before you confirm.\n\n"
+        "**Auth:** `Authorization: Bearer` with a session token or an API key (`gck_…`). "
+        "Create keys from the dashboard or `POST /v1/keys`.\n\n"
+        "**Same API for the website:** the ClutchClips site calls only these public `/v1` routes "
+        "(plus `/openapi.json` for feature detection and `/docs` for humans). "
+        "There are no private website-only endpoints.\n\n"
+        "**Core customer flow:** `POST /v1/uploads` → `POST /v1/clips/quote` / `POST /v1/clips` → "
+        "`GET /v1/jobs/{job_id}` → download clips. Also: `GET /v1/options`, `GET /v1/credits`, "
+        "`GET|POST|DELETE /v1/keys`."
+    ),
+)
 app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in get_settings().cors_origins.split(",") if o.strip()],
                    allow_methods=["*"], allow_headers=["*"])
 app.include_router(routes_auth.router, tags=["auth"])
-app.include_router(routes_export.router, tags=["clips"])      # re-export and clip edits (render, agent B)
+app.include_router(routes_export.router, tags=["clips"])      # re-export and clip edits
 app.include_router(routes_media.router, tags=["clips"])
 app.include_router(routes_direct_upload.router, tags=["clips"])   # resumable uploads straight to the bucket
 app.include_router(routes_tools.router, tags=["tools"])
-app.include_router(routes_text.router, tags=["languages"])      # (languages, agent F)
+app.include_router(routes_text.router, tags=["languages"])
 app.include_router(routes_projects.router, tags=["projects"])
 app.include_router(routes_templates.router, tags=["templates"])
-app.include_router(routes_fonts.router, tags=["templates"])      # caption fonts (captions agent)
-app.include_router(routes_captions.router, tags=["clips"])       # caption words for text editing (captions agent)
+app.include_router(routes_fonts.router, tags=["templates"])      # caption fonts
+app.include_router(routes_captions.router, tags=["clips"])       # caption words for text editing
 app.include_router(routes_meta.router, tags=["clips"])
 app.include_router(routes_billing.router, tags=["billing"])
-app.include_router(routes_ingest.router, tags=["imports"])     # link import (agent E)
-app.include_router(routes_thumbnails.router, tags=["thumbnails"])   # premium thumbnails (#140)
-app.include_router(routes_legal.router, tags=["legal"])        # policies and consent records (trust track)
-app.include_router(routes_trust.router, tags=["trust"])        # copyright and likeness reports, admin cases
+app.include_router(routes_ingest.router, tags=["imports"])
+app.include_router(routes_thumbnails.router, tags=["thumbnails"])
+app.include_router(routes_legal.router, tags=["legal"])
+app.include_router(routes_trust.router, tags=["trust"])
 
 
 @app.exception_handler(ApiError)
@@ -65,8 +98,9 @@ async def validation_error(_request: Request, exc: RequestValidationError):
         "code": "validation_error", "message": f"{where}: {first.get('msg', 'invalid request')}".strip(": ")}})
 
 
-@app.get("/health", tags=["ops"])
+@app.get("/health", tags=["ops"], summary="Health check")
 def health():
+    """Liveness for load balancers. `accepting_jobs` is false when the API is draining."""
     with get_engine().connect() as conn:
         conn.execute(text("SELECT 1"))
     return {"ok": True, "accepting_jobs": get_settings().accept_jobs}

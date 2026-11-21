@@ -1,11 +1,12 @@
 "use client";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { addCut, cutsInside, dropDraft, Edit, EditWord, forApi, inCut, keptLength, Line, linesOf, loadDraft, loadWords, MIN_LENGTH, removeSpan, round,
   loadEditWords, saveDraft, saveOnClip, sameEdit, sourceTime, Span, startEdit, Word } from "@/lib/edit";
+import { isEditWordList, wordEditReady } from "@/lib/wordEdits";
 import { CaptionLook, CaptionLookControls, CaptionOverlay, captionAt, tidyLook, WordFace, WordMenu } from "./editor/Words";
 import { creditWords, exportBody, followJob, useQuote } from "@/lib/exporting";
+import { hookCatalogueOf, hookToneLabel } from "@/lib/hookStyles";
 import { layoutsFor, Listed, onlyListed } from "@/lib/options";
 import { EXPORT, EXPORT_QUOTE, Routes } from "@/lib/routes";
 import { hasPanels, layoutChoices, layoutName, Look, LOOK_KEYS, startLook, tidy } from "@/lib/templates";
@@ -15,6 +16,7 @@ import { Custom, Section } from "./PreEdit";
 import { useDash } from "./Shell";
 import { QuoteLine } from "./StartRow";
 import { Tabs } from "./Tabs";
+import { Breadcrumb } from "./ui";
 
 // Tenths of a second: "1:02.4".
 export const stamp = (s: number) => {
@@ -66,6 +68,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
   const [restored, setRestored] = useState<number | null>(null), [draftAt, setDraftAt] = useState<number | null>(null);
   const [words, setWords] = useState<Word[] | null>(null), [wordsProblem, setWordsProblem] = useState("");
   const [apiWords, setApiWords] = useState<EditWord[] | null>(null);            // GET /v1/clips/{id}/words (#215)
+  const [wordEditsOn, setWordEditsOn] = useState(false);                        // EditWord path ready (emoji/highlight/split)
   const [tab, setTab] = useState<Tab>("transcript");
   const [tool, setTool] = useState<Tool | null>(null);
   const [view, setView] = useState<"edit" | "file">("edit");
@@ -97,8 +100,15 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
 
   useEffect(() => {
     let on = true;
-    const fromApi = known.words ? loadEditWords(clip.id).then((r) => { if (on) setApiWords(r.words); return r.words as Word[]; }) : loadWords(clip);
-    fromApi.then((w) => on && setWords(w)).catch((e) => { if (on) { setWords([]); setWordsProblem(e.message); } });
+    setWordEditsOn(false); setApiWords(null);
+    // Always try GET /words (EditWord). A live route enables emoji/highlight/split even when OpenAPI probe missed.
+    const takeEditWords = (list: EditWord[]) => {
+      if (!on) return;
+      setApiWords(list); setWords(list); setWordEditsOn(isEditWordList(list)); setWordsProblem("");
+    };
+    const fallback = () => loadWords(clip).then((w) => { if (on) { setWords(w); setWordEditsOn(false); } })
+      .catch((e) => { if (on) { setWords([]); setWordEditsOn(false); setWordsProblem(e.message); } });
+    loadEditWords(clip.id).then((r) => takeEditWords(r.words)).catch(() => fallback());
     return () => { on = false; };
   }, [clip.id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -149,8 +159,10 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
   // Cutting words also marks them `cut` in the word edit (#215): the caption and the video leave together.
   const cutSelection = () => { if (selSpan) { set({ cuts: addCut(edit.cuts, selSpan), ...(model ? { words: model.map((w) => (w.start >= selSpan[0] && w.end <= selSpan[1] ? { ...w, cut: true } : w)) } : {}) }); setSel(null); } };
   const restoreSelection = () => { if (selSpan) { set({ cuts: removeSpan(edit.cuts, selSpan), ...(model ? { words: model.map((w) => (w.start >= selSpan[0] && w.end <= selSpan[1] ? { ...w, cut: false } : w)) } : {}) }); setSel(null); } };
-  // Text-based editing (#215): the words as the user edits them; null when this API can't take them.
-  const model: EditWord[] | null = known.words ? (edit.words ?? apiWords) : null;
+  // Text-based editing (#215): EditWord list once GET /words succeeded (or a saved edit already has words).
+  const model: EditWord[] | null = wordEditsOn || wordEditReady(edit.words) || wordEditReady(apiWords)
+    ? (edit.words ?? apiWords) : null;
+  const menuOn = !!model && wordEditReady(model);
   const pickedIdx = sel ? Array.from({ length: Math.abs(sel.b - sel.a) + 1 }, (_, k) => Math.min(sel.a, sel.b) + k) : [];
   const captionLook = ((edit.options.caption_look as CaptionLook | null) || {}) as CaptionLook;
 
@@ -203,13 +215,13 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
   return (
     <div className="grid min-w-0 gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Link href={`/dashboard/project/?id=${project.upload_id}`} aria-label={`Back to ${project.filename}`}
-            className="grid h-9 w-9 flex-none place-items-center rounded-full text-muted hover:bg-chip hover:text-text"><Icon name="back" size={20} /></Link>
-          <div className="grid min-w-0">
-            <h1 title={name} className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[18px] font-semibold leading-[1.3] tracking-[-0.01em]">{name}</h1>
-            <p className="m-0 overflow-hidden text-ellipsis whitespace-nowrap text-[12.5px] text-muted" aria-live="polite">{project.filename} · {status}</p>
-          </div>
+        <div className="grid min-w-0">
+          <Breadcrumb crumbs={[
+            { label: "Home", href: "/dashboard/" },
+            { label: project.filename, href: `/dashboard/project/?id=${project.upload_id}` },
+            { label: name },
+          ]} />
+          <p className="m-0 overflow-hidden text-ellipsis whitespace-nowrap text-[12.5px] text-muted" aria-live="polite">{status}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 narrow:w-full narrow:[&>*]:flex-1">
           <button type="button" className="btn small ghost" disabled={!unsaved} onClick={() => { setEdit(base); setSel(null); }}><Icon name="undo" size={16} />Undo all</button>
@@ -260,7 +272,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
                           onClick={(e) => pickWord(i, e.shiftKey)}>{model?.[i] ? <WordFace w={model[i]} /> : w.text}</button>;
                       })}
                     </div>}
-                {!!words?.length && <WordMenu on={!!known.words} words={model} picked={pickedIdx} onWords={(next) => set({ words: next })} onCutWithVideo={cutSelection} />}
+                {!!words?.length && <WordMenu on={menuOn} words={model} picked={pickedIdx} onWords={(next) => set({ words: next })} onCutWithVideo={cutSelection} />}
                 <p className="muted m-0 text-[12.5px]">Click a word to jump to it. Shift-click another to select everything between, then press Cut or Delete.</p>
                 {!mapping.exact && (job?.options?.tighten || job?.options?.flash_forward) && !!words?.length &&
                   <p className="muted m-0 text-[12.5px]">Word times may be off by a moment: dead air was cut from this clip when it was made, and the exact parts aren&apos;t known yet.</p>}
@@ -343,7 +355,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
                 <label className="grow">Text<input value={edit.hook_text ?? clip.hook ?? ""} maxLength={HOOK_MAX} placeholder="A short opening line"
                   onChange={(e) => set({ hook_text: e.target.value === (clip.hook ?? "") ? null : e.target.value })} /></label>
                 {"hook_style" in listed && <label>Style<select value={String(look.hook_style ?? listed.hook_style.default ?? "")} onChange={(e) => onLook({ hook_style: e.target.value } as any)}>
-                  {(listed.hook_style.values || []).map((v: string) => <option key={v} value={v}>{tidy(v)}</option>)}</select></label>}
+                  {(listed.hook_style.values || []).map((v: string) => <option key={v} value={v}>{hookToneLabel(v, hookCatalogueOf(listed.hook_style.catalogue))}</option>)}</select></label>}
                 {"hook_position" in listed && <label>Position<select value={String(look.hook_position ?? listed.hook_position.default ?? "")} onChange={(e) => onLook({ hook_position: e.target.value } as any)}>
                   {(listed.hook_position.values || []).map((v: string) => <option key={v} value={v}>{POSITION_NAMES[v] || tidy(v)}</option>)}</select></label>}
               </fieldset>}

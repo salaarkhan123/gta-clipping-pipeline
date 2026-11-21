@@ -2,9 +2,10 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { api, ApiError, clock } from "@/lib/api";
-import { Icon } from "./Icon";
-import { Tabs } from "./Tabs";
 import { importStep } from "@/lib/imports";
+import { Icon } from "./Icon";
+import { ImportTakedown } from "./ImportTakedown";
+import { Tabs } from "./Tabs";
 
 // Link import: a public video link becomes a project. Every import needs the user's word that they own the video
 // or may clip it (sent as `consent: true`); the API logs it and refuses what it cannot fetch, and its words are
@@ -107,6 +108,7 @@ export function ImportBox({ sources, onReady, recent, compact, start }: { source
           The link has to open in a signed-out browser. If a site refuses, upload the file instead.</p>
       </details>
       {recent && <RecentImports reload={reload} />}
+      {recent && <div className="mt-4"><ImportTakedown onDone={() => setReload((n) => n + 1)} /></div>}
     </div>
   );
 }

@@ -102,6 +102,35 @@ export function shapeOf(aspect: unknown, vertical?: unknown): Shape | null {
 }
 export const ASPECT_CLASS: Record<Shape, string> = { tall: "aspect-[9/16]", square: "aspect-[4/5]", wide: "aspect-video" };
 
+// Overlay frame ratios (player rail). Distinct from Shape so 1:1 and 4:5 stay separate for the toggle.
+export type AspectRatio = "9:16" | "1:1" | "4:5" | "16:9";
+export const OVERLAY_ASPECTS: readonly AspectRatio[] = ["9:16", "1:1", "4:5", "16:9"];
+export const ASPECT_FRAME: Record<AspectRatio, string> = {
+  "9:16": "aspect-[9/16]",
+  "1:1": "aspect-square",
+  "4:5": "aspect-[4/5]",
+  "16:9": "aspect-video",
+};
+const ASPECT_SET = new Set<string>(OVERLAY_ASPECTS);
+
+export function aspectRatioOf(shape: Shape): AspectRatio {
+  if (shape === "wide") return "16:9";
+  if (shape === "square") return "4:5";
+  return "9:16";
+}
+
+// The clip's run aspect for the overlay, falling back the same way cards do.
+export function aspectFromOptions(aspect: unknown, vertical?: unknown): AspectRatio {
+  if (typeof aspect === "string" && ASPECT_SET.has(aspect)) return aspect as AspectRatio;
+  const shape = shapeOf(aspect, vertical);
+  return shape ? aspectRatioOf(shape) : "9:16";
+}
+
+// Preview encodes only (`clip.rendered` from clip_json). Full and none are not low-res previews.
+export function isLowResPreview(clip: { rendered?: unknown }): boolean {
+  return clip.rendered === "preview";
+}
+
 // The clip's length as rendered: its source parts (`segments`, dead air already cut) added up; start to end otherwise.
 export function lengthOf(c: any): number {
   if (Array.isArray(c.segments) && c.segments.length) {
