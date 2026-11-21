@@ -577,22 +577,34 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
     return status
 
 
+def _clip_has_media(clip: Clip) -> bool:
+    """True when a clip row has stored media (progressive handoff), not just a moment placeholder."""
+    return bool(clip.video_key or clip.preview_key or clip.thumb_key)
+
+
 def _finish_failed_job(job_id: str, status: str, error: tuple[str, str] | None, stored: list[str],
                        handed_over: set, measured, waited) -> str:
     """Refund and hide clips on cancel or a true empty failure. When clips were already handed over,
     keep them, charge the reservation, and mark the job SUCCEEDED (partial) so a late crash cannot
-    erase progressive results the customer already saw."""
+    erase progressive results the customer already saw.
+
+    Rows with no media (e.g. early moment placeholders) are not progressive handoffs: they alone do
+    not keep-and-charge, and they are soft-deleted when finishing early beside real media."""
     storage = get_storage()
     with new_session() as db:
         job = db.execute(select(Job).where(Job.id == job_id).with_for_update()).scalar_one()
         live = list(db.execute(select(Clip).where(Clip.job_id == job_id, Clip.deleted_at.is_(None))).scalars())
-        keep = status != "CANCELED" and (bool(handed_over) or bool(live))
+        ready = [c for c in live if _clip_has_media(c)]
+        keep = status != "CANCELED" and (bool(handed_over) or bool(ready))
 
         if job.status != "RUNNING":
             # Already finalised (e.g. stale sweep). Never delete clips the other finisher kept.
             return job.status
 
         if keep:
+            for clip in live:
+                if not _clip_has_media(clip):
+                    clip.deleted_at = utcnow()
             code, message = error or ("ended_early",
                                       "Processing stopped early. The clips already generated were kept.")
             if status == "LOST":
@@ -609,7 +621,7 @@ def _finish_failed_job(job_id: str, status: str, error: tuple[str, str] | None, 
             ledger.settle(db, job, success=True)
             db.commit()
             log.warning("job %s ended early after %d clip(s); kept them and charged (%s)",
-                        job_id, len(live) or len(handed_over), code)
+                        job_id, len(ready) or len(handed_over), code)
             return "SUCCEEDED"
 
         for key in stored:
@@ -669,7 +681,11 @@ def sweep_stale_jobs() -> int:
         orphans: list[str] = []
         for job in stale:
             clips = list(db.execute(select(Clip).where(Clip.job_id == job.id, Clip.deleted_at.is_(None))).scalars())
-            if clips and not job.id.startswith("imp_"):
+            ready = [c for c in clips if _clip_has_media(c)]
+            if ready and not job.id.startswith("imp_"):
+                for clip in clips:
+                    if not _clip_has_media(clip):
+                        clip.deleted_at = utcnow()
                 job.status, job.progress, job.stage, job.finished_at = "SUCCEEDED", 100, "done", utcnow()
                 job.error_code, job.error_message = None, None
                 job.result = {**(job.result or {}), "partial": True, "ended_early_code": "ended_early",
@@ -679,7 +695,7 @@ def sweep_stale_jobs() -> int:
                     if up is not None:
                         up.analyzed = True
                 ledger.settle(db, job, success=True)
-                log.warning("stale job %s had %d clip(s); kept them and charged", job.id, len(clips))
+                log.warning("stale job %s had %d clip(s); kept them and charged", job.id, len(ready))
             else:
                 job.status, job.finished_at = "FAILED", utcnow()
                 job.error_code, job.error_message = ("worker_lost",
