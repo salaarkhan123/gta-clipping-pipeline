@@ -24,11 +24,14 @@ Candidates: `eval/gi-gta-label-sheet.csv` (30 GTA proposals). Do not tune thresh
 | --- | --- |
 | Precision / recall / F1 | Binary on `genuine_highlight` yes vs no (`maybe` excluded) |
 | Precision@5 / @10 | Share of top-k with `genuine_highlight=yes` |
-| NDCG@5 / @10 | Gains from `quality_1_5` (5→3, 4→2, 3→1, else 0) |
-| Spearman vs quality | System score vs human `quality_1_5` |
-| Missed high-quality | quality≥4 ∧ genuine=yes outside top-10 |
-| FP rate | Among labelled no’s predicted positive |
+| NDCG@5 / @10 | Gains from entertainment/quality 1–5 (5→3, 4→2, 3→1, else 0); dimensions still stored separately |
+| Spearman | System score vs human entertainment (fallback quality) |
+| Missed high-quality | ordinal≥4 ∧ genuine=yes outside top-10 |
+| FP in top-5 | Labelled `no` in top-5 |
+| Source-level CI | Bootstrap over VODs — never clips-as-iid |
 | Processing time / CPU·mem | Separate CPU bench (hook) + future `job_timings.py` full path |
+
+See also [statistical-constraints/03-ABC-EVALUATION-PIPELINE.md](../statistical-constraints/03-ABC-EVALUATION-PIPELINE.md).
 
 ```bash
 cd clip-api

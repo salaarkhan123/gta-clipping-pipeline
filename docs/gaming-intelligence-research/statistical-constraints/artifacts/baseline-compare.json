@@ -1,0 +1,120 @@
+{
+  "experiment_id": "gi-abc-compare",
+  "recorded_at_utc": "2026-11-21T19:08:07.047920+00:00",
+  "dataset_version": "eval/gi-gta-label-sheet.csv",
+  "source_recording_ids": [
+    "gta-online-1"
+  ],
+  "model_id": "gi-heuristic-v0",
+  "code_version": "fe3cfbf302b2645d69d64be5cfeddd9306a19db1",
+  "feature_config": {
+    "family_weights": "default_zero"
+  },
+  "random_seed": 42,
+  "evaluation_methodology": "fixed_pool_A_B_C_source_clustered",
+  "sample_size": {
+    "n_rows": 30,
+    "n_rated": 0,
+    "n_independent_source_videos": 1
+  },
+  "metrics": {
+    "schema_required_fields_v2": [
+      "entertainment_1_5",
+      "gameplay_significance_1_5",
+      "opening_hook_1_5",
+      "context_1_5",
+      "editing_suitability_1_5",
+      "genuine_highlight"
+    ],
+    "schema_required_fields_legacy": [
+      "quality_1_5",
+      "entertainment_1_5",
+      "context_1_5",
+      "genuine_highlight",
+      "clutch_correct"
+    ],
+    "rubric_used": null,
+    "n_rows": 30,
+    "n_rated": 0,
+    "n_independent_source_videos": 1,
+    "min_rated_for_claim": 20,
+    "treats_clutch_score_as_gt": false,
+    "clips_treated_as_independent_for_ci": false,
+    "dimensions_kept_separate": true,
+    "comparison_mode": "fixed_pool_identical_candidates",
+    "status": "blocked_no_human_labels",
+    "message": "No complete human ratings. Fill the v2 rubric (entertainment/gameplay_significance/opening_hook/context/editing_suitability/genuine_highlight) via eval/gi-labeller.html before computing precision/recall/NDCG. Do not fabricate ratings.",
+    "minimum_additional_labels": 20,
+    "decision_gates": {
+      "all_gates_passed": false,
+      "proceed_to_complex_models": false,
+      "gates": [
+        {
+          "id": 1,
+          "name": "human_label_reliability",
+          "passed": false,
+          "evidence": [
+            "no dual-rater agreement yet"
+          ],
+          "required_next": "Collect dual ratings on \u226510 overlapping clips; adjudicate diffs \u22652."
+        },
+        {
+          "id": 2,
+          "name": "baseline_measured",
+          "passed": false,
+          "evidence": [
+            "baseline quality metrics blocked (no/insufficient labels)"
+          ],
+          "required_next": "Complete \u226520 human ratings on Dataset B development or eval sheet."
+        },
+        {
+          "id": 3,
+          "name": "experimental_improves_metric",
+          "passed": false,
+          "evidence": {
+            "status": "not_run"
+          },
+          "required_next": "Run fixed-pool A/B/C on identical candidates with held-out labels."
+        },
+        {
+          "id": 4,
+          "name": "improvement_vs_uncertainty",
+          "passed": false,
+          "evidence": {
+            "status": "not_run"
+          },
+          "required_next": "Need enough independent source videos for source-level CI; do not claim significance early."
+        },
+        {
+          "id": 5,
+          "name": "processing_cost_acceptable",
+          "passed": false,
+          "evidence": {
+            "status": "not_measured_on_full_vod"
+          },
+          "required_next": "Measure wall s / source hour, peak RSS, and $/source hour on identical VODs."
+        },
+        {
+          "id": 6,
+          "name": "generalizes_beyond_development",
+          "passed": false,
+          "evidence": {
+            "status": "held_out_not_evaluated"
+          },
+          "required_next": "Evaluate on held-out recordings (streamer-separated); never tune on those labels."
+        }
+      ],
+      "recommendation": "Do not increase model complexity. Satisfy failing gates first."
+    }
+  },
+  "runtime": {
+    "status": "not_recorded"
+  },
+  "hardware": {
+    "platform": "Linux-6.12.113+-x86_64-with-glibc2.39",
+    "processor": "x86_64",
+    "python": "3.12.3"
+  },
+  "known_limitations": [],
+  "invented_results": false
+}

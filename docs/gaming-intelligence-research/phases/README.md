@@ -2,6 +2,8 @@
 
 Experimental weights stay **0**. Do not merge as production enablement.
 
+**Statistical constraints (continuation):** [../statistical-constraints/README.md](../statistical-constraints/README.md) — methodology audit, Dataset A/B, A/B/C pipeline, decision gates. Do not invent results; quality claims blocked until human labels exist.
+
 | Doc | Topic |
 | --- | --- |
 | [ci-verification](gaming-intelligence-ci-verification.md) | PR #262 CI + safety |
