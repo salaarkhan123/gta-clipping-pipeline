@@ -3,9 +3,9 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 
 // One option of POST /v1/clips as GET /v1/options describes it. `by_aspect` (layout only) lists the values each
-// aspect accepts.
+// aspect accepts. `catalogue` is optional (hook_style from C2): {id, label, description}[] when the API sends it.
 export type Option = { type?: string; values?: any[]; default?: any; minimum?: number; maximum?: number; maxLength?: number;
-  nullable?: boolean; by_aspect?: Record<string, string[]> };
+  nullable?: boolean; by_aspect?: Record<string, string[]>; catalogue?: { id: string; label: string; description?: string }[] };
 export type Listed = Record<string, Option>;
 
 // Asked once per visit and shared by every form. A failed request is not remembered, so the next try asks again.

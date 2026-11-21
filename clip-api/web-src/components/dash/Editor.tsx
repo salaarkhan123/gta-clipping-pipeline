@@ -6,6 +6,7 @@ import { addCut, cutsInside, dropDraft, Edit, EditWord, forApi, inCut, keptLengt
   loadEditWords, saveDraft, saveOnClip, sameEdit, sourceTime, Span, startEdit, Word } from "@/lib/edit";
 import { CaptionLook, CaptionLookControls, CaptionOverlay, captionAt, tidyLook, WordFace, WordMenu } from "./editor/Words";
 import { creditWords, exportBody, followJob, useQuote } from "@/lib/exporting";
+import { hookCatalogueOf, hookToneLabel } from "@/lib/hookStyles";
 import { layoutsFor, Listed, onlyListed } from "@/lib/options";
 import { EXPORT, EXPORT_QUOTE, Routes } from "@/lib/routes";
 import { hasPanels, layoutChoices, layoutName, Look, LOOK_KEYS, startLook, tidy } from "@/lib/templates";
@@ -343,7 +344,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
                 <label className="grow">Text<input value={edit.hook_text ?? clip.hook ?? ""} maxLength={HOOK_MAX} placeholder="A short opening line"
                   onChange={(e) => set({ hook_text: e.target.value === (clip.hook ?? "") ? null : e.target.value })} /></label>
                 {"hook_style" in listed && <label>Style<select value={String(look.hook_style ?? listed.hook_style.default ?? "")} onChange={(e) => onLook({ hook_style: e.target.value } as any)}>
-                  {(listed.hook_style.values || []).map((v: string) => <option key={v} value={v}>{tidy(v)}</option>)}</select></label>}
+                  {(listed.hook_style.values || []).map((v: string) => <option key={v} value={v}>{hookToneLabel(v, hookCatalogueOf(listed.hook_style.catalogue))}</option>)}</select></label>}
                 {"hook_position" in listed && <label>Position<select value={String(look.hook_position ?? listed.hook_position.default ?? "")} onChange={(e) => onLook({ hook_position: e.target.value } as any)}>
                   {(listed.hook_position.values || []).map((v: string) => <option key={v} value={v}>{POSITION_NAMES[v] || tidy(v)}</option>)}</select></label>}
               </fieldset>}

@@ -1,6 +1,7 @@
 "use client";
 // Caption styles and hook tones as tiles, drawn in our own fonts. The words are ours; nothing here is footage.
 import { useState } from "react";
+import { hookCatalogueOf, hookToneDescription, hookToneLabel, type HookCatalogueEntry } from "@/lib/hookStyles";
 import { tidy } from "@/lib/templates";
 import { Tile } from "./parts";
 
@@ -50,14 +51,22 @@ export const HOOK_LINES: Record<string, string> = {
 };
 const BACKS = ["linear-gradient(170deg,#3a2a1f,#0f0d0c)", "linear-gradient(170deg,#1f2a3a,#0b0e13)", "linear-gradient(170deg,#2a1f3a,#0e0b13)", "linear-gradient(170deg,#1f3a2c,#0b130f)"];
 
-export function HookTones({ tones, value, onChange }: { tones: string[]; value: string; onChange: (s: string) => void }) {
+export function HookTones({ tones, value, onChange, catalogue }: {
+  tones: string[]; value: string; onChange: (s: string) => void; catalogue?: HookCatalogueEntry[] | unknown;
+}) {
+  const entries = hookCatalogueOf(catalogue);
   return (
     <div className="flex gap-3 overflow-x-auto pb-1" role="group" aria-label="Hook tone">
-      {tones.map((s, i) => <div key={s} className="w-[92px] flex-none"><Tile name={tidy(s)} on={value === s} onClick={() => onChange(s)} className="aspect-[9/16] w-full">
-        <span className="absolute inset-0" style={{ background: BACKS[i % 4] }} />
-        <img src={`/media/setup/hook-${(i % 4) + 1}.webp`} alt="" className="absolute inset-0 h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
-        <span className="absolute inset-x-2 top-[18%] rounded-[4px] bg-white px-1 py-[3px] text-center font-sans text-[10px] font-bold leading-[1.15] text-black">{HOOK_LINES[s] || tidy(s)}</span>
-      </Tile></div>)}
+      {tones.map((s, i) => {
+        const tip = hookToneDescription(s, entries);
+        return <div key={s} className="w-[92px] flex-none" title={tip}>
+          <Tile name={hookToneLabel(s, entries)} on={value === s} onClick={() => onChange(s)} className="aspect-[9/16] w-full">
+            <span className="absolute inset-0" style={{ background: BACKS[i % 4] }} />
+            <img src={`/media/setup/hook-${(i % 4) + 1}.webp`} alt="" className="absolute inset-0 h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+            <span className="absolute inset-x-2 top-[18%] rounded-[4px] bg-white px-1 py-[3px] text-center font-sans text-[10px] font-bold leading-[1.15] text-black">{HOOK_LINES[s] || tidy(s)}</span>
+          </Tile>
+        </div>;
+      })}
     </div>
   );
 }
