@@ -185,6 +185,23 @@ class Settings(BaseSettings):
     worker_concurrency: int = Field(1, ge=1, le=2)
     sentry_dsn: str = ""
 
+    # Social publishing (docs/publishing.md). Off by default: routes answer 404 publishing_disabled.
+    # Turn on only after platform apps are configured. Tokens encrypted with PUBLISH_TOKEN_KEY (Fernet).
+    publishing: bool = False
+    publish_token_key: str = ""              # Fernet key: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    publish_token_key_old: str = ""          # previous key during rotation (decrypt only)
+    publish_min_ahead_min: int = Field(5, ge=1, le=1440)
+    publish_max_ahead_days: int = Field(90, ge=1, le=365)
+    publish_per_account_daily_cap: int = Field(50, ge=1, le=500)
+    youtube_client_id: str = ""
+    youtube_client_secret: str = ""
+    tiktok_client_id: str = ""
+    tiktok_client_secret: str = ""
+    instagram_client_id: str = ""
+    instagram_client_secret: str = ""
+    facebook_client_id: str = ""
+    facebook_client_secret: str = ""
+
     @property
     def packs(self) -> list[dict]:
         return json.loads(self.credit_packs)
@@ -222,6 +239,8 @@ class Settings(BaseSettings):
         if provider(self) not in ("resend", "smtp") or missing_keys(self):
             problems.append("email delivery must be configured: EMAIL_PROVIDER=resend with RESEND_API_KEY, "
                             "or EMAIL_PROVIDER=smtp with SMTP_HOST")
+        if self.publishing and not self.publish_token_key:
+            problems.append("PUBLISH_TOKEN_KEY must be set when PUBLISHING is true")
         if problems:
             raise RuntimeError("Unsafe production config: " + "; ".join(problems))
 

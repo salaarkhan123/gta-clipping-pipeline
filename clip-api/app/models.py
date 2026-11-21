@@ -327,3 +327,62 @@ class WebhookDelivery(Base):
     status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     attempt: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class SocialAccount(Base):
+    """A customer's connected social destination. Tokens encrypted at rest; never returned by the API."""
+    __tablename__ = "social_accounts"
+    __table_args__ = (
+        UniqueConstraint("account_id", "platform", "external_id", name="uq_social_account"),
+    )
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    platform: Mapped[str] = mapped_column(String(20))  # youtube | tiktok | instagram | facebook | …
+    external_id: Mapped[str] = mapped_column(String(120))
+    display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    access_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    refresh_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    access_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    refresh_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    scopes: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active | needs_reconnect | revoked
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    disconnected_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class ScheduledPost(Base):
+    """One clip → one connected account. Idempotent on (clip_id, social_account_id, request_key)."""
+    __tablename__ = "scheduled_posts"
+    __table_args__ = (
+        UniqueConstraint("clip_id", "social_account_id", "request_key", name="uq_scheduled_post_idem"),
+        Index("ix_scheduled_posts_due", "status", "publish_at", "next_attempt_at"),
+        Index("ix_scheduled_posts_account_created", "account_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    clip_id: Mapped[str] = mapped_column(ForeignKey("clips.id"), index=True)
+    social_account_id: Mapped[str] = mapped_column(ForeignKey("social_accounts.id"), index=True)
+    platform: Mapped[str] = mapped_column(String(20))
+    request_key: Mapped[str] = mapped_column(String(200))
+    title: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    caption: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hashtags: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    privacy: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    options: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    publish_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # null = publish now
+    status: Mapped[str] = mapped_column(String(16), default="QUEUED")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    step: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    external_ref: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    external_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

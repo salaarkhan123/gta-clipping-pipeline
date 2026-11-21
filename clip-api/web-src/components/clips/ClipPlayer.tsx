@@ -7,6 +7,7 @@ import { ComingSoonBadge } from "@/components/ComingSoonBadge";
 import { downloadSubtitles } from "@/components/dash/ClipCard";
 import { Icon, IconName } from "@/components/dash/Icon";
 import { useDash } from "@/components/dash/Shell";
+import { PublishPanel } from "@/components/publish/PublishPanel";
 import { Feedback } from "./ClipTile";
 import { ExportPanel } from "./ExportPanel";
 import { RatingParts } from "./Rating";
@@ -15,8 +16,8 @@ import {
   OVERLAY_ASPECTS, parseVtt, ratingOf, Shape,
 } from "./model";
 
-// Not built yet: shown so people know they are coming, never clickable.
-const SOON: [IconName, string][] = [["send", "Publish to socials"], ["calendar", "Schedule"], ["image", "AI B-roll"]];
+// Still planned: shown so people know they are coming, never clickable.
+const SOON: [IconName, string][] = [["image", "AI B-roll"]];
 type Tab = "transcript" | "rating" | "export";
 
 // The clip's words with clip times (GET /v1/clips/{id}/subtitles?format=vtt), asked once per clip per visit.
@@ -47,6 +48,7 @@ export function ClipPlayer(p: PlayerProps) {
   const [cc, setCc] = useState(false), [track, setTrack] = useState<string | null>(null);
   const [naming, setNaming] = useState<string | null>(null);
   const [frame, setFrame] = useState<AspectRatio | null>(null);
+  const [publishing, setPublishing] = useState(false);
 
   useEffect(() => { dialog.current?.showModal(); }, []);
   useEffect(() => {
@@ -164,8 +166,12 @@ export function ClipPlayer(p: PlayerProps) {
             <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Clip actions">
               <Link className="btn small primary" href={`/dashboard/edit/?project=${p.uploadId}&clip=${clip.id}`}><Icon name="sliders" size={15} />Open in editor</Link>
               {clip.video_url && <a className="btn small ghost" href={clip.video_url} download title="The file as it is now. Free, as often as you like."><Icon name="download" size={15} />Download</a>}
+              <button type="button" className="btn small ghost" onClick={() => setPublishing((v) => !v)} title="Publish or schedule to connected accounts">
+                <Icon name="send" size={15} />Publish
+              </button>
               {cues && Array.isArray(cues) && <button type="button" className="btn small ghost" aria-pressed={cc} onClick={() => setCc(!cc)} title="Show the transcript as subtitles on the player"><Icon name="captions" size={15} />CC</button>}
             </div>
+            {publishing && <PublishPanel clipId={clip.id} onClose={() => setPublishing(false)} />}
             <div role="radiogroup" aria-label="Aspect" className="flex flex-wrap items-center gap-[6px]">
               <span className="text-[12px] text-fg-2">Aspect</span>
               {OVERLAY_ASPECTS.map((a) => (
