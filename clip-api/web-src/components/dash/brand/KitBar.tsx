@@ -1,6 +1,6 @@
 "use client";
-// The brand kit page's header: the kit picker (switch, new, rename, delete), undo and redo, Save as new kit and
-// Save changes. Naming a kit opens a small dialog.
+// Brand kit header actions: kit picker (switch, new, rename, duplicate, set default, delete), undo/redo,
+// Save as and Save. Naming opens a small dialog.
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "../Icon";
@@ -10,27 +10,40 @@ import { KIT_NAME_MAX, SavedKit } from "@/lib/brandkit";
 const ICON_BTN = "grid h-10 w-10 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-text hover:bg-chip disabled:cursor-default disabled:text-dim disabled:hover:bg-transparent";
 const MENU_ITEM = "flex min-h-[38px] w-full cursor-pointer items-center gap-[10px] rounded-8 border-0 bg-transparent px-[10px] py-[6px] text-left font-sans text-[14px] font-medium leading-[normal] text-text hover:bg-chip-hover";
 
-export function KitPicker({ kits, current, draftName, onPick, onNew, onRename, onDelete }: { kits: SavedKit[]; current: string | null; draftName: string;
-  onPick: (id: string) => void; onNew: () => void; onRename: () => void; onDelete: () => void }) {
+export function KitPicker({ kits, current, draftName, defaultId, onPick, onNew, onRename, onDuplicate, onSetDefault, onDelete }: {
+  kits: SavedKit[]; current: string | null; draftName: string; defaultId: string | null;
+  onPick: (id: string) => void; onNew: () => void; onRename: () => void; onDuplicate: () => void;
+  onSetDefault: () => void; onDelete: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null), btn = useRef<HTMLButtonElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useDismiss(open, close, box, btn);
   const name = kits.find((k) => k.id === current)?.name || draftName;
+  const isDefault = !!current && current === defaultId;
   const pick = (f: () => void) => () => { setOpen(false); f(); };
   return (
     <div ref={box} className="relative min-w-0">
       <button ref={btn} type="button" aria-expanded={open} aria-label={`Brand kit: ${name}`} onClick={() => setOpen(!open)}
-        className="flex h-11 w-[240px] max-w-full cursor-pointer items-center justify-between gap-2 rounded-12 border border-solid border-line-soft bg-surface px-4 font-sans text-[15px] font-medium text-text hover:bg-chip narrow:w-full">
-        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{name}{!current && <span className="font-normal text-muted"> (not saved)</span>}</span>
+        className="flex h-11 w-[260px] max-w-full cursor-pointer items-center justify-between gap-2 rounded-12 border border-solid border-line-soft bg-surface px-4 font-sans text-[15px] font-medium text-text hover:bg-chip narrow:w-full">
+        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+          {name}
+          {!current && <span className="font-normal text-muted"> (not saved)</span>}
+          {isDefault && <span className="font-normal text-lime"> · default</span>}
+        </span>
         <Icon name="chevron" size={18} className="text-muted" /></button>
-      {open && <div aria-label="Brand kits" className="absolute left-0 top-[calc(100%+8px)] z-[60] grid w-[280px] max-w-[calc(100vw-32px)] gap-[2px] rounded-16 border border-solid border-line bg-card-2 p-2 shadow-pop">
+      {open && <div aria-label="Brand kits" className="absolute left-0 top-[calc(100%+8px)] z-[60] grid w-[300px] max-w-[calc(100vw-32px)] gap-[2px] rounded-16 border border-solid border-line bg-card-2 p-2 shadow-pop">
         {kits.length > 0 && <p className="m-0 px-[10px] pb-1 pt-1 text-[12px] font-medium text-muted">Your kits</p>}
         {kits.map((k) => <button key={k.id} type="button" className={MENU_ITEM} aria-current={k.id === current ? "true" : undefined} onClick={pick(() => onPick(k.id))}>
-          <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{k.name}</span>{k.id === current && <Icon name="check" size={16} className="text-lime" />}</button>)}
+          <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{k.name}{k.id === defaultId ? <span className="text-muted"> · default</span> : ""}</span>
+          {k.id === current && <Icon name="check" size={16} className="text-lime" />}</button>)}
         {kits.length > 0 && <div className="my-1 h-px bg-line" role="separator" />}
         <button type="button" className={MENU_ITEM} onClick={pick(onNew)}><Icon name="plus" size={17} className="text-muted" />New kit</button>
         {current && <button type="button" className={MENU_ITEM} onClick={pick(onRename)}><Icon name="pencil" size={17} className="text-muted" />Rename</button>}
+        {current && <button type="button" className={MENU_ITEM} onClick={pick(onDuplicate)}><Icon name="stack" size={17} className="text-muted" />Duplicate</button>}
+        {current && <button type="button" className={MENU_ITEM} onClick={pick(onSetDefault)} disabled={isDefault}
+          aria-disabled={isDefault || undefined}>
+          <Icon name="bookmark" size={17} className="text-muted" />{isDefault ? "Default kit" : "Set as default"}</button>}
         {current && <button type="button" className={`${MENU_ITEM} text-danger`} onClick={pick(onDelete)}><Icon name="trash" size={17} />Delete kit</button>}
       </div>}
     </div>

@@ -68,6 +68,7 @@ test("brand kit: planned parts are Coming soon and send nothing; saving sends on
   const form = source("components/dash/brand/Sections.tsx");
   for (const part of ["Logos", "Music"]) assert.match(form, new RegExp(`${part} <span[^>]*>[^<]*</span><ComingSoonBadge />`), part);
   assert.match(form, /A short opener and end card for each shape\.<ComingSoonBadge \/>/);
+  assert.match(form, /title="Additional assets"/);
   const kit = source("lib/brandkit.ts");
   // Nothing priced is ever in a kit: the options come from the look keys plus the hook tone.
   assert.match(kit, /const out = lookOptions\(kit, listed\);\n\s+if \("hook_style" in listed\) out\.hook_style = kit\.hook_style;/);
