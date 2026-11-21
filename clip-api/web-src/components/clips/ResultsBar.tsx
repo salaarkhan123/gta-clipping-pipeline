@@ -6,7 +6,9 @@ const CHIP = "inline-flex min-h-[32px] cursor-pointer items-center gap-[6px] rou
 
 // Sort (AI rating or where the moment is in the video), filter by kind (only the kinds the API gave these clips)
 // and by your own marks.
-export function ResultsBar({ view, onView, kinds, total }: { view: View; onView: (v: View) => void; kinds: { kind: string; count: number }[]; total: number }) {
+export function ResultsBar({ view, onView, kinds, total, children }: {
+  view: View; onView: (v: View) => void; kinds: { kind: string; count: number }[]; total: number; children?: React.ReactNode;
+}) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex min-w-0 flex-wrap items-center gap-[6px] narrow:-mx-4 narrow:w-[calc(100%+32px)] narrow:flex-nowrap narrow:overflow-x-auto narrow:px-4 narrow:pb-1 narrow:[scrollbar-width:none]" role="group" aria-label="Filter by kind">
@@ -32,6 +34,7 @@ export function ResultsBar({ view, onView, kinds, total }: { view: View; onView:
             <button key={s} type="button" role="radio" aria-checked={view.sort === s} onClick={() => onView({ ...view, sort: s })}
               className={`${SEG} ${view.sort === s ? "bg-raised text-text shadow-card" : "bg-transparent text-fg-2 hover:text-text"}`}>{label}</button>))}
         </div>
+        {children}
       </div>
     </div>
   );

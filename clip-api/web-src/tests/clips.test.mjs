@@ -86,6 +86,19 @@ test("the transcript is read from the clip's WebVTT subtitles", () => {
   assert.deepEqual(cues, [{ start: 0, end: 1.5, text: "no way" }, { start: 1.5, end: 62.25, text: "he actually did it" }]);
 });
 
+test("results chrome shares Library's grid/list toggle; list rows still open the player", () => {
+  const results = source("components/clips/Results.tsx");
+  const tile = source("components/clips/ClipTile.tsx");
+  assert.match(results, /import \{ CLIP_LIST, LayoutToggle, nameOf, numbering, useClipLayout \} from "@\/components\/dash\/ClipCard"/);
+  assert.match(results, /<ResultsBar view=\{view\} onView=\{setView\} kinds=\{kinds\} total=\{clips\.length\}>/);
+  assert.match(results, /<LayoutToggle value=\{layout\} onChange=\{setLayout\} \/>/);
+  assert.match(results, /layout === "list" \? CLIP_LIST : GRID\[shape\]/);
+  assert.match(results, /onOpen=\{\(\) => setPlaying\(c\.id\)\}/);
+  assert.match(tile, /if \(layout === "list"\)/);
+  assert.match(tile, /onClick=\{onOpen\}/);
+  assert.match(tile, /<RatingBadge clip=\{clip\} \/>/);
+});
+
 test("unbuilt actions carry the Coming soon badge and are not links", () => {
   const player = source("components/clips/ClipPlayer.tsx");
   assert.match(player, /\["send", "Publish to socials"\], \["calendar", "Schedule"\], \["image", "AI B-roll"\]/);
