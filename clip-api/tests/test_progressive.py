@@ -7,7 +7,7 @@ import pytest
 from app import worker
 from app.config import get_settings
 from app.db import new_session
-from app.models import Clip, Job, utcnow
+from app.models import Clip, Job, new_id, utcnow
 from app.pipeline import PipelineOptions, Timer, run_pipeline
 from tests.test_api import balance
 from tests.test_stage_timings import jt
@@ -165,3 +165,86 @@ def test_the_timing_script_reports_the_first_clip(tmp_path, capsys):
         "stages": {"render": 60.0}, "counts": {"source_sec": 7200.0, "clips": 3}}}))
     assert jt.compare(jt.load(p))["first_clip_sec"] == 45.0                  # queue included: what the customer waits
     assert jt.main([str(p)]) == 0 and "First clip watchable after 45 s" in capsys.readouterr().out
+
+
+def _placeholders(job_id: str, n: int = 2) -> None:
+    """Insert moment-style clip rows with no media (not progressive handoffs)."""
+    with new_session() as db:
+        for i in range(n):
+            db.add(Clip(id=new_id("clip"), job_id=job_id, idx=100 + i, start_sec=float(i), end_sec=float(i) + 1,
+                        score=0.1, signals={}, features={}, video_key=""))
+        db.commit()
+
+
+def test_placeholder_clips_alone_refund_on_crash(client, user, rising):
+    """Empty-media rows must not keep-and-charge: crash before any handoff refunds and hides them."""
+    headers, _ = user
+    _, job_id = submit(client, headers, rising)
+
+    def pipeline(*a, on_clip=None, **k):
+        _placeholders(job_id, 3)
+        raise RuntimeError("crashed before any encode")
+
+    assert worker.run_once(None, pipeline=pipeline) == "FAILED"
+    job = client.get(f"/v1/jobs/{job_id}", headers=headers).json()
+    assert job["status"] == "FAILED" and job["clips"] == [] and job["credits_charged"] == 0
+    assert balance(client, headers) == 30
+
+
+def test_crash_after_one_handoff_hides_placeholder_siblings(client, user, rising):
+    """Keep the media-backed progressive clip; soft-delete empty moment placeholders; charge once."""
+    headers, _ = user
+    _, job_id = submit(client, headers, rising)
+
+    def crash():
+        _placeholders(job_id, 2)
+        raise RuntimeError("disk fell off")
+
+    assert worker.run_once(None, pipeline=after_first_clip(crash)) == "SUCCEEDED"
+    job = client.get(f"/v1/jobs/{job_id}", headers=headers).json()
+    assert job["status"] == "SUCCEEDED" and len(job["clips"]) == 1 and job["credits_charged"] == 1
+    assert job["result"].get("partial") is True
+    assert all(c.get("video_url") or c.get("preview_url") or c.get("thumb_url") for c in job["clips"])
+    assert balance(client, headers) == 29
+
+
+def test_stale_sweep_keeps_media_and_hides_placeholders(client, user, rising):
+    """A dead worker keeps the progressive media clip only; empty placeholders are hidden."""
+    headers, _ = user
+    _, job_id = submit(client, headers, rising)
+    seen = {}
+
+    def presumed_dead():
+        _placeholders(job_id, 2)
+        with new_session() as db:
+            db.get(Job, job_id).heartbeat_at = utcnow().replace(year=utcnow().year - 1)
+            db.commit()
+        seen["swept"] = worker.sweep_stale_jobs()
+        snap = client.get(f"/v1/jobs/{job_id}", headers=headers).json()
+        seen["status"], seen["clips"] = snap["status"], len(snap["clips"])
+
+    assert worker.run_once(None, pipeline=after_first_clip(presumed_dead)) == "SUCCEEDED"
+    assert seen["swept"] == 1 and seen["status"] == "SUCCEEDED" and seen["clips"] == 1
+    job = client.get(f"/v1/jobs/{job_id}", headers=headers).json()
+    assert job["status"] == "SUCCEEDED" and len(job["clips"]) == 1 and job["result"].get("partial") is True
+    assert balance(client, headers) == 29
+
+
+def test_stale_sweep_placeholder_only_refunds(client, user, rising):
+    """Moment placeholders without media are not progressive results: stale sweep refunds."""
+    headers, _ = user
+    _, job_id = submit(client, headers, rising)
+
+    def pipeline(*a, on_clip=None, **k):
+        _placeholders(job_id, 3)
+        with new_session() as db:
+            db.get(Job, job_id).heartbeat_at = utcnow().replace(year=utcnow().year - 1)
+            db.commit()
+        assert worker.sweep_stale_jobs() == 1
+        raise RuntimeError("returning worker after sweep")
+
+    # Job already FAILED from the sweep; returning worker must not revive placeholder rows.
+    assert worker.run_once(None, pipeline=pipeline) == "FAILED"
+    job = client.get(f"/v1/jobs/{job_id}", headers=headers).json()
+    assert job["status"] == "FAILED" and job["clips"] == [] and job["credits_charged"] == 0
+    assert balance(client, headers) == 30
