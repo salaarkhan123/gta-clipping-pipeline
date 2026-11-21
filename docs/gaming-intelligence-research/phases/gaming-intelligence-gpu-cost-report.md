@@ -17,6 +17,15 @@
 
 **Measured production constraint (CPU host):** ffmpeg + long AV1 + Whisper path has **OOM on ~8 GB** hosts (anon ~5.5–5.8 GB on ~7.9 GB, no swap) — cited in #258 / progressive-clip work (#238). This is a **host RAM** fact, not a GPU throughput number.
 
+## Measured on this research host (CPU hook only, 2026-11-21)
+
+| Item | Result | Label |
+| --- | --- | --- |
+| GI hook disabled median | ~0.004 ms / 40 candidates | **MEASURED** |
+| GI hook enabled (weights 0) median | ~0.22 ms / 40 candidates | **MEASURED** |
+| R2 GTA `head_object` | OK (~3.3 GB) | **MEASURED** (no media in artifacts) |
+| ClutchClips L4 / VLM wall time | — | still **not measured** |
+
 CPU-only historical timings from performance research (e.g. droplet 2h runs in #222 docs) are **not** GPU measurements and are not re-quoted here as GPU cost.
 
 ---

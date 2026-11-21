@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clutchclips.local/schemas/gaming-phase1-source-manifest.json",
+  "title": "Gaming Phase 1 source manifest",
+  "type": "object",
+  "required": ["version", "sources"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "generated_at": { "type": "string" },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "sample_id",
+          "creator_pseudonym",
+          "game",
+          "consent_record_id",
+          "split",
+          "use_policy",
+          "content_sha256",
+          "excluded_from_training"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "sample_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" },
+          "creator_pseudonym": { "type": "string", "minLength": 1 },
+          "game": { "type": "string", "minLength": 1 },
+          "patch_or_layout": { "type": "string" },
+          "language": { "type": "string" },
+          "platform": { "type": "string" },
+          "source_platform_id": { "type": "string" },
+          "consent_record_id": { "type": "string", "minLength": 1 },
+          "consent_expiry": { "type": "string" },
+          "media_path_hint": {
+            "type": "string",
+            "description": "Local basename only; never a public watch URL in the public PR."
+          },
+          "duration_sec": { "type": "number", "minimum": 0 },
+          "resolution": { "type": "string" },
+          "content_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$|^synthetic-[a-z0-9-]+$" },
+          "audio_fingerprint": { "type": "string" },
+          "split": { "enum": ["development", "calibration", "test", "evaluation_only"] },
+          "use_policy": {
+            "type": "object",
+            "required": ["private_playback", "annotation", "embeddings", "model_training", "external_model", "redistribution"],
+            "additionalProperties": false,
+            "properties": {
+              "private_playback": { "type": "boolean" },
+              "annotation": { "type": "boolean" },
+              "embeddings": { "type": "boolean" },
+              "model_training": { "type": "boolean" },
+              "external_model": { "type": "boolean" },
+              "redistribution": { "type": "boolean" }
+            }
+          },
+          "excluded_from_training": { "type": "boolean" },
+          "denylist_reason": { "type": "string" },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  }
+}

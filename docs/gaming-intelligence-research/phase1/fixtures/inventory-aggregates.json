@@ -1,0 +1,44 @@
+{
+  "benchmark_2h_labelled": 0,
+  "benchmark_2h_rows": 46,
+  "caption_geometry_videos": {
+    "fortnite": 6,
+    "forza": 4,
+    "gta-online": 3,
+    "gta5": 2,
+    "gta6": 0,
+    "valorant": 7
+  },
+  "denylist_vod_ids": [
+    "gta-online-1",
+    "gta-rp-1",
+    "zias-iceman",
+    "gta5",
+    "gta6",
+    "gta-online",
+    "valorant",
+    "fortnite",
+    "forza"
+  ],
+  "gaps": [
+    "labels-v2.csv has zero human ratings; precision/recall/NDCG cannot be computed.",
+    "No held-out VOD in labels-v2.csv (gta-rp-1 not supplied).",
+    "Only 1 VOD(s) in v2 sheet; README target is three.",
+    "Caption geometry exists for some games, but HUD_REGIONS is empty and OCR text labels are absent.",
+    "HUD_REGIONS={} \u2014 no production HUD crops; #201 measurements still required.",
+    "Private multigame sheets (~55 blank ratings) and ~/ClutchClips-eval media are not on this agent host.",
+    "Per-second named-sound sheets for six evaluation VODs are missing (Phase 1C)."
+  ],
+  "held_out_vods": [],
+  "hud_regions_populated": 0,
+  "labels_v2_by_rating": {
+    "": 30
+  },
+  "labels_v2_rated": 0,
+  "labels_v2_rows": 30,
+  "labels_v2_vods": [
+    "gta-online-1"
+  ],
+  "wayin_labelled": 15,
+  "wayin_rows": 15
+}

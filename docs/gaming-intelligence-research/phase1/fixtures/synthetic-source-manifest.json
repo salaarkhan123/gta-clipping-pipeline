@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "generated_at": "2026-11-20T08:30:00Z",
+  "sources": [
+    {
+      "sample_id": "synth-burst-40s",
+      "creator_pseudonym": "fixture-lab",
+      "game": "synthetic",
+      "patch_or_layout": "testsrc2",
+      "language": "none",
+      "platform": "local-fixture",
+      "consent_record_id": "synthetic-always-allowed",
+      "consent_expiry": "2099-01-01",
+      "media_path_hint": "pytest-session-sample.mp4",
+      "duration_sec": 40,
+      "resolution": "640x360",
+      "content_sha256": "synthetic-burst-40s",
+      "split": "development",
+      "use_policy": {
+        "private_playback": true,
+        "annotation": true,
+        "embeddings": true,
+        "model_training": false,
+        "external_model": false,
+        "redistribution": true
+      },
+      "excluded_from_training": true,
+      "denylist_reason": "synthetic fixture for harness regression only",
+      "notes": "Loud tone 20-24 s; used to prove baseline determinism and signal inventory."
+    },
+    {
+      "sample_id": "gta-online-1",
+      "creator_pseudonym": "owner-eval",
+      "game": "gta-online",
+      "platform": "local-eval",
+      "consent_record_id": "owner-eval-existing",
+      "media_path_hint": "gta-online-1.mkv",
+      "content_sha256": "synthetic-pending-owner-hash",
+      "split": "evaluation_only",
+      "use_policy": {
+        "private_playback": true,
+        "annotation": true,
+        "embeddings": false,
+        "model_training": false,
+        "external_model": false,
+        "redistribution": false
+      },
+      "excluded_from_training": true,
+      "denylist_reason": "existing eval inventory; evaluation-only per DATASET-PLAN",
+      "notes": "30 unrated candidate rows already in clip-api/eval/labels-v2.csv."
+    }
+  ]
+}
