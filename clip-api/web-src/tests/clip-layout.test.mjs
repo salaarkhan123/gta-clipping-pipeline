@@ -55,8 +55,9 @@ test("library clips: toggle sits with the toolbar and drives the same ClipCard g
   assert.match(page, /<LayoutToggle value=\{layout\} onChange=\{setLayout\} \/>/);
   assert.match(page, /layout === "list" \? CLIP_LIST : CLIP_GRID/);
   assert.match(page, /layout=\{layout\}/);
-  assert.match(page, /<ProjectGrid projects=\{projects\} \/>/);
-  assert.doesNotMatch(page, /ProjectGrid[^>]*layout/);
+  // Projects stay cards (no layout prop); delete UI may pass onDeleted on the same ProjectGrid.
+  assert.match(page, /<ProjectGrid projects=\{projects\}/);
+  assert.doesNotMatch(page, /ProjectGrid[^>]*layout=/);
 });
 
 test("project results: same LayoutToggle and key; grid keeps ClipTile GRID[shape]; list is CLIP_LIST rows that still open the player", () => {

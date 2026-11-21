@@ -74,12 +74,14 @@ test("takedown surfaces on imports home and trust cases; account menu links ther
     /href="\/dashboard\/cases\/#remove-imports"[^>]*>Remove my imports</);
 });
 
-test("api contract lists delete and takedown as optional until #239 lands on this API", () => {
+test("api contract requires delete and takedown once #239 is on this branch", () => {
   const contract = JSON.parse(source("lib/api-contract.json"));
   const del = contract.routes.find((r) => r.method === "DELETE" && r.path === "/v1/uploads/{upload_id}");
   const td = contract.routes.find((r) => r.method === "POST" && r.path === "/v1/imports/takedown");
-  assert.equal(del?.optional, true);
-  assert.equal(td?.optional, true);
+  assert.ok(del);
+  assert.ok(td);
+  assert.equal(del.optional, undefined);
+  assert.equal(td.optional, undefined);
   assert.deepEqual(td.body, ["consent"]);
   assert.ok(td.optional_body.includes("url") && td.optional_body.includes("all_imports"));
   assert.match(source("lib/uploads.ts"), /\/v1\/uploads\/\$\{encodeURIComponent\(uploadId\)\}/);
