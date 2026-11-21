@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
 import { coachingFor } from "../../lib/coaching";
+import { ScoreOverlay } from "./ScoreOverlay";
 import { Rating, ratingOf } from "./model";
 
 // The sub-scores as bars, with per-dimension coaching and the AI's overall reason.
@@ -33,8 +34,8 @@ export function RatingParts({ r, compact }: { r: Rating; compact?: boolean }) {
       ) : <p className="m-0 text-[12.5px] text-fg-2">No sub-scores for this clip.</p>}
       {r.why && !compact && <p className="m-0 text-[12.5px] leading-[1.45] text-soft">{r.why}</p>}
       <p className="m-0 text-[11.5px] leading-[1.45] text-fg-3">
-        {r.shown !== null && `${r.shown} is the AI rating scaled across this run, so its best clip sits in the 90s. `}
-        The AI rating is the AI's opinion of the clip. It does not say how many views a clip will get.
+        {r.shown !== null && `${r.shown} is the AI quality score scaled across this run, so its best clip sits in the 90s. `}
+        The AI quality score is the AI's opinion of the clip. It does not say how many views a clip will get.
       </p>
     </div>
   );
@@ -58,17 +59,18 @@ export function RatingBadge({ clip }: { clip: any }) {
       onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
       <button type="button" aria-expanded={open} aria-describedby={tip} onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
         onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}
-        aria-label={r.shown !== null ? `AI rating ${r.shown} out of 100. Show the sub-scores.` : `Not rated by the AI. Number ${r.rank} in this run.`}
-        className="flex cursor-pointer items-baseline gap-[3px] rounded-pill border-0 bg-[rgba(0,0,0,.62)] px-[10px] py-[5px] font-sans leading-none text-text shadow-[inset_0_0_0_1px_rgba(255,255,255,.12)] [backdrop-filter:blur(8px)] hover:bg-[rgba(0,0,0,.8)]">
+        aria-label={r.shown !== null ? `AI quality ${r.shown} out of 100. Show the sub-scores.` : `Not rated by the AI. Number ${r.rank} in this run.`}
+        className="cursor-pointer border-0 bg-transparent p-0 hover:opacity-90">
         {r.shown !== null
-          ? <><b className="text-[17px] font-semibold tabular-nums tracking-[-0.02em] text-lime">{r.shown}</b><small className="text-[10.5px] text-fg-2">/100</small></>
-          : <span className="text-[12px] font-medium tabular-nums">#{r.rank}{r.of ? <span className="text-fg-2"> of {r.of}</span> : null}</span>}
+          ? <ScoreOverlay value={r.shown} kind="ai" />
+          : <span className="inline-flex items-baseline gap-[3px] rounded-[7px] bg-black/70 px-1.5 py-0.5 text-[12px] font-medium tabular-nums text-text shadow-[inset_0_0_0_1px_rgba(255,255,255,.12)] [backdrop-filter:blur(8px)]">
+              #{r.rank}{r.of ? <span className="text-fg-2"> of {r.of}</span> : null}</span>}
       </button>
       {/* Not laid out while closed, so it never widens a phone's page. On a phone it opens as a sheet at the bottom. */}
       <div id={tip} role="tooltip" className={`absolute bottom-[calc(100%+8px)] left-0 z-20 w-[248px] animate-[rise_.15s_ease-out] rounded-16 border border-solid border-line bg-[rgba(20,20,20,.97)] p-[14px] text-left shadow-pop
         [backdrop-filter:blur(10px)] narrow:fixed narrow:inset-x-4 narrow:bottom-4 narrow:z-50 narrow:w-auto ${open ? "block" : "hidden"}`}>
         <p className="m-0 mb-[10px] flex items-baseline justify-between gap-2 text-[13px] font-semibold">
-          {r.shown !== null ? <>AI rating <span className="font-mono text-lime">{r.shown}</span></> : "Not rated by the AI"}
+          {r.shown !== null ? <>AI quality <span className="font-mono text-lime">{r.shown}</span></> : "Not rated by the AI"}
           {r.rank !== null && <span className="text-[11.5px] font-normal text-fg-2">#{r.rank}{r.of ? ` of ${r.of}` : ""} in this run</span>}
         </p>
         {r.shown !== null ? <RatingParts r={r} compact />

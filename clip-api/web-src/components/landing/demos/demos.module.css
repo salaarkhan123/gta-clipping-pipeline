@@ -45,6 +45,24 @@
 /* Layout swaps in the reframe demo. */
 .swap { animation: swap .5s cubic-bezier(.2,.8,.2,1) both; }
 @keyframes swap { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+/* Decorative cursor on the upload demo Get clips control. */
+.cursor { top: 58%; left: 72%; transition: top .55s cubic-bezier(.2,.8,.2,1), left .55s cubic-bezier(.2,.8,.2,1); }
+.cursor[data-phase="aim"] { top: 118%; left: 42%; }
+.cursor[data-phase="click"] { top: 58%; left: 86%; transform: scale(.92); }
+/* 16:9 → 9:16 morph frame used when animating facecam reframe. */
+.morph { animation: morph 4.8s cubic-bezier(.2,.8,.2,1) infinite; transform-origin: 50% 50%; }
+@keyframes morph {
+  0%, 12% { width: 100%; aspect-ratio: 16 / 9; border-radius: 12px; }
+  38%, 72% { width: min(42%, 210px); aspect-ratio: 9 / 16; border-radius: 14px; }
+  100% { width: 100%; aspect-ratio: 16 / 9; border-radius: 12px; }
+}
+.morphPip { animation: morphPip 4.8s ease-in-out infinite; }
+@keyframes morphPip { 0%, 18% { opacity: 1; } 36%, 70% { opacity: 0; } 100% { opacity: 1; } }
+.morphCam { animation: morphCam 4.8s ease-in-out infinite; }
+@keyframes morphCam { 0%, 22% { opacity: 0; } 40%, 70% { opacity: 1; } 100% { opacity: 0; } }
+/* Editor walkthrough: active tool tab pulse. */
+.tabon { animation: tabon 2.8s ease-in-out infinite; }
+@keyframes tabon { 0%, 100% { background: rgba(255,255,255,.08); } 40%, 60% { background: rgba(255,255,255,.16); } }
 
 /* ---------- Caption looks: our own reading of each style in app/pipeline/captions.py ---------- */
 /* Colours from the renderer: lime #B8FF3C (impact, karaoke, tag), yellow #FFFF00 (pop, bold, boxed, bounce,

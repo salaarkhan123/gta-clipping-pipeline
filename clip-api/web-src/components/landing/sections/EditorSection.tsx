@@ -8,12 +8,19 @@ import s from "../demos/demos.module.css";
 import { Section } from "../../site/Section";
 import { EyebrowIcon } from "./EyebrowIcon";
 
-// The clip editor as the app has it (components/dash/Editor.tsx): transcript, caption lines and look tabs, a
-// trim bar with cuts, Your edit / Current file, Undo all changes, Save and Render. Nothing here that it lacks.
+// Animated walkthrough of the real clip editor (components/dash/Editor.tsx): transcript word cuts, caption lines,
+// look (aspect / layout / caption style), trim bar, Your edit / Current file, Undo all, Save, Render.
+// Nothing here that the editor lacks.
 const WORDS = ["Okay", "we", "go", "left,", "wait", "wait", "wait,", "um,", "no,", "right", "side,", "chat", "watch", "this", "jump.", "If",
   "I", "land", "this", "it's", "over.", "NO", "WAY!", "He", "actually", "did", "it."];
 const CUT = [4, 5, 6, 7, 8];                       // "wait wait wait, um, no," cut from the transcript
-const FILLER = /^(um+|uh+|erm|hmm+)[,.!?]*$/i;         // with real words, the fillers are shown cut
+const FILLER = /^(um+|uh+|erm|hmm+)[,.!?]*$/i;
+const LOOKS = [
+  { aspect: "9:16", layout: "Split in two", captions: "Impact" },
+  { aspect: "9:16", layout: "Picture in picture", captions: "Boxed" },
+  { aspect: "1:1", layout: "Full", captions: "Pop" },
+  { aspect: "16:9", layout: "Full", captions: "Clean" },
+];
 
 function Icon({ d }: { d: React.ReactNode }) {
   return <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>;
@@ -26,50 +33,72 @@ const TABS = [
 
 export function EditorSection() {
   const box = useRef<HTMLDivElement>(null), seen = useInView(box, "0px"), reduced = useReducedMotion();
-  const tick = useTicker(seen && !reduced, 360);
-  // Real footage: the media pipeline's editor clip and its own words; the sample sentence until then.
+  const tick = useTicker(seen && !reduced, 900);
   const clip = useItem("editor", "editor-1"), said = useWords("editor", clip);
   const words = said.length >= 8 ? said.slice(0, 40).map((w) => w.text.trim()) : WORDS;
   const cut = said.length >= 8 ? words.flatMap((w, i) => (FILLER.test(w) ? [i] : [])) : CUT;
   const spoken = words.map((_, i) => i).filter((i) => !cut.includes(i));
-  const now = spoken[tick % spoken.length];
+  const now = spoken[tick % Math.max(1, spoken.length)];
   const timed = said.length >= 8 ? said.slice(0, 40) : sampleWords(WORDS);
+  const tab = reduced ? 0 : tick % TABS.length;
+  const look = LOOKS[reduced ? 0 : Math.floor(tick / 2) % LOOKS.length];
+  const cutting = !reduced && tab === 0 && tick % 6 < 3;
 
   return (
     <Section id="editor" eyebrow="Editor" icon={<EyebrowIcon name="edit" />} title={<>Let the AI cut it,<br className="narrow:hidden" /> then make it yours</>}
       sub="Every clip opens in the editor. Cut words straight from the transcript, fix a caption line, change the look, then render it again.">
       <div ref={box} className={`${s.demo} overflow-hidden rounded-stage shadow-card`} data-play={seen}
         style={{ background: "radial-gradient(120% 90% at 50% 0%, #2a2219, #0f1013 80%)" }} aria-hidden="true">
-        {/* top bar */}
         <div className="flex items-center gap-5 border-b border-white/[.07] px-5 py-3 text-[13px] text-white/80 narrow:gap-3 narrow:px-3">
           <span className="font-semibold text-white narrow:hidden">Edit clip #1</span>
-          <span className="flex items-center gap-1.5"><span className="h-3.5 w-2 rounded-[2px] border border-current" />9:16</span>
-          <span className="narrow:hidden">Layout: Split in two</span>
-          <span>Captions: Impact</span>
+          <span className="flex items-center gap-1.5"><span className="h-3.5 w-2 rounded-[2px] border border-current" />{look.aspect}</span>
+          <span className="narrow:hidden">Layout: {look.layout}</span>
+          <span>Captions: {look.captions}</span>
           <span className="ml-auto flex rounded-[9px] bg-black/40 p-0.5 text-[12px] ring-1 ring-white/10 narrow:hidden">
             <b className="rounded-[7px] bg-white/15 px-2.5 py-1 font-semibold">Your edit</b><span className="px-2.5 py-1 text-white/60">Current file</span></span>
         </div>
 
         <div className="grid grid-cols-[1fr_auto_88px] narrow:grid-cols-1">
-          {/* transcript */}
           <div className="flex flex-col gap-3 border-r border-white/[.07] p-5 narrow:order-3 narrow:border-r-0 narrow:border-t narrow:p-4">
-            <p className="text-[12px] text-white/50">Click a word to jump to it. Shift-click another to select everything between, then cut it.</p>
-            <div className="flex items-center gap-2 text-[12px]">
-              <span className="text-white/70">{cut.length ? `${cut.length} word${cut.length === 1 ? "" : "s"} cut` : "No words cut"}</span>
-              <span className="rounded-full bg-white/10 px-2.5 py-1 text-white/60 ring-1 ring-white/10">Cut</span>
-              <span className="rounded-full bg-white/10 px-2.5 py-1 text-white/80 ring-1 ring-white/10">Restore</span>
-            </div>
-            <p className="text-[17px] leading-[1.9] narrow:text-[15px]">
-              {words.map((w, i) => {
-                const out = cut.includes(i);
-                return <span key={i} className={`mr-[.22em] inline-block rounded-[4px] px-[1px] ${out ? "bg-white/[.04] text-white/35 line-through" : i === now ? "bg-lime text-ink" : "text-white/90"}`}>{w}</span>;
-              })}
-            </p>
+            {tab === 0 && <>
+              <p className="text-[12px] text-white/50">Click a word to jump to it. Shift-click another to select everything between, then cut it.</p>
+              <div className="flex items-center gap-2 text-[12px]">
+                <span className="text-white/70">{cutting || cut.length ? `${cut.length} word${cut.length === 1 ? "" : "s"} cut` : "No words cut"}</span>
+                <span className={`rounded-full px-2.5 py-1 ring-1 ring-white/10 ${cutting ? "bg-lime font-semibold text-ink" : "bg-white/10 text-white/60"}`}>Cut</span>
+                <span className="rounded-full bg-white/10 px-2.5 py-1 text-white/80 ring-1 ring-white/10">Restore</span>
+              </div>
+              <p className="text-[17px] leading-[1.9] narrow:text-[15px]">
+                {words.map((w, i) => {
+                  const out = cut.includes(i) && (cutting || reduced || tab === 0);
+                  return <span key={i} className={`mr-[.22em] inline-block rounded-[4px] px-[1px] ${out ? "bg-white/[.04] text-white/35 line-through" : i === now ? "bg-lime text-ink" : "text-white/90"}`}>{w}</span>;
+                })}
+              </p>
+            </>}
+            {tab === 1 && (
+              <div className="grid gap-3">
+                <p className="text-[12px] text-white/50">Edit a caption line. Changes stay on Your edit until you Render.</p>
+                <span className="rounded-[10px] bg-white/5 px-3 py-2.5 text-[15px] text-white ring-1 ring-white/10">
+                  He actually landed it<span className={s.caret} />
+                </span>
+                <span className="rounded-[10px] bg-white/5 px-3 py-2.5 text-[14px] text-white/70 ring-1 ring-white/10">chat watch this jump</span>
+              </div>
+            )}
+            {tab === 2 && (
+              <div className="grid gap-3 text-[13px]">
+                <p className="text-[12px] text-white/50">Shape, layout and caption style — the same Look controls as the editor.</p>
+                <label className="grid gap-1.5"><span className="text-white/55">Aspect</span>
+                  <span className="rounded-[10px] bg-white/5 px-3 py-2 ring-1 ring-white/10">{look.aspect}</span></label>
+                <label className="grid gap-1.5"><span className="text-white/55">Layout</span>
+                  <span className="rounded-[10px] bg-white/5 px-3 py-2 ring-1 ring-white/10">{look.layout}</span></label>
+                <label className="grid gap-1.5"><span className="text-white/55">Captions</span>
+                  <span className="rounded-[10px] bg-white/5 px-3 py-2 ring-1 ring-white/10">{look.captions}</span></label>
+              </div>
+            )}
           </div>
 
-          {/* preview */}
           <div className="flex items-center justify-center px-8 py-6 narrow:order-1 narrow:py-4">
-            <div className="relative aspect-[9/16] h-[400px] overflow-hidden rounded-[14px] ring-1 ring-white/10 narrow:h-[300px]">
+            <div className="relative overflow-hidden rounded-[14px] ring-1 ring-white/10 narrow:h-[300px]"
+              style={{ aspectRatio: look.aspect.replace(":", " / "), height: look.aspect === "16:9" ? 220 : look.aspect === "1:1" ? 320 : 400, maxHeight: 400 }}>
               {clip ? <Footage section="editor" item={clip} play={seen} /> : <>
                 <SplitClip game="gta" />
                 <span className="absolute inset-x-[8%] top-[6%] rounded-[7px] bg-lime px-2 py-1 text-center text-[13px] font-extrabold leading-tight text-ink">He actually landed it</span>
@@ -80,16 +109,15 @@ export function EditorSection() {
             </div>
           </div>
 
-          {/* tabs */}
           <div className="flex flex-col items-center gap-2 border-l border-white/[.07] py-5 narrow:order-2 narrow:flex-row narrow:justify-center narrow:border-l-0 narrow:border-t narrow:py-2">
             {TABS.map((t, i) => (
-              <span key={t.name} className={`flex w-[76px] flex-col items-center gap-1 rounded-[10px] py-2 text-center text-[11px] leading-tight ${i === 0 ? "bg-white/10 text-white" : "text-white/60"}`}>
+              <span key={t.name} className={`flex w-[76px] flex-col items-center gap-1 rounded-[10px] py-2 text-center text-[11px] leading-tight
+                ${i === tab ? `${s.tabon} text-white` : "text-white/60"}`}>
                 <Icon d={t.d} />{t.name}</span>
             ))}
           </div>
         </div>
 
-        {/* trim bar and actions */}
         <div className="flex flex-col gap-3 border-t border-white/[.07] px-5 py-4 narrow:px-3">
           <div className="flex items-center gap-4 text-[12px] text-white/70">
             <span className="flex items-center gap-1.5 rounded-full bg-lime px-3 py-1 font-semibold text-ink">

@@ -6,8 +6,9 @@ import { Footage, useItems } from "./Footage";
 import { useInView } from "./motion";
 
 // Template ids and names as the API serves them (GET /v1/templates).
-const SHOWN: [string, string][] = [["valorant-clutch", "Spike clutch"], ["fortnite-build-fight", "Build fight"],
-  ["racing-gameplay", "Racing"], ["gta-rp-reaction", "GTA RP reaction"]];
+// Prefer GTA / shooter / racing over the Fortnite template as the primary example row.
+const SHOWN: [string, string][] = [["gta-rp-reaction", "GTA RP reaction"], ["valorant-clutch", "Spike clutch"],
+  ["racing-gameplay", "Racing"], ["shooter-gameplay", "Warzone"]];
 
 export function TemplatePreviews() {
   const items = useItems("templates"), box = useRef<HTMLDivElement>(null), seen = useInView(box);
