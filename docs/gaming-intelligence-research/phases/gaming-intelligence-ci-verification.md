@@ -11,8 +11,9 @@
 
 | Check | Status | Notes |
 | --- | --- | --- |
-| `docker-build` | **success** | Completed ~3 min |
-| `test` | **in_progress** (Pytest step; >15 min wall as of eval push) | Will update when terminal; local GI 20 passed |
+| `docker-build` @ `213f65b` | **success** | First push |
+| `test` @ `213f65b` | **cancelled** | Superseded when eval commit `43bc4dd` pushed mid-run (not a code failure) |
+| `docker-build` / `test` @ `43bc4dd` | **in_progress** (re-run) | Watching via CI subscription; local GI **20 passed** |
 
 Local GI suites do not wait on hosted full pytest completion to ship research docs; hosted result is recorded when terminal.
 
