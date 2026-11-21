@@ -302,30 +302,65 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     weights = {**WEIGHTS, **(options.weights or {})}
     heard_audio = [k for k in TIMELINE_AUDIO if weights.get(k, 0) > 0]      # timeline signals from the same decode
     series: dict[str, np.ndarray] = {}
-    if options.chat_region != "none":
-        progress("chat_motion", 5)
-        with timer.stage("chat_motion"):
-            motion = onscreen_chat_motion(input_path, options.chat_region, deadline, **part,
-                                          sample=options.chat_motion_sample)
-        if motion:
-            floor = max(float(np.std(motion)) * 0.1, 1e-6)
-            series["chat_motion"] = normalise(baseline_z(motion, floor=floor), n, shift=CHAT_LAG)
+    want_chat = options.chat_region != "none"
+    want_audio = info.has_audio
     db: list[float] = []
+    extra: dict[str, list[float]] = {}
+    motion: list[float] | None = None
     audio: Path | None = source_audio.path if source_audio is not None else None
-    if info.has_audio:
-        progress("audio", 30)
-        extra: dict[str, list[float]] = {}
+    # Overlap only when both paths run. progress() is locked then so the worker's coarse mark stays consistent.
+    progress_gate = threading.Lock() if (want_chat and want_audio) else nullcontext()
+
+    def measure_chat() -> list[float] | None:
+        with progress_gate:
+            progress("chat_motion", 5)
+        with timer.stage("chat_motion"):
+            return onscreen_chat_motion(input_path, options.chat_region, deadline, **part,
+                                        sample=options.chat_motion_sample)
+
+    def measure_audio() -> tuple[list[float], dict[str, list[float]]]:
+        with progress_gate:
+            progress("audio", 30)
+        got: dict[str, list[float]] = {}
         with timer.stage("audio_signal"):
             # A caller that already decoded the audio measured its levels in that pass; otherwise measure now, with
             # the timeline's audio signals from the same decode when any of them counts.
             if source_audio is not None:
-                db = source_audio.levels or []
+                levels = source_audio.levels or []
                 if heard_audio:
-                    extra = wav_timeline(source_audio.path, **part)
+                    got = wav_timeline(source_audio.path, **part)
             elif heard_audio:
-                db, extra = audio_timeline(input_path, deadline, **part)
+                levels, got = audio_timeline(input_path, deadline, **part)
             else:
-                db = audio_rms_db(input_path, deadline, **part) or []
+                levels = audio_rms_db(input_path, deadline, **part) or []
+        return levels, got
+
+    if want_chat and want_audio:
+        # Stage seconds stay per-stage; wall may be less than their sum when they overlap.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            chat_fut = pool.submit(measure_chat)
+            audio_fut = pool.submit(measure_audio)
+            try:
+                for fut in as_completed((chat_fut, audio_fut)):
+                    if fut is chat_fut:
+                        motion = fut.result()
+                    else:
+                        db, extra = fut.result()
+            except Exception:
+                if deadline is not None and deadline.at is not None:
+                    deadline.at = time.monotonic()
+                chat_fut.cancel()
+                audio_fut.cancel()
+                raise
+    elif want_chat:
+        motion = measure_chat()
+    elif want_audio:
+        db, extra = measure_audio()
+
+    if motion:
+        floor = max(float(np.std(motion)) * 0.1, 1e-6)
+        series["chat_motion"] = normalise(baseline_z(motion, floor=floor), n, shift=CHAT_LAG)
+    if want_audio:
         if ranged and source_audio is not None:
             db = db[base:int(math.ceil(t1))]
         if db:
