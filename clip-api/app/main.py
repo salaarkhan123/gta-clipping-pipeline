@@ -7,13 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from . import routes_auth, routes_billing, routes_export, routes_ingest, routes_media, routes_meta, routes_projects, routes_templates, routes_text, routes_tools
+from . import log_redact, routes_auth, routes_billing, routes_captions, routes_direct_upload, routes_export, routes_fonts, routes_ingest, routes_legal, routes_media, routes_meta, routes_projects, routes_templates, routes_text, routes_thumbnails, routes_tools, routes_trust
 from .config import get_settings
 from .db import get_engine, init_db
 from .deps import ApiError
 from .render_options import refused_layout
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+log_redact.install()          # no verification or file token, and no key, in the request logs
 
 
 @asynccontextmanager
@@ -21,8 +22,7 @@ async def lifespan(_app: FastAPI):
     s = get_settings()
     s.check_production()
     if s.sentry_dsn:
-        import sentry_sdk
-        sentry_sdk.init(dsn=s.sentry_dsn, traces_sample_rate=0.0)
+        log_redact.init_sentry(s.sentry_dsn)
     init_db()
     yield
 
@@ -34,13 +34,19 @@ app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in get_setting
 app.include_router(routes_auth.router, tags=["auth"])
 app.include_router(routes_export.router, tags=["clips"])      # re-export and clip edits (render, agent B)
 app.include_router(routes_media.router, tags=["clips"])
+app.include_router(routes_direct_upload.router, tags=["clips"])   # resumable uploads straight to the bucket
 app.include_router(routes_tools.router, tags=["tools"])
 app.include_router(routes_text.router, tags=["languages"])      # (languages, agent F)
 app.include_router(routes_projects.router, tags=["projects"])
 app.include_router(routes_templates.router, tags=["templates"])
+app.include_router(routes_fonts.router, tags=["templates"])      # caption fonts (captions agent)
+app.include_router(routes_captions.router, tags=["clips"])       # caption words for text editing (captions agent)
 app.include_router(routes_meta.router, tags=["clips"])
 app.include_router(routes_billing.router, tags=["billing"])
 app.include_router(routes_ingest.router, tags=["imports"])     # link import (agent E)
+app.include_router(routes_thumbnails.router, tags=["thumbnails"])   # premium thumbnails (#140)
+app.include_router(routes_legal.router, tags=["legal"])        # policies and consent records (trust track)
+app.include_router(routes_trust.router, tags=["trust"])        # copyright and likeness reports, admin cases
 
 
 @app.exception_handler(ApiError)

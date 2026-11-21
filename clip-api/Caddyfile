@@ -1,18 +1,45 @@
+# Security headers for every site. Deleting a header ("-Server", "-Via") makes Caddy apply the block as the response is
+# written, so it also covers the api's proxied responses (uvicorn's own "server" header included).
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		-Server
+		-Via
+	}
+}
+
 {$API_DOMAIN} {
+	import security_headers
+	# JSON and /docs (Swagger UI loads its own assets from a CDN): only framing is restricted here.
+	header Content-Security-Policy "frame-ancestors 'none'"
 	encode gzip
 	reverse_proxy api:8000
 }
 
 {$WEB_DOMAIN} {
+	import security_headers
+	# The static site (Next.js export). It calls the API, shows media from the API (local storage) or the bucket,
+	# reads captions from and uploads to the bucket, and sends checkout and the billing portal to Stripe by
+	# navigation, which CSP does not restrict.
+	# MEDIA_ORIGIN is S3_ENDPOINT_URL (docker-compose.yml): signed links are path-style on that one host
+	# (app/storage.py), R2 or a Space. Empty with local storage.
+	# 'unsafe-inline': the export inlines its hydration scripts and style attributes, which change every build.
+	header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://{$API_DOMAIN} {$MEDIA_ORIGIN}; media-src 'self' blob: https://{$API_DOMAIN} {$MEDIA_ORIGIN}; font-src 'self' data:; connect-src 'self' https://{$API_DOMAIN} {$MEDIA_ORIGIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
 	encode gzip
 	root * /srv/web
 	file_server
 	handle_errors {
+		import security_headers # an error response does not keep the deferred block from above
 		rewrite * /404.html
 		file_server
 	}
 }
 
 www.{$WEB_DOMAIN} {
+	import security_headers
 	redir https://{$WEB_DOMAIN}{uri} permanent
 }

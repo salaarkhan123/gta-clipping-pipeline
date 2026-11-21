@@ -32,11 +32,17 @@ def make_token(subject: str, purpose: str, ttl: timedelta, **claims) -> str:
 
 
 def read_token(token: str, purpose: str) -> dict | None:
-    try:
-        data = jwt.decode(token, get_settings().secret_key, algorithms=["HS256"])
-    except jwt.PyJWTError:
-        return None
-    return data if data.get("p") == purpose else None
+    """The claims of a token signed with SECRET_KEY, or with SECRET_KEY_PREVIOUS during a rotation."""
+    s = get_settings()
+    for key in filter(None, (s.secret_key, s.secret_key_previous)):
+        try:
+            data = jwt.decode(token, key, algorithms=["HS256"])
+        except jwt.InvalidSignatureError:
+            continue
+        except jwt.PyJWTError:
+            return None                    # expired, malformed or otherwise invalid whichever key signed it
+        return data if data.get("p") == purpose else None
+    return None
 
 
 def new_api_key() -> tuple[str, str, str]:

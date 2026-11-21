@@ -28,6 +28,7 @@ from .db import get_db
 from .deps import ApiError, Principal, current_principal
 from .exports import ClipEditDoc, clip_cut, complete_edit, export_spec
 from .models import Clip, Export, Job, Upload
+from .pipeline.render import output_size, resolution_name
 from .pipeline.tools import planned_seconds
 from .plans import plan_of
 from .render_options import LayoutOptions, refused_layout
@@ -125,6 +126,15 @@ def check_edit(db: Session, clip: Clip, edit: ClipEditDoc) -> ClipEditDoc:
         raise ApiError(422, "bad_edit", e.errors()[0]["msg"]) from None
 
 
+def rendered_resolution(db: Session, job: Job, options: dict, max_side: int | None) -> str:
+    """The resolution an export with these options renders (render.output_size, as run_export draws it): the one
+    asked for, never above the source's own nor the plan's cap `max_side`. What the quote and the clip report."""
+    upload = db.get(Upload, job.upload_id)
+    size = output_size(upload.width, upload.height, options.get("vertical", True), options.get("aspect", "9:16"),
+                       options.get("resolution"), max_side=max_side)
+    return resolution_name(*size)
+
+
 @dataclass
 class ExportPlan:
     """What an export request renders, reserves and hands back. The quote shows it; the export stores it."""
@@ -132,6 +142,7 @@ class ExportPlan:
     clips: list[Clip]                   # every clip asked for, in order
     options: dict                       # the render options (the job's, with the sent ones on top)
     edits: dict                         # clip id: the edit it renders (a dict) or None
+    resolution: str = "1080"            # what the files are: the request's, after the plan's cap and the source's size
     todo: list[Clip] = field(default_factory=list)      # the clips rendered and charged
     seconds: dict = field(default_factory=dict)         # clip id: the seconds it renders
     free: list[dict] = field(default_factory=list)      # clips with this render already: handed back free
@@ -165,8 +176,13 @@ def export_plan(db: Session, p: Principal, body: ExportRequest) -> ExportPlan:
         if len(clips) != 1:
             raise ApiError(422, "one_clip_per_edit", "Send an edit with exactly one clip in `clips`.")
         edits[clips[0].id] = check_edit(db, clips[0], body.edit).model_dump()
-    options = _options(job, body.options.model_dump(exclude_unset=True), body.options.hook)
-    plan = ExportPlan(job=job, clips=clips, options=options, edits=edits)
+    # `hook` not sent: the export keeps what the job chose (its hook_overlay), so a clip made with the hook off
+    # is not exported with one.
+    hook = body.options.hook if "hook" in body.options.model_fields_set else bool((job.options or {}).get("hook_overlay", True))
+    options = _options(job, body.options.model_dump(exclude_unset=True), hook)
+    s, account_plan = get_settings(), plan_of(p.account)
+    plan = ExportPlan(job=job, clips=clips, options=options, edits=edits,
+                      resolution=rendered_resolution(db, job, options, account_plan.get("max_side")))
     storage, own = get_storage(), own_render_spec(job)
     for c in clips:
         doc = ClipEditDoc.model_validate(edits[c.id]) if edits[c.id] else None
@@ -174,11 +190,10 @@ def export_plan(db: Session, p: Principal, body: ExportRequest) -> ExportPlan:
         key = existing_render(db, c, export_spec(options, edits[c.id]), own)
         if key:
             plan.free.append({"clip_id": c.id, "video_url": storage.url(key), "seconds": seconds,
-                              "resolution": options.get("resolution", "1080")})
+                              "resolution": plan.resolution})
         else:
             plan.todo.append(c)
             plan.seconds[c.id] = seconds
-    s, account_plan = get_settings(), plan_of(p.account)
     cap = min(s.max_render_sec, account_plan["max_render_min"] * 60 if account_plan.get("max_render_min")
               else s.max_render_sec)
     if plan.total > cap:
@@ -203,7 +218,7 @@ def export_quote(body: ExportRequest, p: Principal = Depends(current_principal),
     plan = export_plan(db, p, body)
     todo = {c.id for c in plan.todo}
     return {"credits_reserved": plan.cost, "seconds": plan.total, "note": NOTE if plan.todo else FREE_NOTE,
-            "resolution": plan.options.get("resolution", "1080"),
+            "resolution": plan.resolution,
             "clips": [{"clip_id": c.id, "seconds": plan.seconds[c.id] if c.id in todo else 0.0, "free": c.id not in todo}
                       for c in plan.clips],
             "existing": plan.free}

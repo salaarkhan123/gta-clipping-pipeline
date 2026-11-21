@@ -53,13 +53,14 @@ export function BulkEdit({ clips, jobs, listed, known, onClose, onDone }: { clip
         <Custom listed={listed} look={l} onLook={onLook} setAspect={setAspect} />
         <div className="bulk-foot">
         {oneRunOnly ? <p className="notice">These clips come from {runs.length} runs. Bulk edit takes clips from one run at a time: pick clips from one run.</p>
-          : <p aria-live="polite">{known.exportQuote ? <QuoteLine quote={quote} what="This export" exact /> : "You only use credits for the minutes rendered."}</p>}
+          : known.exportQuote ? <p aria-live="polite"><QuoteLine quote={quote} what="This export" exact /></p>
+          : <p className="notice">Exporting needs the exact price first, and this server can't quote one yet. Nothing was charged.</p>}
         {state?.problem && <p className="error" role="alert">{state.problem}</p>}
         {working && <progress max={100} value={state?.progress ?? 0} aria-label="Export progress" />}
         {state?.done && <p className="notice" role="status">Done. The new files are on the cards.</p>}
         <div className="editor-actions">
           <button type="button" className="btn small ghost" onClick={() => dialog.current?.close()}>{state?.done ? "Close" : "Cancel"}</button>
-          <button type="button" className="btn small primary" disabled={!body || working || !!state?.done || (!!known.exportQuote && quote.state !== "ok")} onClick={run}>
+          <button type="button" className="btn small primary" disabled={!body || working || !!state?.done || !known.exportQuote || quote.state !== "ok"} onClick={run}>
             {working ? "Rendering…" : quote.state === "ok" ? `Export for ${creditWords(quote.credits)}` : "Export"}</button>
         </div>
         </div>

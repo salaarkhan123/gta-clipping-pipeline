@@ -1,0 +1,17 @@
+{
+ "permission": "owner-confirmed 2026-11-18",
+ "sources": {
+  "tgg":   {"url": "https://www.youtube.com/watch?v=xMXp80Cntxw", "creator": "TGG", "credit": "Footage: TGG",
+            "title": "GTA 6 LAUNCH STREAM! Playing GTA 6 for the First Time", "game": "GTA VI"},
+  "xqc":   {"url": "https://www.youtube.com/watch?v=VWNBp6SIEPU", "creator": "xQc", "credit": "Footage: xQc",
+            "title": "xQc Plays GRAND THEFT AUTO VI (Part 1)", "game": "GTA VI"},
+  "ninja": {"url": "https://www.youtube.com/watch?v=ogbIEh-4rYw", "creator": "Ninja", "credit": "Footage: Ninja",
+            "title": "Ninja Live Stream 15/8/2018 - Game Fortnite", "game": "Fortnite"},
+  "timmy": {"url": "https://www.youtube.com/watch?v=ovyMOe_017I", "creator": "iiTzTimmy", "credit": "Footage: iiTzTimmy",
+            "title": "I Might Be Getting TOO Good at Valorant… (Lowest To Highest Rank Challenge)", "game": "Valorant"},
+  "forza": {"url": "https://www.youtube.com/watch?v=78kntDlbjMI", "creator": "TmarTn2", "credit": "Footage: TmarTn2",
+            "title": "Forza Horizon 5 - Part 1 - The Beginning", "game": "Forza Horizon 5"},
+  "tgg2":  {"url": "https://www.youtube.com/watch?v=1GtrjKhSwzM", "creator": "TGG", "credit": "Footage: TGG",
+            "title": "1 Hour of GTA 6 Free-Roam Gameplay", "game": "GTA VI"}
+ }
+}

@@ -15,10 +15,18 @@ test("a clip with no saved edit opens with its run's dead air as cuts", () => {
   assert.match(source("lib/edit.ts"), /cuts: deadAir\(clip\.segments, trim\.start, trim\.end\)/);
 });
 
+test("a save or export keeps the words text-based editing saved; the hook switch reaches the export (#218 review)", () => {
+  const edit = source("lib/edit.ts");
+  assert.match(edit, /words\?: EditWord\[\] \| null/);                                          // the editor keeps them
+  // ... sends them back unless a caption line was changed here: then the lines, no words, word cuts kept as cuts
+  assert.match(edit, /export function forApi\(e: Edit\) \{[\s\S]*?words \? \{ words: lines \? null : words \} : \{\}/);
+  assert.match(edit, /lines && words \? words\.filter\(\(w\) => w\.cut\)\.reduce\(\(all, w\) => addCut\(all, \[w\.start, w\.end\]\), e\.cuts\)/);
+  assert.match(source("lib/exporting.ts"), /options = \{ \.\.\.options, hook: options\.hook_overlay \}/);
+});
+
 test("new website jobs ask for previews; the export dialogs show the exact price", () => {
-  const form = source("components/dash/JobForm.tsx");
-  assert.match(form, /export const RENDER = "preview";/);
-  assert.match(form, /render: RENDER/);
+  assert.match(source("lib/options.ts"), /export const RENDER = "preview";/);
+  assert.match(source("components/dash/setup/JobSetup.tsx"), /render: RENDER/);
   for (const file of ["components/dash/Editor.tsx", "components/dash/BulkEdit.tsx"]) assert.match(source(file), /<QuoteLine [^>]*exact \/>/);
   assert.match(source("components/dash/ClipCard.tsx"), /clip\.rendered !== "full" && <ExportFull/);
 });

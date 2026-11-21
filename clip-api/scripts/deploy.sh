@@ -14,10 +14,16 @@
 # schema unchanged (each upgrade runs in one transaction). Migrations must be additive, so old code keeps
 # working on the new schema and a code rollback needs no schema rollback.
 #
-# Env: DEPLOY_BRANCH (default main).
+# Env: DEPLOY_BRANCH (default main). DEPLOY_SHA (optional, full 40-character commit): fast-forward to that commit
+# instead of the branch head; it must already be on origin/DEPLOY_BRANCH. scripts/ops.sh sets it.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 BRANCH="${DEPLOY_BRANCH:-main}"
+TARGET="${DEPLOY_SHA:-}"
+if [ -n "$TARGET" ] && ! [[ "$TARGET" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "refusing: DEPLOY_SHA must be a full 40-character lowercase commit sha" >&2
+  exit 1
+fi
 
 running_jobs() {
   local out
@@ -52,7 +58,19 @@ fi
 require_idle "before pull"
 before=$(git rev-parse --short HEAD)
 git fetch --quiet origin "$BRANCH"
-git merge --ff-only --quiet "origin/$BRANCH"
+if [ -n "$TARGET" ]; then
+  if ! git merge-base --is-ancestor "$TARGET" "origin/$BRANCH" 2>/dev/null; then
+    echo "refusing: $TARGET is not on origin/$BRANCH" >&2
+    exit 1
+  fi
+  if ! git merge-base --is-ancestor HEAD "$TARGET"; then
+    echo "refusing: $TARGET is older than the checkout ($before); going back is a rollback" >&2
+    exit 1
+  fi
+  git merge --ff-only --quiet "$TARGET"
+else
+  git merge --ff-only --quiet "origin/$BRANCH"
+fi
 after=$(git rev-parse --short HEAD)
 echo "code: $before -> $after"
 

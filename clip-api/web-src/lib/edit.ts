@@ -1,4 +1,5 @@
 import { api, API, ApiError, getToken } from "./api";
+import CONTRACT from "./api-contract.json";
 import { deadAir } from "./deadair";
 
 // An edit of one clip, as the editor keeps it. Every time is in seconds of the SOURCE video, so an edit means the
@@ -12,11 +13,34 @@ import { deadAir } from "./deadair";
 // this into what it sends, so only it changes when the stored format lands.
 export type Span = [number, number];
 export type Line = { start: number; end: number; text: string };
+// - words: the caption word by word (API `edit.words`, EditWord below): edited text, hidden words, highlights, emoji,
+//   splits, words cut with their video. A save or export that dropped them would undo those edits (PATCH replaces
+//   the whole edit).
 export type Edit = { trim: { start: number; end: number }; cuts: Span[]; caption_lines: Line[]; hook_text: string | null;
-  options: Record<string, unknown> };
+  options: Record<string, unknown>; words?: EditWord[] | null };
 export type Word = { start: number; end: number; text: string };
+// One caption word in the text-based editor (#215, exports.EditWord), in source seconds, keeping its spoken time.
+// hidden: the caption leaves, the video stays. cut: the caption and its stretch of video leave. highlight: #RRGGBB.
+// emoji: up to two, drawn after the word. break_before: a new caption starts at this word (split).
+export type EditWord = { start: number; end: number; text: string; hidden: boolean; cut: boolean; highlight: string | null;
+  emoji: string | null; break_before: boolean };
+export const loadEditWords = (clipId: string) => api<{ edited: boolean; words: EditWord[] }>(`/v1/clips/${clipId}/words`);
 
-export const forApi = (e: Edit) => ({ trim: e.trim, cuts: e.cuts, caption_lines: e.caption_lines, hook_text: e.hook_text, options: e.options });
+// An edit carries only the look options the API's edit takes (lib/api-contract.json `edit_options`, checked against
+// the API by clip-api/tests/test_web_contract.py); any other name is a 422. Clip-time options such as tighten,
+// punch_zoom or flash_forward stay on the job that made the clip.
+const EDIT_OPTIONS = new Set<string>(CONTRACT.edit_options);
+export const editOptions = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => EDIT_OPTIONS.has(k)));
+// `words` (#215) win over caption lines in the API (ClipEditDoc.caption_words). With the word menu the captions are
+// edited as words and the line editor is not shown, so the words go as they are. Caption lines are changed only
+// where there is no word menu (caption_lines is non-empty only then): the lines are sent and no words, keeping each
+// word that was cut with its video as a cut.
+export function forApi(e: Edit) {
+  const lines = e.caption_lines.length > 0, words = Array.isArray(e.words) ? e.words : null;
+  const cuts = lines && words ? words.filter((w) => w.cut).reduce((all, w) => addCut(all, [w.start, w.end]), e.cuts) : e.cuts;
+  return { trim: e.trim, cuts, caption_lines: e.caption_lines, hook_text: e.hook_text,
+    ...(words ? { words: lines ? null : words } : {}), options: editOptions(e.options) };
+}
 
 export const round = (t: number) => Math.round(t * 100) / 100;
 // The shortest clip the editor lets the trim make: the API's shortest clip.

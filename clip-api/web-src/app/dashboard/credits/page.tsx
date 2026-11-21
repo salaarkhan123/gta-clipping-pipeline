@@ -1,0 +1,87 @@
+"use client";
+// Credit usage history: the balance and every recent ledger entry from GET /v1/credits, by day.
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { Icon, IconName } from "@/components/dash/Icon";
+import { useDash } from "@/components/dash/Shell";
+import { Tabs } from "@/components/dash/Tabs";
+import { PAGE_HEAD, PAGE_TITLE } from "@/components/dash/ui";
+import { api } from "@/lib/api";
+import { byDay, Ledger, LEDGER_PAGE, LedgerRow, rowName, Side, sideOf, totals } from "@/lib/credits";
+
+const ICONS: Record<string, IconName> = { grant: "sparkle", topup: "card", reserve: "scissors", release: "undo", adjust: "sliders" };
+
+function Stat({ label, value, hint, tone = "text-text" }: { label: string; value: string; hint?: string; tone?: string }) {
+  return (
+    <div className="grid content-start gap-1 rounded-20 border border-solid border-line-soft bg-card p-5">
+      <span className="text-[13px] font-medium text-muted">{label}</span>
+      <span className={`font-sans text-[28px] font-semibold leading-[1.1] tracking-[-0.02em] tabular-nums ${tone}`}>{value}</span>
+      {hint && <span className="text-[12.5px] text-fg-3">{hint}</span>}
+    </div>
+  );
+}
+
+function Entry({ r }: { r: LedgerRow }) {
+  const t = new Date(r.created_at);
+  return (
+    <li className="flex items-center gap-3 px-4 py-3">
+      <span className="grid h-9 w-9 flex-none place-items-center rounded-12 bg-surface text-muted" aria-hidden="true"><Icon name={ICONS[r.kind] || "bolt"} size={18} /></span>
+      <span className="grid min-w-0 flex-1 gap-[2px]">
+        <span className="overflow-hidden text-ellipsis whitespace-nowrap text-[14.5px] font-medium text-text">{rowName(r)}</span>
+        <span className="flex flex-wrap gap-x-2 text-[12.5px] text-muted">
+          {!Number.isNaN(t.getTime()) && <time dateTime={r.created_at}>{t.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</time>}
+          {r.job_id && <span className="font-mono text-fg-3" title={`Job ${r.job_id}`}>{r.job_id}</span>}
+        </span>
+      </span>
+      <b className={`font-sans text-[15px] font-semibold tabular-nums ${r.delta > 0 ? "text-lime" : "text-text"}`}>{r.delta > 0 ? `+${r.delta.toLocaleString()}` : r.delta.toLocaleString()}</b>
+    </li>
+  );
+}
+
+export default function Credits() {
+  const { me, fail } = useDash();
+  const [ledger, setLedger] = useState<Ledger | null>(null);
+  const [side, setSide] = useState<Side>("all");
+  useEffect(() => { api<Ledger>("/v1/credits").then(setLedger).catch(fail); }, [fail]);
+  const rows = ledger?.history || [];
+  const shown = side === "all" ? rows : rows.filter((r) => sideOf(r) === side);
+  const sum = totals(rows);
+
+  return (
+    <div className="grid gap-6">
+      <div className={PAGE_HEAD}>
+        <div className="grid gap-1">
+          <h1 className={PAGE_TITLE}>Credit usage</h1>
+          <p className="m-0 text-[14px] text-muted">One credit is one minute of video. A failed or cancelled job is refunded in full.</p>
+        </div>
+        <div className="flex gap-2">
+          <Link href="/dashboard/billing/" className="btn small ghost">Subscription</Link>
+          <Link href="/dashboard/pricing/" className="btn small primary">Add credits</Link>
+        </div>
+      </div>
+      <section aria-label="Summary" className="grid grid-cols-3 gap-3 narrow:grid-cols-1">
+        <Stat label="Balance" value={(ledger?.balance ?? me.credits).toLocaleString()} tone="text-lime" />
+        <Stat label="Used by jobs" value={ledger ? sum.used.toLocaleString() : "…"} hint={ledger ? "In the entries below, after refunds" : undefined} />
+        <Stat label="Added" value={ledger ? sum.added.toLocaleString() : "…"} hint={ledger ? "Plan credits, purchases and grants below" : undefined} />
+      </section>
+      <section className="grid gap-3" aria-labelledby="history-title">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="history-title" className="m-0 text-[18px]">History</h2>
+          <Tabs seg label="Show" panel="history" value={side} onChange={setSide} tabs={[["all", "All"], ["used", "Used"], ["added", "Added"]]} />
+        </div>
+        <div id="history" role="tabpanel">
+          {!ledger ? <p className="muted">Loading…</p>
+            : !shown.length ? <p className="m-0 rounded-20 border border-dashed border-line p-8 text-center text-muted">{rows.length ? "Nothing of this kind in your recent history." : "No credit activity yet."}</p>
+            : <div className="grid gap-5">{byDay(shown).map((g) => (
+                <div key={g.day} className="grid gap-2">
+                  <h3 className="m-0 text-[13px] font-medium text-muted">{g.day}</h3>
+                  <ul className="m-0 list-none divide-x-0 divide-y divide-solid divide-line-soft overflow-hidden rounded-20 border border-solid border-line-soft bg-card p-0">
+                    {g.rows.map((r, i) => <Entry key={`${r.created_at}-${i}`} r={r} />)}</ul>
+                </div>))}
+              </div>}
+          {ledger && rows.length >= LEDGER_PAGE && <p className="mt-4 text-[13px] text-fg-3">Showing your latest {LEDGER_PAGE} entries.</p>}
+        </div>
+      </section>
+    </div>
+  );
+}

@@ -32,6 +32,13 @@ curl -s -X POST $API/v1/clips -H "authorization: Bearer $KEY" -H 'content-type: 
 curl -s $API/v1/jobs/job_... -H "authorization: Bearer $KEY"
 ```
 
+Large files, when the server stores files in a bucket (`STORAGE_BACKEND=s3`): send them straight to the bucket in
+resumable parts. `POST /v1/uploads/multipart {filename, size_bytes}` gives an `upload_token`;
+`POST /v1/uploads/multipart/parts {upload_token}` gives signed PUT URLs for the parts not stored yet (call it again
+to resume); `PUT` each part's exact bytes to its URL; `POST /v1/uploads/multipart/complete {upload_token}` returns
+the upload, like `POST /v1/uploads`. `POST /v1/uploads/multipart/abort` discards the parts. Without a bucket the
+first call answers 409 `direct_upload_unavailable`; use `POST /v1/uploads`.
+
 ## Deploy on one server
 
 1. Create an Ubuntu 24.04 server (4 vCPU / 8 GB RAM or more; video work is CPU-heavy). Point a DNS A record for `api.yourdomain.com` at it.

@@ -5,9 +5,18 @@ branch (`main`). Code reaches `main` only through reviewed PRs (`staging` → `m
 
 ## Every deploy
 
+From GitHub Actions, once `docs/devops/setup.md` is done: `deploy.yml` (with an approval, a backup that is
+verified first, and an automatic code rollback), `rollback.yml`, and `monitor.yml` every 15 minutes. They reach the
+server only through `scripts/ops.sh`, which wraps `deploy.sh`. By hand on the server:
+
 ```bash
 cd /root/clip-api && bash scripts/deploy.sh
 ```
+
+`DEPLOY_SHA=<full sha>` deploys that commit of `main` instead of its head.
+
+**Env changes:** after editing `.env`, run `docker compose up -d api worker` (when no job is RUNNING).
+`docker compose restart` does not re-read `.env`.
 
 `scripts/deploy.sh` refuses while a job is RUNNING (it checks `admin.py stuck` before the pull and again right
 before the restart), refuses if the job list cannot be read, if tracked files were edited on the server, or if
@@ -17,6 +26,12 @@ migrations from the new image (`admin.py migrate`), restarts only `api` and `wor
 schema. On a selftest failure it prints the rollback command. Caddy and Postgres are
 not restarted; `web/` is served straight from the checkout, so the site updates with the pull. A change to the
 `Caddyfile` needs `docker compose up -d caddy` as well.
+
+**Security headers** (in the `Caddyfile`, on both domains): HSTS (one year, includeSubDomains, no preload),
+nosniff, `strict-origin-when-cross-origin`, `X-Frame-Options: DENY` plus `frame-ancestors 'none'`, a minimal
+`Permissions-Policy`, and no `Server` or `Via` header. The site's Content-Security-Policy allows only itself, the API
+domain and `*.digitaloceanspaces.com` for media. When the site starts loading from a new origin (fonts, a CDN,
+analytics), add that origin to the policy in the same PR, or the browser blocks it.
 
 ## Schema migrations
 
@@ -49,6 +64,10 @@ A job from before stage timing existed has only the coarse stages shown in the d
 uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-clips 10` runs the pipeline locally
 (no AI judge) and prints the same stages.
 
+**Transcript reuse (U1).** Repeat jobs on the same upload report `transcript_reused` /
+`transcript_transcribed` / `transcript_reuse_rate` in the rates line (and `transcript_cached` for Finder /
+transcript tools). How to confirm a hit on a re-run: [docs/transcript-reuse.md](docs/transcript-reuse.md).
+
 ## Transcription settings
 
 - `TRANSCRIPTION_PROVIDER=local` (the only provider so far): whole recordings are transcribed by the local Whisper
@@ -58,8 +77,56 @@ uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-cl
   Finder's index today). Leave it at 1 on the 4 vCPU droplet: one model already uses every core. On a machine
   with 8 or more cores try 2 to 4 and compare with `scripts/job_timings.py`. Each extra one adds memory.
 - `TRANSCRIBE_CHUNK_SEC` (default 300): the chunk length.
-- A transcript that Video Finder made for an upload is reused by Clip Maker for its first, rough pass, so that
-  pass costs nothing on the second job. Captions are still made by the caption model.
+- **One transcript per upload (U1).** Every job on an upload reads what earlier jobs transcribed and keeps what
+  it transcribes, so nothing is transcribed twice:
+  - `transcripts/<upload>.json` is the whole transcript (Video Finder, Transcripts, Summaries, whole mode below):
+    segments, words with start and end, the model that made it. Speakers appear only when the provider identified
+    them; the local Whisper models do not, so there are none (never guessed).
+  - `transcripts/<upload>.parts.json` keeps the pieces a Clip Maker job transcribed (its candidate windows).
+    A re-run on the same upload reads them instead of transcribing again; Video Finder or a transcript job later
+    transcribes only the rest. A whole transcript only exists once all of it was transcribed, so Video Finder's
+    pricing (which checks for one) is unchanged.
+  - A rough pass (what the judge reads) takes text from any model; captions only from the caption model's own
+    text. Both files go with the upload at retention and takedown.
+- `TRANSCRIBE_WHOLE` (default `false`): Clip Maker transcribes the whole recording first, with word timings, and
+  every candidate reads it. Off by default because the local model makes a 2-hour job slower on the droplet
+  (numbers in the U1 PR); turn it on with a hosted provider or a bigger machine. It helps only with the AI judge
+  (without one, candidates are transcribed by the caption model anyway).
+- `LLM_PASS` (default `true`, U3): with `ANTHROPIC_API_KEY` set and a whole transcript of the upload (whole mode
+  above, or an earlier Video Finder or transcript job), the AI reads the transcript in 5-minute chunks (1 minute
+  overlap, 8 at a time) and proposes moments; the judge rates them mixed with the strongest signal windows, the
+  same number of candidates as before. Without a whole transcript, or when the AI fails (3 tries per chunk,
+  60 s each, 150 s for the whole pass), candidates come from the signals exactly as before. A job's counts
+  show what happened: `llm_chunks`, `llm_chunks_failed`, `llm_tokens_in`, `llm_tokens_out`, `llm_pass_skipped`,
+  `llm_pass_failed`. `false` turns it off. **U1's transcript reuse and this pass only run with
+  `TRANSCRIBE_WHOLE=true`**: set it in the Step 2 deploy, or make it the default once hosted transcription lands
+  (the local model is the bottleneck on CPU).
+- `CLIP_QUALITY_FLOOR` (default 40, U4): with a clip-length bucket and no clip count (automatic discovery), a moment
+  becomes a clip only when the AI rates it at least this (0-100; an ordinary clip is about 50). There is no quota: a
+  long video gets as many clips as it has moments this good, at most 50, and none becomes filler; a job with none is
+  `no_moments` and refunded. Tune it on the tuning videos only.
+- `SCORE_WEIGHTS` (default empty): per-game weights of the judge's five sub-scores, for ranking only, as JSON
+  `{"<game, genre or default>": {"hook": n, "payoff": n, "clarity": n, "emotion": n, "pacing": n}}`. A job's game is
+  its template's; it uses the game's weights, else its genre's, else `default`, else the plain mean. Empty: every
+  game ranks by the plain mean. The AI rating, the stored sub-scores and the quality floor never change with it.
+  Make the value with `python scripts/fit_score_weights.py eval/labels-v2.csv <vod>=<job.json> ... --out w.json`,
+  which fits on the owner's labels (tuning videos only, at least 30 rated clips per game) and prints each
+  sub-score's rank correlation and precision@k against them. A clip records which weights ranked it
+  (`features.rank_weights`, `features.rank_score`).
+- Repeats (no setting): two candidates on the same screen (a lobby, a respawn or starting-soon screen, a loop) are
+  one moment and only the better is kept; off in a video whose frames all look alike (a fixed camera). Job counts
+  `repeat_picture`, `repeat_topic`, `repeat_speech` say how many candidates were dropped as repeats.
+
+## Moment signals (U2)
+
+- Moments are scored per second from loudness (`audio`, 0.7), how fast the sound changes (`audio_flux`, 0.35) and
+  laughter-like bursts (`audio_bursts`, 0.35), plus on-screen chat motion when a chat region is set. The two new
+  signals come from the loudness decode (one ffmpeg process, two outputs), so audio is still decoded once; they
+  add about 17 CPU-seconds per 2-hour video for their FFTs. `pipeline/timeline.py` has them.
+- `scene` (picture change between key frames) is built but off (weight 0): it costs a key-frame decode.
+- Standby: a candidate whose picture stands still with nobody talking for 90% of its seconds never becomes a clip
+  (starting-soon and BRB screens, an empty chair, a menu left open). Each clip records `features.standby`, the
+  share. It decodes only the key frames inside each candidate.
 
 ## Provisional layouts
 
@@ -104,6 +171,51 @@ Default: one job at a time. Two ways to add capacity:
 After either change, run the 10-clip benchmark twice at the same time and compare with SPEC.md §10 B before
 relying on it.
 
+## Dedicated render worker (setup B / S4) — optional
+
+SPEC section 14 setup B puts analysis on the current droplet and clip encodes on a second, larger
+CPU-optimized host. That split is ticket **S4 / #98** (`WORKER_STAGES` per process). Until that role code
+ships, every worker process still runs the whole pipeline (download, transcribe, render, store). A second
+container on a bigger box therefore still loads Whisper and CLIP; it only helps as extra job slots, not as a
+true render-only machine. See `docs/render-worker.md` for the full ops note.
+
+**When to split (owner decision).** Keep one droplet while queue time and export SLOs are acceptable. Add a
+dedicated render host only when:
+
+1. Render dominates wall time (historically ~60% of a 2 h job on the 4 vCPU box — `measured` 2026-11-15 in
+   SPEC.md §10 B; re-check with `scripts/job_timings.py` on your footage).
+2. You need more parallel preview encodes than one box can hold without thrashing.
+3. You accept the fixed monthly cost of a second machine (owner provisions and pays; agents never sign up or
+   deploy paid infra, and must not enable paid cloud GPUs).
+
+**Env knobs** (same `.env` on every app container; restart with `docker compose up -d` for the services that
+changed, when no job is RUNNING):
+
+| Knob | Default | What it does |
+|---|---|---|
+| `WORKER_CONCURRENCY` | `1` (max `2` in code) | Jobs one worker *process* runs at once. Shares one model load. Cap stays 2 until a bigger-host benchmark and a code change raise `le=2`. |
+| `RENDER_WORKERS` | `1` (max `8` when Wave B1 is deployed) | Clip encodes *inside one Clip Maker job*. `1` = serial (safe on 4 vCPU). Raise only after measuring with `scripts/job_timings.py`. Until B1 merges, the setting is ignored and encodes stay serial. |
+
+Total in-flight jobs ≈ worker containers × `WORKER_CONCURRENCY`. Parallel encodes per job ≈ `RENDER_WORKERS`
+(after B1). Those knobs are independent.
+
+**Hardware sizing (hypotheses, not measured).** Public DigitalOcean list prices read for research on
+2026-11-20; throughput on these shapes for ClutchClips is **not measured** until the owner runs a timing job.
+
+| Shape | Role | List price (public) | Hypothesis |
+|---|---|---|---|
+| Basic 4 vCPU / 8 GiB | API, DB, analysis (today) | ~$48 / month | Keep as the always-on box. |
+| CPU-Optimized 16 vCPU / 32 GiB | Setup B render worker | ~$336 / month (~$0.50 / hour) | Candidate for many parallel `RENDER_WORKERS` and/or several worker containers. Speed-up vs the 4 vCPU box is **not measured**. Idle all month costs ~7× the small droplet. Prefer create-for-backlog / destroy-after if the cloud bills per second. |
+| GPU droplet / cloud GPU | S5 (#99) only | higher $/hour | Out of scope here. Do not provision. Benchmark only with owner OK. |
+
+**Compose stub.** `docker-compose.yml` includes a fully commented `render-worker` service example. Default
+`docker compose up` behaviour is unchanged. Uncomment and start it only on a host the owner already
+provisions, with shared storage (`STORAGE_BACKEND=s3` or equivalent) so both machines see the same uploads and
+clips. Prefer waiting for S4 role split before treating it as render-only.
+
+**No API change.** This section and the compose stub document an ops option. They do not change public routes,
+credits, or job contracts.
+
 ## Plans and Stripe Prices
 
 Plan prices, monthly credits and limits live in `app/plans.py` and nowhere else, so every pricing change is a
@@ -111,13 +223,15 @@ reviewed PR. The `PLANS` environment variable is no longer read: delete its line
 Stripe Price that you create; the API only needs its ID.
 
 1. In Stripe (test mode first, then live mode), create one product per plan, each with two recurring Prices in
-   USD, per unit, billed every 1 month or every 1 year:
+   USD, per unit, billed every 1 month or every 1 year. Use the product names
+   `Clutch Clips Starter`, `Clutch Clips Pro` and `Clutch Clips Scale`. Both Checkout and invoice
+   processing check the product against the plan. Confirm the names before changing a live catalog.
 
    | Plan | Monthly Price | Yearly Price |
    |---|---|---|
-   | Starter | $15.99 per month | $66.96 per year |
-   | Pro | $26.99 per month | $114.96 per year |
-   | Scale | $139.99 per month | $839.88 per year |
+   | Starter | $15.99 per month | $66.99 per year |
+   | Pro | $26.99 per month | $114.99 per year |
+   | Scale | $139.99 per month | $839.99 per year |
 
 2. Put each Price ID (`price_...`) in `.env`:
 
@@ -131,6 +245,10 @@ Stripe Price that you create; the API only needs its ID.
    ```
 
 3. Restart: `docker compose up -d api worker`.
+
+4. Check: `docker compose exec -T api python scripts/admin.py stripe-check` (read-only, prints no secret) shows
+   the key mode, one `OK` per Price and `ALL OK`. For a real payment test with minimal spend, follow
+   `docs/ops/stripe-e2e-test.md`; to change a Stripe key or secret, `docs/ops/credential-rotation.md`.
 
 A plan whose Price ID is blank answers `plan_unavailable`. Before each checkout the API reads the Price from Stripe
 and refuses it (`plan_unavailable`, and an error in the api log naming what differs) unless it is active, recurring,
@@ -153,6 +271,50 @@ docker compose exec -T db psql -U clip -d clip -c \
   "select plan, subscription_status, count(*) from accounts where stripe_subscription_id is not null group by 1, 2"
 ```
 
+## Email (Resend)
+
+The api sends verification, password-reset and account emails through Resend's HTTPS API (`app/emailer.py`).
+SMTP port 587 is blocked from the droplet, so SMTP is optional. Logs never hold a link, a token or a full
+address: `email_sent` and `email_delivery_failed` lines show `s***@domain`. The access log redacts
+`?token=` and `/v1/files/<token>` (`app/log_redact.py`).
+
+To switch production to Resend, follow this order. A PR never changes server settings.
+
+1. On the droplet, add the key yourself. Never paste it in chat, a ticket or git:
+   ```bash
+   cd /root/clip-api
+   nano .env      # EMAIL_PROVIDER=resend, RESEND_API_KEY=re_..., EMAIL_FROM=noreply@clutchclips.io
+   ```
+   Leave `ENV` and `AUTO_VERIFY_EMAIL` as they are for now.
+2. Load the new env into the two app containers. This does not touch Caddy or Postgres:
+   ```bash
+   docker compose up -d api worker
+   ```
+3. Send one real message, then check the Resend dashboard and the inbox:
+   ```bash
+   docker compose exec api python scripts/admin.py send-test-email --to you@yourdomain.com
+   ```
+   - Exit 0 prints Resend's message id.
+   - Exit 2 means a key is missing.
+   - Exit 1 means Resend refused it: 401 or 403 is a wrong key, 422 means `EMAIL_FROM` is not on a verified domain.
+4. Only after a real delivery succeeds, set `ENV=prod` and `AUTO_VERIFY_EMAIL=false` in `.env`, then run
+   `docker compose up -d api worker` again. With `ENV=prod` the api refuses to start without working email
+   settings, so a typo stops the start instead of leaving mail unsent.
+
+### Reset and verification links that were logged
+
+Before this change, with no email provider configured, the api wrote each email's text, reset and verification
+links included, to the container log. To clean up:
+
+1. Void every link already sent: `docker compose exec api python scripts/admin.py bump-token-epoch`.
+   - Reset links already expire after 1 hour or on a password change; verification links after 48 hours.
+   - The bump kills all of them at once without rotating `SECRET_KEY`, which would log everyone out.
+2. Truncate the old container logs (Docker's json-file driver):
+   ```bash
+   for c in $(docker compose ps -q api worker); do truncate -s 0 "$(docker inspect --format='{{.LogPath}}' $c)"; done
+   ```
+3. Delete any copies made from those logs, such as downloads or pasted snippets.
+
 ## Link import and takedowns
 
 Users can import a public video link (Twitch, Kick, direct https video links, Google Drive and Dropbox share
@@ -163,10 +325,50 @@ costs credits.
 `POST /v1/imports/preview {url}` shows what a link is (title, channel, length, thumbnail) before an import. It
 reads metadata only, is free, and stores nothing except a log line (`clipapi.ingest`, "import preview"). Lookups
 are capped at 10 a minute per account and 15 seconds each; answers are cached in memory for 5 minutes per link.
-`IMPORTS_ENABLED=false` switches it off too.
+`IMPORTS_ENABLED=false` switches it off too. The preview also says what kind of link it is (`video_type`,
+`live_status`), the game where the site names it, and which options apply; `start_sec` / `end_sec` price a part.
+
+What an import downloads (`app/ingest/platforms.py`): at most 1080p when the video has it, H.264 with AAC first,
+then VP9 or AV1, at the highest resolution whose size fits `IMPORT_MAX_BYTES`. YouTube serves picture and sound
+as two streams: both are downloaded and joined by our own ffmpeg on the saved files (yt-dlp still runs no
+program), so an import needs about twice the video's size in `WORK_DIR` while it runs. `start_sec` / `end_sec`
+on `POST /v1/imports` and `POST /v1/clips/from-url` import a part: where the site serves a segment list (Twitch
+and Kick VODs, most YouTube videos) only that part is downloaded. A video longer than `IMPORT_MAX_DURATION_SEC`
+can be imported one part at a time. A Twitch VOD whose stream is still live is imported up to the part published
+so far; the live stream itself is never read. The same part of the same link is never downloaded twice for one
+account: a stored copy is handed back, or the part is cut from it (stage `copying`).
+A YouTube video that comes without a segment list is read the same way by byte range (each stream is one indexed
+file). What an import actually downloaded is on its status as `fetched` (mode, bytes, seconds, and the whole
+video's size for comparison), apart from what it charged.
+
+Checking a deployed stack end to end, through the public API only, as one test account:
+
+    export CLIP_API_TOKEN=...      # a session token or API key of the test account; the script never prints it
+    python scripts/live_import_smoke.py --base-url https://<api host> \
+        --url "https://www.youtube.com/watch?v=<id>" --start 600 --end 660 --i-have-the-rights
+
+It previews the link, starts clips from it with that range, follows the import (stages and bytes), prints what was
+charged next to what was downloaded, lists the clips, quotes and runs an export of the first one, downloads it and
+checks with ffprobe that it has a picture and sound and decodes to its full length, then prints the balance before
+and after with the ledger rows. It stops at the first failing step with `FAILED stage=... code=... message=...`
+(tokens and signed addresses removed). Exit 0: every step passed. 1: a step failed. 3: a failed import did not come
+back to the starting balance. A passing run spends real credits (the clip job and the export). Needs `httpx` and
+`ffprobe` where it runs; `--help` lists the options.
+
+`IMPORT_TIMEOUT_SEC` (30 minutes) bounds one download. Measured from a laptop on 2026-11-18: 25 seconds of a
+1080p Twitch VOD (24 MB) took 2.9 s end to end. A whole multi-hour VOD has not been timed; a download that runs
+out of time fails cleanly and says to upload the file.
+
+`POST /v1/clips/from-url {url, consent: true, options}` does both steps in one call: it reserves the quoted
+credits on a clip job (status `WAITING`, stage `importing`), queues a normal import (logged the same way), and
+when the import has stored the video the worker queues the clip job in the same transaction. A failed or
+cancelled import refunds the job. If a worker dies between the two, the worker's one-minute sweep finishes or
+refunds the job; `python scripts/admin.py stuck` lists `WAITING` jobs too. Contract: `docs/CONTRACTS.md`,
+"URL clipping".
 
 - **Switch imports off:** set `IMPORTS_ENABLED=false` and restart `api` and `worker`. New imports are refused
-  with "upload the file instead"; imports already queued fail the same way. Uploads keep working.
+  with "upload the file instead"; imports already queued fail the same way (and the link clip jobs waiting for
+  them are refunded). Uploads keep working.
 - **Caps** (defaults in brackets): `IMPORT_MAX_BYTES` (8 GB), `IMPORT_MAX_DURATION_SEC` (6 hours),
   `IMPORT_TIMEOUT_SEC` (1800, the whole download). The upload limits (`MAX_UPLOAD_BYTES`, `MAX_DURATION_SEC`,
   `MIN_DURATION_SEC`) apply too; the lower value wins.
@@ -187,6 +389,180 @@ are capped at 10 a minute per account and 15 seconds each; answers are cached in
 The link may be given in any form the site uses (with or without `www.`, tracking parameters, `youtu.be`): it is
 matched by its canonical form. Ordinary uploads are never touched by a takedown.
 
+**Copyright and likeness reports** arrive through `POST /v1/trust/reports` (no login). Each one becomes a case
+with a reference (`CC-XXXX-XXXX`) that is emailed to the claimant. A notice goes to `TRUST_ADMIN_EMAIL`, or to
+every admin account when it is empty. A report changes no content.
+
+- Make an account an admin (its website login can then read `/v1/admin/trust/cases`):
+  `docker compose exec -T api python scripts/admin.py make-admin you@yourdomain.com` (`revoke-admin` undoes it).
+  API keys never reach admin routes, even an admin's.
+- Limits: `TRUST_REPORTS_PER_IP_PER_HOUR` (5), `TRUST_REPORTS_PER_IP_PER_DAY` (20),
+  `TRUST_REPORTS_PER_EMAIL_PER_DAY` (3); 32 KB per report.
+- Decide with `POST /v1/admin/trust/cases/{reference}/decisions {"action": ...}`. Each decision is one event in
+  the case history, with who and when.
+  - `forward_notice`: sends the notice to the account holder (Canada's notice-and-notice). It removes nothing.
+  - `disable`: hides the content and keeps its files. `restore` and `reject` bring it back.
+  - `remove`: the verified decision. It gives one strike per account; `REPEAT_INFRINGER_STRIKES` (3) suspends the
+    account. Strikes never expire while `REPEAT_INFRINGER_STRIKE_DAYS` is 0.
+  - `withdraw`, or `restore` after a counter-notice, cancels the case's strikes.
+  - `delete_content`: removes the files, only on a case already decided `remove`.
+  - `terminate {account_id, note}`: suspends an account at once for a serious violation.
+- Links handed out before a `disable` keep working until they expire (`SIGNED_URL_TTL_SEC`, 1 hour).
+- The reported user sees their cases at `GET /v1/trust/my-cases`, without the claimant's contact details. They can
+  send a counter-notice there; a copy goes to the claimant, and the admin decides on `restore` after 10 business
+  days.
+
+## Premium AI thumbnails
+
+A paid option on top of the free thumbnail (#140). The free frame-based thumbnail is always made and stays free,
+and so are choosing between a clip's thumbnails and editing or hiding their text. A premium thumbnail restyles the
+clip's thumbnail frame with an image-edit model (Gemini Nano Banana 2.1, with one retry on Gemini); our
+own renderer then draws the hook, so the words are spelled exactly. Every attempt's provider, time and estimated
+cost is kept in the thumbnail's `info` and the job's `result`.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `PREMIUM_THUMBNAILS` | `false` | The feature flag. Off: the premium routes answer 404 `premium_thumbnails_off`, `/v1/options` does not list them and the website hides the panel. Leave it off until real provider tests and a quality check are done. |
+| `GEMINI_API_KEY` | empty | The only provider. It must be a key from a Google project **with billing on** (paid tier): on the free tier Google trains on what is sent and people may review it (see Data handling). Empty: the routes answer 503. |
+| `PREMIUM_THUMB_CREDITS` | `25` | The price of one premium thumbnail, in credits (owner OK 2026-11-17). The only price used: the quote, the confirm step and the reservation all read it. |
+| `GEMINI_IMAGE_MODEL` | `gemini-nano-banana-2.1` | The Gemini model id (the stable id in Google's model page). |
+| `GEMINI_IMAGE_SIZE` | `2K` | `1K`, `2K` or `4K`. 2K is $0.0504 an image. |
+| `PREMIUM_THUMB_TIMEOUT_SEC` | `60` | One provider attempt, end to end. |
+| `PREMIUM_THUMB_STYLES` | four presets | JSON list of `{id, name, prompt}`; each prompt describes a look only. |
+
+- The worker runs premium thumbnails in a slot of their own (started when the flag is on), so a 20-second paid
+  job never waits behind a 2-hour VOD. Restart the `worker` after turning the flag on.
+- Credits: reserved once at confirm, settled once. Any failure (provider error or timeout after the retry, safety
+  block, the face lost, cancel, crash, dead worker) is refunded in full.
+- Likeness consent: the first premium thumbnail of a clip needs the user's confirmation that they are the streamer
+  or have their permission; each one is a row in `likeness_consents` (account, clip, wording, time).
+
+**Data handling.** A premium thumbnail sends Gemini one frame of the clip and a close-up of the face in it, plus
+the prompt (the style and the user's custom styling). Nothing else: no video, no account details. Owner rule
+(2026-11-18): customer footage never goes to a provider that trains on API inputs without the user's explicit,
+informed authorization.
+
+| Provider | Trains on what we send? | Kept by the provider | What we do |
+|---|---|---|---|
+| Google Gemini, paid tier | No: "Google doesn't use your prompts … or responses to improve our products" (Gemini API Additional Terms, Paid Services, effective 2026-03-23) | 55 days for abuse monitoring only (Gemini API abuse-monitoring page); request logs for the project unless turned off | Every request sends `store: false`. Use a billing-enabled key only. Leave AI Studio's "Logs and datasets" sharing off. |
+| Google Gemini, free tier | **Yes**, and human reviewers may read inputs and outputs (Unpaid Services) | Not stated | Never use a free-tier key for this feature: the frames contain real faces. |
+| Black Forest Labs (removed) | **Yes, by default**: the privacy policy (section 2) says BFL may use inputs, tasks and outputs to train its models | "As long as reasonably necessary" (section 7) | Not used. There is no API flag or account setting to turn training off; the only routes are an email request to privacy@blackforestlabs.ai (subject "Training Opt Out") that we cannot verify, or an enterprise contract. Re-adding BFL needs a verifiable opt-out first. |
+
+- Benchmark with real calls (about $0.06 a thumbnail), from `clip-api/` with the keys in its settings file:
+  `python scripts/premium_thumb_bench.py <out_dir> --video <file> <moments.csv> --per-video 20`.
+## Moving files to Cloudflare R2
+
+The production choice: R2 charges nothing for downloads, and clip files are mostly downloaded. Same code path as
+Spaces (`STORAGE_BACKEND=s3`): a private bucket, and every link the site shows is a signed URL straight from the
+bucket, valid for `SIGNED_URL_TTL_SEC` (at most 7 days, R2's limit; longer values are cut to 7 days).
+
+**What differs from S3** (developers.cloudflare.com/r2, read 2026-11-17; pages under `/r2/`):
+- Region is `auto` (`api/s3/api/`). Endpoint `https://<account id>.r2.cloudflarestorage.com` (`api/tokens/`).
+- No full-object CRC32 checksums and no checksum headers on CopyObject or PutBucketCors (`api/s3/api/`): the
+  client sends checksums only when the API requires them.
+- Multipart: every part but the last the same size, 5 MiB to 5 GiB, at most 10,000 parts
+  (`objects/multipart-objects/`). boto3 cuts equal parts. Unfinished multipart uploads are aborted after 7 days by
+  default, so no lifecycle rule is needed for them.
+- DeleteObjects takes 1,000 keys (`platform/release-notes/`, 2022-07-01); deleting a folder sends batches of 1,000.
+- Signed URLs: 1 second to 7 days, GET/HEAD/PUT/DELETE, only on the S3 endpoint, not on a custom domain
+  (`api/s3/presigned-urls/`). So media is served from `<account id>.r2.cloudflarestorage.com`.
+- Buckets are private unless public access is turned on (`buckets/public-buckets/`). Leave the r2.dev URL and
+  custom domains off.
+- The site reads captions from the bucket and sends uploads to it in the browser, so the bucket needs CORS rules
+  (`buckets/cors/`).
+- R2 does not document the `response-content-disposition` override, so each file is also stored with
+  `Content-Disposition: attachment; filename=...` (documented on PutObject). The Download button saves the clip
+  under its name; `<video>` and `<img>` ignore the header.
+
+**Price** (`r2/pricing/`, read 2026-11-17): storage $0.015 per GB-month, Class A operations (writes, lists)
+$4.50 per million, Class B (reads) $0.36 per million, downloads free. Free each month: 10 GB-month, 1 million
+Class A, 10 million Class B. Deletes are free.
+
+| 1 TB stored, 5 TB downloaded per month | R2 | Spaces |
+|---|---|---|
+| Storage | 1,000 GB × $0.015 = $15.00 (less 10 GB free: $14.85) | $5 base (250 GiB) + 681 GiB × $0.02 = $18.62 |
+| Downloads | free | 1,024 GiB in the base, then 3,633 GiB × $0.01 = $36.33 |
+| Operations | about 0.4 M Class A (uploads in 8 MiB parts, clips) and 1 M Class B: inside the free tier, $0 | included |
+| **Total** | **about $15 per month** | **about $55 per month** |
+
+Downloads by the worker (R2 to the droplet) are free too. Above 1 M writes a month, Class A costs $4.50
+per further million.
+
+1. In the Cloudflare dashboard, R2, **Create bucket**: a name (for example `clutchclips-media`), Location:
+   **Specify jurisdiction** off, **Location hint** nearest the droplet (NYC or TOR droplet: Eastern North America
+   `enam`; SFO: `wnam`; AMS, FRA, LON: `weur`; SGP, BLR: `apac`; SYD: `oc`). Default storage class Standard.
+   Hints are best effort and apply only when the bucket is created (`reference/data-location/`).
+2. Bucket, **Settings**: Public Development URL **disabled**, no custom domain. **CORS policy**, Add, JSON tab,
+   paste (the site is the only origin; `www` redirects to it):
+   ```json
+   [
+     {
+       "AllowedOrigins": ["https://clutchclips.io"],
+       "AllowedMethods": ["GET", "HEAD", "PUT"],
+       "AllowedHeaders": ["range", "content-type"],
+       "ExposeHeaders": ["Content-Length", "Content-Range", "Content-Type", "ETag"],
+       "MaxAgeSeconds": 3600
+     }
+   ]
+   ```
+3. R2, **Manage API tokens**, **Create API token**: permission **Object Read & Write**, **Apply to specific
+   buckets only**: the bucket from step 1, TTL forever. Copy the Access Key ID and Secret Access Key (shown once)
+   and the S3 endpoint `https://<account id>.r2.cloudflarestorage.com`.
+4. Add to the server's env file (keep `STORAGE_BACKEND=local` for now):
+   ```
+   S3_ENDPOINT_URL=https://<account id>.r2.cloudflarestorage.com
+   S3_REGION=auto
+   S3_BUCKET=clutchclips-media
+   S3_ACCESS_KEY_ID=<access key id>
+   S3_SECRET_ACCESS_KEY=<secret access key>
+   SIGNED_URL_TTL_SEC=3600
+   ```
+   Then `docker compose up -d api worker caddy` when no job is RUNNING. Caddy adds `S3_ENDPOINT_URL` to the site's
+   Content-Security-Policy (`MEDIA_ORIGIN` in `docker-compose.yml`), so the browser may load media from it.
+5. Check the bucket: put, get, signed URL (bytes, type, file name), CORS for `PUBLIC_WEB_URL`, private (no
+   unsigned reads), delete, delete-folder. Every line must be `ok`. Then copy the files (safe to repeat; nothing
+   local is deleted):
+   ```bash
+   docker compose exec -T -e STORAGE_BACKEND=s3 api python scripts/check_storage.py
+   docker compose exec -T api python scripts/migrate_storage.py --dry-run
+   docker compose exec -T api python scripts/migrate_storage.py
+   ```
+   Optional, from a laptop with the repo: `tests/test_r2_live.py` runs every storage call, the migration and the
+   check against the bucket (`R2_ENDPOINT_URL`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`; under
+   half a cent of operations, cleans up after itself).
+6. Switch: set `STORAGE_BACKEND=s3`, `docker compose up -d api worker` (when no job is RUNNING), then run
+   `migrate_storage.py` once more to pick up anything written in between. It must end with `failed 0`.
+7. Verify: run one job on the site, play a clip, open the editor (captions load from the bucket), press
+   Download (saved under the clip's name). Upload a video: the browser's network tab shows `PUT` requests to the
+   bucket host, not one long `POST /v1/uploads`. The browser console shows no CSP or CORS error. Keep the local
+   files for a week (`data/storage` in the `data` volume), then delete them.
+
+**Direct uploads** (#62): with `STORAGE_BACKEND=s3` the site sends videos straight to the bucket in parts of 16 MiB
+or more, four at a time, instead of through the droplet (`app/routes_direct_upload.py`). A part that fails is
+retried; after a dropped connection, picking the same file again resumes from the parts already stored (the token
+lasts 24 hours). Each part URL signs its exact size, so the bucket refuses anything else. The upload is recorded
+only after every part is stored at the agreed size; then the API downloads the file once (free from R2) to check
+the size, hash it for re-upload detection, and read it as a video within the limits. A file that fails is
+deleted. Unfinished uploads are aborted by R2 after 7 days (bucket Settings, Object lifecycle rules; 2 days is
+enough, since an upload can be resumed for 24 hours). On local storage the site keeps using
+`POST /v1/uploads`.
+
+**Roll back:** set `STORAGE_BACKEND=local` and `docker compose up -d api worker`. Files created while on R2 are
+only in the bucket; copy them back with `aws s3 sync` (endpoint as above, region `auto`) before deleting it.
+
+**Storage folders** (retention and account deletion delete by folder, `delete_prefix`; ticket #150):
+
+| Folder | Holds | Removed with |
+|---|---|---|
+| `uploads/<account id>/<upload id>.<ext>` | source videos | the upload; `uploads/<account id>/` with the account |
+| `transcripts/<upload id>.json`, `index/<upload id>.npz` | per-upload transcript and visual index | the upload (single keys, not folders) |
+| `clips/<job id>/` | clip videos, previews, thumbnails, captions | the job |
+| `exports/<job id>/` | rendered exports | the job |
+| `healthcheck/`, `r2-live-test/` | left only if a check was killed midway | safe to delete any time |
+
+`delete_prefix` takes only a whole folder ending in `/`, so `uploads/acct_1/` never touches `uploads/acct_10/`,
+and raises if the bucket refuses any key.
+
 ## Moving files to DigitalOcean Spaces
 
 Uploads and clips are stored on the droplet's disk by default (`STORAGE_BACKEND=local`). Spaces moves them to a
@@ -198,7 +574,10 @@ GiB downloaded. Transfer from a Space to a Droplet in the same region group is f
 droplet's region.
 
 1. In the DigitalOcean panel: create a Space in the droplet's region with **file listing restricted**, and a
-   Spaces access key limited to that bucket.
+   Spaces access key limited to that bucket. Add the CORS rule from the R2 section (Settings, CORS
+   Configurations: origin `https://clutchclips.io`, GET, HEAD and PUT, headers `range` and `content-type`), and
+   a lifecycle rule that aborts unfinished multipart uploads after 7 days (R2 does this by default; Spaces does
+   not): `aws s3api put-bucket-lifecycle-configuration --endpoint-url $S3_ENDPOINT_URL --bucket <space> --lifecycle-configuration '{"Rules":[{"ID":"abort-parts","Status":"Enabled","Filter":{"Prefix":""},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":7}}]}'`.
 2. Add to the server's env file (keep `STORAGE_BACKEND=local` for now):
    `S3_ENDPOINT_URL=https://<region>.digitaloceanspaces.com`, `S3_REGION=<region>` (for example `nyc3`),
    `S3_BUCKET=<space name>`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`. Then `docker compose up -d api worker`

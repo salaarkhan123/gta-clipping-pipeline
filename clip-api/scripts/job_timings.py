@@ -20,7 +20,7 @@ from pathlib import Path
 # Fine pipeline stage -> the coarse stage the dashboard shows.
 COARSE = {"download": "downloading", "probe": "probing", "facecam_detect": "probing", "chat_motion": "chat_motion",
           "audio_signal": "audio", "transcribe_rough": "transcribing", "transcribe_final": "transcribing",
-          "judge_frames": "judging", "judge_ai": "judging", "dead_air": "rendering", "render": "rendering",
+          "llm_pass": "judging", "judge_frames": "judging", "judge_ai": "judging", "dead_air": "rendering", "render": "rendering",
           "thumbnail": "rendering", "titles": "writing_titles", "store": "uploading"}
 TARGETS = ((2 * 3600, 600.0), (4 * 3600, 900.0))    # the goal: a 2 h video in 10 min, a 4 h video in 15 min
 
@@ -45,6 +45,7 @@ def load(path: Path) -> dict:
             "queue": result.get("queue_sec", 0.0), "total": result.get("total_sec", elapsed), "source": source,
             "first_clip": result.get("first_clip_sec"),
             "clips": counts.get("clips", len(data.get("clips") or [])), "counts": counts,
+            "transcript_cached": result.get("transcript_cached"),
             "fine": result.get("stages"), "coarse": result.get("timings") or {}}
 
 
@@ -82,12 +83,39 @@ def compare(job: dict, base: dict | None = None) -> dict:
     heard = c.get("transcribed_rough_sec", 0) + c.get("transcribed_final_sec", 0)
     if asr and heard:
         rates["transcribe_x_realtime"] = round(heard / asr, 1)
+    reuse = transcript_reuse(c, job.get("transcript_cached"))
+    if reuse:
+        rates.update(reuse)
     return {"job_id": job["job_id"], "detail": "fine" if fine else "coarse", "source_min": round(job["source"] / 60, 1),
             "clips": job["clips"], "queue_sec": job["queue"], "run_sec": job["elapsed"], "total_sec": job["total"],
             "target_sec": round(goal, 1), "meets_target": job["total"] <= goal, "rates": rates, "stages": rows,
             "first_clip_sec": None if job["first_clip"] is None else round(job["queue"] + job["first_clip"], 1),
             **({"baseline": {"job_id": base["job_id"], "total_sec": base["total"], "clips": base["clips"],
                              "change_sec": round(job["total"] - base["total"], 1)}} if base else {})}
+
+
+def transcript_reuse(counts: dict, transcript_cached: bool | None = None) -> dict:
+    """Hit-rate numbers for U1 Heard reuse. Clip Maker jobs count windows reused vs transcribed; find/transcript
+    jobs expose a boolean `transcript_cached` on the job result."""
+    out: dict = {}
+    reused = int(counts.get("transcript_reused") or 0)
+    transcribed = int(counts.get("transcript_transcribed") or 0)
+    attempts = reused + transcribed
+    if attempts:
+        out["transcript_reused"] = reused
+        out["transcript_transcribed"] = transcribed
+        out["transcript_reuse_rate"] = round(reused / attempts, 3)
+    elif "transcript_reused" in counts or "transcript_transcribed" in counts:
+        out["transcript_reused"] = reused
+        out["transcript_transcribed"] = transcribed
+        out["transcript_reuse_rate"] = 0.0
+    if counts.get("transcript_whole_reused"):
+        out["transcript_whole_reused"] = int(counts["transcript_whole_reused"])
+    if counts.get("heard_pieces"):
+        out["heard_pieces"] = int(counts["heard_pieces"])
+    if transcript_cached is not None:
+        out["transcript_cached"] = bool(transcript_cached)
+    return out
 
 
 def render(c: dict, md: bool = False) -> str:

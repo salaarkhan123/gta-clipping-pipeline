@@ -5,6 +5,7 @@ Usage:
   python scripts/eval_clips.py <v1-labels.csv> <run.json> [--json]                  # v1 sheet, one run
   python scripts/eval_clips.py <labels-v2.csv> [<vod>=<run.json> ...] [--json] [--show-held-out]
   python scripts/eval_clips.py <labels-v2.csv>                                       # check the sheet only
+  python scripts/eval_clips.py <labels-hud-ocr.csv> [<events.json>] [--json]         # HUD OCR exact-match (#202)
 
 A run file is what `scripts/label_moments.py select` (ours) or `wayin` (Wayin's clips placed in the source) writes,
 or a GET /v1/jobs/<job_id> response: its "clips" have start_sec / end_sec, and a rank (1 = best) or a score;
@@ -41,6 +42,11 @@ TOP_K = (20, 40)
 OURS = "clutchclips"
 V2_FIELDS = ["id", "vod", "game", "start", "end", "rating", "reason", "held_out", "source"]
 V2_REQUIRED = ["vod", "game", "start", "end", "rating", "reason", "held_out"]
+OCR_FIELDS = ["id", "vod", "game", "t", "region", "expected_text", "notes"]
+OCR_REQUIRED = ["vod", "game", "t", "region", "expected_text"]
+OCR_REGIONS = ("killfeed", "banner")
+OCR_MATCH_WINDOW = 2.0      # seconds: a prediction matches a labelled frame if |t - t'| is within this
+OCR_GATE = 0.9              # exact-match rate that must hold before HUD events may feed ranking
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 MIN_LEN, MAX_LEN, REASON_MAX = 5.0, 300.0, 80
 
@@ -454,14 +460,135 @@ def _main_v2(args) -> int:
     return 0
 
 
+def is_ocr(path: Path) -> bool:
+    """HUD OCR exact-match sheet (#202). Separate from labels-v2.csv: region + expected_text, no rating column."""
+    with open(path, newline="") as f:
+        header = next(csv.reader(f), [])
+    return "region" in header and "expected_text" in header
+
+
+def parse_ocr(path: Path) -> tuple[list[dict], list[str]]:
+    """Every row of an OCR sheet (labelled or not) and the reasons it is invalid, as 'line N: ...'."""
+    rows: list[dict] = []
+    errors: list[str] = []
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        missing = [c for c in OCR_REQUIRED if c not in (reader.fieldnames or [])]
+        if missing:
+            return [], [f"header: missing column(s) {', '.join(missing)} (expected {', '.join(OCR_FIELDS)})"]
+        for line, r in enumerate(reader, 2):
+            bad = []
+            vod, game = (r.get("vod") or "").strip(), (r.get("game") or "").strip()
+            if not SLUG.match(vod):
+                bad.append(f"vod {vod!r} is not a short id (a-z, 0-9, dashes)")
+            if not SLUG.match(game):
+                bad.append(f"game {game!r} is not a short id")
+            try:
+                t = seconds(r["t"])
+            except (ValueError, TypeError):
+                t = 0.0
+                bad.append(f"t {r.get('t')!r} is not a time (h:mm:ss or seconds)")
+            region = (r.get("region") or "").strip()
+            if region not in OCR_REGIONS:
+                bad.append(f"region {region!r} must be killfeed or banner")
+            expected = " ".join((r.get("expected_text") or "").split())
+            if bad:
+                errors += [f"line {line}: {b}" for b in bad]
+                continue
+            rows.append({"id": (r.get("id") or "").strip() or f"line{line}", "line": line, "vod": vod, "game": game,
+                         "t": t, "region": region, "expected_text": expected, "notes": (r.get("notes") or "").strip()})
+    return rows, errors
+
+
+def load_ocr_events(path: Path) -> list[dict]:
+    data = json.loads(Path(path).read_text())
+    raw = data.get("events", data) if isinstance(data, dict) else data
+    events = []
+    for e in raw:
+        events.append({"vod": (e.get("vod") or "").strip(), "t": float(e["t"]),
+                       "region": (e.get("region") or "").strip(), "text": " ".join(str(e.get("text") or "").split())})
+    return events
+
+
+def score_ocr(rows: list[dict], events: list[dict]) -> dict:
+    """Exact-match rate of predicted HUD events against labelled frames. Empty expected_text is not labelled yet."""
+    labelled = [r for r in rows if r["expected_text"]]
+    used: set[int] = set()
+    per_row = []
+    hits = 0
+    for r in labelled:
+        want = r["expected_text"].casefold()
+        match = None
+        for i, e in enumerate(events):
+            if i in used:
+                continue
+            if r["vod"] and e["vod"] and e["vod"] != r["vod"]:
+                continue
+            if e["region"] != r["region"]:
+                continue
+            if abs(e["t"] - r["t"]) > OCR_MATCH_WINDOW:
+                continue
+            if e["text"].casefold() == want:
+                match = i
+                break
+        if match is not None:
+            used.add(match)
+            hits += 1
+        per_row.append({**r, "hit": match is not None})
+    n = len(labelled)
+    rate = None if n == 0 else hits / n
+    return {"labelled": n, "hits": hits, "misses": n - hits, "unlabelled": sum(1 for r in rows if not r["expected_text"]),
+            "exact_match": rate, "gate": OCR_GATE,
+            "feeds_ranking": bool(rate is not None and rate >= OCR_GATE), "per_row": per_row}
+
+
+def report_ocr(s: dict) -> str:
+    rate = "-" if s["exact_match"] is None else f"{s['exact_match']:.0%}"
+    rank = "yes" if s["feeds_ranking"] else "no (weight 0)"
+    lines = [f"HUD OCR exact-match {s['hits']} of {s['labelled']} labelled frames ({rate}); "
+             f"gate {s['gate']:.0%}; feeds ranking: {rank}"]
+    if s["unlabelled"]:
+        lines.append(f"{s['unlabelled']} row(s) have no expected_text yet")
+    for r in s["per_row"]:
+        mark = "hit" if r["hit"] else "miss"
+        lines.append(f"  {mark:<4} {r['id']}  {hms(r['t'])}  {r['region']}  {r['expected_text']}")
+    return "\n".join(lines)
+
+
+def _main_ocr(args) -> int:
+    rows, errors = parse_ocr(args.labels)
+    if errors:
+        print("\n".join(errors), file=sys.stderr)
+        print(f"{len(errors)} problem(s) in {args.labels}: fix them and run again", file=sys.stderr)
+        return 1
+    if not args.runs:
+        print(f"{args.labels}: {len(rows)} rows, valid"
+              + (" (empty template)" if not rows else ""))
+        return 0
+    if len(args.runs) != 1:
+        print("an OCR sheet is scored against exactly one events.json", file=sys.stderr)
+        return 2
+    labelled = [r for r in rows if r["expected_text"]]
+    if not labelled:
+        print("no labelled frames yet: fill in expected_text first", file=sys.stderr)
+        return 2
+    s = score_ocr(rows, load_ocr_events(Path(args.runs[0])))
+    print(json.dumps({k: v for k, v in s.items() if k != "per_row"} | {"per_row": [
+        {"id": r["id"], "hit": r["hit"], "t": r["t"], "region": r["region"]} for r in s["per_row"]
+    ]}) if args.json else report_ocr(s))
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("labels", type=Path)
-    ap.add_argument("runs", nargs="*", help="v1: one run.json · v2: <vod>=<run.json> per system and video")
+    ap.add_argument("runs", nargs="*", help="v1: one run.json · v2: <vod>=<run.json> per system and video · ocr: events.json")
     ap.add_argument("--duration", type=float, default=None, help="v1: video length in seconds (default: from the data)")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--show-held-out", action="store_true", help="v2: also print the held-out video's clips and misses")
     args = ap.parse_args(argv)
+    if is_ocr(args.labels):
+        return _main_ocr(args)
     if is_v2(args.labels):
         return _main_v2(args)
     if len(args.runs) != 1:

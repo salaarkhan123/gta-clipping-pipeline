@@ -41,7 +41,7 @@ def test_the_judge_gets_time_marks_and_its_cut_and_peak_are_used(three_bursts, t
     clip, seen = judged(three_bursts, tmp_path, lambda a, b: {"start": a + 2, "end": a + 18, "peak": a + 12})
     assert seen[0]["lines"][0] == (0.0, "oh no") and seen[0]["window"][1] - seen[0]["window"][0] == pytest.approx(20, abs=0.1)
     lo, hi = clip.features["nominated"]
-    assert clip.start == pytest.approx(lo + 2, abs=1.0) and 15 <= clip.end - clip.start <= 45     # the judge's cut, snapped to speech
+    assert clip.start == pytest.approx(lo + 2, abs=1.5) and 15 <= clip.end - clip.start <= 60     # the judge's cut, on whole sentences
     edit = clip.features["edit"]
     assert edit["flash_forward"] is True and len(edit["segments"]) == 2
     peak = edit["segments"][0]
@@ -133,7 +133,7 @@ def test_timed_lines_are_sent_and_the_cut_comes_back_as_trim():
     text = seen[0]["messages"][0]["content"][-1]["text"]
     assert "[12.4] NO WAY" in text and "between 8.0 and 38.0" in text and "ignored when lines" not in text
     assert meta["trim"] == {"start": 6.0, "end": 31.5, "peak": 18.0} and meta["title"] == "Clean getaway"
-    assert "cut" in seen[0]["tools"][0]["input_schema"]["properties"] and "15 to 45 second" in seen[0]["system"]
+    assert "cut" in seen[0]["tools"][0]["input_schema"]["properties"] and "15 to 60 second" in seen[0]["system"]
 
 
 def test_without_lines_the_request_and_reply_are_as_before():

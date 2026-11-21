@@ -3,12 +3,14 @@ import { useEffect, useState } from "react";
 import { AuthDialog } from "@/components/Auth";
 import { Footer, Nav } from "@/components/Chrome";
 import { exportName, INCLUDED, PeriodToggle, Plan, PlanCards, yearlySaving } from "@/components/PricingPlans";
-import { api, ApiError, FREE_CREDITS, getToken, money } from "@/lib/api";
+import { api, ApiError, getToken, money } from "@/lib/api";
+import { freeCredits } from "@/lib/plans";
 
-const FAQ: [string, string][] = [
-  ["Can I use ClutchClips for free?", `Yes. Sign up and get ${FREE_CREDITS} free credits, enough for about ${FREE_CREDITS} minutes of video. No credit card required.`],
+const faq = (signup: number | null): [string, string][] => [
+  ["Can I use ClutchClips for free?", signup === null ? "Yes. Sign up and get free credits. No credit card required."
+    : `Yes. Sign up and get ${signup} free credits, enough for about ${signup} minutes of video. No credit card required.`],
   ["How do credits work?", "1 credit processes 1 minute of source video. A 2-hour stream uses 120 credits, and you can make as many clips from it as you want. More clips, searches and reframes of the same upload only cost the minutes they render."],
-  ["Do unused credits roll over?", "Yes. Credits stay in your account while your plan is active."],
+  ["Do credits expire?", "No. Credits don't expire: what you don't use stays in your account."],
   ["What if a job fails?", "The credits come back to your account automatically."],
   ["Can I cancel anytime?", "Yes. Cancel from your account menu and keep your plan until the end of the period you paid for."],
   ["What payment methods do you accept?", "Cards, Apple Pay and Google Pay through Stripe. Receipts and invoices are in the billing portal."],
@@ -18,6 +20,7 @@ export default function Pricing() {
   const [plans, setPlans] = useState<Plan[] | null>(null), [packs, setPacks] = useState<any[]>([]);
   const [currency, setCurrency] = useState("usd"), [yearly, setYearly] = useState(true);
   const [current, setCurrent] = useState<string | null>(null);
+  const signup = plans?.find((p) => p.price_month_cents === 0)?.signup_credits ?? null;
   const [msg, setMsg] = useState(""), [busy, setBusy] = useState(""), [want, setWant] = useState<(() => void) | null>(null);
 
   useEffect(() => {
@@ -63,6 +66,8 @@ export default function Pricing() {
             {!plans ? <p className="muted">Loading plans…</p>
               : <PlanCards plans={plans} currency={currency} yearly={yearly} current={current} busy={busy} freeHref={getToken() ? "/dashboard/" : "/login/?new=1"}
                   onPick={(p) => go("/v1/billing/subscribe", { plan_id: p.id, interval: yearly ? "year" : "month" }, p.id)} />}
+            <p className="muted small mt-5 text-center">Plans renew until you cancel. By subscribing or buying credits you agree to the{" "}
+              <a href="/terms/#credits" className="text-lime underline">Terms of Service</a> and the <a href="/refunds/" className="text-lime underline">Refund Policy</a>.</p>
           </div>
         </section>
 
@@ -76,7 +81,7 @@ export default function Pricing() {
                   <thead><tr><th>Feature</th>{plans.map((p) => <th key={p.id}>{p.name}</th>)}</tr></thead>
                   <tbody>
                     <tr className="group"><td colSpan={plans.length + 1}>Usage</td></tr>
-                    <tr><td>Credits</td>{plans.map((p) => <td key={p.id}>{p.price_month_cents ? `${p.monthly_credits.toLocaleString()}/mo` : `${FREE_CREDITS} one-time`}</td>)}</tr>
+                    <tr><td>Credits</td>{plans.map((p) => <td key={p.id}>{p.price_month_cents ? `${p.monthly_credits.toLocaleString()}/mo` : p.signup_credits === undefined ? "On sign-up" : `${p.signup_credits} on sign-up`}</td>)}</tr>
                     <tr><td>Max export quality</td>{plans.map((p) => <td key={p.id}>{exportName(p.max_side)}</td>)}</tr>
                     <tr><td>Reframe / Captions length per job</td>{plans.map((p) => <td key={p.id}>{p.max_render_min ? `${p.max_render_min} min` : "Unlimited"}</td>)}</tr>
                     <tr className="group"><td colSpan={plans.length + 1}>Tools</td></tr>
@@ -104,7 +109,7 @@ export default function Pricing() {
           <div className="container">
             <h2 className="section-title">Pricing FAQ</h2>
             <p className="section-sub">Questions about billing and credits.</p>
-            <div className="faq">{FAQ.map(([q, a], i) => (<details key={q} open={i === 0}><summary>{q}</summary><p>{a}</p></details>))}</div>
+            <div className="faq">{faq(signup).map(([q, a], i) => (<details key={q} open={i === 0}><summary>{q}</summary><p>{a}</p></details>))}</div>
           </div>
         </section>
 
@@ -112,7 +117,7 @@ export default function Pricing() {
           <div className="container">
             <div className="cta-band">
               <h2>Get started with the <span className="grad">free plan</span></h2>
-              <p>{FREE_CREDITS} free credits · No credit card required</p>
+              <p>{freeCredits(signup)} · No credit card required</p>
               <a href={getToken() ? "/dashboard/" : "/login/?new=1"} className="btn btn-primary btn-lg">Try for Free</a>
             </div>
           </div>

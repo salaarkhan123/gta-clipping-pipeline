@@ -1,0 +1,109 @@
+name: ci
+
+# Hosted equivalent of ci/local-ci.sh. Job names `test` and `docker-build` are the deploy gate's
+# required checks (.github/ops/config.json). Do not rename those jobs.
+on:
+  pull_request:
+    branches: [staging, main]  # includes perf-integration PRs targeting these
+  push:
+    branches:
+      - main                         # post-merge Check Runs on main (deploy gate); does not deploy
+      - cursor/perf-integration-6ad0 # CPR-14 integration branch CI on every push
+      - cursor/phase-4-validation-6ad0 # Phase 4 stacked on #234
+  workflow_dispatch:   # re-run on a chosen ref without a new commit
+
+permissions:
+  contents: read
+  actions: write   # GHA cache for pip + Buildx (cache-from/to type=gha)
+
+concurrency:
+  # One run per PR (or per branch on push); cancel superseded runs so they do not burn minutes.
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # Run 44657037485 annotation: "exceeded the maximum execution time of 45m0s" (job timeout-minutes).
+    # Not concurrency (no newer run until after cancel), not billing. Pytest alone ~43m to ~87% under
+    # --cpus 2 --memory 5g. Owner-requested 90m headroom; no cpu/memory caps (4/7g broke docker create).
+    timeout-minutes: 90
+    # Same base as clip-api/Dockerfile and ci/local-ci.sh so renders use production ffmpeg 7.1.
+    container:
+      image: python:3.12-slim-trixie
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: clipapi_test
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/clipapi_test
+      PYTHONDONTWRITEBYTECODE: "1"
+    defaults:
+      run:
+        working-directory: clip-api
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install system deps (match local-ci / Dockerfile)
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ffmpeg git nodejs ca-certificates fonts-dejavu-core
+          ffmpeg -version | head -1 | tee /dev/stderr | grep -q '^ffmpeg version 7\.1\.'
+          df -h
+          free -m || true
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: /github/home/.cache/pip
+          key: pip-trixie-${{ hashFiles('clip-api/requirements.txt', 'clip-api/requirements-dev.txt') }}
+          restore-keys: pip-trixie-
+      - name: Install Python deps
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Pytest
+        run: pytest -q -rs -p no:cacheprovider
+
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Free disk space for model bake
+        run: |
+          set -euo pipefail
+          df -h
+          free -m
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /usr/share/swift \
+            /usr/local/.ghcup \
+            /usr/share/miniconda \
+            /usr/local/graalvm \
+            /usr/local/share/powershell \
+            /usr/share/gradle || true
+          sudo docker system prune -af || true
+          df -h
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build production image (linux/amd64, no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: clip-api
+          push: false
+          load: true
+          platforms: linux/amd64
+          tags: clutchclips-ci-build:${{ github.sha }}
+          # Layer cache only; image contents still follow the Dockerfile and pinned bases.
+          cache-from: type=gha,scope=clip-api-prod
+          cache-to: type=gha,mode=max,scope=clip-api-prod

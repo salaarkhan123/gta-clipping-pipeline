@@ -1,0 +1,28 @@
+{
+  "required_checks": [
+    "test",
+    "docker-build"
+  ],
+  "backups": {
+    "keep": 7
+  },
+  "monitor": {
+    "load_per_cpu_max": 2.0,
+    "mem_avail_mb_min": 600,
+    "disk_free_mb_min": 10240,
+    "disk_used_pct_max": 85,
+    "backup_age_hours_max": 36,
+    "oldest_queued_min_max": 60,
+    "stalest_heartbeat_min_max": 10,
+    "containers": [
+      "db",
+      "api",
+      "worker",
+      "caddy"
+    ],
+    "require_email": true,
+    "require_billing_webhook": true,
+    "stripe_webhook_errors_1h_max": 2,
+    "email_failures_1h_max": 0
+  }
+}

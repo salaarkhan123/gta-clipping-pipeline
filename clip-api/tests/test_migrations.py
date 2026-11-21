@@ -1,18 +1,22 @@
 """Alembic: the baseline equals the create_all schema; old databases are stamped, not rebuilt; reruns are no-ops."""
 import os
+import re
 import threading
 import uuid
+from datetime import datetime
 
 import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
+from alembic.operations import Operations
 from alembic.runtime.migration import MigrationContext
+import sqlalchemy as sa
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 
 from app import models  # noqa: F401
 from app.db import Base, get_engine
-from app.migrate import BASELINE, config, current, head, migrate
+from app.migrate import BASELINE, config, current, head, incompatible, migrate
 
 
 def diffs(engine):
@@ -134,3 +138,93 @@ def test_an_old_database_missing_a_table_is_refused_not_patched(db):
     with pytest.raises(RuntimeError, match="webhook_deliveries"):
         migrate(e)
     assert current(e) is None
+
+
+def test_a_database_ahead_of_this_code_starts_without_migrating(db, caplog):
+    """A code rollback after a newer release migrated the database: the older code must still start. It leaves the
+    newer revision alone (migrations are additive, so the old code runs on the newer schema) and says so in the log."""
+    engine = db("ahead")
+    migrate(engine)
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE alembic_version SET version_num = '9999'"))
+    caplog.set_level("WARNING", logger="clipapi.migrate")
+    assert migrate(engine) == ("9999", "9999")
+    assert current(engine) == "9999"
+    assert any("newer" in r.getMessage() and "9999" in r.getMessage() for r in caplog.records)
+
+
+def _apply_future_revision(engine):
+    """What a later, additive release could do: a nullable column, a NOT NULL column with a server default, and a
+    new table. Then the database says it is at a revision this code has no script for."""
+    with engine.begin() as conn:
+        ops = Operations(MigrationContext.configure(conn))
+        ops.add_column("clips", sa.Column("future_note", sa.String(40), nullable=True))
+        ops.add_column("payments", sa.Column("future_flag", sa.Boolean(), nullable=False, server_default=sa.false()))
+        ops.create_table("future_things", sa.Column("id", sa.Integer(), primary_key=True),
+                         sa.Column("clip_id", sa.String(40), sa.ForeignKey("clips.id"), nullable=False))
+        conn.execute(text("UPDATE alembic_version SET version_num = '9999'"))
+
+
+def test_rolling_back_from_a_newer_additive_release_keeps_this_code_working(db, caplog):
+    """A newer release migrated the database additively and its code was rolled back to this one: startup goes on
+    without migrating, and this code's models still write and read the tables the newer release changed."""
+    engine = db("rollback_future")
+    migrate(engine)
+    _apply_future_revision(engine)
+    assert current(engine) == "9999"
+
+    caplog.set_level("WARNING", logger="clipapi.migrate")
+    assert migrate(engine) == ("9999", "9999")
+    assert current(engine) == "9999"
+    with engine.connect() as conn:
+        assert incompatible(conn) == []
+
+    from sqlalchemy.orm import Session
+
+    from app.models import Account, Clip, Job, Payment, Upload
+    now = datetime(2026, 11, 18)
+    with Session(engine) as s:
+        s.add(Account(id="a1", email="rollback@example.com", password_hash="x", webhook_secret="w"))
+        s.flush()
+        s.add(Upload(id="u1", account_id="a1", filename="v.mp4", storage_key="k", size_bytes=1, duration_sec=1.0,
+                     width=1920, height=1080, has_audio=True, expires_at=now))
+        s.flush()
+        s.add(Job(id="j1", account_id="a1", upload_id="u1", options={}, duration_sec=1.0, credits_reserved=1,
+                  expires_at=now))
+        s.flush()
+        s.add(Clip(id="c1", job_id="j1", idx=0, start_sec=0.0, end_sec=1.0, score=1.0, signals={}, features={},
+                   video_key="v"))
+        s.add(Payment(account_id="a1", kind="pack", stripe_ref="cs_rollback", credits=10))
+        s.commit()
+    with Session(engine) as s:
+        assert s.get(Clip, "c1").video_key == "v"
+        assert s.query(Payment).one().credits == 10
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT future_note FROM clips")).one() == (None,)
+        assert not conn.execute(text("SELECT future_flag FROM payments")).scalar_one()
+
+
+@pytest.mark.parametrize("change, problem", [
+    ("dropped column", "column clips.reaction is missing"),
+    ("required column", "clips.made_required is NOT NULL with no default, and this code never sets it"),
+    ("dropped table", "table clip_feedback is missing"),
+])
+def test_a_newer_schema_this_code_cannot_use_refuses_to_start(db, change, problem):
+    """A database newer than the code is only started on when the code can still use it. A newer release that
+    dropped something this code reads, or added a column this code cannot fill, stops startup with the reason."""
+    engine = db("incompatible_" + change.replace(" ", "_"))
+    migrate(engine)
+    with engine.begin() as conn:
+        ops = Operations(MigrationContext.configure(conn))
+        if change == "dropped column":
+            ops.drop_column("clips", "reaction")
+        elif change == "required column":
+            recreate = "always" if conn.dialect.name == "sqlite" else "auto"   # SQLite cannot ALTER in NOT NULL
+            with ops.batch_alter_table("clips", recreate=recreate) as batch:
+                batch.add_column(sa.Column("made_required", sa.String(10), nullable=False))
+        else:
+            ops.drop_table("clip_feedback")
+        conn.execute(text("UPDATE alembic_version SET version_num = '9999'"))
+    with pytest.raises(RuntimeError, match="cannot use its schema: .*" + re.escape(problem)):
+        migrate(engine)
+    assert current(engine) == "9999"

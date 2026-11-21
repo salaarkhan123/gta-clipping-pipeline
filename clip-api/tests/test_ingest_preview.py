@@ -15,7 +15,9 @@ from tests.test_api import balance
 
 TWITCH = "https://www.twitch.tv/videos/2301234567"
 THUMB = "https://static-cdn.jtvnw.net/cf_vods/d1m7jfoe9zdc1j/abc/thumb/thumb0-640x360.jpg"
-KEYS = {"url", "platform", "supported", "title", "channel", "duration_sec", "thumbnail_url", "kind", "refusal"}
+KEYS = {"url", "platform", "supported", "title", "channel", "channel_url", "category", "duration_sec",
+        "available_sec", "started_at", "thumbnail_url", "video_type", "live_status", "kind", "options", "range",
+        "refusal", "estimate", "lookup_ms"}
 
 
 @pytest.fixture(autouse=True)
@@ -25,11 +27,12 @@ def fresh_cache():
     link_preview.clear_cache()
 
 
-def ask(client, headers, url):
-    r = client.post("/v1/imports/preview", json={"url": url}, headers=headers)
+def ask(client, headers, url, **more):
+    r = client.post("/v1/imports/preview", json={"url": url, **more}, headers=headers)
     assert r.status_code == 200, r.text
     body = r.json()
     assert set(body) == KEYS
+    assert isinstance(body.pop("lookup_ms"), int)        # how long the site took; 0 from the cache
     return body
 
 
@@ -46,11 +49,17 @@ def test_a_supported_link_shows_its_metadata_and_imports_nothing(client, user, f
     fake_ydl.info = {"duration": 7260.5, "uploader": "SomeStreamer", "thumbnail": THUMB}
     body = ask(client, headers, "https://m.twitch.tv/videos/2301234567?t=1h")
     assert body == {"url": TWITCH, "platform": "twitch", "supported": True, "title": "Ranked grind: part 3 / finale!",
-                    "channel": "SomeStreamer", "duration_sec": 7260.5, "thumbnail_url": THUMB, "kind": "video",
-                    "refusal": None}
+                    "channel": "SomeStreamer", "channel_url": None, "category": None, "duration_sec": 7260.5,
+                    "available_sec": 7260.5, "started_at": None, "thumbnail_url": THUMB, "video_type": "vod",
+                    "live_status": "not_live", "kind": "video", "range": None,
+                    "options": {"import": True, "clip": True, "range": True, "range_download": "full"},
+                    "refusal": None, "estimate": {
+                        "credits": 122, "basis": "source_minutes", "duration_sec": 7260.5, "balance": 30,
+                        "enough": False, "note": "One credit per started minute of the video (121.0 minutes). Never "
+                                                 "more than this; less if the video turns out shorter."}}
     # Metadata only, with the import's fixed options and a short socket timeout. Nothing is stored or charged.
     assert len(fake_ydl.instances) == 1 and fake_ydl.instances[0].urls == [TWITCH]
-    options = fake_ydl.instances[0].params
+    options = fake_ydl.instances[0].given
     for name in ("cookiefile", "cookiesfrombrowser", "username", "password", "impersonate", "geo_bypass"):
         assert not options[name]
     assert options["proxy"] == "" and options["extractor_args"] == {} and options["js_runtimes"] == {}
@@ -104,9 +113,17 @@ def test_too_long_is_refused_with_the_import_message_and_keeps_the_metadata(clie
     fake_ydl.info = {"duration": 7 * 3600.0, "thumbnail": THUMB}
     body = ask(client, headers, TWITCH)
     assert body["supported"] is False
-    assert body["refusal"] == {"code": "video_too_long", "message": "Maximum video length is 6 hours."}
+    assert body["refusal"] == {"code": "video_too_long", "message": "Maximum video length is 6 hours. Choose a "
+                                                                    "shorter range of the video."}
     assert body["title"] == "Ranked grind: part 3 / finale!" and body["thumbnail_url"] == THUMB
     assert body["duration_sec"] == 7 * 3600.0
+    # The link itself is fine: a part of it that fits can be chosen, and is priced on its own length.
+    assert body["options"] == {"import": False, "clip": False, "range": True, "range_download": "full"}
+    part = ask(client, headers, TWITCH, start_sec=3600, end_sec=3600 + 600)
+    assert part["supported"] is True and part["refusal"] is None
+    assert part["range"] == {"start_sec": 3600.0, "end_sec": 4200.0}
+    assert part["estimate"]["credits"] == 10 and part["estimate"]["duration_sec"] == 600.0
+    assert len(fake_ydl.instances) == 1             # the second answer came from the cache: no second request
 
 
 def test_too_short_is_refused_with_the_import_message(client, user, fake_ydl):
@@ -131,7 +148,7 @@ def test_a_live_stream_is_refused(client, user, fake_ydl):
      "Kick refused the download."),
     ("https://youtu.be/dQw4w9WgXcQ",
      "ERROR: [youtube] dQw4w9WgXcQ: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies",
-     "login_required", "YouTube often refuses automated downloads: upload the file instead"),
+     "source_refused", "YouTube often refuses automated downloads: upload the file instead"),
 ])
 def test_an_extractor_failure_is_a_clean_refusal(client, user, fake_ydl, url, raw, code, starts):
     headers, _ = user
@@ -145,7 +162,7 @@ def test_an_extractor_failure_is_a_clean_refusal(client, user, fake_ydl, url, ra
 
 def test_a_crash_inside_the_extractor_is_a_refusal_not_a_500(client, user, fake_ydl, monkeypatch):
     headers, _ = user
-    monkeypatch.setattr(fake_ydl, "extract_info", lambda self, url, download=False: 1 / 0)
+    monkeypatch.setattr(fake_ydl, "extract_info", lambda self, url, **how: 1 / 0)
     body = ask(client, headers, TWITCH)
     assert body["refusal"] == {"code": "source_failed", "message": "Twitch could not be read. Upload the file instead."}
 
@@ -154,7 +171,7 @@ def test_a_site_that_does_not_answer_times_out_cleanly(client, user, fake_ydl, m
     headers, _ = user
     release = threading.Event()
     monkeypatch.setattr(link_preview, "LOOKUP_TIMEOUT_SEC", 0.2)
-    monkeypatch.setattr(fake_ydl, "extract_info", lambda self, url, download=False: release.wait(5) and {})
+    monkeypatch.setattr(fake_ydl, "extract_info", lambda self, url, **how: release.wait(5) and {})
     try:
         body = ask(client, headers, TWITCH)
     finally:

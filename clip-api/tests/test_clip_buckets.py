@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 import app.pipeline as pipeline
-from app.pipeline import PipelineError, PipelineOptions, Timer, probe, run_pipeline
+from app.pipeline import AUTO_LONGEST, PipelineError, PipelineOptions, Timer, probe, run_pipeline
 from app.pipeline.edit import cut, duration as kept, select_cuts
 from app.pipeline.moments import BUCKETS, KINDS, MAX_CLIPS, NOMINAL, Moment, kind_of
 from app.pipeline.stt import extract_audio, wav_duration
@@ -19,7 +19,10 @@ from app.pipeline.windows import fits, pick_windows
 from tests.test_launch import three_bursts  # noqa: F401  (fixture: 60 s, loud at 10-13, 30-33 and 48-51)
 
 BURSTS = (260, 360, 160, 460, 560, 60)      # where the `long` video is loud, loudest first
-FAST = {"vertical": False, "captions": False, "punch_zoom": False, "tighten": False}
+# Loudness alone ranks these synthetic videos: every tone burst starts the same way, so the U2 sound-change
+# signals rate them alike and "the loudest moment" would no longer be the strongest.
+FAST = {"vertical": False, "captions": False, "punch_zoom": False, "tighten": False,
+        "weights": {"audio_flux": 0, "audio_bursts": 0}}
 
 
 def make_video(path: Path, seconds: int, volume: str, picture: str = "testsrc2=size=320x180:rate=10",
@@ -58,7 +61,7 @@ def no_render(monkeypatch):
     def no_thumb(*args, **kwargs):
         raise PipelineError("no_thumb", "not rendered")
     monkeypatch.setattr(pipeline, "render_clip", fake_clip)
-    monkeypatch.setattr(pipeline, "render_thumb", no_thumb)
+    monkeypatch.setattr(pipeline, "make_thumbnail", no_thumb)
 
 
 class Marked:
@@ -119,6 +122,7 @@ def test_every_bucket_yields_clips_inside_it_with_a_judge_that_cuts_to_the_longe
     clips = run_pipeline(long, PipelineOptions(duration=bucket, limit=1, **FAST), tmp_path / "o",
                          transcriber=Marked(), judge=judge)
     lo, hi = BUCKETS[bucket]
+    hi = min(hi, AUTO_LONGEST.get(bucket, hi))                               # Auto (0-90) never passes 60 s (U4)
     assert all(c["cut_range"] == (max(lo, 10), hi - 2) for c in seen)        # the range the judge is told (room for the flash)
     widest = max(c["lines"][-1][0] - c["lines"][0][0] for c in seen)
     assert widest >= hi - 2 - 4                                              # enough transcript to cut the longest clip
@@ -142,7 +146,7 @@ def test_a_judge_cut_outside_the_bucket_is_rejected(long, tmp_path, no_render, c
         assert length_ms(clip) + 1500 > 60000
     else:
         assert "nominated" not in clip.features, why
-        assert abs(length_ms(clip) - 45000) <= 1000                          # the nominated window is kept
+        assert abs(length_ms(clip) - 45000) <= 3000                          # the nominated window, on whole sentences
     assert inside(clip, "30-60", rendered=False)
 
 
@@ -383,4 +387,4 @@ def test_without_the_new_options_the_pipeline_asks_for_exactly_what_it_did_befor
         ("pick_windows", (20, 4, duration), {}),             # twice as many with a transcript
         ("pick_spread", (20, 7, duration), {})]              # five spare for the judge
     assert all(k == {} and len(a) == 1 for n, a, k in calls if n == "audio_rms_db")          # the whole file, no seek
-    assert all(set(c) == {"length", "signals", "lines", "window"} for c in seen)             # no cut_range
+    assert all(set(c) == {"length", "signals", "lines", "window", "timeline"} for c in seen)  # no cut_range

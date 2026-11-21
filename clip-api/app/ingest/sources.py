@@ -56,6 +56,23 @@ def _one(query: dict, key: str) -> str | None:
     return values[0] if values else None
 
 
+# Site pages that look like a channel name. A channel page is told from them by its address alone: the site is
+# never asked whether the channel is live, and a live stream is never read (app/ingest/platforms.py).
+_TWITCH_PAGES = frozenset({"videos", "directory", "settings", "clips", "downloads", "jobs", "turbo", "store",
+                           "subscriptions", "wallet", "drops", "inventory", "search", "popout", "embed",
+                           "collections", "friends", "messages", "payments", "prime", "team", "moderator", "login",
+                           "signup", "privacy", "legal", "security", "following", "broadcast", "dashboard"})
+_KICK_PAGES = frozenset({"categories", "browse", "following", "dashboard", "search", "settings", "video", "videos",
+                         "clips", "login", "signup", "terms", "privacy", "community-guidelines", "dmca", "about"})
+
+
+def _live_channel(platform: str, channel: str, url: str) -> Refused:
+    return Refused("live_channel", "This is a channel page, not a recording. Live streams cannot be imported from "
+                                   "a link. Paste the VOD link after the stream, or upload the file.",
+                   about={"platform": platform, "channel": channel, "url": url, "video_type": "live_channel",
+                          "kind": "channel"})
+
+
 def _twitch(host: str, path: str, query: dict) -> Source | None:
     if host == "clips.twitch.tv":
         m = re.fullmatch(r"/([A-Za-z0-9_-]{1,120})/?", path)
@@ -71,8 +88,11 @@ def _twitch(host: str, path: str, query: dict) -> Source | None:
         if m:
             url = f"https://www.twitch.tv/videos/{m.group(1)}"
             return Source("twitch", PLATFORM, url, url)
+        m = re.fullmatch(r"/([A-Za-z0-9_]{4,25})/?", path)
+        if m and m.group(1).lower() not in _TWITCH_PAGES:
+            raise _live_channel("twitch", m.group(1).lower(), f"https://www.twitch.tv/{m.group(1).lower()}")
     raise Refused("unsupported_link", "Use a link to one Twitch VOD (twitch.tv/videos/...) or one clip. Channel "
-                                      "pages, live streams and collections cannot be imported.")
+                                      "pages, live streams and collections cannot be imported. " + UPLOAD_INSTEAD)
 
 
 def _kick(host: str, path: str, query: dict) -> Source | None:
@@ -92,8 +112,10 @@ def _kick(host: str, path: str, query: dict) -> Source | None:
     if m and clip:
         url = f"https://kick.com/{m.group(1)}/clips/{clip}"
         return Source("kick", PLATFORM, url, url)
+    if m and m.group(1).lower() not in _KICK_PAGES:
+        raise _live_channel("kick", m.group(1).lower(), f"https://kick.com/{m.group(1).lower()}")
     raise Refused("unsupported_link", "Use a link to one Kick VOD (kick.com/<channel>/videos/...) or one clip. "
-                                      "Channel pages and live streams cannot be imported.")
+                                      "Channel pages and live streams cannot be imported. " + UPLOAD_INSTEAD)
 
 
 def _youtube(host: str, path: str, query: dict) -> Source | None:
@@ -111,7 +133,7 @@ def _youtube(host: str, path: str, query: dict) -> Source | None:
         return None
     if not video:
         raise Refused("unsupported_link", "Use a link to one YouTube video. Playlists, channels and live streams "
-                                          "cannot be imported.")
+                                          "cannot be imported. " + UPLOAD_INSTEAD)
     url = f"https://www.youtube.com/watch?v={video}"
     return Source("youtube", PLATFORM, url, url)
 
@@ -127,7 +149,7 @@ def _gdrive(host: str, path: str, query: dict) -> Source | None:
             file_id = None
     if not file_id:
         raise Refused("unsupported_link", "Use a Google Drive share link to one file (drive.google.com/file/d/...). "
-                                          "Folders cannot be imported.")
+                                          "Folders cannot be imported. " + UPLOAD_INSTEAD)
     # `confirm=t` answers Drive's "this file is too large to scan for viruses, download anyway?" page, which
     # every large file gets. It does not open anything that is not shared publicly: a private file still
     # answers with a sign-in page, and that is a refusal.
@@ -141,7 +163,7 @@ def _dropbox(host: str, path: str, query: dict) -> Source | None:
         return None
     if not re.fullmatch(r"/(?:s|scl/fi)/[\w-]+/[^/]+", path):
         raise Refused("unsupported_link", "Use a Dropbox share link to one file (dropbox.com/scl/fi/... or "
-                                          "dropbox.com/s/...). Folders cannot be imported.")
+                                          "dropbox.com/s/...). Folders cannot be imported. " + UPLOAD_INSTEAD)
     keep = {k: query[k][0] for k in ("rlkey",) if query.get(k)}     # the share key; everything else is tracking
     base = f"https://www.dropbox.com{path}"
     canonical = base + ("?" + urlencode(keep) if keep else "")

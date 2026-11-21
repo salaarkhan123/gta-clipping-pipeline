@@ -65,10 +65,10 @@ def test_drive_and_dropbox_download_urls():
     ("https://example.com/", "unsupported_source"),
     ("https://nottwitch.tv/videos/2301234567", "unsupported_source"),    # a look-alike host is not the host
     ("https://www.twitch.tv.evil.example/videos/2301234567", "unsupported_source"),
-    ("https://www.twitch.tv/somechannel", "unsupported_link"),           # a channel is a live stream
+    ("https://www.twitch.tv/somechannel", "live_channel"),               # a channel page: live, never read
     ("https://www.twitch.tv/somechannel/videos", "unsupported_link"),
     ("https://www.twitch.tv/collections/abcDEF", "unsupported_link"),
-    ("https://kick.com/somechannel", "unsupported_link"),
+    ("https://kick.com/somechannel", "live_channel"),
     ("https://kick.com/somechannel/videos", "unsupported_link"),
     ("https://www.youtube.com/playlist?list=PL123", "unsupported_link"),
     ("https://www.youtube.com/@somechannel", "unsupported_link"),

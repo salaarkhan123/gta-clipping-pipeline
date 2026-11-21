@@ -1,8 +1,9 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { nameOf, numbering } from "@/components/dash/ClipCard";
+import { numbering } from "@/components/dash/ClipCard";
 import { Editor } from "@/components/dash/Editor";
+import { ThumbnailPanel } from "@/components/dash/PremiumThumbs";
 import { useDash } from "@/components/dash/Shell";
 import { api, ApiError } from "@/lib/api";
 import { useClipOptions } from "@/lib/options";
@@ -25,17 +26,15 @@ export default function EditPage() {
 
   const numbers = useMemo(() => numbering(project?.clips || []), [project]);
   if (gone) return <><h1 className="dash-title">Clip not found</h1>
-    <p className="muted">This clip isn't here any more. Videos and clips are kept for 7 days. <Link href="/dashboard/">Back to Home</Link></p></>;
+    <p className="muted">This clip isn&apos;t here any more. Videos and clips are kept for 7 days. <Link href="/dashboard/">Back to Home</Link></p></>;
   const clip = project?.clips.find((c: any) => c.id === ids?.clip);
   if (!project || !clip || !listed || !known) return <p className="muted">Loading the editor…</p>;
   const job = project.jobs.find((j: any) => j.job_id === clip.job_id);
-  const name = nameOf(clip, numbers.get(clip.id));
   return (
-    <>
-      <p className="crumb"><Link href="/dashboard/">Home</Link> / <Link href={`/dashboard/project/?id=${project.upload_id}`}>{project.filename}</Link> / {name}</p>
-      <h1 className="dash-title">Edit {name}</h1>
+    <div className="wide">
       <Editor project={project} clip={clip} job={job} listed={listed} known={known} number={numbers.get(clip.id)}
         onClip={(c) => setProject((p: any) => ({ ...p, clips: p.clips.map((x: any) => (x.id === c.id ? c : x)) }))} />
-    </>
+      <ThumbnailPanel clip={clip} />
+    </div>
   );
 }

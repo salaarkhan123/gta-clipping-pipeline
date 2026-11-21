@@ -32,7 +32,7 @@ Finds the best moments in a long video and renders captioned clips. Costs 1 cred
 - Find moments by what was said: `POST /v1/find {upload_id, query, max_results, make_clips, clip_length}`; matches are in `job.result.matches`. After the first search of an upload, `GET /v1/uploads/{upload_id}/search?q=...` is instant and free.
 
 - Options shared by every tool: `aspect` (`9:16`, `4:5`, `1:1`, `16:9`), `facecam_region` (`auto` detects the streamer's camera), `caption_style`.
-- Each clip in a finished job has `title`, `description`, `hashtags` and `virality` (when the server has AI enabled), and `GET /v1/clips/{clip_id}/subtitles?format=srt|vtt|txt` returns its subtitles.
+- Each clip in a finished job has `title`, `description`, `hashtags` and `virality` (when the server has AI enabled: the AI rating, 0-100, with five sub-scores in `scores` and their `scoring_version`; an opinion of the clip, not a prediction of views), and `GET /v1/clips/{clip_id}/subtitles?format=srt|vtt|txt` returns its subtitles.
 - Video Finder searches what was said and what is on screen: `mode` is `auto`, `speech` or `visual`.
 
 ## Errors

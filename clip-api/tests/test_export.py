@@ -73,13 +73,14 @@ def test_render_none_stores_no_video_and_an_export_renders_it_for_the_seconds_re
     assert abs(done["result"]["exports"][0]["seconds"] - q["seconds"]) < 0.01           # priced on what it renders
 
     again = client.get(f"/v1/jobs/{job['job_id']}", headers=headers).json()["clips"][0]
-    assert again["rendered"] == "full" and again["export_res"] == "480" and again["video_url"] == again["export_url"]
+    # 480 asked, never above the 640x360 source's short side: the clip says the 360 it is
+    assert again["rendered"] == "full" and again["export_res"] == "360" and again["video_url"] == again["export_url"]
     w, h, length = short_side(client, again["export_url"], tmp_path)
     assert (w, h) == (360, 640)                          # 480 asked, never above the 640x360 source's short side
     assert abs(length - q["seconds"]) < 0.5
     with new_session() as db:
         rows = db.execute(select(Export).where(Export.clip_id == clip["id"])).scalars().all()
-        assert [(x.status, x.resolution) for x in rows] == [("SUCCEEDED", "480")]
+        assert [(x.status, x.resolution) for x in rows] == [("SUCCEEDED", "360")]
 
     # Exported again: the new render replaces the old one, whose file is removed.
     first_key = rows[0].storage_key
@@ -189,12 +190,16 @@ def test_an_edit_sent_with_the_export_is_saved_and_priced():
     doc = ClipEditDoc(trim={"start": 10, "end": 40}, cuts=[[5, 12], [20, 25], [24, 30], [39, 50]])
     assert doc.segments() == [[12.0, 20.0], [30.0, 39.0]]                       # cuts clipped to the trim and joined
     assert ClipEditDoc(trim={"start": 0, "end": 5}).segments() == [[0.0, 5.0]]
+    # A cut left beyond the trim after the end was trimmed back keeps nothing past the trim (Codex, #218).
+    assert ClipEditDoc(trim={"start": 10, "end": 20}, cuts=[[25, 27]]).segments() == [[10.0, 20.0]]
+    assert ClipEditDoc(trim={"start": 10, "end": 30}, cuts=[[2, 5], [15, 16], [35, 40]]).segments() == \
+        [[10.0, 15.0], [16.0, 30.0]]
     with pytest.raises(ValueError):
         ClipEditDoc(trim={"start": 0, "end": 400})                              # longer than 300 s
     with pytest.raises(ValueError):
         ClipEditDoc(trim={"start": 0, "end": 10}, cuts=[[0, 9.5]])              # under a second left
     lines = ClipEditDoc(trim={"start": 0, "end": 10}, caption_lines=[{"start": 1, "end": 2, "text": "a b"}])
-    assert lines.words() == [(1.0, 1.5, "a"), (1.5, 2.0, "b")]
+    assert lines.caption_words() == [(1.0, 1.5, "a"), (1.5, 2.0, "b")]
 
 
 def test_words_on_a_rendered_timeline_go_back_to_source_seconds():

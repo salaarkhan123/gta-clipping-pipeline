@@ -13,6 +13,24 @@ DEFAULT_PACKS = json.dumps([
     {"id": "pack_5000", "name": "5,000 credits", "credits": 5000, "price_cents": 4999},
 ])
 
+# Premium AI thumbnails (#140): the named looks a user picks from. Each prompt describes a look only; the fixed
+# rules (keep the face, add nothing, no text, brand-safe) are in app/imagegen/prompts.py and always come first.
+# Override with PREMIUM_THUMB_STYLES (the same JSON shape).
+DEFAULT_THUMB_STYLES = json.dumps([
+    {"id": "cinematic", "name": "Cinematic",
+     "prompt": "a cinematic film still: teal and orange color grade, soft volumetric light, gentle haze and depth in "
+               "the background, rich contrast, a subtle vignette"},
+    {"id": "high_energy", "name": "High-energy gaming",
+     "prompt": "a high-energy gaming thumbnail: punchy saturated colors, strong colored rim light on the person, a "
+               "soft glow outline around them, vivid contrast and motion energy in the existing background"},
+    {"id": "clean", "name": "Clean professional",
+     "prompt": "a clean professional look: balanced natural colors, crisp detail, soft even lighting, a slightly "
+               "calmer, less cluttered background"},
+    {"id": "dramatic", "name": "Dramatic",
+     "prompt": "a dramatic look: deep shadows, moody low-key lighting with one strong key light on the person, a "
+               "dark vignette and an intense atmosphere"},
+])
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -21,6 +39,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/dev.db"
     data_dir: str = "./data"
     secret_key: str = "dev-insecure-change-me"
+    # During a SECRET_KEY rotation only: the old key, still accepted when reading tokens (never used to sign), so
+    # sessions and emailed links made before the rotation keep working until they expire. Remove it afterwards.
+    secret_key_previous: str = ""
     public_api_url: str = "http://localhost:8000"
     public_web_url: str = "http://localhost:3000"
     cors_origins: str = "http://localhost:3000"
@@ -68,12 +89,28 @@ class Settings(BaseSettings):
 
     # Auth and email
     jwt_ttl_hours: int = 168
-    auto_verify_email: bool = True    # dev default; set false in prod once SMTP is configured
+    auto_verify_email: bool = True    # dev default; set false in prod once email delivery works
+    # Email (app/emailer.py): resend | smtp | none. Empty: smtp when SMTP_HOST is set, otherwise none.
+    email_provider: str = ""
+    resend_api_key: str = ""
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
-    email_from: str = "no-reply@example.com"
+    email_from: str = "noreply@clutchclips.io"
+    # Signup without accept_policies=true is refused (422 terms_required). Off by default so API clients written
+    # before consent records keep working; the website always sends it. Owner decision (app/legal.py).
+    require_terms_acceptance: bool = False
+    # Copyright and likeness reports (app/trust.py). TRUST_ADMIN_EMAIL: where new-report notices go (comma
+    # separated); empty = every active admin account. Limits are per sender IP and per claimant email.
+    trust_admin_email: str = ""
+    trust_reports_per_ip_per_hour: int = 5
+    trust_reports_per_ip_per_day: int = 20
+    trust_reports_per_email_per_day: int = 3
+    # Repeat infringers (owner, 2026-11-18: three strikes). Strikes expire after this many days; 0 = never.
+    # Both are owner decisions (app/trust_decisions.py).
+    repeat_infringer_strikes: int = 3
+    repeat_infringer_strike_days: int = 0
 
     # Stripe
     stripe_secret_key: str = ""
@@ -87,19 +124,53 @@ class Settings(BaseSettings):
     stripe_price_scale_month: str = ""
     stripe_price_scale_year: str = ""
 
-    # AI titles, hashtags and virality scores (optional; off when the key is empty)
+    # AI titles, hashtags and the AI rating of each clip (optional; off when the key is empty). The rating is the
+    # model's opinion of the clip, 0-100, never a probability or prediction of views or virality.
     anthropic_api_key: str = ""
     ai_model: str = "claude-haiku-5-5"
+    # (U3) With the AI key and a whole transcript of the upload, an LLM reads the transcript in 5-minute chunks and
+    # proposes moments for the judge (app/pipeline/llm_pass.py). Costs tokens per job (measured in the U3 PR);
+    # false: candidates are nominated from the signals only, as before.
+    llm_pass: bool = True
+    # (U4) Automatic discovery (a clip-length bucket and no clip count): the AI rating (0-100) a moment needs to become
+    # a clip. No quota: a video gets as many clips as it has moments this good, never filler. Tune on tuning videos.
+    clip_quality_floor: int = Field(40, ge=0, le=100)
+    # Per-game weights of the five sub-scores, for ranking only: JSON {"<game or genre or default>": {"hook": n,
+    # "payoff": n, "clarity": n, "emotion": n, "pacing": n}}. Empty: every game ranks by the plain mean. Fill it from
+    # scripts/fit_score_weights.py, which fits on the owner's labels (tuning videos only).
+    score_weights: str = ""
+
+    # Premium AI thumbnails (#140, paid; owner OK 2026-11-17). Off until real provider testing and a quality check
+    # are done: off, the premium routes answer 404 `premium_thumbnails_off` and /v1/options does not list them. The
+    # free frame-based thumbnail is always made and stays free.
+    premium_thumbnails: bool = False
+    premium_thumb_credits: int = Field(25, ge=1)      # what one premium thumbnail costs: the only price used
+    gemini_api_key: str = ""                          # Gemini Nano Banana 2.1 (image edit); a billing-enabled key only
+    gemini_image_model: str = "gemini-nano-banana-2.1"
+    gemini_image_size: str = "2K"                     # 1K | 2K | 4K (upper-case K)
+    premium_thumb_timeout_sec: float = Field(60.0, ge=5, le=300)   # one provider attempt, end to end
+    premium_thumb_styles: str = DEFAULT_THUMB_STYLES
 
     # Pipeline
     whisper_model: str = "small.en"   # captions. "none" disables transcription and captions
     whisper_index_model: str = "base.en"   # full-video search index: smaller and several times faster
+    # S5 / #99 GPU plug-in points. Defaults keep the CPU path. Do not flip in production without an
+    # owner-OK measured bench (scripts/bench_nvenc.py) and a provisioned GPU worker. Agents never
+    # provision paid GPUs. See docs/ops/gpu-bench-recommendations.md.
+    video_encoder: str = "libx264"    # libx264 (default) | h264_nvenc (bench / future only)
+    whisper_device: str = "cpu"       # cpu (default) | cuda (faster-whisper CUDA stub)
+    nvdec: bool = False               # optional -hwaccel cuda; not wired into render_clip yet
     # Whole-recording transcription. "local" runs the Whisper models above; hosted providers are added with
     # their adapters. TRANSCRIBE_PARALLEL chunks run at once: leave it at 1 on a 4 vCPU server (one model already
     # uses every core) and raise it on a machine with 8 or more (see DEPLOY.md, "Measuring speed").
     transcription_provider: str = "local"
     transcribe_parallel: int = Field(1, ge=1, le=8)
     transcribe_chunk_sec: int = Field(300, ge=60, le=1800)
+    # Clip Maker transcribes the whole recording first (with word timings) and keeps it for every later job on the
+    # upload, instead of transcribing candidate windows only. Off by default: on the 4 vCPU droplet the local model
+    # makes a 2-hour job slower (see DEPLOY.md, "Transcription settings"); turn it on with a hosted provider or a
+    # bigger machine.
+    transcribe_whole: bool = False
     # Languages (agent F; app/languages.py). English always uses the two models above, exactly as before. Speech in
     # any other language uses the multilingual model of the same size: empty = worked out from the model above
     # (small.en -> small, base.en -> base). They are public models and are downloaded on first use unless the
@@ -118,11 +189,24 @@ class Settings(BaseSettings):
     # Jobs one worker process runs at once. 2 is the most a 4 vCPU / 8 GB server holds (ffmpeg and Whisper
     # both use every core); raise the limit only with a bigger server and a new benchmark.
     worker_concurrency: int = Field(1, ge=1, le=2)
+    # Chat-band sample mode for onscreen_chat_motion (signals.CHAT_MOTION_SAMPLES).
+    # Default "dense" (fps=2) keeps historical behaviour. For preview latency with chat_region set,
+    # prefer "coarse" (fps=0.5 + interpolate, parallel on long VODs) or "sparse" (fps=1); "lite" is
+    # sparse-rate at scale=240. Measured on synth-30min: coarse ≈1.8× faster than sparse at equal
+    # chat-burst ranking quality; H.264 decode is the floor so density alone cannot reach 2×.
+    chat_motion_sample: str = "dense"
+    # How many clip encodes one Clip Maker job may run at once (Wave B1). 1 = serial (default, safe on 4 vCPU).
+    # Raise on a machine with spare cores after measuring with scripts/job_timings.py; cap 8.
+    render_workers: int = Field(1, ge=1, le=8)
     sentry_dsn: str = ""
 
     @property
     def packs(self) -> list[dict]:
         return json.loads(self.credit_packs)
+
+    @property
+    def thumb_styles(self) -> list[dict]:
+        return json.loads(self.premium_thumb_styles)
 
     @property
     def work_dir(self) -> Path:
@@ -143,10 +227,16 @@ class Settings(BaseSettings):
         problems = []
         if self.secret_key == "dev-insecure-change-me" or len(self.secret_key) < 32:
             problems.append("SECRET_KEY must be a random string of 32+ characters")
+        if self.secret_key_previous and len(self.secret_key_previous) < 32:
+            problems.append("SECRET_KEY_PREVIOUS, when set, must be the old 32+ character SECRET_KEY")
         if self.database_url.startswith("sqlite"):
             problems.append("DATABASE_URL must point at Postgres")
         if self.auto_verify_email:
-            problems.append("AUTO_VERIFY_EMAIL must be false (configure SMTP)")
+            problems.append("AUTO_VERIFY_EMAIL must be false (configure email delivery)")
+        from .emailer import missing_keys, provider
+        if provider(self) not in ("resend", "smtp") or missing_keys(self):
+            problems.append("email delivery must be configured: EMAIL_PROVIDER=resend with RESEND_API_KEY, "
+                            "or EMAIL_PROVIDER=smtp with SMTP_HOST")
         if problems:
             raise RuntimeError("Unsafe production config: " + "; ".join(problems))
 

@@ -6,6 +6,7 @@ What a clip is rendered from: its edit (`clips.edit`, ClipEditDoc) when it has o
 (`features["edit"]`: segments, flash-forward, zooms), else its start and end.
 """
 import json
+import re
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -13,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .models import Clip, Export, Job, new_id
+from .pipeline.captions import Word
 from .pipeline.edit import remap_words, source_words
 from .pipeline.tools import ExportItem, planned_seconds
 from .render_options import LayoutOptions
@@ -36,6 +38,52 @@ class CaptionLine(BaseModel):
     text: str = Field(max_length=200)
 
 
+EMOJI = re.compile(r"^[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\u2190-\u21FF\u2300-\u23FF"
+                   r"\uFE0F\u200D\U0001F3FB-\U0001F3FF]{1,8}$")
+
+
+class EditWord(BaseModel):
+    """One caption word in the text-based editor (captions agent), in SOURCE seconds like the rest of the edit.
+
+    - `text`: the word as it is shown (edit words); its time stays the spoken word's.
+    - `hidden`: remove the caption only; the video keeps the moment.
+    - `cut`: remove the caption and its stretch of video (the word's [start, end] joins the edit's cuts).
+    - `highlight`: this word in a colour (#RRGGBB) of the user's choosing.
+    - `emoji`: up to two emoji drawn after the word.
+    - `break_before`: a new caption starts at this word (split).
+    """
+    model_config = ConfigDict(extra="forbid")
+    start: float = Field(ge=0)
+    end: float = Field(gt=0)
+    text: str = Field(min_length=1, max_length=60)
+    hidden: bool = False
+    cut: bool = False
+    highlight: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    emoji: str | None = Field(default=None, max_length=16)
+    break_before: bool = False
+
+    @field_validator("text")
+    @classmethod
+    def one_word(cls, value):
+        value = " ".join(value.split())
+        if not value or "{" in value or "}" in value or "\\" in value:
+            raise ValueError("a caption word is plain text")
+        return value
+
+    @field_validator("emoji")
+    @classmethod
+    def only_emoji(cls, value):
+        if value is not None and not EMOJI.match(value):
+            raise ValueError("emoji takes emoji only")
+        return value
+
+    @model_validator(mode="after")
+    def check_times(self):
+        if self.end <= self.start:
+            raise ValueError("a word ends after it starts")
+        return self
+
+
 class ClipEditDoc(BaseModel):
     """`clips.edit`: one clip as the editor left it. Every time is in seconds of the SOURCE video, so an edit means
     the same thing however the clip was rendered before (the format of web-src/lib/edit.ts).
@@ -48,6 +96,9 @@ class ClipEditDoc(BaseModel):
     - `caption_lines`: the caption lines in the user's words; each line's time is shared evenly between its words.
       Empty: the clip's own words, moved onto the new cut.
     - `hook_text`: the on-screen hook in the user's words; null keeps the AI's.
+    - `words`: the caption word by word (text-based editing, EditWord): edited text, hidden captions, highlights,
+      emoji, splits, and words cut with their video. When set it replaces `caption_lines` and the clip's own words;
+      each word keeps its own time.
     - `options`: the look the editor chose (POST /v1/clips option names), kept for the editor. An export renders
       with the options its request sends.
     Saving is free: nothing is rendered until POST /v1/clips/export.
@@ -56,6 +107,7 @@ class ClipEditDoc(BaseModel):
     trim: Trim
     cuts: list[tuple[float, float]] = Field(default_factory=list, max_length=200)
     caption_lines: list[CaptionLine] = Field(default_factory=list, max_length=1000)
+    words: list[EditWord] | None = Field(default=None, max_length=3000)
     hook_text: str | None = Field(default=None, max_length=HOOK_MAX)
     options: dict = Field(default_factory=dict)
 
@@ -90,8 +142,9 @@ class ClipEditDoc(BaseModel):
     def segments(self) -> list[list[float]]:
         """The source parts to play, in order: the trim with the cuts taken out."""
         out, at = [], self.trim.start
-        for s, e in sorted((max(s, self.trim.start), min(e, self.trim.end)) for s, e in self.cuts):
-            if e <= at:
+        cuts = [*self.cuts, *((w.start, w.end) for w in self.words or () if w.cut)]
+        for s, e in sorted((max(s, self.trim.start), min(e, self.trim.end)) for s, e in cuts):
+            if e <= s or e <= at:       # a cut wholly outside the trim (left over after a re-trim) keeps nothing extra
                 continue
             if s - at > 0.05:
                 out.append([round(at, 3), round(s, 3)])
@@ -100,8 +153,12 @@ class ClipEditDoc(BaseModel):
             out.append([round(at, 3), round(self.trim.end, 3)])
         return out
 
-    def words(self) -> list[tuple[float, float, str]]:
-        """The caption lines as timed words, in source seconds."""
+    def caption_words(self) -> list[tuple[float, float, str]]:
+        """The caption as timed words, in source seconds: `words` as edited (hidden and cut ones left out, each
+        word's marks on its text, captions.Word), else the caption lines with their time shared evenly."""
+        if self.words is not None:
+            return [(w.start, w.end, Word.of(w.text, w.highlight, w.emoji, w.break_before))
+                    for w in sorted(self.words, key=lambda w: w.start) if not (w.hidden or w.cut)]
         out = []
         for line in self.caption_lines:
             parts = line.text.split()
@@ -178,12 +235,15 @@ def export_items(db: Session, clip_ids: list[str], storage, work: Path, edits: d
             continue                    # deleted after the export was asked for: not rendered, not charged
         if edits is not None and clip_id in edits:
             edit = ClipEditDoc.model_validate(edits[clip_id]) if edits[clip_id] else None
+            # No edit when the export was asked for: the job's own cut, as it was priced, even if an edit was
+            # saved since (clip_cut would read that saved edit).
+            segments, flash, zooms = clip_cut(clip, edit) if edit is not None else rendered_cut(clip)
         else:
             edit = edit_of(clip)
-        segments, flash, zooms = clip_cut(clip, edit)
+            segments, flash, zooms = clip_cut(clip, edit)
         words = None
-        if edit is not None and edit.caption_lines:
-            words = remap_words(edit.words(), segments)
+        if edit is not None and (edit.caption_lines or edit.words is not None):
+            words = remap_words(edit.caption_words(), segments)
         elif clip.captions_key and storage.exists(clip.captions_key):
             storage.fetch(clip.captions_key, work / f"{clip.id}.captions.json")
             saved = json.loads((work / f"{clip.id}.captions.json").read_text()).get("words") or []
@@ -199,13 +259,14 @@ def export_items(db: Session, clip_ids: list[str], storage, work: Path, edits: d
     return items
 
 
-def finish_export(db: Session, job: Job, done: list[tuple[str, str, str]], resolution: str) -> list[str]:
+def finish_export(db: Session, job: Job, done: list[tuple[str, str, str, str]]) -> list[str]:
     """Inside the export job's success transaction: each clip's `export_key` becomes its new render and an
-    Export row records it. `done` is (export_id, clip_id, storage_key). Returns the storage keys of the renders
-    these replace, for the caller to delete once the transaction is committed."""
-    new_keys = {key for _e, _c, key in done}
+    Export row records it. `done` is (export_id, clip_id, storage_key, resolution), the resolution being the
+    rendered file's own (render.resolution_name). Returns the storage keys of the renders these replace, for the
+    caller to delete once the transaction is committed."""
+    new_keys = {key for _e, _c, key, _r in done}
     replaced = []
-    for export_id, clip_id, key in done:
+    for export_id, clip_id, key, resolution in done:
         clip = db.get(Clip, clip_id)
         if clip is None:
             continue

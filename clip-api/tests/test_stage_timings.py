@@ -47,6 +47,7 @@ def test_the_pipeline_times_its_stages_and_they_cover_the_run(video, transcriber
     c = d["counts"]
     assert c["clips"] == len(clips) == 1 and c["source_sec"] == pytest.approx(40, abs=0.5) and c["candidates"] >= 1
     assert c["rendered_sec"] > 0 and c["transcribed_rough_sec"] >= 10
+    assert c["transcript_transcribed"] == c["candidates"] and "transcript_reused" not in c
     assert clips[0].features["edit"]["render_sec"] == pytest.approx(d["stages"]["render"], abs=0.05)
     assert run_pipeline(video, PipelineOptions(max_clips=1, clip_length=10), tmp_path / "p")   # the timer is optional
 
@@ -57,8 +58,10 @@ def test_the_judge_path_times_frames_ai_and_the_second_transcription(three_burst
     def judge(text, frame, ctx):
         time.sleep(0.05)
         return {"title": "t", "virality": {"score": 80}}
+    fast = Talker()
+    fast.model_name = "base.en"           # another model: its text is not the caption model's (U1)
     run_pipeline(three_bursts, PipelineOptions(max_clips=1, clip_length=20), tmp_path / "o", transcriber=Talker(), judge=judge,
-                 fast_transcriber=Talker(), timer=timer)
+                 fast_transcriber=fast, timer=timer)
     d = timer.as_dict()
     assert {"judge_frames", "judge_ai", "transcribe_rough", "transcribe_final"} <= set(d["stages"])
     assert d["stages"]["judge_ai"] >= 0.05 and d["counts"]["judged"] == d["counts"]["candidates"] >= 1
@@ -107,7 +110,13 @@ NEW = {"elapsed_sec": 400.0, "speed_x": 18.0, "queue_sec": 5.0, "total_sec": 405
        "timings": {"audio": 50.0, "transcribing": 120.0, "rendering": 200.0, "uploading": 10.0},
        "stages": {"download": 5.0, "audio_signal": 50.0, "transcribe_rough": 90.0, "transcribe_final": 30.0, "judge_ai": 10.0,
                   "dead_air": 8.0, "render": 180.0, "thumbnail": 12.0, "store": 10.0},
-       "counts": {"source_sec": 7200.0, "clips": 10, "rendered_sec": 300.0, "transcribed_rough_sec": 1380.0, "transcribed_final_sec": 380.0}}
+       "counts": {"source_sec": 7200.0, "clips": 10, "rendered_sec": 300.0, "transcribed_rough_sec": 1380.0,
+                  "transcribed_final_sec": 380.0, "transcript_transcribed": 12, "transcript_reused": 0}}
+REUSE = {"elapsed_sec": 200.0, "speed_x": 36.0, "queue_sec": 2.0, "total_sec": 202.0,
+         "timings": {"audio": 50.0, "rendering": 120.0, "uploading": 10.0},
+         "stages": {"download": 5.0, "audio_signal": 50.0, "dead_air": 8.0, "render": 100.0, "thumbnail": 12.0, "store": 10.0},
+         "counts": {"source_sec": 7200.0, "clips": 10, "rendered_sec": 300.0, "candidates": 12,
+                    "transcript_reused": 12, "transcript_transcribed": 0, "heard_pieces": 12}}
 
 
 def test_targets_follow_the_goal():
@@ -120,7 +129,22 @@ def test_one_job_gives_stage_shares_rates_and_the_target(tmp_path):
     assert (c["detail"], c["source_min"], c["clips"], c["total_sec"], c["target_sec"], c["meets_target"]) == ("fine", 120.0, 10, 405.0, 600.0, True)
     assert c["stages"][0] == {"stage": "render", "sec": 180.0, "share": 0.45}
     assert c["stages"][-1]["stage"] == "(not in a stage)" and c["stages"][-1]["sec"] == 5.0     # 400 - 395 timed
-    assert c["rates"] == {"render_sec_per_clip": 18.0, "render_x_realtime": 1.67, "transcribe_x_realtime": 14.7}
+    assert c["rates"] == {"render_sec_per_clip": 18.0, "render_x_realtime": 1.67, "transcribe_x_realtime": 14.7,
+                          "transcript_reused": 0, "transcript_transcribed": 12, "transcript_reuse_rate": 0.0}
+
+
+def test_transcript_reuse_rate_on_a_repeat_job(tmp_path):
+    """U1: a re-run with every window read from Heard reports a 1.0 hit rate (no 2h VOD; fixture only)."""
+    assert jt.transcript_reuse({"transcript_reused": 9, "transcript_transcribed": 1}) == {
+        "transcript_reused": 9, "transcript_transcribed": 1, "transcript_reuse_rate": 0.9}
+    assert jt.transcript_reuse({}, transcript_cached=True) == {"transcript_cached": True}
+    c = jt.compare(jt.load(job(tmp_path, "reuse.json", REUSE)))
+    assert c["rates"]["transcript_reuse_rate"] == 1.0
+    assert c["rates"]["transcript_reused"] == 12 and c["rates"]["transcript_transcribed"] == 0
+    assert c["rates"]["heard_pieces"] == 12
+    assert "transcribe_rough" not in {r["stage"] for r in c["stages"]}
+    out = jt.render(c)
+    assert "transcript reuse rate 1.0" in out and "heard pieces 12" in out
 
 
 def test_an_older_job_is_compared_on_the_coarse_stages(tmp_path):

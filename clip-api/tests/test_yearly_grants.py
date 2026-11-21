@@ -11,6 +11,7 @@ from app import worker
 from app.db import new_session
 from app.models import CreditLedger, Payment
 from app.plan_grants import add_months, sweep_yearly_grants
+from tests.billing_fixtures import legacy_subscription
 from tests.test_api import balance
 from tests.test_plans import prices, set_account  # noqa: F401
 from tests.test_stripe_events import T0, charge, fresh_ids, i, invoice, me, payment, send, sub_obj, subscribe  # noqa: F401
@@ -26,7 +27,7 @@ def ts(dt: datetime) -> int:
 def yearly_invoice(account, inv=None, start=START, price="price_pro_y", intent=None):
     meta = {"account_id": account["id"], "plan_id": "pro_v2", "interval": "year"}
     line = {"price": {"id": price}, "period": {"start": ts(start), "end": ts(add_months(start, 12))}}
-    return invoice(account, meta, inv=inv, amount_paid=11496, payment_intent=intent or i("pi_y"),
+    return invoice(account, meta, inv=inv, amount_paid=11499, payment_intent=intent or i("pi_y"),
                    lines={"data": [line]})
 
 
@@ -118,7 +119,7 @@ def test_a_refund_takes_back_what_was_granted_and_stops_the_grants(client, pro_y
     headers, account = pro_yearly
     sweep_yearly_grants(add_months(START, 2))
     assert balance(client, headers) == 30 + 3000
-    send(client, "charge.refunded", charge(intent=i("pi_y"), amount=11496, refunded=11496))
+    send(client, "charge.refunded", charge(intent=i("pi_y"), amount=11499, refunded=11499))
     assert balance(client, headers) == 30 and payment(i("in_1")).status == "refunded"
     sweep_yearly_grants(add_months(START, 6))
     assert balance(client, headers) == 30
@@ -127,7 +128,7 @@ def test_a_refund_takes_back_what_was_granted_and_stops_the_grants(client, pro_y
 def test_a_partial_refund_takes_its_share_and_stops_the_grants(client, pro_yearly):
     headers, account = pro_yearly
     sweep_yearly_grants(add_months(START, 1))
-    send(client, "charge.refunded", charge(intent=i("pi_y"), amount=11496, refunded=5748, full=False))
+    send(client, "charge.refunded", charge(intent=i("pi_y"), amount=11499, refunded=5750, full=False))
     assert balance(client, headers) == 30 + 1000 and payment(i("in_1")).status == "partial"
     sweep_yearly_grants(add_months(START, 6))
     assert balance(client, headers) == 30 + 1000
@@ -152,12 +153,13 @@ def test_a_yearly_renewal_starts_a_new_twelve(client, pro_yearly):
     assert f"grant:{i('sub_1')}:{ts(END)}:0" in grant_keys(account["id"])
 
 
-def test_a_legacy_yearly_subscriber_still_gets_the_year_up_front(client, user, prices):
+def test_a_legacy_yearly_subscriber_still_gets_the_year_up_front(client, user, prices, legacy_subscription):
     headers, account = user
     set_account(account["id"], plan="pro", stripe_subscription_id=i("sub_1"), stripe_customer_id=f"cus_{account['id']}")
     meta = {"account_id": account["id"], "plan_id": "pro", "interval": "year"}
+    legacy_subscription(account, i("sub_1"), "Pro", "year", 23400)
     line = {"price": {"id": "price_1OldInlinePrice"}, "period": {"start": T0, "end": ts(END)}}
-    send(client, "invoice.paid", invoice(account, meta, lines={"data": [line]}))
+    send(client, "invoice.paid", invoice(account, meta, total=23400, lines={"data": [line]}))
     assert balance(client, headers) == 30 + 1500 * 12 and payment(i("in_1")).kind == "plan"
     sweep_yearly_grants(add_months(START, 6))
     assert balance(client, headers) == 30 + 18000

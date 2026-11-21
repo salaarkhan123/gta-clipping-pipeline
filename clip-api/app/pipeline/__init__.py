@@ -10,6 +10,11 @@ With a `judge` (the AI), the signals only nominate ~3x more candidates than aske
 one from its transcript and a frame, and the best-rated are rendered. Loud is not the same as good: the
 judge throws out intro cards, menus and dead air that happen to be loud.
 
+With a `proposer` too and a whole transcript of the analysed part (U3, llm_pass.py), an LLM first reads the
+transcript in overlapping 5-minute chunks and proposes moments; the judge then rates those mixed with the
+strongest signal windows instead of windows from every quarter. Without either, or when the pass fails, the
+candidates are nominated exactly as before.
+
 Three options change what is selected (all optional; without them nothing changes):
 - `duration`, a clip-length bucket (moments.BUCKETS): every clip's length, in the source and as rendered, is
   inside it. Windows are nominated at the bucket's nominal length, the judge gets enough transcript to cut
@@ -19,33 +24,54 @@ Three options change what is selected (all optional; without them nothing change
 - `range`: only this part of the source is measured, transcribed and clipped. Clip times stay source times.
 """
 import json
+import logging
 import math
 import time
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
+import threading
 
 import numpy as np
 
+log = logging.getLogger("clipapi.pipeline")
+
 from .ff import SAFE_IN, Deadline, PipelineError, PipelineTimeout, probe, run  # noqa: F401 (re-exported)
-from .render import CHAT_REGIONS, FACECAM_REGIONS, render_clip, render_thumb, resolve_layout
+from .render import CHAT_REGIONS, FACECAM_REGIONS, render_clip, resolve_layout
+from .thumbs import make_thumbnail, thumb_text
 from .censor import mask, mask_words
 from .facecam import moment_facecam, resolve_facecam
 from .timing import Timer
-from .stt import SourceAudio, slice_wav, window as transcript_window
+from .stt import SourceAudio, slice_wav
+from .heard import Heard, model_of
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
-from .transcribe import Transcriber, Transcript, exclamation_hits, extract_wav, in_language, snap_to_speech
-from .edit import FLASH_LEN, KEEP_PAUSE, MAX_REMOVED, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, select_cuts, with_flash_forward, zoom_expr, zoom_peaks
+from .timeline import AUDIO as TIMELINE_AUDIO, HUD as TIMELINE_HUD, STANDBY_REJECT, audio_timeline, keyframes, \
+    scene_changes, standby_seconds, wav_timeline
+from .sound_events import EVENTS as SOUND_EVENTS, score_wav as score_sound_events
+from .transcribe import (Transcriber, Transcript, exclamation_hits, extract_wav, in_language, snap_to_sentences,
+                         snap_to_speech)
+from .edit import FLASH_LEN, KEEP_PAUSE, MAX_REMOVED, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, select_cuts, to_output, with_flash_forward, zoom_expr, zoom_peaks
+from . import hooks as hook_lines
+from .ranking import EQUAL, rank_score
+from .copy_check import check_copy
 from .moments import BUCKETS, MAX_CLIPS, NOMINAL, Moment
-from .variety import HORIZON, min_gap_for, pick_distinct
+from .llm_pass import PASS_BUDGET_SEC, PassResult, Proposal, Proposer, mix, run_pass
+from .variety import HORIZON, min_gap_for, pick_distinct, picture_hash
 from .windows import fits, pick_spread, pick_windows
 
-WEIGHTS = {"chat_motion": 1.0, "audio": 0.7}   # hand-set; the learned ranker replaces these later
+# Hand-set; the learned ranker replaces these later. The timeline signals (timeline.py) and the named
+# sound events (sound_events.py) are computed only when their weight is above 0. The U2 defaults come from
+# the check against the labelled tuning moments. Each sound event stays at 0 until that class is measured.
+# HUD OCR (#202): observation only until eval/labels-hud-ocr.csv ≥ 0.9 — weights stay 0.
+WEIGHTS = {"chat_motion": 1.0, "audio": 0.7, "audio_flux": 0.35, "audio_bursts": 0.35, "scene": 0.0,
+           "hud_killfeed": 0.0, "hud_banner": 0.0,
+           **{name: 0.0 for name in SOUND_EVENTS}}
 TRANSCRIPT_BONUS = 0.15                        # max re-rank bonus from exclamation phrases
 PAD = 4.0                                      # seconds of audio transcribed either side of a candidate
-JUDGE_PAD = 8.0                                # ... when a judge chooses the cut: room to grow a 30 s window to 45 s
-JUDGE_MIN_LEN, JUDGE_MAX_LEN = 15.0, 45.0      # the clip lengths a judge may choose
+JUDGE_PAD = 15.0                               # ... when a judge chooses the cut: room to grow a 30 s window to 60 s
+JUDGE_MIN_LEN, JUDGE_MAX_LEN = 15.0, 60.0      # the clip lengths a judge may choose (U4: story cuts up to 60 s)
 MIN_CLIP = 10.0
 MIN_RELATIVE_SCORE = 0.2                      # candidates below 20% of the best window are dropped
 MAX_CANDIDATES = 30                           # how many moments the judge may look at per video, for up to 10 clips
@@ -54,6 +80,16 @@ SILENT_DB = -90.0                             # the level given to seconds outsi
 JUDGE_WEIGHT = 0.75                           # final rank = 0.75 * judge score + 0.25 * signal strength
 JUDGE_FLOOR = 20                              # judge scores below this are junk (menus, intro cards, dead air)
 JUDGE_THREADS = 4
+# (U4) Automatic discovery (a `duration` and no `limit`): a moment becomes a clip only when the judge rates it at
+# least this; there is no quota, so a long video gets as many clips as it has moments this good (at most MAX_CLIPS).
+# The prompt anchors an ordinary clip at 50, so 40 keeps ordinary-or-better moments. Not tuned yet: tune it on the
+# tuning videos only (never the held-out one). The worker sets it from CLIP_QUALITY_FLOOR.
+QUALITY_FLOOR = 40
+# (U4, owner: clips up to 60 s) "0-90" is the website's Auto clip length: its clips are at most 60 s. A bucket the
+# user picks on purpose (30-60, 60-90, ...) keeps its own range; the reservation still uses the bucket's own longest
+# (more is reserved, the job is settled on what it rendered), so nothing about credits changes.
+AUTO_LONGEST = {"0-90": 60}
+PEAKS = 3                                     # per signal, the strongest seconds the judge is told about
 
 # judge(transcript_text, frame_path, context) -> {"virality": {"score": 0-100, ...}, ...} or None
 Judge = Callable[[str, Path | None, dict], dict | None]
@@ -67,12 +103,15 @@ class PipelineOptions:
     aspect: str = "9:16"          # 9:16 | 4:5 | 1:1 | 16:9 (used when vertical/reframing is on)
     max_side: int | None = None   # plan resolution cap: short side in pixels
     chat_region: str = "none"     # "none" or a key of CHAT_REGIONS
+    chat_motion_sample: str = "dense"  # dense|sparse|coarse|lite — see signals.CHAT_MOTION_SAMPLES
     zoom: float = 1.0
     captions: bool = True
     caption_font: str = "DejaVu Sans"
     caption_style: str = "pop"            # impact | pop | bold | neon | boxed | clean
     caption_position: str = "auto"        # impact only: auto | seam | lower | center
     caption_accent: str | None = None     # impact only: the keyword's colour, #RRGGBB; None = the brand lime
+    caption_look: dict | None = None      # (captions) render_options.CaptionLook as a dict: font, weight, colours...
+    caption_font_file: str | None = None  # (captions) local file of caption_look's "custom:<id>" font (the worker fetches it)
     camera: str | None = None             # two-panel layouts: "top" | "bottom"; None = the layout's own
     split_ratio: float | None = None      # two-panel layouts: the top panel's share of the height, 0.25 to 0.75
     censor: bool = False                  # mask swears in captions (burned and captions.json)
@@ -84,6 +123,7 @@ class PipelineOptions:
     punch_zoom: bool = True               # subtle punch-in zooms (max 1.15x) on the gameplay at loudness spikes
     flash_forward: bool = True            # open on 1.5 s of the peak when the judge names one, then cut back
     hook_overlay: bool = True             # burn the judge's on-screen hook text over the first 2.5 s
+    thumbnail_text: bool = True           # set the hook (else the title) on the thumbnail; independent of hook_overlay
     template: str | None = None           # the template these options came from (recorded, not interpreted here)
     prompt: str | None = None             # the user's words for the moments they want: handed to the judge as data
     weights: dict | None = None           # per-signal weights overriding WEIGHTS, e.g. {"audio": 1.0}
@@ -100,10 +140,17 @@ class PipelineOptions:
     caption_display: str = "original"     # original | translation | both (recorded: burned captions are the original)
     # (render, agent B)
     render: str = "full"                  # full | preview (fast and small) | none (no video: times, copy, thumbnail)
+    # (render, Wave B1) how many clip encodes may run at once. 1 = previous serial behaviour (default).
+    # Cap is applied against the number of chosen clips; progress and on_clip stay serial under a lock.
+    render_workers: int = 1
     hook_style: str = "serious"           # the tone the judge writes the hook in (render_options.HookStyle)
     hook_position: str = "beginning"      # beginning | end: where the burned hook shows
     hook_duration_ms: int | None = None   # how long it shows; None = 2.5 s
+    quality_floor: int = QUALITY_FLOOR    # (U4) automatic discovery: the judge rating a moment needs to become a clip
+    score_weights: dict | None = None     # the game's weights for the five sub-scores (ranking.py); None: equal
+    score_weights_version: str = EQUAL    # ... and their name, recorded on every clip they ranked
     moment_layout: bool = False           # auto: draw each moment for what it shows (PROVISIONAL; off: one layout)
+    observe_hud_ocr: bool = False         # #202: run HUD OCR for logs/eval only; never ranks while weights stay 0
 
 
 @dataclass
@@ -114,10 +161,11 @@ class ClipResult:
     signals: dict                 # share of the score from each signal (user-facing "why this clip")
     features: dict                # raw features (training data for the future ranker)
     video_path: Path | None       # None: rendered with render "none" (no video yet)
-    thumb_path: Path | None = None
+    thumb_path: Path | None = None    # the thumbnail: the clip's best frame with its hook text (thumbs.py)
     captions_path: Path | None = None
     meta: dict | None = None      # the judge's title, hashtags and virality for this clip
     index: int = 0                # the clip's number within the job, in the order the moments happen (1 = earliest)
+    frame_path: Path | None = None    # that frame without text (what an AI is shown)
 
 
 @dataclass
@@ -146,20 +194,37 @@ def _frame(src: Path, t: float, out: Path, deadline: Deadline | None) -> Path | 
 
 
 def _transcribe(c: "_Candidate", i: int, transcriber, src: Path, duration: float, out_dir: Path, deadline,
-                pad: float = PAD, audio: Path | None = None, floor: float = 0.0) -> None:
+                pad: float = PAD, audio: Path | None = None, floor: float = 0.0, heard: Heard | None = None,
+                any_model: bool = False, timed=None) -> bool:
     """Whisper over the candidate plus `pad` either side, never outside [floor, duration]. `audio` is the job's
-    extracted WAV: with it the piece is cut straight out of that file; without it ffmpeg seeks into the source."""
+    extracted WAV: with it the piece is cut straight out of that file; without it ffmpeg seeks into the source.
+
+    `heard`: what this upload already has transcribed. When it covers the piece (by this transcriber's model, or by
+    any model with `any_model`) the text is read from it and nothing is transcribed: returns False. Otherwise the
+    new piece is added to it: returns True. `timed`: a context manager the transcription itself runs in (a timer
+    stage), so reading known text is not counted as transcribing."""
     c.offset = max(floor, c.start - pad)
-    length = min(duration, c.end + pad) - c.offset
+    end = min(duration, c.end + pad)
+    model = model_of(transcriber)
+    known = heard.window(c.offset, end, None if any_model else model) if heard is not None else None
+    if known is not None:
+        c.transcript = known[0]
+        return False
     wav = out_dir / f"cand{i}.wav"
-    if audio is not None:
-        slice_wav(audio, c.offset, length, wav)
-    else:
-        extract_wav(src, c.offset, length, wav, deadline)
-    try:
-        c.transcript = transcriber.transcribe(wav)
-    finally:
-        wav.unlink(missing_ok=True)
+    with timed if timed is not None else nullcontext():
+        if audio is not None:
+            slice_wav(audio, c.offset, end - c.offset, wav)
+        else:
+            extract_wav(src, c.offset, end - c.offset, wav, deadline)
+        try:
+            c.transcript = transcriber.transcribe(wav)
+        finally:
+            wav.unlink(missing_ok=True)
+    if heard is not None:
+        heard.add(c.offset, end, model, Transcript(
+            words=[(s + c.offset, e + c.offset, w) for s, e, w in c.transcript.words],
+            segments=[(s + c.offset, e + c.offset, x) for s, e, x in c.transcript.segments]))
+    return True
 
 
 def _with_prompt(judge: Judge, prompt: str) -> Judge:
@@ -180,16 +245,24 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                  deadline: Deadline | None = None,
                  judge: Judge | None = None,
                  fast_transcriber: Transcriber | None = None, timer: Timer | None = None,
-                 transcript: Transcript | None = None, source_audio: SourceAudio | None = None,
+                 transcript: Heard | None = None, source_audio: SourceAudio | None = None,
                  on_clip: Callable[[ClipResult], None] | None = None,
-                 on_moments: Callable[[list[Moment]], None] | None = None) -> list[ClipResult]:
+                 on_moments: Callable[[list[Moment]], None] | None = None,
+                 proposer: Proposer | None = None,
+                 hook_writer: hook_lines.Writer | None = None) -> list[ClipResult]:
     """`timer`, when given, receives how long each stage took and how much work it did (see timing.py).
-    `transcript` is an existing transcript of the whole recording (absolute seconds), if there is one.
+    `transcript` (heard.Heard) is what earlier jobs transcribed of this recording: candidates it covers are read
+    from it instead of transcribed again (the rough pass from any model, captions only from the caption model's
+    own text), and what this run transcribes is added to it for the caller to keep.
     `source_audio` is the recording's audio already decoded by the caller (stt.extract_audio): candidates are
     then cut from it. Without it nothing is extracted up front, which is faster when only candidates are read.
     `on_clip` is called with each clip as soon as it is rendered (best first); the return value is every clip in
     the order of the video. `on_moments` is called once, before anything is rendered, with the chosen moments
-    (moments.Moment, best first)."""
+    (moments.Moment, best first).
+    `proposer` (llm_pass.Proposer, used only with a `judge`) reads the whole transcript in chunks and proposes
+    moments for the judge (U3). It runs only when `transcript` covers the whole analysed part.
+    `hook_writer` (hooks.Writer, U4) rewrites a hook that repeats an earlier clip's; without it a repeat is replaced
+    by one of the clip's titles or its own best line."""
     progress = progress_cb or (lambda stage, pct: None)
     timer = timer or Timer()
     t_begin = time.monotonic()
@@ -226,11 +299,14 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         layout, facecam = resolve_facecam(input_path, info, options, deadline)
 
     # 1. Cheap signals over the analysed part of the source.
+    weights = {**WEIGHTS, **(options.weights or {})}
+    heard_audio = [k for k in TIMELINE_AUDIO if weights.get(k, 0) > 0]      # timeline signals from the same decode
     series: dict[str, np.ndarray] = {}
     if options.chat_region != "none":
         progress("chat_motion", 5)
         with timer.stage("chat_motion"):
-            motion = onscreen_chat_motion(input_path, options.chat_region, deadline, **part)
+            motion = onscreen_chat_motion(input_path, options.chat_region, deadline, **part,
+                                          sample=options.chat_motion_sample)
         if motion:
             floor = max(float(np.std(motion)) * 0.1, 1e-6)
             series["chat_motion"] = normalise(baseline_z(motion, floor=floor), n, shift=CHAT_LAG)
@@ -238,20 +314,62 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     audio: Path | None = source_audio.path if source_audio is not None else None
     if info.has_audio:
         progress("audio", 30)
+        extra: dict[str, list[float]] = {}
         with timer.stage("audio_signal"):
-            # A caller that already decoded the audio measured its levels in that pass; otherwise measure now.
-            db = (source_audio.levels if source_audio is not None else audio_rms_db(input_path, deadline, **part)) or []
+            # A caller that already decoded the audio measured its levels in that pass; otherwise measure now, with
+            # the timeline's audio signals from the same decode when any of them counts.
+            if source_audio is not None:
+                db = source_audio.levels or []
+                if heard_audio:
+                    extra = wav_timeline(source_audio.path, **part)
+            elif heard_audio:
+                db, extra = audio_timeline(input_path, deadline, **part)
+            else:
+                db = audio_rms_db(input_path, deadline, **part) or []
         if ranged and source_audio is not None:
             db = db[base:int(math.ceil(t1))]
         if db:
             series["audio"] = normalise(baseline_z(db, floor=1.0), n)
+        for name in heard_audio:
+            series[name] = _scored(extra.get(name) or [], n)
         if ranged:      # the edit stage reads loudness by source second: put the measured part back in its place
             db = [SILENT_DB] * base + list(db)
+    if weights.get("scene", 0) > 0:
+        with timer.stage("scene"):
+            series["scene"] = _scored(scene_changes(input_path, deadline, **part), n)
+    # Named sounds are a separate model. Weight 0 skips the call, so the default job never loads it.
+    active_sounds = [name for name in SOUND_EVENTS if weights.get(name, 0) > 0]
+    if active_sounds and info.has_audio:
+        with timer.stage("sound_events"):
+            if audio is not None:
+                raw = score_sound_events(audio, **part)
+            else:
+                dest = out_dir / "sound-events.wav"
+                try:
+                    extract_wav(input_path, float(base) if ranged else 0.0,
+                                span if ranged else info.duration, dest, deadline)
+                    raw = score_sound_events(dest)
+                finally:
+                    dest.unlink(missing_ok=True)
+        for name in active_sounds:
+            series[name] = _scored(list(raw.get(name) or []), n)
+    # HUD OCR (#202): computed only when a hud_* weight is above 0, or when observe_hud_ocr is on for logs/eval.
+    # Default weights are 0, so ranking never decodes HUD frames (timeline.py rule).
+    hud_events = []
+    hud_live = any(weights.get(k, 0) > 0 for k in TIMELINE_HUD)
+    if hud_live or options.observe_hud_ocr:
+        from .screen_text import read_hud, series_from_events
+        with timer.stage("hud_ocr"):
+            hud_events = read_hud(input_path, _template_game(options.template), t0, t1,
+                                  width=info.width, height=info.height, deadline=deadline)
+        if hud_live:
+            for name, vals in series_from_events(hud_events, n, base).items():
+                if weights.get(name, 0) > 0:
+                    series[name] = _scored(vals, n)
     if not series:
         raise PipelineError("no_signal", "This video has no audio track and no chat region was set, "
                                          "so there is nothing to score moments with.")
 
-    weights = {**WEIGHTS, **(options.weights or {})}
     total = np.zeros(n)
     for name, vals in series.items():
         total += weights[name] * vals
@@ -265,30 +383,50 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     # Candidates the judge will mostly reject only need a rough transcript: use the fast model for them,
     # then the caption model for the ones that make the cut.
     rough = fast_transcriber if (judge is not None and fast_transcriber is not None) else transcriber
-    # A transcript of the whole recording (made by the fast model, e.g. for Video Finder) stands in for the rough
-    # pass. Only then: the clips that make the cut are still transcribed by the caption model below, so caption
-    # quality does not depend on where the rough text came from.
-    reuse = transcript is not None and use_asr and rough is not transcriber
+    # What the upload already has transcribed stands in for the rough pass: text by any model when the clips that
+    # make the cut are transcribed again by the caption model below (so caption quality does not depend on where
+    # the rough text came from), otherwise only the caption model's own text.
+    heard = transcript if transcript is not None else Heard()
+    second_pass = rough is not transcriber
+    # (U3) With a judge, a proposer and the whole transcript, an LLM reads all of it and proposes moments.
+    cut_lengths = limits or (JUDGE_MIN_LEN, JUDGE_MAX_LEN)
+    passed = None
+    if judge is not None and proposer is not None and use_asr:
+        passed = _llm_pass(heard, t0, t1, proposer, options, cut_lengths, timer, progress, deadline)
     # With a judge, nominate from every quarter of a long video so it sees the whole thing; it still decides.
-    picks = (pick_spread if judge is not None else pick_windows)(total, length, count, span,
-                                                                 **({"skip_edges": False} if ranged else {}))
-    if not picks:
+    # A pass that read every chunk has already seen the whole thing: the signals then add their strongest windows.
+    spread = judge is not None and (passed is None or not passed.complete)
+    picks = (pick_spread if spread else pick_windows)(total, length, count, span,
+                                                      **({"skip_edges": False} if ranged else {}))
+    if not picks and not (passed and passed.proposals):
         raise PipelineError("no_moments", "No stand-out moments were found in this video.")
     if ranged:      # back to source seconds, and inside the range
         picks = [(max(t0, s + base), min(t1, e + base), m) for s, e, m in picks]
-    top = max(p[2] for p in picks) or 1.0
+    top = max((p[2] for p in picks), default=0.0) or 1.0
     # Don't pad the result with filler: drop windows far weaker than the best one.
     picks = [p for p in picks if p[2] / top >= MIN_RELATIVE_SCORE]
+    nominated = [(s, e, None, m) for s, e, m in picks]
+    if passed is not None:
+        # A proposal on a standby screen is dropped by the standby stage below, like any candidate (U2).
+        nominated = mix([_fit_proposal(p, cut_lengths, t0, t1) for p in passed.proposals], picks, count)
+        timer.count("llm_candidates", sum(1 for x in nominated if x[2] is not None))
     candidates: list[_Candidate] = []
-    for start, end, mean in picks:
+    for start, end, proposal, mean in nominated:
         a, b = int(start) - base, max(int(start) + 1, int(end)) - base
+        features = {}
+        if passed is not None:      # who nominated it, and what the proposer said about it
+            features["nominated_by"] = "signals" if proposal is None else ("both" if mean is not None else "llm")
+            if proposal is not None:
+                features["proposal"] = {"kind": proposal.kind, "strength": proposal.strength, "why": proposal.why}
+        if mean is None:            # a moment only the proposer found: the signals' strength over its own span
+            mean = float(total[a:b].mean()) if b > a else 0.0
         parts = {name: float(weights[name] * vals[a:b].mean()) for name, vals in series.items()}
         denom = sum(parts.values()) or 1.0
         candidates.append(_Candidate(
-            start=start, end=end, base=mean / top,
+            start=start, end=end, base=min(1.0, mean / top),
             signals={k: round(v / denom, 3) for k, v in parts.items()},
             features={"window_mean": round(mean, 4), **{f"{k}_mean": round(v, 4) for k, v in parts.items()},
-                      **{f"{k}_peak": round(float(vals[a:b].max()), 4) for k, vals in series.items()}}))
+                      **{f"{k}_peak": round(float(vals[a:b].max()), 4) for k, vals in series.items()}, **features}))
 
     # 3. Whisper on candidates only: features, re-rank bonus, edge snapping, captions.
     for i, c in enumerate(candidates):
@@ -298,15 +436,15 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         progress("transcribing", 45 + int((15 if judge else 25) * i / len(candidates)))
         pad = JUDGE_PAD if judge is not None else PAD
         if judge is not None and limits:      # enough either side for the judge to grow the window to the bucket's longest
-            pad = max(JUDGE_PAD, (limits[1] - length) / 2)
-        if reuse:      # the recording already has a transcript: read the candidate out of it
-            lo = max(t0, c.start - pad)
-            c.transcript, c.offset = transcript_window(transcript, lo, min(t1, c.end + pad))
-            timer.count("transcript_reused")
-        else:
-            with timer.stage("transcribe_rough"):
-                _transcribe(c, i, rough, input_path, t1, out_dir, deadline, pad=pad, audio=audio, floor=t0)
+            own = c.end - c.start if "proposal" in c.features else length      # a proposal has its own length
+            pad = max(JUDGE_PAD, (limits[1] - own) / 2)
+        made = _transcribe(c, i, rough, input_path, t1, out_dir, deadline, pad=pad, audio=audio, floor=t0,
+                           heard=heard, any_model=second_pass, timed=timer.stage("transcribe_rough"))
+        if made:
+            timer.count("transcript_transcribed")
             timer.count("transcribed_rough_sec", round(c.end - c.start + 2 * pad, 1))
+        else:
+            timer.count("transcript_reused")
         text = " ".join(s[2] for s in c.transcript.segments)
         hits = exclamation_hits(text)
         inside = [w for w in c.transcript.words if c.start <= w[0] + c.offset < c.end]
@@ -324,42 +462,92 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
             _snap(c, t1, limits, t0)
 
     timer.count("candidates", len(candidates))
+    # Standby footage (starting-soon and BRB screens, an empty chair, a menu left open) never becomes a clip.
+    proposed = sum(1 for c in candidates if "proposal" in c.features)
+    with timer.stage("standby"):
+        series["standby"] = np.zeros(n)        # 0/1 per second; known inside the candidates, 0 elsewhere
+        candidates = _without_standby(candidates, input_path, deadline, use_asr, timer, series["standby"], base)
+    if passed is not None:      # (U3) proposals the standby stage dropped: the transcript cannot see a BRB screen
+        dropped = proposed - sum(1 for c in candidates if "proposal" in c.features)
+        if dropped:
+            timer.count("llm_proposals_standby", dropped)
+    if not candidates:
+        raise PipelineError("no_moments", "Only standby footage (a still screen with nobody talking) was found in "
+                                          "this video.")
     if judge is None:
         ranked = sorted(candidates, key=lambda c: c.final, reverse=True)
     else:
         # A flash-forward adds FLASH_LEN to the rendered clip: the judge's cut leaves room for it in the bucket.
         cut_limits = (limits[0], limits[1] - (FLASH_LEN if options.flash_forward else 0.0)) if limits else None
+        every = options.duration is not None and options.limit is None
         ranked = _judge(candidates, judge, input_path, out_dir, progress, deadline, t1, options.judge_focus,
-                        timer, limits=cut_limits, floor=t0,
-                        every=options.duration is not None and options.limit is None)
+                        timer, limits=cut_limits, floor=t0, every=every,
+                        quality_floor=options.quality_floor,
+                        weights=(options.score_weights, options.score_weights_version),
+                        timeline=lambda c: _timeline(series, c.offset, c.end + JUDGE_PAD, base))
+        if not ranked:      # (U4) automatic discovery found no moment over the quality floor: a refunded failure
+            raise PipelineError("no_moments", "No moment in this video reached the quality bar for a clip.")
     # Without the new options this is max_clips over the whole video, as before. A long list is spread by how
     # many moments there really are, and "same topic" only counts between clips near each other (variety.py).
     many = limits is not None or options.limit is not None
-    distinct, _skipped = pick_distinct(
+    distinct, skipped = pick_distinct(
         ranked, want, window=lambda c: (c.start, c.end), meta=lambda c: c.meta,
         speech=lambda c: " ".join(s[2] for s in c.transcript.segments),
         min_gap=min_gap_for(t1 - t0, min(want, len(ranked)) if many else want),
-        horizon=HORIZON if want > 10 else None)
+        horizon=HORIZON if want > 10 else None,
+        picture=lambda c: int(c.features["picture"], 16) if c.features.get("picture") else None)
+    for reason in ("same picture", "same topic", "same speech"):      # repeats dropped, by why (job counts)
+        dropped = sum(1 for _i, why in skipped if why.startswith(reason))
+        if dropped:
+            timer.count("repeat_" + reason.split()[1], dropped)
     chosen = sorted(distinct, key=lambda c: c.start)
+    if hud_events:
+        for c in chosen:
+            hits = [e.as_dict() for e in hud_events if c.start <= e.t < c.end]
+            if hits:
+                c.features["scene"] = {**(c.features.get("scene") or {}), "text_events": hits}
     if judge is not None:
         for i, c in enumerate(chosen):
             progress("transcribing", 62 + int(8 * i / len(chosen)))
-            if use_asr and rough is not transcriber:
-                with timer.stage("transcribe_final"):
-                    _transcribe(c, 100 + i, transcriber, input_path, t1, out_dir, deadline, audio=audio, floor=t0)
-                timer.count("transcribed_final_sec", round(c.end - c.start + 2 * PAD, 1))
+            if use_asr and second_pass:
+                made = _transcribe(c, 100 + i, transcriber, input_path, t1, out_dir, deadline, audio=audio,
+                                   floor=t0, heard=heard, timed=timer.stage("transcribe_final"))
+                if made:
+                    timer.count("transcript_transcribed")
+                    timer.count("transcribed_final_sec", round(c.end - c.start + 2 * PAD, 1))
+                else:
+                    timer.count("transcript_reused")
             _snap(c, t1, limits, t0)
     if limits:
         for c in chosen:
             _fit(c, limits, t0, t1)
+    if judge is not None:
+        game = _template_game(options.template)
+        for c in chosen:          # (captions) no tool names, filler or claims the clip does not make
+            if isinstance(c.meta, dict):
+                lines = [t for s, _e, t in c.transcript.segments if c.start <= s + c.offset < c.end]
+                c.meta, found = check_copy(c.meta, " ".join(lines), game, lines)
+                if found:
+                    c.features["copy_problems"] = found
+                    timer.count("copy_problems", len(found))
+        _distinct_hooks(chosen, hook_writer, timer, options.hook_style)
+        for c in chosen:          # (U4) the judge's peak, for the thumbnail and the flash-forward: source seconds
+            c.features["peak_sec"] = round(c.peak, 3) if c.peak is not None and c.start <= c.peak < c.end else None
     if on_moments is not None:
         on_moments([_moment(c) for c in sorted(chosen, key=lambda c: -c.final)])
 
     # 4. Render, best first: with `on_clip` each clip is handed over the moment it is done, so the strongest
     #    ones can be watched while the rest are still rendering. Clip numbers stay in the order of the video.
+    #    render_workers > 1 runs several encodes at once; progress and on_clip stay serial under a lock so the
+    #    worker's DB hand-off cannot race. Default workers=1 keeps the historical serial, score-ordered hand-off.
+    jobs = list(sorted(enumerate(chosen, 1), key=lambda ic: -ic[1].final))
+    workers = max(1, min(int(options.render_workers or 1), len(jobs) or 1))
+    handoff = threading.Lock()
     results: list[ClipResult] = []
-    for done, (i, c) in enumerate(sorted(enumerate(chosen, 1), key=lambda ic: -ic[1].final)):
-        progress("rendering", 70 + int(28 * done / len(chosen)))
+    handed = [0]
+    first_marked = [False]
+
+    def finish_one(i: int, c) -> ClipResult | None:
         spoken = [(s + c.offset, e + c.offset, w) for s, e, w in c.transcript.words
                   if c.start <= s + c.offset < c.end]                     # source seconds
         segments = [(round(c.start, 3), round(c.end, 3))]
@@ -391,52 +579,177 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
             hook = " ".join(mask(w) for w in hook.split())
         c.features["edit"] = {"segments": segments, "flash_forward": flash, "zoom_at": zooms, "hook": hook,
                               "removed_sec": round((c.end - c.start) - kept_duration(body), 2)}
+        if c.features.get("peak_sec") is not None:   # where the peak plays in the rendered clip (after any tease)
+            at = to_output(c.features["peak_sec"], segments, skip=1 if flash else 0)
+            c.features["edit"]["peak_at"] = round(at, 2) if at is not None else None
         # (render, agent B) render "none" stores no video (POST /v1/clips/export makes one later), "preview" a
         # fast small one. With moment_layout on, auto draws each moment for what it shows (facecam.moment_facecam).
         video = out_dir / f"clip-{i}.mp4" if options.render != "none" else None
-        thumb = out_dir / f"clip-{i}.jpg"
         timer.count("clips")
-        if video is None:
-            with timer.stage("thumbnail"):
-                thumb = _frame(input_path, (c.peak if c.peak is not None else c.start + 1.0), thumb, deadline)
-        else:
-            lay, cam = layout, facecam
-            if options.moment_layout and options.layout == "auto" and options.vertical and layout != "classic":
-                with timer.stage("moment_scene"):
-                    lay, cam = moment_facecam(input_path, info, c.start, c.end, layout, facecam, deadline)
-            t0 = time.monotonic()
-            with timer.stage("render"):
-                render_clip(input_path, c.start, c.end, video, src_w=info.width, src_h=info.height,
-                            vertical=options.vertical, zoom=options.zoom, chat=options.chat_region,
-                            words=words, font=options.caption_font, layout=lay, facecam=cam,
-                            style=options.caption_style, aspect=options.aspect, max_side=options.max_side,
-                            deadline=deadline, segments=segments, punch=zoom_expr(zooms), has_audio=info.has_audio,
-                            hook=hook, flash=flash, resolution=options.resolution, position=options.caption_position,
-                            accent=options.caption_accent, camera=options.camera, split_ratio=options.split_ratio,
-                            preview=options.render == "preview", hook_position=options.hook_position,
-                            hook_ms=options.hook_duration_ms)
-            c.features["edit"]["render_sec"] = round(time.monotonic() - t0, 2)
-            timer.count("rendered_sec", round(kept_duration(segments), 1))
+        lay, cam = layout, facecam
+        if video is not None:
             try:
-                with timer.stage("thumbnail"):
-                    render_thumb(video, thumb, deadline)
+                if options.moment_layout and options.layout == "auto" and options.vertical and layout != "classic":
+                    with timer.stage("moment_scene"):
+                        lay, cam = moment_facecam(input_path, info, c.start, c.end, layout, facecam, deadline)
+                t0 = time.monotonic()
+                with timer.stage("render"):
+                    render_clip(input_path, c.start, c.end, video, src_w=info.width, src_h=info.height,
+                                vertical=options.vertical, zoom=options.zoom, chat=options.chat_region,
+                                words=words, font=options.caption_font, layout=lay, facecam=cam,
+                                style=options.caption_style, aspect=options.aspect, max_side=options.max_side,
+                                deadline=deadline, segments=segments, punch=zoom_expr(zooms), has_audio=info.has_audio,
+                                hook=hook, flash=flash, resolution=options.resolution, position=options.caption_position,
+                                accent=options.caption_accent, camera=options.camera, split_ratio=options.split_ratio,
+                                look=options.caption_look, custom_font=_font_file(options),
+                                preview=options.render == "preview", hook_position=options.hook_position,
+                                hook_ms=options.hook_duration_ms)
+                c.features["edit"]["render_sec"] = round(time.monotonic() - t0, 2)
+                timer.count("rendered_sec", round(kept_duration(segments), 1))
             except PipelineTimeout:
                 raise
-            except PipelineError:
-                thumb = None
+            except PipelineError as e:
+                # One bad encode must not wipe clips already handed over (progressive results).
+                log.warning("skipping clip %s at %.1f-%.1fs: %s %s", i, c.start, c.end, e.code, e.message[:200])
+                timer.count("render_failed")
+                return None
+        # (U7) The thumbnail is drawn from the source in the clip's layout, so a clip with no video yet has one too.
+        thumb = frame = None
+        try:
+            with timer.stage("thumbnail"):
+                on_thumb = thumb_text(c.meta, options.censor) if options.thumbnail_text else None
+                made = make_thumbnail(input_path, info, c.start, c.end, out_dir / f"clip-{i}.jpg", options=options,
+                                      layout=lay, facecam=cam, text=on_thumb, segments=segments, peak=c.peak,
+                                      loudness=db, speech=[(s, e) for s, e, _ in spoken] if use_asr else None,
+                                      deadline=deadline)
+            thumb, frame, c.features["thumbnail"] = made.path, made.frame, made.record
+        except PipelineTimeout:
+            raise
+        except PipelineError:
+            pass
         caps = None
         if words:
             caps = out_dir / f"clip-{i}.captions.json"
             caps.write_text(json.dumps({"words": [{"start": s, "end": e, "text": t} for s, e, t in words]}))
-        results.append(ClipResult(start=round(c.start, 3), end=round(c.end, 3), score=round(c.final, 4),
-                                  signals=c.signals, features=c.features, video_path=video,
-                                  thumb_path=thumb, captions_path=caps, meta=c.meta, index=i))
-        if done == 0:
-            timer.count("first_clip_sec", round(time.monotonic() - t_begin, 1))
-        if on_clip is not None:
-            on_clip(results[-1])
+        return ClipResult(start=round(c.start, 3), end=round(c.end, 3), score=round(c.final, 4),
+                          signals=c.signals, features=c.features, video_path=video,
+                          thumb_path=thumb, captions_path=caps, meta=c.meta, index=i,
+                          frame_path=frame)
+
+    def hand_over(result: ClipResult | None) -> None:
+        if result is None:
+            return
+        with handoff:
+            results.append(result)
+            n = handed[0]
+            handed[0] = n + 1
+            progress("rendering", 70 + int(28 * n / len(jobs)))
+            if not first_marked[0]:
+                first_marked[0] = True
+                timer.count("first_clip_sec", round(time.monotonic() - t_begin, 1))
+            if on_clip is not None:
+                on_clip(result)
+
+    # Enter "rendering" before the first encode so the worker's coarse `timings` bill encode
+    # wall to rendering (main called progress at the top of each serial iteration; B1's
+    # hand_over-only progress ran after finish and left rendering ≈ 0 for a single clip).
+    if jobs:
+        progress("rendering", 70)
+    if workers == 1:
+        for i, c in jobs:
+            hand_over(finish_one(i, c))
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futs = [pool.submit(finish_one, i, c) for i, c in jobs]
+            for fut in as_completed(futs):
+                hand_over(fut.result())
+    if chosen and not results:
+        raise PipelineError("render_failed",
+                            "None of the selected moments could be rendered. Your credits were refunded.")
     progress("done", 100)
     return sorted(results, key=lambda r: r.index)
+
+
+def _llm_pass(heard: Heard, t0: float, t1: float, proposer: Proposer, options: PipelineOptions,
+              cut_lengths: tuple[float, float], timer: Timer, progress,
+              deadline: Deadline | None = None) -> PassResult | None:
+    """(U3) The transcript pass, or None when it cannot run or read nothing: nomination is then as before.
+    The job's counts say what it did: chunks, failed chunks, proposals and tokens, or why it did not run."""
+    if not heard.covers(t0, t1):
+        timer.count("llm_pass_skipped")         # no whole transcript of the analysed part (TRANSCRIBE_WHOLE off)
+        return None
+    progress("judging", 40)                 # a stage name the dashboard already shows
+    context = {"cut_range": (math.ceil(cut_lengths[0]), math.floor(cut_lengths[1])),
+               **({"focus": options.judge_focus} if options.judge_focus else {}),
+               **({"prompt": options.prompt} if options.prompt else {})}
+    budget = deadline.remaining(PASS_BUDGET_SEC) if deadline else PASS_BUDGET_SEC     # out of time: the job times out
+    with timer.stage("llm_pass"):
+        try:
+            passed = run_pass(heard, t0, t1, proposer, context, budget=budget)
+        except Exception:                       # a broken proposer never fails the job: nominate as before
+            passed = None
+    if passed is None or not passed.ok:
+        timer.count("llm_pass_failed")
+        return None
+    timer.count("llm_chunks", passed.chunks)
+    timer.count("llm_chunks_failed", len(passed.failed))
+    timer.count("llm_proposals", len(passed.proposals))
+    timer.count("llm_tokens_in", passed.tokens_in)
+    timer.count("llm_tokens_out", passed.tokens_out)
+    return passed
+
+
+def _fit_proposal(p: Proposal, lengths: tuple[float, float], floor: float, ceiling: float) -> Proposal:
+    """A proposal as a candidate the judge can cut: at most the longest clip (keeping the end, where the payoff
+    is), at least the shortest (grown on both sides), inside [floor, ceiling]."""
+    shortest, longest = lengths
+    start, end = max(floor, p.start), min(ceiling, p.end)
+    if end - start > longest:
+        start = end - longest
+    if end - start < shortest:
+        grow = (shortest - (end - start)) / 2
+        start, end = max(floor, start - grow), min(ceiling, end + grow)
+    return Proposal(round(start, 2), round(end, 2), p.kind, p.why, p.strength, list(p.chunks))
+
+
+def _without_standby(candidates: list[_Candidate], src: Path, deadline, heard_words: bool, timer: Timer,
+                      per_second: np.ndarray | None = None, base: int = 0) -> list[_Candidate]:
+    """The standby contract (shared with the judge and U3): every candidate gets `features.standby_share`, the share
+    of its seconds where the picture stands still and (when it was transcribed) nobody speaks, and
+    `features.standby`, True only at STANDBY_REJECT or more. Those are dropped. `per_second` (second i is source
+    second base + i) gets 1 for every standby second found inside a candidate."""
+    def seconds(c: _Candidate):
+        frames = keyframes(src, c.start, c.end - c.start, deadline)
+        speech = [(s + c.offset, e + c.offset) for s, e, _w in c.transcript.words] if heard_words else None
+        if heard_words and not c.transcript.words:        # no word timings: a segment is speech too
+            speech = [(s + c.offset, e + c.offset) for s, e, _t in c.transcript.segments]
+        return standby_seconds(frames, c.start, c.end, speech)
+
+    with ThreadPoolExecutor(JUDGE_THREADS) as pool:
+        found = list(pool.map(seconds, candidates))
+    kept = []
+    for c, sec in zip(candidates, found):
+        share = 0.0 if sec is None else round(float(sec.mean()), 3)
+        c.features["standby_share"] = share
+        c.features["standby"] = share >= STANDBY_REJECT
+        if sec is not None and per_second is not None:
+            a = int(c.start) - base
+            for k in np.flatnonzero(sec):
+                if 0 <= a + k < len(per_second):
+                    per_second[a + k] = 1.0
+        if c.features["standby"]:
+            timer.count("standby_rejected")
+        else:
+            kept.append(c)
+    return kept
+
+
+def _scored(vals: list[float], n: int) -> np.ndarray:
+    """A timeline signal against its own rolling baseline, scaled like the others (as chat motion is)."""
+    if not vals:
+        return np.zeros(n)
+    floor = max(float(np.std(vals)) * 0.1, 1e-6)
+    return normalise(baseline_z(vals, floor=floor), n)
 
 
 def _span(part: dict | None, duration: float) -> tuple[float, float]:
@@ -461,6 +774,7 @@ def _limits(bucket: str | None, available: float) -> tuple[float, float] | None:
     if bucket not in BUCKETS:
         raise PipelineError("bad_options", f"Unknown duration; use one of: {', '.join(BUCKETS)}.")
     shortest, longest = BUCKETS[bucket]
+    longest = min(longest, AUTO_LONGEST.get(bucket, longest))
     if available < shortest:
         raise PipelineError("too_short_for_duration",
                             f"This video (or the chosen range) is {available:.0f} s long: shorter than the "
@@ -495,9 +809,63 @@ def pool_size(want: int, judged: bool, with_transcript: bool) -> int:
 
 
 def _snap(c: _Candidate, duration: float, limits: tuple[float, float] | None = None, floor: float = 0.0) -> None:
-    segs = [(s + c.offset, e + c.offset, t) for s, e, t in c.transcript.segments]
+    """(U4) Both edges on whole sentences when the transcript has word timings; otherwise on the nearest
+    transcript segment edge, as before."""
     min_len, max_len = limits or (MIN_CLIP, 60.0)
-    c.start, c.end = snap_to_speech(c.start, c.end, segs, lo=floor, hi=duration, min_len=min_len, max_len=max_len)
+    words = [(s + c.offset, e + c.offset, w) for s, e, w in c.transcript.words]
+    snapped = snap_to_sentences(c.start, c.end, words, lo=floor, hi=duration, min_len=min_len, max_len=max_len)
+    if snapped is None:
+        segs = [(s + c.offset, e + c.offset, t) for s, e, t in c.transcript.segments]
+        snapped = snap_to_speech(c.start, c.end, segs, lo=floor, hi=duration, min_len=min_len, max_len=max_len)
+    c.start, c.end = snapped
+
+
+def _template_game(template: str | None) -> str | None:
+    """(captions) The game of the template a job's options came from (a templates.GAMES id), or None."""
+    from app.templates import TEMPLATES
+    game = (TEMPLATES.get(template or "") or {}).get("game")
+    return game if game and game != "other" else None
+
+
+def _distinct_hooks(chosen: list[_Candidate], writer, timer: Timer, style: str = "serious") -> None:
+    """(U4) No two clips of the job with the same hook (hooks.distinct), best clip first: its hook is kept."""
+    order = sorted(chosen, key=lambda c: -c.final)
+    rows = []
+    for c in order:
+        meta = c.meta if isinstance(c.meta, dict) else {}
+        lines = [t for s, _e, t in c.transcript.segments if c.start <= s + c.offset < c.end]
+        rows.append({"hook": meta.get("hook"), "titles": meta.get("titles") or [], "lines": lines,
+                     "context": {"title": meta.get("title"), "kind": meta.get("kind"), "hook_style": style}})
+    stats = hook_lines.distinct(rows, writer)
+    for c, row in zip(order, rows):
+        if isinstance(c.meta, dict) and "rewritten" in row:
+            c.meta["hook"] = row["hook"]
+            c.features["hook_rewritten"] = row["rewritten"]
+    for k, v in stats.items():
+        timer.count(f"hook_{k}", v)
+
+
+def _timeline(series: dict[str, np.ndarray], start: float, end: float, base: int) -> dict:
+    """(U4) The signal timeline the judge reads: for each per-second signal, its PEAKS strongest seconds in
+    [start, end] (at least 3 s apart), as (seconds from `start`, strength 0-1 against the signal's own peak in the
+    video). Loudness, chat motion and U2's timeline signals; not `standby`, which the judge gets as a share."""
+    out = {}
+    for name, vals in series.items():
+        if name == "standby":
+            continue
+        a, b = max(0, int(start) - base), min(len(vals), int(math.ceil(end)) - base)
+        top = float(np.max(vals)) if len(vals) else 0.0
+        if b <= a or top <= 0:
+            continue
+        peaks: list[int] = []
+        for i in sorted(range(a, b), key=lambda i: -vals[i]):
+            if vals[i] <= 0 or len(peaks) == PEAKS:
+                break
+            if all(abs(i - j) >= 3 for j in peaks):
+                peaks.append(i)
+        if peaks:
+            out[name] = [(round(i + base - start, 1), round(min(1.0, float(vals[i]) / top), 2)) for i in sorted(peaks)]
+    return out
 
 
 def _fit(c: _Candidate, limits: tuple[float, float], floor: float, ceiling: float) -> None:
@@ -564,15 +932,32 @@ def _apply_trim(c: _Candidate, trim: dict | None, duration: float,
 
 def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path, progress, deadline,
            duration: float = float("inf"), focus: str | None = None, timer: Timer | None = None,
-           limits: tuple[float, float] | None = None, floor: float = 0.0, every: bool = False) -> list[_Candidate]:
+           limits: tuple[float, float] | None = None, floor: float = 0.0, every: bool = False,
+           quality_floor: int = QUALITY_FLOOR, weights: tuple[dict | None, str] = (None, EQUAL),
+           timeline=None) -> list[_Candidate]:
     """Rate every candidate, drop the junk, and return them best first. The judge may also choose each clip's cut:
-    15-45 s, or inside `limits` (told to the judge as `cut_range`, whole seconds).
+    15-60 s, or inside `limits` (told to the judge as `cut_range`, whole seconds).
     `every`: the caller returns all of them, not a top N, so only moments the judge rated at or above its floor
-    count; moments it failed to rate are used only when it rated none at all."""
+    count, and with it the clip count is not a quota: only moments rated at least `quality_floor` are kept;
+    moments it failed to rate are used only when it rated none at all.
+    `timeline(c)`: the signal peaks inside the candidate's transcript, sent to the judge (see _timeline)."""
     timer = timer or Timer()
     progress("judging", 60)
+    # A candidate flagged as a standby screen (U2: BRB, intro card, empty chair, menu) is never judged or kept.
+    # The flag is the boolean `features.standby` (True only past U2's STANDBY_REJECT share); `standby_share`, a
+    # float, is information only: a moment with a little standby in it is still judged.
+    standby = [c for c in candidates if c.features.get("standby") is True]
+    if standby:
+        timer.count("standby_rejected", len(standby))
+        candidates = [c for c in candidates if c.features.get("standby") is not True]
+        if not candidates:
+            raise PipelineError("no_moments", "No stand-out moments were found in this video.")
     with timer.stage("judge_frames"):
         frames = [_frame(src, (c.start + c.end) / 2, out_dir / f"cand{i}.jpg", deadline) for i, c in enumerate(candidates)]
+        for c, f in zip(candidates, frames):      # what the moment looks like, for the same-screen test (variety.py)
+            seen = picture_hash(f)
+            if seen is not None:
+                c.features["picture"] = f"{seen:016x}"
 
     def rate(i: int):
         c = candidates[i]
@@ -582,7 +967,9 @@ def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path,
                                        "lines": [(round(s, 1), t) for s, _e, t in c.transcript.segments],
                                        "window": (round(c.start - c.offset, 1), round(c.end - c.offset, 1)),
                                        **({"cut_range": (math.ceil(limits[0]), math.floor(limits[1]))} if limits else {}),
-                                       **({"focus": focus} if focus else {})})
+                                       **({"timeline": timeline(c)} if timeline is not None else {}),
+                                       **({"focus": focus} if focus else {}),
+                                       **({"standby": c.features["standby_share"]} if c.features.get("standby_share") else {})})
 
     with timer.stage("judge_ai"), ThreadPoolExecutor(JUDGE_THREADS) as pool:
         metas = list(pool.map(rate, range(len(candidates))))
@@ -601,16 +988,30 @@ def _judge(candidates: list[_Candidate], judge: Judge, src: Path, out_dir: Path,
             unrated.append(c)
             continue
         c.features["judge_score"] = score
-        c.final = JUDGE_WEIGHT * score / 100 + (1 - JUDGE_WEIGHT) * min(1.0, c.final / top)
+        # The game's weights reorder clips only (ranking.py): the AI rating above, the stored sub-scores and the
+        # quality floor stay on the plain mean, so new weights never change how many clips a video gets.
+        ranked_by = rank_score(meta.get("scores"), weights[0]) if weights[0] is not None else None
+        if ranked_by is not None:
+            c.features["rank_score"], c.features["rank_weights"] = ranked_by, weights[1]
+        c.final = (JUDGE_WEIGHT * (score if ranked_by is None else ranked_by) / 100
+                   + (1 - JUDGE_WEIGHT) * min(1.0, c.final / top))
         rated.append(c)
     rated.sort(key=lambda c: c.final, reverse=True)
-    keep = [c for c in rated if c.features["judge_score"] >= JUDGE_FLOOR]
-    junk = [c for c in rated if c.features["judge_score"] < JUDGE_FLOOR]
+    bar = max(JUDGE_FLOOR, quality_floor) if every else JUDGE_FLOOR
+    keep = [c for c in rated if c.features["judge_score"] >= bar]
+    junk = [c for c in rated if c.features["judge_score"] < bar]
     # If the judge failed for some, rank them by signals after the good ones; junk only fills an otherwise empty result.
     unrated.sort(key=lambda c: c.final, reverse=True)
     out = (keep if rated else unrated) if every else keep + unrated
+    if every and rated:
+        return out          # automatic discovery: nothing over the floor is no clip, never a filler one
     return out if out else junk[:1]
 
 
 __all__ = ["run_pipeline", "PipelineOptions", "ClipResult", "PipelineError", "PipelineTimeout", "Timer",
            "Deadline", "probe", "asdict", "Moment", "BUCKETS"]
+
+
+def _font_file(options) -> Path | None:
+    """(captions) The local file of the caption_look's uploaded font, when it has one."""
+    return Path(options.caption_font_file) if getattr(options, "caption_font_file", None) else None

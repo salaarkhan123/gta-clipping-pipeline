@@ -37,7 +37,7 @@
 | Per clip: title, description, tags | One each | Title (3 options), description, hashtags | done | A | – |
 | Per clip: score | 0–100 | Raw 0–100 from the AI, plus `display_score`: calibrated per job on every read (best clip 90 to 99, none under 55, order kept), in the job, project, library and clip-edit responses. The website still shows rank and tier | partial | A · U4/U5; D shows it | – |
 | Score breakdown | Five dimensions (Hook, Story, Value, Engagement, Reach) with grades and explanations on paid plans | Four parts (hook, flow, value, trend), one reason | partial | A · U4 | – |
-| Per clip: thumbnail | Image URL | Frame from the clip | done | B | – |
+| Per clip: thumbnail | Image URL | `thumb_url`: the clip's best frame (face, action, loudness; never a menu, a cut or a blurred frame) in the clip's own layout and aspect, with its hook (or title) set on it, 720 on the short side. Free. AI-generated thumbnails are a separate paid option, not built | done | U7 | – |
 | Per clip: download link | Only when rendered; new link on every read, valid 24 h | Signed link, valid for a configured time | partial | B | – |
 | Result expiry, cost used | Reported per task | Expiry reported; credits charged reported | done | – | – |
 | Markers on the source timeline | Results show where each clip came from | Not shown | missing | D | – |
@@ -172,6 +172,8 @@ Run on 2026-11-16 without the AI judge (selection only): 7 of the 15 found, 8 mi
 | Scale | $139.99 | $69.99 | 6,000 | 2K and 4K | unlimited | 50 videos | 150 GB | 50 | 10 |
 
 1 credit processes 1 minute of source video. Pro adds 2 seats, brand kit, custom fonts, AI music, speech enhancement, B-roll and hook generation; Scale adds 4 seats and priority processing. Per credit: $0.032 (Starter), $0.027 (Pro), $0.023 (Scale) at monthly prices; $0.011, $0.0096, $0.0117 billed yearly.
+
+Our own yearly prices differ from theirs since 2026-11-19 (owner): $66.99, $114.99 and $839.99 a year, set in `clip-api/app/plans.py`. The table above stays as their prices were read.
 
 ## Decisions (owner, 2026-11-16)
 

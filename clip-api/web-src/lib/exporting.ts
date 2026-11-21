@@ -11,6 +11,9 @@ export function exportBody(r: Route, { jobId, clipIds, options, edit }: { jobId:
   if (r.fields.includes("job_id")) body.job_id = jobId;
   if (r.fields.includes("clips")) body.clips = clipIds;
   else if (r.fields.includes("clip_ids")) body.clip_ids = clipIds;
+  // The look calls the burned-in hook `hook_overlay` (POST /v1/clips); an export calls it `hook`. Without this the
+  // "Hook text" switch is dropped by the filter below and every export burns the hook.
+  if (typeof options.hook_overlay === "boolean" && !("hook" in options)) options = { ...options, hook: options.hook_overlay };
   if (r.fields.includes("options")) {
     const takes = r.nested.options || [];
     body.options = takes.length ? Object.fromEntries(Object.entries(options).filter(([k]) => takes.includes(k))) : options;

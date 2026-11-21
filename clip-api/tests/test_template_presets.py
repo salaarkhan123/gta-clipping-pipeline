@@ -173,11 +173,12 @@ def test_the_poster_route_serves_each_poster_as_an_image_only(client):
     for tid, t in TEMPLATES.items():
         r = client.get(t["preview"]["poster"])                                 # the path the list gives; no key
         assert r.status_code == 200, tid
-        assert r.headers["content-type"] == "image/svg+xml", tid
+        path, media_type = catalogue.poster_file(tid)
+        assert r.headers["content-type"] == media_type, tid
         assert r.headers["x-content-type-options"] == "nosniff", tid
         assert r.headers["content-security-policy"] == "default-src 'none'; style-src 'unsafe-inline'", tid
         assert r.headers["cache-control"] == "public, max-age=3600", tid
-        assert r.content == (ASSETS / tid / "poster.svg").read_bytes(), tid
+        assert r.content == path.read_bytes(), tid
     assert POSTER_HEADERS["Content-Security-Policy"] == "default-src 'none'; style-src 'unsafe-inline'"
 
 
@@ -193,7 +194,7 @@ def test_the_poster_route_cannot_be_walked_out_of_the_catalogue(client, tmp_path
     for attempt in ("../templates/lol-teamfight", "lol-teamfight/../lol-teamfight", "lol-teamfight/", str(secret), "", "."):
         assert catalogue.poster_file(attempt) is None, attempt                 # only an exact catalogue id resolves
     path, media_type = catalogue.poster_file("lol-teamfight")
-    assert path == ASSETS / "lol-teamfight" / "poster.svg" and media_type == "image/svg+xml"
+    assert path.parent == ASSETS / "lol-teamfight" and path.name in catalogue.POSTER_TYPES and media_type == catalogue.POSTER_TYPES[path.name]
     monkeypatch.setattr(catalogue, "ASSETS", tmp_path)                         # a template whose folder has no poster
     gone = client.get("/v1/templates/lol-teamfight/poster")
     assert gone.status_code == 404 and gone.json()["error"]["code"] == "no_poster"
@@ -217,3 +218,12 @@ def test_the_fixed_paths_are_never_read_as_a_template_id(client, user):
     for word in ("custom", "games"):                                           # and neither word is ever an id with a poster
         r = client.get(f"/v1/templates/{word}/poster")
         assert r.status_code == 404 and r.json()["error"]["code"] == "unknown_template"
+
+
+def test_a_footage_poster_is_served_before_the_schematic_one():
+    """Every template has a frame rendered from the owner's footage; it is the poster, small enough for a grid."""
+    for tid in TEMPLATES:
+        path, media_type = catalogue.poster_file(tid)
+        assert path.name == "poster.webp" and media_type == "image/webp", tid
+        assert path.stat().st_size < 150_000, tid
+        assert (ASSETS / tid / "poster.svg").is_file(), tid                  # the drawing stays as the fallback
