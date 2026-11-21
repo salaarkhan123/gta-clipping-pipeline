@@ -1,20 +1,31 @@
 "use client";
 import { Caption, sampleWords } from "./Caption";
-import { Credits, Footage, useItem } from "./Footage";
+import { Credits, Footage, useItem, useItems } from "./Footage";
 import { Gameplay } from "./Frames";
 import { useReducedMotion, useTicker } from "./motion";
 import s from "./demos.module.css";
 
 // The on-screen hook: a line the AI writes from what was said, near-black on lime (captions.py HOOK_TEXT,
 // HOOK_BOX), at the start of the clip for 2.5 s unless set otherwise. Text only: there is no voice.
+// Prefer non-Fortnite approved footage for the primary hook preview when several items exist.
 const HOOK = "He tried the bridge jump. Twice.";
 const SAMPLE = sampleWords(["watch", "this", "one", "more", "time"]);
 const TONES = ["Serious", "Casual", "Humorous", "Dramatic", "Excited", "Calm"];   // 6 of the 13 hook styles
 
+function pickHook(items: ReturnType<typeof useItems>) {
+  const preferred = items.find((i) => i.id === "hook-2") // Valorant, owner-confirmed
+    || items.find((i) => i.game && !/fortnite/i.test(i.game))
+    || items.find((i) => i.id === "hook-1")
+    || null;
+  return preferred;
+}
+
 export function HookText({ play }: { play: boolean }) {
   const reduced = useReducedMotion(), tick = useTicker(play && !reduced, 420);
-  // Real footage has its hook burned in by the engine; the panel then shows that clip's own hook line.
-  const real = useItem("hook", "hook-1"), hook = real?.hook || HOOK;
+  const items = useItems("hook");
+  const fallback = useItem("hook", "hook-2");
+  const real = pickHook(items) || fallback;
+  const hook = real?.hook || HOOK;
   return (
     <div className={`${s.demo} flex h-full items-center justify-center gap-10 narrow:flex-col-reverse narrow:gap-4`} data-play={play}>
       <div className="flex w-[340px] flex-col gap-4 rounded-[16px] bg-black/35 p-5 ring-1 ring-white/10 narrow:w-full narrow:gap-3 narrow:p-4" aria-hidden="true">

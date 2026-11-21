@@ -50,10 +50,18 @@ test("future features are written in the future tense", () => {
 test("an AI rating is shown only when the AI judge rated the clip", () => {
   const footage = source("components/landing/demos/Footage.tsx");
   assert.match(footage, /export const aiRated = \(item: Item \| null\) => typeof item\?\.rating === "number" && item\.rating_source === "ai";/);
-  for (const f of ["demos/VodToClips.tsx", "demos/CaptionStyles.tsx", "demos/Reframe.tsx", "demos/HookText.tsx", "demos/DeadAir.tsx",
+  for (const f of ["demos/CaptionStyles.tsx", "demos/Reframe.tsx", "demos/HookText.tsx", "demos/DeadAir.tsx",
     "sections/ModelsSection.tsx", "sections/WorkflowSection.tsx", "sections/EditorSection.tsx", "sections/TeamsSection.tsx"]) {
-    for (const line of source(`components/landing/${f}`).split("\n").filter((l) => l.includes("<AiRating"))) assert.match(line, /aiRated\(/, f);
+    for (const line of source(`components/landing/${f}`).split("\n").filter((l) => l.includes("<AiRating") || l.includes("<ScoreOverlay"))) {
+      if (line.includes('kind="sample"')) continue;
+      assert.match(line, /aiRated\(/, f);
+    }
   }
+  // Hero walkthrough: AI chip only via aiRated; sample chips are labeled Sample score.
+  const vod = source("components/landing/demos/VodToClips.tsx");
+  assert.match(vod, /aiRated\(item\)/);
+  assert.match(vod, /kind="ai"/);
+  assert.match(vod, /kind="sample"/);
 });
 
 test("demo media never plays sound, waits for reduced motion and carries its credit", () => {
@@ -86,6 +94,26 @@ test("each card that shows footage names every creator it shows, once, at the bo
   }
   // Files with no Credits line play no footage.
   assert.doesNotMatch(source("components/landing/sections/TeamsSection.tsx"), /<Footage /);
+});
+
+test("hook demo prefers non-Fortnite approved footage when available", () => {
+  const hook = source("components/landing/demos/HookText.tsx");
+  assert.match(hook, /hook-2/);
+  assert.match(hook, /!\/fortnite\/i/);
+});
+
+test("reframe camera outline is neutral, not a green Facecam sticker", () => {
+  const reframe = source("components/landing/demos/Reframe.tsx");
+  assert.match(reframe, /label="Camera" tone="white"/);
+  assert.doesNotMatch(reframe, /label="Facecam" tone="lime"/);
+});
+
+test("editor walkthrough cycles real editor tabs only", () => {
+  const ed = source("components/landing/sections/EditorSection.tsx");
+  for (const name of ["Transcript", "Caption lines", "Look", "Undo all changes", "Save", "Render", "Your edit"]) {
+    assert.match(ed, new RegExp(name));
+  }
+  assert.doesNotMatch(ed, /B-roll|Upscale|Auto caption magic/i);
 });
 
 test("the dead-air and moment-finder cards draw only real data: no sample transcript, peaks or prompt", () => {

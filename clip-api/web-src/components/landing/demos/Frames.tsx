@@ -44,7 +44,7 @@ export function Cam({ label = false, className = "" }: { label?: boolean; classN
         <path d="M18 100c0-20 14-34 32-34s32 14 32 34z" fill="#56637d" />
         <rect x="26" y="30" width="48" height="7" rx="3.5" fill="#2a3242" />
       </svg>
-      {label && <span className="absolute left-1.5 top-1.5 rounded-[5px] bg-black/45 px-1.5 py-0.5 text-[10px] font-medium text-white/70">Facecam</span>}
+      {label && <span className="absolute left-1.5 top-1.5 rounded-[5px] bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white/75">Camera</span>}
     </span>
   );
 }

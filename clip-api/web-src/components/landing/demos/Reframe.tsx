@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Pill } from "./Bits";
 import { Credits, Footage, Item, useItems } from "./Footage";
+import { Cam, Gameplay } from "./Frames";
 import { useReducedMotion, useTicker } from "./motion";
 import s from "./demos.module.css";
 
@@ -19,11 +20,9 @@ type Boxes = { facecam?: Box; crop?: Record<string, Box> };
 const isBox = (b: unknown): b is Box => Array.isArray(b) && b.length === 4 && b.every((n) => typeof n === "number" && n >= 0 && n <= 1);
 const at = (b: Box) => ({ left: `${b[0] * 100}%`, top: `${b[1] * 100}%`, width: `${b[2] * 100}%`, height: `${b[3] * 100}%` });
 
-// An outline the engine reported, with its label inside it: the facecam's at the top, the crop's at the bottom,
-// so the two never cover each other.
+// An outline the engine reported, with its label inside it: the camera's at the top, the crop's at the bottom,
+// so the two never cover each other. Neutral (white) labels only — no green Facecam sticker.
 function Outline({ box, label, tone }: { box: Box; label: string; tone: "lime" | "white" }) {
-  // A box near the right edge anchors its label on its right, so the label stays inside the frame even when the
-  // box is narrower than the label.
   const right = box[0] + box[2] > 0.75;
   return (
     <span className={`absolute rounded-[6px] border-2 transition-all duration-500 ${tone === "lime" ? "border-lime" : "border-white/90"}`} style={at(box)} aria-hidden="true">
@@ -44,7 +43,7 @@ export function BeforeFrame({ item, layout, play }: { item: Item | null; layout:
       {item && <>
         <Footage section="reframe" item={item} play={play} />
         {crop && <Outline box={crop} label="Gameplay crop" tone="white" />}
-        {cam && <Outline box={cam} label="Facecam" tone="lime" />}
+        {cam && <Outline box={cam} label="Camera" tone="white" />}
       </>}
     </div>
   );
@@ -60,6 +59,26 @@ export function Reframe({ play }: { play: boolean }) {
   const n = shown.length, i = n ? (picked ?? tick) % n : 0, layout = n ? shown[i] : null;
   const original = find("original");
   const face = (l: (typeof LAYOUTS)[number], live: boolean) => { const it = find(l.id); return it ? <Footage section="reframe" item={it} play={live} /> : <span className="absolute inset-0 bg-white/[.04]" />; };
+
+  // Placeholder morph when the media pipeline has not delivered reframe footage yet: 16:9 → 9:16 with the
+  // camera panel kept clear of the gameplay crop (no green Facecam sticker).
+  if (!items.length) {
+    return (
+      <div className={`${s.demo} flex h-full flex-col items-center justify-center gap-4`} data-play={play}>
+        <div className="relative flex h-[360px] w-full max-w-[560px] items-center justify-center narrow:h-[260px]">
+          <div className={`${reduced ? "aspect-[9/16] h-full" : s.morph} relative overflow-hidden bg-white/[.04] ring-1 ring-white/10`}>
+            <Gameplay game="gta" label={false} />
+            <span className={`${s.morphPip} absolute bottom-[8%] left-[5%] aspect-[4/3] w-[24%] overflow-hidden rounded-[6px] ring-1 ring-white/25`}>
+              <Cam /></span>
+            <span className={`${s.morphCam} absolute inset-x-0 top-0 h-[32%] overflow-hidden border-b border-black/50`}>
+              <Cam /></span>
+          </div>
+        </div>
+        <Pill>16:9 → 9:16 · camera over gameplay</Pill>
+        <p className="text-[12px] text-white/45">Approved reframe footage pending · layout animation only</p>
+      </div>
+    );
+  }
 
   return (
     <div className={`${s.demo} flex h-full flex-col items-center justify-center gap-3`} data-play={play}>
@@ -79,7 +98,6 @@ export function Reframe({ play }: { play: boolean }) {
 
         <figure className="flex flex-col items-center gap-4 narrow:gap-2.5">
           <div className="relative h-[360px] w-[203px] narrow:h-[220px] narrow:w-[124px]">
-            {/* the next two layouts peek out behind the one shown */}
             {[2, 1].filter((k) => k < n).map((k) => (
               <span key={k} className="absolute inset-0 overflow-hidden rounded-[14px] opacity-40 ring-1 ring-white/10 transition-transform duration-500"
                 style={{ transform: `translateX(${k * 14}px) scale(${1 - k * 0.06})` }} aria-hidden="true">{face(shown[(i + k) % n], false)}</span>

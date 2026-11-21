@@ -1,13 +1,11 @@
 // Small pieces the demos and sections share.
+import { ScoreOverlay } from "@/components/clips/ScoreOverlay";
 
-// The AI rating on a clip: the AI's opinion of it, scaled across one video's clips. Never a forecast of views.
-export function AiRating({ value, className = "" }: { value: number; className?: string }) {
-  return (
-    <span className={`inline-flex flex-col items-start rounded-[7px] bg-black/70 px-1.5 py-0.5 leading-none ${className}`} aria-label={`AI rating ${value}`}>
-      <span className="text-[7.5px] font-semibold uppercase tracking-[.08em] text-white/60">AI rating</span>
-      <b className="text-[17px] font-bold text-lime">{value}</b>
-    </span>
-  );
+// Landing alias for the shared on-picture chip. Prefer ScoreOverlay directly in new code.
+export function AiRating({ value, className = "", kind = "ai" as const }: {
+  value: number; className?: string; kind?: "ai" | "sample";
+}) {
+  return <ScoreOverlay value={value} kind={kind} className={className} />;
 }
 
 // A label under a frame: "Before", a layout's name.

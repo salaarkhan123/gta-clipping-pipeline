@@ -1,6 +1,6 @@
 "use client";
 import { useRef } from "react";
-import { AiRating } from "../demos/Bits";
+import { ScoreOverlay } from "@/components/clips/ScoreOverlay";
 import { aiRated, Credits, Footage, Item, useItem, useItems, useSignals } from "../demos/Footage";
 import { useInView } from "../demos/motion";
 import { BeforeFrame } from "../demos/Reframe";
@@ -58,7 +58,7 @@ function FinderVisual({ play }: { play: boolean }) {
         </div>
         <div className="relative aspect-[9/16] h-[240px] shrink-0 overflow-hidden rounded-[14px] bg-white/[.04] ring-1 ring-white/10 narrow:h-[180px]">
           {best && <><Footage section="hero-vertical-clips" item={best} play={play} />
-            {aiRated(best) && <AiRating value={Math.round(best.rating!)} className="absolute bottom-2 left-2 z-10" />}</>}
+            {aiRated(best) && <ScoreOverlay value={Math.round(best.rating!)} kind="ai" className="absolute bottom-2 left-2 z-10" />}</>}
         </div>
       </div>
       <Credits items={[vod, best]} />
