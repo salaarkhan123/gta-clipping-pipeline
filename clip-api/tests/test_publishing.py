@@ -67,18 +67,23 @@ def test_status_machine_transitions():
 
 def _seed_clip(account_id: str, *, export: bool = True) -> str:
     with new_session() as db:
+        # Flush parents first: Postgres checks each foreign key as the row goes in (SQLite is deferred).
         up = Upload(
             id=new_id("up"), account_id=account_id, filename="a.mp4",
             storage_key=f"uploads/{account_id}/a.mp4", size_bytes=1000,
             duration_sec=30, width=1080, height=1920, has_audio=True,
             analyzed=True, expires_at=utcnow() + timedelta(days=7),
         )
+        db.add(up)
+        db.flush()
         job = Job(
             id=new_id("job"), account_id=account_id, upload_id=up.id,
-            status="SUCCEEDED", options={"aspect": "9:16"}, duration_sec=30,
+            status="SUCCEEDED", options={"aspect": "9:16", "tool": "clips"}, duration_sec=30,
             credits_reserved=1, credits_charged=1,
             expires_at=utcnow() + timedelta(days=7),
         )
+        db.add(job)
+        db.flush()
         clip = Clip(
             id=new_id("clp"), job_id=job.id, idx=1, start_sec=0, end_sec=28,
             score=80, signals={}, features={},
@@ -86,7 +91,7 @@ def _seed_clip(account_id: str, *, export: bool = True) -> str:
             export_key=(f"exports/{job.id}/1.mp4" if export else None),
             meta={"title": "Clutch play", "description": "Wow", "hashtags": ["gta"]},
         )
-        db.add_all([up, job, clip])
+        db.add(clip)
         db.commit()
         return clip.id
 
