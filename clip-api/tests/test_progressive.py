@@ -74,15 +74,18 @@ def test_the_first_clip_is_visible_and_playable_while_the_job_is_still_running(c
     def look():
         snap["job"] = client.get(f"/v1/jobs/{job_id}", headers=headers).json()
         snap["project"] = client.get(f"/v1/projects/{upload_id}", headers=headers).json()
-        snap["video"] = client.get(snap["job"]["clips"][0]["video_url"].replace("http://localhost:8000", "")).status_code
+        playable = [c for c in snap["job"]["clips"] if c.get("video_url")]
+        snap["playable"] = playable
+        snap["video"] = client.get(playable[0]["video_url"].replace("http://localhost:8000", "")).status_code
     assert worker.run_once(None, pipeline=after_first_clip(look)) == "SUCCEEDED"
-    assert snap["job"]["status"] == "RUNNING" and len(snap["job"]["clips"]) == 1 and snap["video"] == 200
-    assert len(snap["project"]["clips"]) == 1
+    # Moments may already be listed (S1); exactly one encode is done so far, and it is playable.
+    assert snap["job"]["status"] == "RUNNING" and len(snap["playable"]) == 1 and snap["video"] == 200
+    assert len(snap["project"]["clips"]) >= 1
     done = client.get(f"/v1/jobs/{job_id}", headers=headers).json()
     assert done["status"] == "SUCCEEDED" and sorted(c["index"] for c in done["clips"]) == [1, 2, 3]
     assert len({c["id"] for c in done["clips"]}) == 3 and done["credits_charged"] == 1      # none stored twice
     best = max(done["clips"], key=lambda c: c["score"])
-    assert snap["job"]["clips"][0]["id"] == best["id"] and best["index"] != 1               # the best one came first
+    assert snap["playable"][0]["id"] == best["id"] and best["index"] != 1                   # the best one came first
     r = done["result"]
     assert 0 < r["first_clip_sec"] < r["elapsed_sec"] and r["counts"]["clips"] == 3
 

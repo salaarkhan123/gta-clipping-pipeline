@@ -79,21 +79,26 @@ def claim_job(prefix: str | None = None) -> str | None:
 
 
 def default_transcriber() -> Transcriber | None:
-    model = get_settings().whisper_model
+    s = get_settings()
+    model = s.whisper_model
     if model.lower() == "none":
         return None
     other = languages.caption_model()          # (languages) for speech that is not English
-    return FasterWhisperTranscriber(model, multilingual=None if other.lower() in ("none", model) else other)
+    # device defaults to cpu (S5 CUDA stub stays off until Settings.whisper_device=cuda).
+    return FasterWhisperTranscriber(model, multilingual=None if other.lower() in ("none", model) else other,
+                                    device=s.whisper_device)
 
 
 def default_indexer() -> Transcriber | None:
     """Faster, smaller model used only to build the full-video search transcript."""
-    model = get_settings().whisper_index_model
+    s = get_settings()
+    model = s.whisper_index_model
     if model.lower() == "none":
         return None
     other = languages.index_model()            # (languages) for speech that is not English
     return FasterWhisperTranscriber(model, beam_size=1, words=False,
-                                    multilingual=None if other.lower() in ("none", model) else other)
+                                    multilingual=None if other.lower() in ("none", model) else other,
+                                    device=s.whisper_device)
 
 
 def spoken_language(upload_id: str, asked: str | None, has_audio: bool, src: Path, duration: float, work: Path,
@@ -308,6 +313,8 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
         render_mode = options.get("render", "full")         # (render, agent B) full | preview | none
         exported: list[tuple[str, str, str, str]] = []      # (render, agent B) export jobs: (export_id, clip_id, key, resolution)
         export_sec = 0.0                                    # (render, agent B) export jobs: quoted seconds rendered
+        # (S1 / B2) Moment rows published before encodes: (start, end) → clip id, so on_clip updates them.
+        early_clips: dict[tuple[float, float], str] = {}
         # (languages, agent F) The spoken language: asked for, known, or detected now. English or unknown leaves
         # the transcribers exactly as they were; any other language hands over to the multilingual models.
         asked = options.pop("source_lang", None)
@@ -338,6 +345,28 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             except Exception:
                 log.exception("could not set the title on a thumbnail of %s", job_id)
 
+        def save_moments(moments) -> None:
+            """(S1) Store times, scores and copy for every chosen moment before any encode runs."""
+            if not moments:
+                return
+            # Indices match ClipResult.index: chosen moments in source order (pipeline sorts by start).
+            ordered = sorted(moments, key=lambda m: (m.start, m.end))
+            with new_session() as db:
+                job = db.execute(select(Job).where(Job.id == job_id).with_for_update()).scalar_one()
+                if job.status != "RUNNING":
+                    raise Lost()
+                if job.cancel_requested:
+                    raise Canceled()
+                for idx, m in enumerate(ordered, 1):
+                    clip_id = new_id("clip")
+                    early_clips[(m.start, m.end)] = clip_id
+                    db.add(Clip(id=clip_id, job_id=job_id, idx=idx, start_sec=m.start, end_sec=m.end,
+                                score=m.score, signals=m.signals or {}, features=dict(m.features or {}),
+                                video_key="", kind=m.kind, meta=m.meta))
+                # Moments are listable now; encodes (or thumbnails for render=none) still follow.
+                job.stage, job.progress, job.heartbeat_at = "rendering", max(job.progress, 70), utcnow()
+                db.commit()
+
         def save_clip(r, idx: int) -> None:
             """Store one finished clip and make it visible now, while the job is still running."""
             meta = getattr(r, "meta", None)             # the judge already rated it, or:
@@ -360,7 +389,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                     log.exception("caption translation failed for a clip of %s", job_id)
                     translation["status"] = "partial"
             # No AI, no score: a number made from loudness alone would mislead.
-            clip_id = new_id("clip")
+            clip_id = early_clips.get((r.start, r.end)) or new_id("clip")
             base = f"clips/{job_id}/{clip_id}"
             thumb_key = caps_key = None
             # (render, agent B) render "preview": the video is the preview; "none": there is no video yet.
@@ -394,9 +423,18 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                     raise Lost()
                 if job.cancel_requested:
                     raise Canceled()
-                db.add(Clip(id=clip_id, job_id=job_id, idx=idx, start_sec=r.start, end_sec=r.end, score=r.score,
-                            signals=r.signals, features=r.features, video_key=video_key, preview_key=preview_key,
-                            thumb_key=thumb_key, captions_key=caps_key, meta=meta))
+                row = db.get(Clip, clip_id) if (r.start, r.end) in early_clips else None
+                if row is not None and row.deleted_at is None:
+                    # Same row published at on_moments: fill in media (and final features/copy).
+                    row.score, row.signals, row.features = r.score, r.signals, r.features
+                    row.video_key, row.preview_key = video_key, preview_key
+                    row.thumb_key, row.captions_key, row.meta = thumb_key, caps_key, meta
+                    if row.kind is None and isinstance(meta, dict):
+                        row.kind = meta.get("kind")
+                else:
+                    db.add(Clip(id=clip_id, job_id=job_id, idx=idx, start_sec=r.start, end_sec=r.end, score=r.score,
+                                signals=r.signals, features=r.features, video_key=video_key, preview_key=preview_key,
+                                thumb_key=thumb_key, captions_key=caps_key, meta=meta))
                 db.commit()
             if not handed_over:
                 first_clip.append(time.monotonic() - t_start)
@@ -481,7 +519,10 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             opts = PipelineOptions(caption_font=s.caption_font, source_lang=language, target_lang=target,
                                    moment_layout=s.provisional_layouts, quality_floor=s.clip_quality_floor,
                                    score_weights=weights, score_weights_version=weights_version,
+                                   chat_motion_sample=s.chat_motion_sample,
                                    **options)   # (render, agent B; U4 quality floor; per-game rank weights)
+            # Wave B1: encode concurrency is an ops knob (RENDER_WORKERS), not a per-job client option.
+            opts.render_workers = s.render_workers
             # The pipeline's judge takes (text, frame, context); the AI client takes (text, context, frame).
             extra = ({"judge": lambda text, frame, ctx: ai.clip_meta(text, {**ctx, **lang_ctx}, frame),
                       "fast_transcriber": indexer} if ai is not None else {})
@@ -492,12 +533,21 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             # (U1) What this upload already has transcribed (a whole transcript, pieces of earlier clip jobs) is read
             # instead of transcribed again, and what this job transcribes is kept for the next one.
             heard, whole = load_heard(storage, upload_id, language or "en", work)
-            if (want_whole and has_audio and (indexer or transcriber) is not None
-                    and (whole is None or transcript_language(whole) != (language or "en"))):
-                progress("transcribing", 5)
-                # One decode gives the WAV for the whole transcript and the loudness the pipeline needs.
+            if heard.pieces:
+                timer.count("heard_pieces", len(heard.pieces))
+            whole_ok = whole is not None and transcript_language(whole) == (language or "en")
+            # One decode: loudness for scoring, slices for candidate ASR, silence edits, and (when enabled) the
+            # whole-file transcript. Avoids a second RMS pass plus per-window extract_wav seeks (research A2 / S3).
+            # The WAV lives under work/ and is removed with the job temp dir.
+            audio = None
+            if has_audio:
+                progress("audio", 4)
                 with timer.stage("audio_signal"):
                     audio = extract_audio(src, work / "source-audio.wav", deadline)
+                extra["source_audio"] = audio
+            # want_whole = global TRANSCRIBE_WHOLE or this job's ClipOptions.transcribe_whole (#260).
+            if want_whole and audio is not None and (indexer or transcriber) is not None and not whole_ok:
+                progress("transcribing", 5)
                 stt = provider_for(s.transcription_provider, timing_words(indexer or transcriber),
                                    s.transcribe_chunk_sec, s.transcribe_parallel)
                 with timer.stage("transcribe_whole"):
@@ -508,7 +558,9 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                 (work / "transcript.json").write_text(json.dumps(doc))
                 storage.put(transcript_key(upload_id), work / "transcript.json")
                 heard, _ = load_heard(storage, upload_id, language or "en", work)     # the whole one, then the pieces
-                extra["source_audio"] = audio
+            elif want_whole and whole_ok:
+                timer.count("transcript_whole_reused")
+
             def hand_over(r) -> None:
                 """Store one clip. A single storage/DB glitch skips that clip; cancel/lost still stop the job."""
                 try:
@@ -520,7 +572,8 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
                                   getattr(r, "index", "?"), job_id)
 
             results = pipeline(src, opts, work / "out", progress, transcriber, deadline, timer=timer,
-                               on_clip=hand_over, transcript=heard, **extra)
+                               on_clip=hand_over, on_moments=save_moments,
+                               transcript=heard, **extra)
             save_parts(storage, upload_id, heard, work)
 
         progress("uploading", 99)

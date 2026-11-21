@@ -108,6 +108,8 @@ def test_a_rerun_on_the_same_upload_transcribes_nothing_and_gives_the_same_clips
     assert len(tr.seconds) == made                                          # nothing transcribed again
     a, b = finished(client, headers, first), finished(client, headers, second)
     assert b["result"]["counts"]["transcript_reused"] >= 1 and "transcribe_rough" not in b["result"]["stages"]
+    assert b["result"]["counts"].get("transcript_transcribed", 0) == 0
+    assert b["result"]["counts"]["heard_pieces"] >= 1
     key = lambda c: (c["start_sec"], c["end_sec"], c["score"])  # noqa: E731
     assert [key(c) for c in a["clips"]] == [key(c) for c in b["clips"]]
     caps = [client.get(f"/v1/clips/{j['clips'][0]['id']}/subtitles?format=txt", headers=headers).text for j in (a, b)]
@@ -221,6 +223,15 @@ def test_whole_mode_makes_the_transcript_first_and_every_candidate_reads_it(clie
     doc = stored(up["upload_id"])
     assert doc["model"] == "base.en" and doc["words"] and all(w[0] < w[1] for w in doc["words"])
     assert final.seconds                                                    # captions: still the caption model
+    # A second job reuses the whole transcript: no transcribe_whole stage, counter set.
+    again = clip_job(client, headers, up["upload_id"], clip_length=20)
+    made = (len(rough.seconds), len(final.seconds))
+    assert worker.run_once(final, indexer=rough, ai=FakeAI()) == "SUCCEEDED"
+    second = finished(client, headers, again)["result"]
+    assert (len(rough.seconds), len(final.seconds)) == made
+    assert "transcribe_whole" not in second["stages"]
+    assert second["counts"]["transcript_whole_reused"] == 1
+    assert second["counts"]["transcript_reused"] >= second["counts"]["candidates"]
 
 
 def test_whole_mode_failure_refunds(client, user, three_bursts, monkeypatch):  # noqa: F811
