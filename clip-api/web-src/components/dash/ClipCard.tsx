@@ -6,7 +6,11 @@ import { ExportFull } from "./ExportFull";
 import { Icon, IconName, Soon } from "./Icon";
 import { BACKDROP, CARD_ROW, MEDIA, Shape, thumbVar, useShape } from "./ProjectCard";
 import { useDash } from "./Shell";
+import { CLIP_LAYOUT_KEY, ClipLayout, parseClipLayout } from "@/lib/clip-layout";
 import { scoreLabel } from "@/lib/scores";
+
+export type { ClipLayout };
+export { CLIP_LAYOUT_KEY, parseClipLayout };
 
 export async function downloadSubtitles(clipId: string, format = "srt") {
   const res = await fetch(`${API}/v1/clips/${clipId}/subtitles?format=${format}`, { headers: { Authorization: `Bearer ${getToken()}` } });
@@ -41,11 +45,40 @@ const SOON: [IconName, string][] = [["calendar", "Schedule"]];
 // `uploadId` (or `project`) gives the card its Edit action: the editor needs the source video.
 // The results grid: cards shaped like their clip (see ProjectCard's `useShape`), same picture height, wrapping.
 export const CLIP_GRID = CARD_ROW;
+// Compact stacked rows for the list layout (Library clips, and any other ClipCard grid that opts in).
+export const CLIP_LIST = "grid gap-2";
+
+// Grid vs list: remembered in this browser only. Always start as grid so SSR matches the first paint.
+export function useClipLayout(): [ClipLayout, (v: ClipLayout) => void] {
+  const [layout, setLayout] = useState<ClipLayout>("grid");
+  useEffect(() => {
+    try { setLayout(parseClipLayout(localStorage.getItem(CLIP_LAYOUT_KEY))); } catch { /* private mode */ }
+  }, []);
+  const set = (v: ClipLayout) => {
+    setLayout(v);
+    try { localStorage.setItem(CLIP_LAYOUT_KEY, v); } catch { /* private mode */ }
+  };
+  return [layout, set];
+}
+
+export function LayoutToggle({ value, onChange }: { value: ClipLayout; onChange: (v: ClipLayout) => void }) {
+  return (
+    <div role="group" aria-label="Clip layout" className="inline-flex gap-[2px] rounded-12 border border-solid border-line-soft bg-panel p-[3px]">
+      {([["grid", "Grid layout"], ["list", "List layout"]] as const).map(([mode, label]) => (
+        <button key={mode} type="button" aria-pressed={value === mode} aria-label={label} title={label} onClick={() => onChange(mode)}
+          className={`grid h-8 w-8 cursor-pointer place-items-center rounded-8 border-0 ${value === mode ? "bg-chip-hover text-lime" : "bg-transparent text-muted hover:text-text"}`}>
+          <Icon name={mode} size={16} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // Same picture height for both shapes: a tall card is 216 px wide (384 px high), a wide one 683 px.
 const CLIP_WIDTH: Record<Shape, string> = { tall: "w-[216px] flex-none narrow:w-[calc((100%-12px)/2)]", wide: "w-[683px] max-w-full flex-none narrow:w-full" };
 
-export function ClipCard({ clip, onChange, project, uploadId, lit, number, selected, onSelect }: { clip: any; onChange: (c: any) => void;
-  project?: { id: string; name: string }; uploadId?: string; lit?: boolean; number?: number; selected?: boolean; onSelect?: (id: string, on: boolean) => void }) {
+export function ClipCard({ clip, onChange, project, uploadId, lit, number, selected, onSelect, layout = "grid" }: { clip: any; onChange: (c: any) => void;
+  project?: { id: string; name: string }; uploadId?: string; lit?: boolean; number?: number; selected?: boolean; onSelect?: (id: string, on: boolean) => void; layout?: ClipLayout }) {
   const { fail } = useDash();
   // A reply signs new links for the same files; the ones on the page stay, so a playing clip is not restarted.
   const merge = (r: any) => onChange({ ...clip, ...r, video_url: clip.video_url, thumb_url: clip.thumb_url || r.thumb_url, captions_url: clip.captions_url || r.captions_url });
@@ -60,6 +93,33 @@ export function ClipCard({ clip, onChange, project, uploadId, lit, number, selec
   const source = uploadId || project?.id;
   const shape = useShape(clip.thumb_url, "tall");
   const [play, setPlay] = useState(false);
+  const length = typeof clip.end_sec === "number" && typeof clip.start_sec === "number" ? clip.end_sec - clip.start_sec : clip.start_sec;
+  if (layout === "list") {
+    return (
+      <article id={`clip-${clip.id}`} tabIndex={-1} aria-label={name}
+        className={`clip group/card flex min-w-0 scroll-mt-24 items-center gap-3 rounded-12 bg-card px-2 py-2 ring-1 ring-inset focus:outline-none
+          ${selected ? "ring-2 ring-lime" : "ring-[rgba(255,255,255,.06)] hover:ring-[rgba(255,255,255,.14)]"}
+          ${clip.kept === false ? "opacity-[.45]" : ""} ${lit ? "outline outline-2 outline-offset-2 outline-lime" : ""}`}>
+        {onSelect && <input type="checkbox" checked={!!selected} aria-label={`Select ${name}`} onChange={(e) => onSelect(clip.id, e.target.checked)}
+          className="h-5 w-5 flex-none cursor-pointer accent-lime" />}
+        <div className="relative h-14 w-10 flex-none overflow-hidden rounded-8 bg-card-2">
+          {play ? <video controls autoPlay playsInline preload="auto" poster={clip.thumb_url || undefined} src={clip.video_url} className="block h-full w-full bg-black object-contain" />
+            : <button type="button" onClick={() => setPlay(true)} aria-label={`Play ${name}`} className="grid h-full w-full cursor-pointer place-items-center border-0 bg-transparent p-0">
+                {clip.thumb_url ? <img src={clip.thumb_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                  : <Icon name="film" size={18} className="text-muted" />}
+              </button>}
+        </div>
+        <button type="button" onClick={() => setPlay(true)} aria-label={`Play ${name}`}
+          className="grid min-w-0 flex-1 cursor-pointer gap-[2px] border-0 bg-transparent p-0 text-left">
+          <h3 title={name} className="m-0 truncate font-body text-[14px] font-semibold leading-[1.3] tracking-[-0.005em] text-text">
+            {rank && <span className="tabular-nums text-muted">#{rank} </span>}{name}</h3>
+          {project && <span className="truncate text-[12.5px] text-muted">{project.name}</span>}
+        </button>
+        <span className="flex-none tabular-nums text-[12.5px] text-muted">{clock(length)}</span>
+        <ScoreBadge clip={clip} />
+      </article>
+    );
+  }
   return (
     <article id={`clip-${clip.id}`} tabIndex={-1} aria-label={name}
       className={`clip group/card grid min-w-0 scroll-mt-24 content-start gap-[10px] ${CLIP_WIDTH[shape]} rounded-16 focus:outline-none
