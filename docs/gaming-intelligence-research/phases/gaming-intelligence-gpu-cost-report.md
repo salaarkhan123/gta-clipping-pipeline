@@ -61,3 +61,13 @@ L40S must process >~1.58× L4 source-hours per billed hour to beat L4 compute co
 4. Default Clip Maker stays CPU until a measured hybrid win. Experimental detectors remain weight 0 on any GPU worker.
 
 **Approval gate.** Measured source-hours/month, quality delta vs B0, p95 latency, memory headroom, current rental quote — then capped pilot only.
+
+### Eval-pass CPU hook resource (2026-11-21, measured)
+
+| Item | Value |
+| --- | --- |
+| Disabled mean | 0.0046 ms / 40 candidates (200 repeats) |
+| Enabled zero-weight mean | 0.2316 ms |
+| Process `ru_maxrss` | 34156 KB (unchanged across arms; interpreter-dominated) |
+| Per source-video-hour GI hook | **not measured** as full `run_pipeline` (hook-only microbench) |
+| GPU wall time | **not measured** (no provision) |

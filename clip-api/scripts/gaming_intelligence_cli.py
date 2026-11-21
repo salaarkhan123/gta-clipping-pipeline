@@ -23,6 +23,7 @@ from scripts.gaming_intelligence.bench import (  # noqa: E402
     reproducible_gpu_bench_plan,
     write_cpu_bench_stub,
 )
+from scripts.gaming_intelligence.compare import evaluate_arms  # noqa: E402
 from scripts.gaming_intelligence.dataset import (  # noqa: E402
     candidates_from_labels_v2,
     candidates_from_run,
@@ -59,6 +60,10 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("gpu-plan", help="Print reproducible L4 bench plan (no provision)")
 
+    c = sub.add_parser("compare", help="A/B/C metrics (blocked until human labels exist)")
+    c.add_argument("sheet", type=Path)
+    c.add_argument("--min-rated", type=int, default=20)
+
     args = p.parse_args(argv)
 
     if args.cmd == "export-sheet":
@@ -92,6 +97,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "gpu-plan":
         print(json.dumps(reproducible_gpu_bench_plan(), indent=2))
+        return 0
+
+    if args.cmd == "compare":
+        rows = load_label_sheet(args.sheet)
+        print(json.dumps(evaluate_arms(rows, min_rated=args.min_rated), indent=2))
         return 0
 
     return 2

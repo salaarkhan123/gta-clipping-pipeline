@@ -20,7 +20,9 @@ from app.pipeline.gaming_intelligence import (  # noqa: E402
     maybe_rerank_moments,
 )
 from scripts.gaming_intelligence.bench import estimate_gpu_cost, write_cpu_bench_stub  # noqa: E402
+from scripts.gaming_intelligence.compare import evaluate_arms  # noqa: E402
 from scripts.gaming_intelligence.dataset import (  # noqa: E402
+    HUMAN_FIELDS,
     candidates_from_labels_v2,
     candidates_from_run,
     export_label_sheet,
@@ -108,12 +110,14 @@ def test_dataset_from_run_leaves_human_blank(tmp_path):
     rows = candidates_from_run(run, vod="gta-demo", game="gta-online")
     assert len(rows) == 2
     assert rows[0]["clutch_score"] == "88"
-    assert rows[0]["hook"] == ""
-    assert rows[0]["publish"] == ""
+    assert rows[0]["quality_1_5"] == ""
+    assert rows[0]["genuine_highlight"] == ""
+    assert "quality_1_5" in HUMAN_FIELDS
     out = export_label_sheet(rows, tmp_path / "sheet.csv")
     stats = sheet_stats(rows)
     assert stats["rows"] == 2
     assert stats["unrated"] == 2
+    assert stats["metrics_ready"] is False
     assert stats["treats_clutch_score_as_gt"] is False
     assert out.is_file()
 
@@ -124,8 +128,52 @@ def test_labels_v2_export_does_not_copy_rating_as_gt():
         pytest.skip("labels-v2.csv missing")
     rows = candidates_from_labels_v2(path)
     assert len(rows) == 30
-    assert all(r["hook"] == "" for r in rows)
+    assert all(r["quality_1_5"] == "" for r in rows)
     assert sheet_stats(rows)["unrated"] == 30
+
+
+def test_compare_blocked_without_labels():
+    path = ROOT / "eval" / "gi-gta-label-sheet.csv"
+    if not path.is_file():
+        pytest.skip("gi sheet missing")
+    from scripts.gaming_intelligence.dataset import load_label_sheet
+    report = evaluate_arms(load_label_sheet(path), min_rated=20)
+    assert report["status"] == "blocked_no_human_labels"
+    assert report["n_rated"] == 0
+    assert report["minimum_additional_labels"] == 20
+
+
+def test_compare_exploratory_with_synthetic_labels():
+    rows = []
+    for i in range(5):
+        rows.append({
+            "id": f"x-{i}",
+            "vod": "synth",
+            "game": "gta-online",
+            "start": f"0:0{i}:00",
+            "end": f"0:0{i}:30",
+            "source": "test",
+            "clutch_rank": str(i + 1),
+            "clutch_score": str(90 - i * 5),
+            "quality_1_5": str(5 - (i % 5)),
+            "entertainment_1_5": "3",
+            "context_1_5": "3",
+            "suitable_tiktok": "maybe",
+            "suitable_shorts": "maybe",
+            "suitable_reels": "maybe",
+            "genuine_highlight": "yes" if i < 3 else "no",
+            "clutch_correct": "yes",
+            "event_tags": "",
+            "notes": "",
+            "rater": "test",
+            "rated_at": "2026-11-21T00:00:00Z",
+            "gi_score": str(50 + i),
+        })
+    report = evaluate_arms(rows, min_rated=20)
+    assert report["status"] == "insufficient_sample"
+    assert report["exploratory"] is True
+    assert "A" in report["arms"] and "B" in report["arms"] and "C" in report["arms"]
+    assert report["arms"]["A"]["precision@5"] is not None
 
 
 def test_estimate_gpu_clearly_marked():

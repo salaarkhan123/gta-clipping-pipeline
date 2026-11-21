@@ -1,4 +1,4 @@
-id,vod,game,start,end,source,clutch_rank,clutch_score,hook,stakes,payoff,reaction,clarity,novelty,completeness,publish,event_tags,notes,rater,rated_at
+id,vod,game,start,end,source,clutch_rank,clutch_score,quality_1_5,entertainment_1_5,context_1_5,suitable_tiktok,suitable_shorts,suitable_reels,genuine_highlight,clutch_correct,event_tags,notes,rater,rated_at
 gta-online-1-15,gta-online-1,gta-online,0:05:29,0:06:14,clutchclips:gta-online-1.staging-347ca2f#15,,,,,,,,,,,,,,
 gta-online-1-7,gta-online-1,gta-online,0:07:55,0:08:40,clutchclips:gta-online-1.staging-347ca2f#7,,,,,,,,,,,,,,
 gta-online-1-18,gta-online-1,gta-online,0:09:50,0:10:35,clutchclips:gta-online-1.staging-347ca2f#18,,,,,,,,,,,,,,

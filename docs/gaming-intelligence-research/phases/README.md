@@ -1,17 +1,23 @@
-# Gaming intelligence phases (this research PR)
+# Gaming intelligence phases (research PR #262)
 
-Dense phase docs + CPU prototype. Extends [#237](https://github.com/salaarkhan123/gta-clipping-pipeline/pull/237) / [#257](https://github.com/salaarkhan123/gta-clipping-pipeline/pull/257) / [#258](https://github.com/salaarkhan123/gta-clipping-pipeline/pull/258). Experimental weights stay **0**. Do not merge into production enablement without owner OK.
+Experimental weights stay **0**. Do not merge as production enablement.
 
-| Doc | Phase |
+| Doc | Topic |
 | --- | --- |
-| [system-audit](gaming-intelligence-system-audit.md) | 1 |
-| [model-comparison](gaming-intelligence-model-comparison.md) | 2 |
-| [architecture](gaming-intelligence-architecture.md) | 3 |
-| [eval-dataset](gaming-intelligence-eval-dataset.md) | 4 |
-| [entertainment-rubric](gaming-intelligence-entertainment-rubric.md) | 5 |
-| [benchmark-report](gaming-intelligence-benchmark-report.md) | 6 |
-| [virality-research](gaming-intelligence-virality-research.md) | 7 |
-| [gpu-cost-report](gaming-intelligence-gpu-cost-report.md) | 8 |
-| [roadmap](gaming-intelligence-roadmap.md) | 9–10 |
+| [ci-verification](gaming-intelligence-ci-verification.md) | PR #262 CI + safety |
+| [system-audit](gaming-intelligence-system-audit.md) | Phase 1 |
+| [model-comparison](gaming-intelligence-model-comparison.md) | Phase 2 |
+| [architecture](gaming-intelligence-architecture.md) | Phase 3 |
+| [eval-dataset](gaming-intelligence-eval-dataset.md) | Phase 4 dataset |
+| [labeling-workflow](gaming-intelligence-labeling-workflow.md) | Owner labeller steps |
+| [entertainment-rubric](gaming-intelligence-entertainment-rubric.md) | Phase 5 (legacy 0–3) |
+| [benchmark-report](gaming-intelligence-benchmark-report.md) | Phase 6 |
+| [virality-research](gaming-intelligence-virality-research.md) | Phase 7 desk |
+| [virality-methodology](gaming-intelligence-virality-methodology.md) | Virality eval protocol |
+| [gpu-cost-report](gaming-intelligence-gpu-cost-report.md) | Phase 8 |
+| [comparison-framework](gaming-intelligence-comparison-framework.md) | A/B/C metrics |
+| [game-signals](gaming-intelligence-game-signals.md) | Per-title features |
+| [roadmap](gaming-intelligence-roadmap.md) | Nine questions |
+| [eval-milestones](gaming-intelligence-eval-milestones.md) | Next milestones |
 
-Prototype: `clip-api/app/pipeline/gaming_intelligence.py` · CLI `scripts/gaming_intelligence_cli.py` · tests `tests/test_gaming_intelligence.py`.
+Prototype: `clip-api/app/pipeline/gaming_intelligence.py` · CLI · `eval/gi-labeller.html`.

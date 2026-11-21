@@ -2,7 +2,7 @@
 
 Candidates come from run JSON / labels-v2 rows. Human fields start empty.
 ClutchClips AI ratings and ranks are **not** ground truth — they are proposals
-for a human to rate with the entertainment rubric.
+for a human to rate. Do not fabricate ratings.
 """
 from __future__ import annotations
 
@@ -23,23 +23,38 @@ CANDIDATE_FIELDS = (
     "clutch_score",     # proposal only — not ground truth
 )
 
-# Human labels (entertainment rubric). Empty until an owner/editor fills them.
+# Human labels for GI evaluation (owner request 2026-11-21). Empty until filled.
+# Scales are 1–5 unless noted. Do not copy clutch_score into these fields.
 HUMAN_FIELDS = (
-    "hook",             # 0-3
-    "stakes",           # 0-3
-    "payoff",           # 0-3
-    "reaction",         # 0-3
-    "clarity",          # 0-3
-    "novelty",          # 0-3
-    "completeness",     # 0-3
-    "publish",          # yes|no|maybe
-    "event_tags",       # free text: gunfight,crash,dialogue,...
+    "quality_1_5",          # highlight quality
+    "entertainment_1_5",    # entertainment value
+    "context_1_5",          # context / understandability
+    "suitable_tiktok",      # yes|no|maybe
+    "suitable_shorts",      # yes|no|maybe
+    "suitable_reels",       # yes|no|maybe
+    "genuine_highlight",    # yes|no|maybe — is this a real gaming highlight?
+    "clutch_correct",       # yes|no|maybe — did ClutchClips correctly identify it?
+    "event_tags",           # free text: gunfight,crash,dialogue,...
     "notes",
     "rater",
     "rated_at",
 )
 
+# Legacy research rubric (0–3) kept for optional side studies; not required for GI v1 eval.
+LEGACY_RUBRIC_FIELDS = (
+    "hook", "stakes", "payoff", "reaction", "clarity", "novelty", "completeness", "publish",
+)
+
 ALL_FIELDS = CANDIDATE_FIELDS + HUMAN_FIELDS
+
+# Fields that must be non-empty for a row to count as "human-rated" for metrics.
+REQUIRED_FOR_RATED = (
+    "quality_1_5",
+    "entertainment_1_5",
+    "context_1_5",
+    "genuine_highlight",
+    "clutch_correct",
+)
 
 
 def _hms(seconds: float) -> str:
@@ -80,12 +95,7 @@ def candidates_from_run(
 
 
 def candidates_from_labels_v2(path: Path) -> list[dict[str, str]]:
-    """Reuse eval/labels-v2.csv intervals as candidates; strip any prior rating as GT.
-
-    Existing `rating`/`reason` columns are ignored for ground truth. They may be
-    copied into notes only when already human-filled — we leave human fields blank
-    so raters start clean.
-    """
+    """Reuse eval/labels-v2.csv intervals as candidates; strip any prior rating as GT."""
     rows: list[dict[str, str]] = []
     with path.open(newline="") as f:
         for r in csv.DictReader(f):
@@ -100,9 +110,21 @@ def candidates_from_labels_v2(path: Path) -> list[dict[str, str]]:
                 "clutch_rank": "",
                 "clutch_score": "",
             })
-            # Do not copy rating into human rubric fields — that would launder Clutch scores as GT.
             rows.append(row)
     return rows
+
+
+def migrate_sheet_row(old: dict[str, str]) -> dict[str, str]:
+    """Map an older GI sheet row onto the current schema without inventing ratings."""
+    row = {k: "" for k in ALL_FIELDS}
+    for k in CANDIDATE_FIELDS:
+        if k in old:
+            row[k] = (old.get(k) or "").strip()
+    for k in HUMAN_FIELDS:
+        if k in old and (old.get(k) or "").strip():
+            row[k] = (old.get(k) or "").strip()
+    # Do not auto-translate legacy 0–3 rubric into 1–5 — that would invent values.
+    return row
 
 
 def export_label_sheet(rows: list[dict[str, str]], path: Path) -> Path:
@@ -117,19 +139,29 @@ def export_label_sheet(rows: list[dict[str, str]], path: Path) -> Path:
 
 def load_label_sheet(path: Path) -> list[dict[str, str]]:
     with path.open(newline="") as f:
-        return list(csv.DictReader(f))
+        raw = list(csv.DictReader(f))
+    # Accept legacy headers by migrating each row.
+    return [migrate_sheet_row(r) for r in raw]
+
+
+def is_rated(row: dict[str, str]) -> bool:
+    return all((row.get(k) or "").strip() for k in REQUIRED_FOR_RATED)
 
 
 def sheet_stats(rows: list[dict[str, str]]) -> dict[str, Any]:
     """Census only — never invents ratings."""
-    rubric_keys = ("hook", "stakes", "payoff", "reaction", "clarity", "novelty", "completeness")
-    rated = sum(1 for r in rows if any((r.get(k) or "").strip() for k in rubric_keys))
-    publish_filled = sum(1 for r in rows if (r.get("publish") or "").strip())
+    rated = sum(1 for r in rows if is_rated(r))
+    partial = sum(
+        1 for r in rows
+        if not is_rated(r) and any((r.get(k) or "").strip() for k in HUMAN_FIELDS)
+    )
     return {
         "rows": len(rows),
         "vods": sorted({(r.get("vod") or "") for r in rows if r.get("vod")}),
-        "human_rubric_partial_or_complete": rated,
-        "publish_filled": publish_filled,
-        "unrated": len(rows) - rated,
+        "human_rated_complete": rated,
+        "human_partial": partial,
+        "unrated": len(rows) - rated - partial,
         "treats_clutch_score_as_gt": False,
+        "required_for_rated": list(REQUIRED_FOR_RATED),
+        "metrics_ready": rated > 0,
     }

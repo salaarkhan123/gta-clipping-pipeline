@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GI GTA labeller</title>
+<!-- Local-only. Open in Chrome. Sheet + video stay on your machine. Never commits media. -->
+<style>
+  :root { --bg:#0d0f12; --panel:#161a1f; --line:#262c34; --text:#e8ecf1; --dim:#8a94a3;
+          --lime:#b8ff3c; --cyan:#3cf0ff; --bad:#ff6b6b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.4 "Segoe UI", system-ui, sans-serif; }
+  header { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:10px 16px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:15px; margin:0 12px 0 0; letter-spacing:.02em; }
+  button, select, input, textarea { background:var(--panel); color:var(--text); border:1px solid var(--line);
+    border-radius:6px; padding:6px 10px; font:inherit; }
+  button:hover { border-color:var(--lime); cursor:pointer; }
+  button.primary { background:var(--lime); color:#0d0f12; border-color:var(--lime); font-weight:600; }
+  button.on { background:var(--lime); color:#0d0f12; }
+  main { display:grid; grid-template-columns:minmax(0,1fr) 440px; gap:16px; padding:16px; }
+  @media (max-width:1100px){ main { grid-template-columns:1fr; } }
+  video { width:100%; max-height:58vh; background:#000; border-radius:8px; }
+  .bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px; color:var(--dim); }
+  .bar b { color:var(--text); }
+  #panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; margin-top:10px; }
+  .field { margin:10px 0; }
+  .field label { display:block; color:var(--dim); font-size:12px; margin-bottom:4px; }
+  .rates { display:flex; gap:6px; flex-wrap:wrap; }
+  .yn { display:flex; gap:6px; }
+  aside { background:var(--panel); border:1px solid var(--line); border-radius:8px; max-height:calc(100vh - 90px);
+    display:flex; flex-direction:column; overflow:hidden; }
+  aside .top { padding:10px 12px; border-bottom:1px solid var(--line); color:var(--dim); }
+  #rows { overflow:auto; }
+  .row { display:grid; grid-template-columns:28px 1fr auto; gap:8px; padding:7px 12px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .row:hover { background:#1c2128; } .row.cur { background:#222a1a; }
+  .dot { width:22px; height:22px; border-radius:4px; display:grid; place-items:center; background:#2a3039; color:var(--dim); font-size:11px; font-weight:700; }
+  .dot.ok { background:var(--lime); color:#0d0f12; } .dot.part { background:var(--cyan); color:#0d0f12; }
+  .t { font-variant-numeric:tabular-nums; } .s { color:var(--dim); font-size:12px; }
+  .warn { color:var(--bad); min-height:1.2em; margin-top:6px; }
+  #status { margin-left:auto; color:var(--dim); } #status.dirty { color:var(--cyan); }
+  .hint { color:var(--dim); font-size:12px; margin-top:8px; }
+  kbd { background:#2a3039; border-radius:4px; padding:0 5px; }
+  details { margin-top:10px; color:var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>GI GTA labeller</h1>
+  <button id="openSheet">Open sheet</button>
+  <input id="sheetFile" type="file" accept=".csv,text/csv" hidden>
+  <button id="openVideo">Open video</button>
+  <input id="videoFile" type="file" accept="video/*,.mkv" hidden>
+  <select id="vod"></select>
+  <button id="save" class="primary">Save sheet</button>
+  <span id="status">Open <code>eval/gi-gta-label-sheet.csv</code>, then your local VOD (not in git).</span>
+</header>
+<main>
+  <section>
+    <video id="player" controls preload="metadata"></video>
+    <div class="bar">
+      <span>at <b id="pos">0:00:00</b></span>
+      <span id="progress"></span>
+      <span class="hint">Clutch score shown for reference only — do <b>not</b> copy it into ratings.</span>
+    </div>
+    <div id="panel">
+      <div class="bar" style="margin-top:0"><b id="curTitle">No row</b>
+        <span id="clutchRef" class="hint"></span>
+      </div>
+      <div class="field"><label>Highlight quality (1–5)</label>
+        <div class="rates" data-key="quality_1_5"></div></div>
+      <div class="field"><label>Entertainment value (1–5)</label>
+        <div class="rates" data-key="entertainment_1_5"></div></div>
+      <div class="field"><label>Context / understandability (1–5)</label>
+        <div class="rates" data-key="context_1_5"></div></div>
+      <div class="field"><label>Platform suitability</label>
+        <div class="yn">
+          <span>TikTok</span><span data-yn="suitable_tiktok"></span>
+          <span>Shorts</span><span data-yn="suitable_shorts"></span>
+          <span>Reels</span><span data-yn="suitable_reels"></span>
+        </div>
+      </div>
+      <div class="field"><label>Genuine gaming highlight?</label>
+        <span class="yn" data-yn="genuine_highlight"></span></div>
+      <div class="field"><label>Did ClutchClips correctly identify it?</label>
+        <span class="yn" data-yn="clutch_correct"></span></div>
+      <div class="field"><label>Event tags</label>
+        <input id="event_tags" placeholder="gunfight, chase, dialogue, fail…" style="width:100%"></div>
+      <div class="field"><label>Notes</label>
+        <textarea id="notes" rows="2" style="width:100%"></textarea></div>
+      <div class="field"><label>Rater id</label>
+        <input id="rater" placeholder="your name / handle" style="width:240px"></div>
+      <div class="warn" id="warn"></div>
+      <div class="hint">Keys: <kbd>1</kbd>–<kbd>5</kbd> quality · <kbd>J</kbd>/<kbd>K</kbd> next/prev · <kbd>Space</kbd> play · <kbd>R</kbd> replay · <kbd>Ctrl/Cmd+S</kbd> save</div>
+    </div>
+    <details open>
+      <summary>How to rate (ground truth)</summary>
+      <ul>
+        <li>Judge the <b>moment in the video</b>, not the ClutchClips score.</li>
+        <li>1 = junk / not a clip · 3 = usable with edits · 5 = would post as-is.</li>
+        <li><code>genuine_highlight</code>: is this a real gameplay/RP highlight for the title?</li>
+        <li><code>clutch_correct</code>: given what you saw, was nominating this interval reasonable?</li>
+        <li>Do not invent ratings for moments you did not watch.</li>
+      </ul>
+    </details>
+  </section>
+  <aside>
+    <div class="top" id="asideTop">0 / 0 rated</div>
+    <div id="rows"></div>
+  </aside>
+</main>
+<script>
+const FIELDS = ["id","vod","game","start","end","source","clutch_rank","clutch_score",
+  "quality_1_5","entertainment_1_5","context_1_5",
+  "suitable_tiktok","suitable_shorts","suitable_reels",
+  "genuine_highlight","clutch_correct","event_tags","notes","rater","rated_at"];
+const SCALE = ["quality_1_5","entertainment_1_5","context_1_5"];
+const YN = ["suitable_tiktok","suitable_shorts","suitable_reels","genuine_highlight","clutch_correct"];
+const NEED = ["quality_1_5","entertainment_1_5","context_1_5","genuine_highlight","clutch_correct"];
+
+let rows = [], idx = -1, dirty = false, focusScale = "quality_1_5";
+
+function hmsToSec(t){ const p=String(t||"0").split(":").map(Number); let s=0; for(const x of p) s=s*60+x; return s; }
+function secToHms(s){ s=Math.max(0,Math.round(s)); const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),x=s%60;
+  return `${h}:${String(m).padStart(2,"0")}:${String(x).padStart(2,"0")}`; }
+function parseCsv(text){
+  const lines=text.replace(/^\uFEFF/,"").trimEnd().split(/\r?\n/);
+  const headers=splitCsvLine(lines[0]);
+  return lines.slice(1).filter(Boolean).map(line=>{
+    const cols=splitCsvLine(line); const o={};
+    headers.forEach((h,i)=>o[h]=cols[i]??"");
+    const out={}; for(const f of FIELDS) out[f]=o[f]??"";
+    return out;
+  });
+}
+function splitCsvLine(line){
+  const out=[]; let cur="", q=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c=='"'){ if(q&&line[i+1]=='"'){cur+='"';i++;} else q=!q; }
+    else if(c==','&&!q){ out.push(cur); cur=""; }
+    else cur+=c;
+  }
+  out.push(cur); return out;
+}
+function toCsv(list){
+  const esc=v=>{ v=String(v??""); return /[",\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v; };
+  return [FIELDS.join(",")].concat(list.map(r=>FIELDS.map(f=>esc(r[f])).join(","))).join("\n")+"\n";
+}
+function isRated(r){ return NEED.every(k=>(r[k]||"").trim()); }
+function isPartial(r){ return !isRated(r) && FIELDS.slice(8).some(k=>(r[k]||"").trim()); }
+function setDirty(v){ dirty=v; status.className=v?"dirty":""; status.textContent=v?"Unsaved changes":"Saved / clean"; }
+
+function buildRateButtons(){
+  document.querySelectorAll(".rates").forEach(el=>{
+    const key=el.dataset.key; el.innerHTML="";
+    for(let n=1;n<=5;n++){
+      const b=document.createElement("button"); b.textContent=String(n); b.dataset.v=String(n);
+      b.onclick=()=>{ if(idx<0)return; rows[idx][key]=String(n); rows[idx].rated_at=new Date().toISOString();
+        if(rater.value) rows[idx].rater=rater.value; setDirty(true); paint(); };
+      el.appendChild(b);
+    }
+    const c=document.createElement("button"); c.textContent="clear";
+    c.onclick=()=>{ if(idx<0)return; rows[idx][key]=""; setDirty(true); paint(); };
+    el.appendChild(c);
+  });
+  document.querySelectorAll("[data-yn]").forEach(el=>{
+    const key=el.dataset.yn; el.innerHTML="";
+    for(const v of ["yes","no","maybe"]){
+      const b=document.createElement("button"); b.textContent=v; b.dataset.v=v;
+      b.onclick=()=>{ if(idx<0)return; rows[idx][key]=v; rows[idx].rated_at=new Date().toISOString();
+        if(rater.value) rows[idx].rater=rater.value; setDirty(true); paint(); };
+      el.appendChild(b);
+    }
+    const c=document.createElement("button"); c.textContent="clear";
+    c.onclick=()=>{ if(idx<0)return; rows[idx][key]=""; setDirty(true); paint(); };
+    el.appendChild(c);
+  });
+}
+
+function filtered(){
+  const v=vod.value; return rows.map((r,i)=>({r,i})).filter(x=>!v||x.r.vod===v);
+}
+function paint(){
+  const list=filtered();
+  const rated=list.filter(x=>isRated(x.r)).length;
+  asideTop.textContent=`${rated} / ${list.length} complete · ${list.filter(x=>isPartial(x.r)).length} partial`;
+  rowsEl.innerHTML="";
+  list.forEach(({r,i})=>{
+    const d=document.createElement("div"); d.className="row"+(i===idx?" cur":"");
+    const dot=document.createElement("div");
+    dot.className="dot"+(isRated(r)?" ok":isPartial(r)?" part":"");
+    dot.textContent=isRated(r)?"✓":(r.quality_1_5||"·");
+    const mid=document.createElement("div");
+    mid.innerHTML=`<div class="t">${r.start} → ${r.end}</div><div class="s">${r.id}</div>`;
+    const right=document.createElement("div"); right.className="s"; right.textContent=r.game||"";
+    d.append(dot,mid,right); d.onclick=()=>select(i); rowsEl.appendChild(d);
+  });
+  if(idx<0||!rows[idx]){ curTitle.textContent="No row"; clutchRef.textContent=""; return; }
+  const r=rows[idx];
+  curTitle.textContent=`${r.id} · ${r.start}–${r.end}`;
+  clutchRef.textContent=`Clutch rank ${r.clutch_rank||"–"} score ${r.clutch_score||"–"} (proposal only)`;
+  document.querySelectorAll(".rates").forEach(el=>{
+    const key=el.dataset.key;
+    el.querySelectorAll("button[data-v]").forEach(b=>b.classList.toggle("on", b.dataset.v===(r[key]||"")));
+  });
+  document.querySelectorAll("[data-yn]").forEach(el=>{
+    const key=el.dataset.yn;
+    el.querySelectorAll("button[data-v]").forEach(b=>b.classList.toggle("on", b.dataset.v===(r[key]||"")));
+  });
+  event_tags.value=r.event_tags||""; notes.value=r.notes||""; if(r.rater) rater.value=r.rater;
+  const missing=NEED.filter(k=>!(r[k]||"").trim());
+  warn.textContent=missing.length?`Still need: ${missing.join(", ")}`:"";
+  progress.textContent=`row ${list.findIndex(x=>x.i===idx)+1}/${list.length}`;
+}
+
+function select(i){
+  idx=i; const r=rows[i]; paint();
+  const a=hmsToSec(r.start), b=hmsToSec(r.end);
+  if(player.src){ player.currentTime=a; player.play().catch(()=>{}); 
+    const stop=()=>{ if(player.currentTime>=b-0.05){ player.pause(); player.removeEventListener("timeupdate",stop);} };
+    player.addEventListener("timeupdate", stop);
+  }
+}
+
+function fillVods(){
+  const set=[...new Set(rows.map(r=>r.vod).filter(Boolean))];
+  vod.innerHTML=set.map(v=>`<option value="${v}">${v}</option>`).join("");
+  if(set.length) vod.value=set[0];
+}
+
+openSheet.onclick=()=>sheetFile.click();
+sheetFile.onchange=async()=>{
+  const f=sheetFile.files[0]; if(!f)return;
+  rows=parseCsv(await f.text()); fillVods(); idx=rows.length?filtered()[0]?.i??-1:-1; setDirty(false); paint();
+  if(idx>=0) select(idx);
+};
+openVideo.onclick=()=>videoFile.click();
+videoFile.onchange=()=>{
+  const f=videoFile.files[0]; if(!f)return;
+  player.src=URL.createObjectURL(f);
+  const stem=f.name.replace(/\.[^.]+$/,"");
+  const match=[...vod.options].find(o=>stem.includes(o.value)||o.value.includes(stem));
+  if(match){ vod.value=match.value; paint(); }
+};
+vod.onchange=()=>{ const list=filtered(); idx=list[0]?.i??-1; paint(); if(idx>=0) select(idx); };
+save.onclick=()=>{
+  const blob=new Blob([toCsv(rows)],{type:"text/csv"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="gi-gta-label-sheet.csv"; a.click(); setDirty(false);
+};
+event_tags.oninput=()=>{ if(idx<0)return; rows[idx].event_tags=event_tags.value; setDirty(true); };
+notes.oninput=()=>{ if(idx<0)return; rows[idx].notes=notes.value; setDirty(true); };
+rater.oninput=()=>{ if(idx<0)return; rows[idx].rater=rater.value; setDirty(true); };
+
+setInterval(()=>{ pos.textContent=secToHms(player.currentTime||0); }, 200);
+
+window.addEventListener("keydown", e=>{
+  if(e.target.matches("input,textarea")) return;
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="s"){ e.preventDefault(); save.click(); return; }
+  if(e.key===" " ){ e.preventDefault(); player.paused?player.play():player.pause(); return; }
+  if(e.key.toLowerCase()==="r"&&idx>=0){ select(idx); return; }
+  if(e.key>="1"&&e.key<="5"&&idx>=0){
+    rows[idx][focusScale]=e.key; rows[idx].rated_at=new Date().toISOString();
+    if(rater.value) rows[idx].rater=rater.value; setDirty(true); paint(); return;
+  }
+  const list=filtered(); const at=list.findIndex(x=>x.i===idx);
+  if((e.key==="j"||e.key==="J"||e.key==="ArrowDown")&&at<list.length-1){ select(list[at+1].i); }
+  if((e.key==="k"||e.key==="K"||e.key==="ArrowUp")&&at>0){ select(list[at-1].i); }
+});
+
+buildRateButtons();
+document.querySelectorAll(".rates").forEach(el=>{
+  el.addEventListener("mouseenter",()=>{ focusScale=el.dataset.key; });
+});
+</script>
+</body>
+</html>
