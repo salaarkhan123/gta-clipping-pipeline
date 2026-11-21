@@ -7,7 +7,7 @@ import { KitPicker, NameDialog, UndoRedo } from "@/components/dash/brand/KitBar"
 import { KitPreview, Shape, SHAPES } from "@/components/dash/brand/KitPreview";
 import { KitForm } from "@/components/dash/brand/Sections";
 import { useDash } from "@/components/dash/Shell";
-import { PAGE_TITLE } from "@/components/dash/ui";
+import { BackTitle } from "@/components/dash/ui";
 import { ApiError } from "@/lib/api";
 import { blankKit, createKit, deleteKit, FIRST_KIT_NAME, Kit, kitFrom, Kits, loadKits, sameKit, updateKit } from "@/lib/brandkit";
 import { change, History, redo, startHistory, undo } from "@/lib/history";
@@ -123,7 +123,7 @@ export default function BrandKit() {
     <div className="grid gap-6">
       <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
         <div className="mr-auto grid min-w-0 gap-1">
-          <h1 className={PAGE_TITLE}>Brand kit</h1>
+          <BackTitle title="Brand kit" crumbs={[{ label: "Home", href: "/dashboard/" }, { label: "Brand kit" }]} />
           <p className="m-0 text-[14px] text-muted">Set your look once: captions, hook, layout and edits. Pick it in any job.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 narrow:w-full">

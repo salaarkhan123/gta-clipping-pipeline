@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useDash } from "@/components/dash/Shell";
-import { PAGE_HEAD, PAGE_TITLE } from "@/components/dash/ui";
+import { BackTitle, PAGE_HEAD } from "@/components/dash/ui";
 import { DecisionBody, DecisionDialog } from "@/components/trust/DecisionDialog";
 import { LINK } from "@/components/trust/Field";
 import { api } from "@/lib/api";
@@ -70,7 +70,7 @@ function Gate() {
   const ref = (useSearchParams().get("ref") || "").trim().toUpperCase();
   if (!me.is_admin) return (
     <section className="panel" aria-labelledby="admins-only">
-      <h1 id="admins-only" className={PAGE_TITLE}>Admins only</h1>
+      <BackTitle title="Admins only" id="admins-only" crumbs={[{ label: "Home", href: "/dashboard/" }, { label: "Admins only" }]} />
       <p className="muted">This page is for ClutchClips admins. <Link className={LINK} href="/dashboard/">Back to Home</Link></p>
     </section>
   );
@@ -93,7 +93,7 @@ function CaseList() {
 
   return (
     <div className="stack">
-      <div className={PAGE_HEAD}><h1 className={PAGE_TITLE}>Admin: cases</h1></div>
+      <div className={PAGE_HEAD}><BackTitle title="Admin: cases" crumbs={[{ label: "Home", href: "/dashboard/" }, { label: "Admin: cases" }]} /></div>
       <form className="row" aria-label="Filter cases" onSubmit={(e) => e.preventDefault()}>
         <label>Status<select className={SELECT} value={status} onChange={(e) => { setStatus(e.target.value); setOffset(0); }}>
           <option value="">All statuses</option>{STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></label>
@@ -152,7 +152,7 @@ function CaseView({ reference }: { reference: string }) {
     <div className="stack">
       {back}
       <div className={PAGE_HEAD}>
-        <h1 className={PAGE_TITLE}>{c.reference}</h1>
+        <BackTitle title={c.reference} crumbs={[{ label: "Home", href: "/dashboard/" }, { label: "Admin: cases", href: "/dashboard/admin/cases/" }, { label: c.reference }]} />
         <p className="flex flex-wrap gap-2 text-[14px]"><span className="rounded-full bg-chip px-[10px] py-[2px]">{KIND_LABEL[c.kind] || c.kind}</span>
           <span className="rounded-full bg-chip px-[10px] py-[2px] text-lime">{STATUS_LABEL[c.status] || c.status}</span></p>
       </div>
