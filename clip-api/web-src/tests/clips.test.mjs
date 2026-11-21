@@ -132,8 +132,11 @@ test("results chrome shares Library's grid/list toggle; list rows still open the
   assert.match(tile, /<RatingBadge clip=\{clip\} \/>/);
 });
 
-test("unbuilt actions carry the Coming soon badge and are not links", () => {
+test("Publish opens the panel; AI B-roll stays Coming soon", () => {
   const player = source("components/clips/ClipPlayer.tsx");
-  assert.match(player, /\["send", "Publish to socials"\], \["calendar", "Schedule"\], \["image", "AI B-roll"\]/);
+  assert.match(player, /import \{ PublishPanel \} from "@\/components\/publish\/PublishPanel"/);
+  assert.match(player, /title="Publish or schedule to connected accounts"[\s\S]*?\/>Publish\s*<\/button>/);
+  assert.match(player, /\{publishing && <PublishPanel clipId=\{clip\.id\}/);
+  assert.match(player, /const SOON: \[IconName, string\]\[\] = \[\["image", "AI B-roll"\]\]/);
   assert.match(player, /aria-disabled="true"[^]*<ComingSoonBadge short/);
 });

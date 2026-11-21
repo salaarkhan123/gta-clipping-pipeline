@@ -15,13 +15,14 @@ import logging
 import re
 
 _PATTERNS = (
-    (re.compile(r"([?&](?:token|t)=)[^&\s\"']+"), r"\1[redacted]"),
+    (re.compile(r"([?&](?:token|t|code|access_token|refresh_token)=)[^&\s\"']+"), r"\1[redacted]"),
     (re.compile(r"(/v1/files/)[^/?\s\"']+"), r"\1[redacted]"),
     (re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"), "[redacted]"),   # signed tokens (JWT)
     (re.compile(r"\b[sr]k_(?:live|test)_[A-Za-z0-9]+"), "[redacted]"),                    # Stripe keys
     (re.compile(r"\bwhsec_[A-Za-z0-9]+"), "[redacted]"),                                   # Stripe webhook secrets
     (re.compile(r"\bsk-ant-[A-Za-z0-9_-]+"), "[redacted]"),                                # Anthropic keys
     (re.compile(r"\bgck_[A-Za-z0-9_-]+"), "[redacted]"),                                   # ClutchClips API keys
+    (re.compile(r"\bgAAAA[A-Za-z0-9_\-=]+"), "[redacted]"),                                # Fernet ciphertext (social tokens)
 )
 LOGGERS = ("uvicorn.access", "uvicorn.error", "httpx", "httpcore")
 

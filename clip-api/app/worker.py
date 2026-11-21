@@ -758,6 +758,19 @@ def run_once(transcriber: Transcriber | None = None, pipeline=run_pipeline,
     return process_job(job_id, transcriber, pipeline, indexer, embedder, ai)
 
 
+def _run_publish_once() -> str | None:
+    """Claim and process one due scheduled post. No-op when PUBLISHING is off."""
+    from .db import new_session
+    from .publish import service as publish_service
+    with new_session() as db:
+        post_id = publish_service.claim_due_post(db)
+    if not post_id:
+        return None
+    with new_session() as db:
+        publish_service.process_post(db, post_id)
+    return post_id
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     log_redact.install()
@@ -788,7 +801,10 @@ def _slot(i: int, stop: threading.Event, transcriber, pipeline, indexer, embedde
                 if stale or expired or months or waiting:
                     log.info("sweep: %s stale jobs refunded, %s expired files deleted, %s yearly-plan months granted, "
                              "%s link clip jobs settled after their import", stale, expired, months, waiting)
-            if run_once(transcriber, pipeline, indexer, embedder, ai or default_ai()) is None:
+            published = False
+            if get_settings().publishing and i == 0:
+                published = _run_publish_once() is not None
+            if run_once(transcriber, pipeline, indexer, embedder, ai or default_ai()) is None and not published:
                 stop.wait(poll)
         except Exception:
             log.exception("worker loop error")

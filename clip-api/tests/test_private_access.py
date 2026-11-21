@@ -25,7 +25,7 @@ from app.db import new_session
 from app.ingest import platforms
 from app.ingest.takedown import takedown
 from app.main import app
-from app.models import ClipThumbnail, Export, Job, Upload, new_id, utcnow
+from app.models import ClipThumbnail, Export, Job, ScheduledPost, SocialAccount, Upload, new_id, utcnow
 from app.pipeline.fonts import FONT_DIR
 from app.security import make_token
 from tests.conftest import FakeTranscriber
@@ -84,12 +84,24 @@ ROUTES: dict[tuple[str, str], Case] = {
     ("POST", "/v1/trust/my-cases/{reference}/counter-notice"): Case(body={
         "name": "Some Body", "address": "1 Any St, Calgary AB", "phone": "+1 555 0102",
         "explanation": "This is my own recording.", "mistake": True, "consent": True, "signature": "Some Body"}),
+    # Publishing (UX-C): off by default → 404 publishing_disabled for everyone, including the owner.
+    ("POST", "/v1/clips/{clip_id}/publish/check"): Case(body={
+        "targets": [{"social_account_id": "soc_placeholder", "caption": "x", "hashtags": [], "privacy": "private"}]}),
+    ("POST", "/v1/clips/{clip_id}/publish"): Case(body={
+        "targets": [{"social_account_id": "soc_placeholder", "caption": "x", "hashtags": [], "privacy": "private"}],
+        "rights_confirmed": True}),
+    ("GET", "/v1/posts/{post_id}"): Case(owner=(404, "publishing_disabled")),
+    ("PATCH", "/v1/posts/{post_id}"): Case(body={"caption": "taken over"}),
+    ("POST", "/v1/posts/{post_id}/cancel"): Case(),
+    ("POST", "/v1/posts/{post_id}/retry"): Case(),
+    ("DELETE", "/v1/social-accounts/{social_id}"): Case(),
 }
 
 # Routes with an id in the path that are public on purpose.
 PUBLIC_ID_ROUTES = {
     ("GET", "/v1/files/{token}"): "the signed token is the credential; expiry and tampering are tested below",
     ("GET", "/v1/templates/{template_id}/poster"): "catalogue posters are public images, not anyone's content",
+    ("POST", "/v1/social-accounts/{platform}/connect"): "platform is a catalogue name (youtube/…), not private content; session + server config gate it",
 }
 
 # Routes that take an id in the JSON body: (the id field, the rest of the body, the 404 code, A's own answer on
@@ -122,7 +134,10 @@ PUBLIC_BODY_IDS = {
 # Account routes that list things: as B they must hold none of A's ids.
 LISTINGS = ("/v1/me", "/v1/keys", "/v1/uploads", "/v1/jobs", "/v1/clips", "/v1/projects", "/v1/imports",
             "/v1/credits", "/v1/templates/custom", "/v1/me/consents",        # consents: #158
-            "/v1/trust/my-cases", "/v1/fonts")                                # fonts: #214                                             # reports about your content: #146
+            "/v1/trust/my-cases", "/v1/fonts",                                # fonts: #214
+            "/v1/publish/platforms", "/v1/social-accounts", "/v1/posts")     # publishing UX-C (404 while off)
+# Listings that answer 404 publishing_disabled while PUBLISHING is off (still auth-gated).
+PUBLISHING_LISTINGS = frozenset({"/v1/publish/platforms", "/v1/social-accounts", "/v1/posts"})
 PUBLIC_GETS = {
     "/health": "status only", "/v1/auth/verify": "takes an emailed token", "/v1/languages": "fixed list",
     "/v1/options": "fixed list", "/v1/templates": "catalogue", "/v1/templates/games": "catalogue",
@@ -274,9 +289,28 @@ def world(client, video) -> World:
     font = client.post("/v1/fonts?filename=Mine.ttf&licence_confirmed=true",            # (#214) A's own font
                        content=(FONT_DIR / "Bangers-Regular.ttf").read_bytes(), headers=a)
     assert font.status_code == 201, font.text
+    # Publishing rows exist so id routes have real params; PUBLISHING=false still 404s every call.
+    social_id, post_id = new_id("soc"), new_id("pst")
+    with new_session() as db:
+        db.add(SocialAccount(
+            id=social_id, account_id=a_account["id"], platform="youtube", external_id="chan_a",
+            display_name="A's channel", status="active",
+        ))
+        db.flush()
+        db.add(ScheduledPost(
+            id=post_id, account_id=a_account["id"], clip_id=clip["id"], social_account_id=social_id,
+            platform="youtube", request_key="access-case", title="t", caption="c", hashtags=[],
+            privacy="private", options={}, status="SCHEDULED", attempts=0,
+            publish_at=utcnow() + timedelta(days=1),
+        ))
+        db.commit()
     ids = {"key_id": a_key_id, "job_id": clip_job, "clip_id": clip["id"], "upload_id": up["upload_id"],
            "template_id": template.json()["id"], "import_id": imp["import_id"], "thumb_id": thumb_id,
-           "reference": reported.json()["reference"], "font_id": font.json()["id"]}
+           "reference": reported.json()["reference"], "font_id": font.json()["id"],
+           "social_id": social_id, "post_id": post_id}
+    # Publish bodies need A's real social id so a future PUBLISHING=on run still denies B correctly.
+    ROUTES[("POST", "/v1/clips/{clip_id}/publish/check")].body["targets"][0]["social_account_id"] = social_id
+    ROUTES[("POST", "/v1/clips/{clip_id}/publish")].body["targets"][0]["social_account_id"] = social_id
     w = World(a, a_key, b, b_key, b_account, ids)
     exported = client.get(f"/v1/jobs/{clip_job}", headers=a).json()["clips"]
     assert exported[0]["preview_url"] and exported[0]["export_url"], exported       # a preview and an export exist
@@ -440,6 +474,11 @@ def test_listings_hold_only_your_own(client, world, path):
         r = client.get(path, headers=headers)
         if r.status_code == 403:                                   # login-only route, B's key
             assert who == "B's key" and r.json()["error"]["code"] == "session_required"
+            continue
+        # Publishing lists 404 while PUBLISHING is off; still must not leak A's ids.
+        if path in PUBLISHING_LISTINGS and r.status_code == 404:
+            assert r.json()["error"]["code"] == "publishing_disabled"
+            assert_denied_and_silent(r, world, {404}, f"{who} {path}")
             continue
         assert r.status_code == 200, r.text
         assert_denied_and_silent(r, world, {200}, f"{who} {path}")

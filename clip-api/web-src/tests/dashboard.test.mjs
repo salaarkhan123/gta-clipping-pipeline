@@ -11,10 +11,11 @@ test("sidebar: every built page is a link, every planned one is Coming soon and 
   const nav = source("components/dash/shell/nav.ts");
   for (const [label, href] of [["Home", "/dashboard/"], ["Projects", "/dashboard/library/"], ["Brand kit", "/dashboard/brand-kit/"],
     ["Asset library", "/dashboard/assets/"], ["Templates", "/dashboard/templates/"], ["Analytics", "/dashboard/analytics/"],
+    ["Calendar", "/dashboard/calendar/"], ["Social accounts", "/dashboard/social-accounts/"],
     ["API access", "/dashboard/keys/"]]) {
     assert.match(nav, new RegExp(`label: "${label}", icon: "[a-zA-Z]+", href: "${href.replace(/\//g, "\\/")}"`), label);
   }
-  for (const label of ["Calendar", "Social accounts", "Labs", "Learning centre"]) {
+  for (const label of ["Labs", "Learning centre"]) {
     assert.match(nav, new RegExp(`\\{ label: "${label}", icon: "[a-zA-Z]+" \\}`), label);
   }
   const side = source("components/dash/shell/Sidebar.tsx");
