@@ -112,8 +112,8 @@ export default function Project() {
     <div className="mx-auto grid w-full max-w-wide grid-cols-1 gap-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
-          <BackTitle title={project.filename} />
-          <p className="m-0 pl-[46px] text-[13px] tabular-nums text-fg-2">
+          <BackTitle title={project.filename} crumbs={[{ label: "Home", href: "/dashboard/" }, { label: project.filename }]} />
+          <p className="m-0 text-[13px] tabular-nums text-fg-2">
             {clock(project.duration_sec)} · {clips.length} clip{clips.length === 1 ? "" : "s"} · kept until {until}</p>
         </div>
         <button type="button" className="btn small primary" onClick={() => setMaking(true)}><Icon name="plus" size={16} />Make more</button>
