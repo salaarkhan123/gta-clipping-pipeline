@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { clock } from "@/lib/api";
+import { DeleteUploadControl } from "./DeleteUploadControl";
 import { Icon } from "./Icon";
 
 const DAY = 24 * 3600 * 1000;
@@ -21,11 +22,13 @@ const PILL = "absolute top-2 z-[1] rounded-full bg-[rgba(7,8,10,.8)] px-2 py-[2p
 // clip and 16:9 for a wide one, with the clip count, length and expiry on it; then its name and when it was added.
 // Fields from GET /v1/projects.
 // `small`: the size for Home's sideways row (same picture height for both shapes).
-export function ProjectCard({ p, small }: { p: any; small?: boolean }) {
+// `onDeleted`: soft-delete via DELETE /v1/uploads/{id}; parent refreshes the list.
+export function ProjectCard({ p, small, onDeleted }: { p: any; small?: boolean; onDeleted?: (uploadId: string) => void }) {
   const ends = expiry(p.expires_at);
   const shape = useShape(p.thumb_url, "wide");
   return (
     <li className={`${(small ? SMALL_WIDTH : CARD_WIDTH)[shape]} ${small ? "snap-start" : ""}`}>
+    <div className="grid gap-1">
     <Link href={`/dashboard/project/?id=${p.upload_id}`} className="group grid gap-1 rounded-12 [overflow-wrap:anywhere]">
       <span style={p.thumb_url ? thumbVar(p.thumb_url) : undefined} className={`relative grid ${MEDIA[shape]} place-items-center overflow-hidden rounded-12 border border-solid border-line bg-card text-[13px] text-muted transition-[border-color] duration-200
         ease-[ease] group-hover:border-lime after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:top-[45%] after:bg-[linear-gradient(transparent,rgba(0,0,0,.78))] after:content-[''] ${p.thumb_url ? BACKDROP : ""}`}>
@@ -40,6 +43,8 @@ export function ProjectCard({ p, small }: { p: any; small?: boolean }) {
       <strong title={p.filename} className="mt-[6px] overflow-hidden text-ellipsis whitespace-nowrap font-body text-[14px] font-semibold leading-[1.3]">{p.filename}</strong>
       <span className="muted text-[12.5px]">Added {shortDate(p.created_at)}</span>
     </Link>
+    {onDeleted && <DeleteUploadControl uploadId={p.upload_id} name={p.filename} onDeleted={onDeleted} compact={small} />}
+    </div>
     </li>
   );
 }
@@ -71,10 +76,10 @@ export const thumbVar = (src: string) => ({ "--thumb": `url("${src.replace(/"/g,
 export const BACKDROP = "before:pointer-events-none before:absolute before:inset-[-16px] before:content-[''] before:[background:var(--thumb)_center/cover_no-repeat] before:blur-[14px] before:brightness-[.45]";
 
 // `row`: one line that scrolls sideways (Home's recent projects), cards a little smaller. Otherwise the cards wrap (Library).
-export const ProjectGrid = ({ projects, row }: { projects: any[]; row?: boolean }) => (
+export const ProjectGrid = ({ projects, row, onDeleted }: { projects: any[]; row?: boolean; onDeleted?: (uploadId: string) => void }) => (
   <ul className={`list-none ${row
     ? "flex snap-x snap-mandatory items-start gap-[14px] overflow-x-auto pb-[6px] narrow:gap-[10px]"
     : CARD_ROW}`}>
-    {projects.map((p) => <ProjectCard key={p.upload_id} p={p} small={row} />)}
+    {projects.map((p) => <ProjectCard key={p.upload_id} p={p} small={row} onDeleted={onDeleted} />)}
   </ul>
 );

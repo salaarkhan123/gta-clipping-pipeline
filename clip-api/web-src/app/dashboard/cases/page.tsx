@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
+import { ImportTakedown } from "@/components/dash/ImportTakedown";
 import { useDash } from "@/components/dash/Shell";
 import { PAGE_HEAD, PAGE_TITLE } from "@/components/dash/ui";
 import { CounterNoticeForm } from "@/components/trust/CounterNoticeForm";
@@ -53,6 +54,7 @@ function Cases() {
                   {c.can_counter_notice && <> · <b className="text-warn">You can send a counter-notice</b></>}</p>
               </li>))}
           </ul>}
+      {!ref && <div id="remove-imports"><ImportTakedown /></div>}
     </div>
   );
 }

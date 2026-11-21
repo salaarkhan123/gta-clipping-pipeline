@@ -10,6 +10,7 @@ import { useDash } from "@/components/dash/Shell";
 import { Tabs } from "@/components/dash/Tabs";
 import { PAGE_TITLE } from "@/components/dash/ui";
 import { api, clock } from "@/lib/api";
+import { DeleteUploadControl } from "@/components/dash/DeleteUploadControl";
 
 type Video = { upload_id: string; filename: string; size_bytes: number; duration_sec: number; width: number | null; height: number | null;
   created_at: string; expires_at: string; thumb_url: string | null; clips: number };
@@ -28,7 +29,7 @@ function SoonAdd({ icon = "plus", text, className = "" }: { icon?: IconName; tex
   );
 }
 
-function VideoCard({ v }: { v: Video }) {
+function VideoCard({ v, onDeleted }: { v: Video; onDeleted: (uploadId: string) => void }) {
   return (
     <li className="grid content-start gap-2">
       <Link href={`/dashboard/project/?id=${encodeURIComponent(v.upload_id)}`} className="group grid gap-2 no-underline">
@@ -40,6 +41,7 @@ function VideoCard({ v }: { v: Video }) {
         <span className="overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-medium text-text" title={v.filename}>{v.filename}</span>
       </Link>
       <span className="text-[12.5px] text-muted">{[v.height ? `${v.height}p` : "", bytes(v.size_bytes), v.clips ? `${v.clips} clips` : "", date(v.created_at) && `Added ${date(v.created_at)}`].filter(Boolean).join(" · ")}</span>
+      <DeleteUploadControl uploadId={v.upload_id} name={v.filename} onDeleted={onDeleted} />
     </li>
   );
 }
@@ -66,7 +68,8 @@ function Videos() {
   );
   return (
     <div className="grid gap-4">
-      <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 p-0 narrow:grid-cols-2 narrow:gap-3">{list.map((v) => <VideoCard key={v.upload_id} v={v} />)}</ul>
+      <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 p-0 narrow:grid-cols-2 narrow:gap-3">{list.map((v) => <VideoCard key={v.upload_id} v={v}
+        onDeleted={(id) => setList((old) => (old || []).filter((x) => x.upload_id !== id))} />)}</ul>
       <p className="m-0 text-[12.5px] text-fg-3">Uploaded videos are kept until their expiry date, then deleted with their clips.</p>
       {more && <button type="button" className="btn small ghost justify-self-center" disabled={busy} onClick={() => load(list.length)}>{busy ? "Loading…" : "Load more"}</button>}
     </div>
