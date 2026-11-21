@@ -2,6 +2,7 @@
 // the hook's tone and the editing switches. Nothing here sets what a job costs: the API refuses priced options in
 // a saved look, and a kit is free to save. Logos, intros and outros, music and per-shape layouts are not stored by
 // the API yet, so the page shows them as Coming soon and never sends them.
+// "Set as default" is a client preference (localStorage): the templates API has no default flag.
 import { api } from "./api";
 import { allows, Listed } from "./options";
 import { Look, lookFrom, lookOptions, startLook } from "./templates";
@@ -12,6 +13,7 @@ export type Kits = { kits: SavedKit[]; limit: number | null };
 
 export const KIT_NAME_MAX = 80;
 export const FIRST_KIT_NAME = "My brand kit";
+const DEFAULT_KEY = "cc_default_brand_kit";
 
 export async function loadKits(): Promise<Kits> {
   const r = await api("/v1/templates/custom");
@@ -52,3 +54,24 @@ export const updateKit = (id: string, patch: { name?: string; kit?: Kit }, liste
   api<SavedKit>(`/v1/templates/custom/${encodeURIComponent(id)}`, { method: "PATCH",
     body: { ...(patch.name !== undefined ? { name: patch.name } : {}), ...(patch.kit ? { options: kitOptions(patch.kit, listed) } : {}) } });
 export const deleteKit = (id: string) => api(`/v1/templates/custom/${encodeURIComponent(id)}`, { method: "DELETE" });
+
+// Duplicate: POST a new saved look with the same options (the API has no duplicate route).
+export const duplicateKit = (name: string, kit: Kit, listed: Listed) => createKit(name, kit, listed);
+
+export function getDefaultKitId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const id = window.localStorage.getItem(DEFAULT_KEY);
+    return id && id.length ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setDefaultKitId(id: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (id) window.localStorage.setItem(DEFAULT_KEY, id);
+    else window.localStorage.removeItem(DEFAULT_KEY);
+  } catch { /* private mode: preference not remembered */ }
+}

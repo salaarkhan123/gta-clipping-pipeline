@@ -48,6 +48,7 @@ function Camera() {
 
 function Panels({ kit, shape }: { kit: Kit; shape: string }) {
   const wide = shape === "16:9", layout = kit.layout;
+  // fit / classic: letterbox (or blurred sides). full / fill: gameplay fills the frame.
   if (layout === "fit" || layout === "classic") return (
     <span className="absolute inset-0 overflow-hidden bg-black">
       {layout === "classic" && <span className="absolute inset-[-10%] scale-110 opacity-70 blur-[10px]"><Gameplay /></span>}
