@@ -80,9 +80,15 @@ function SocialAccounts() {
       </div>
 
       {enabled === false && (
-        <p className="m-0 rounded-20 border border-solid border-line-soft bg-card p-5 text-[14px] text-muted">
-          {reason || "Publishing is not enabled on this server yet."} Destinations will appear here after the owner turns publishing on and registers each platform app.
-        </p>
+        <div className="grid gap-3 rounded-20 border border-solid border-line-soft bg-card p-5">
+          <h2 className="m-0 text-[18px] font-semibold tracking-[-0.02em]">Publishing is not enabled yet</h2>
+          <p className="m-0 max-w-[60ch] text-[14px] text-muted">
+            {reason || "Publishing is not enabled on this server yet."} Official OAuth destinations (YouTube Shorts, TikTok, Instagram Reels, Facebook Reels) appear here after the owner turns publishing on and registers each platform app. Until then, download clips and post them yourself.
+          </p>
+          <p className="m-0 text-[13px] text-fg-3">
+            Access tokens never appear in the browser. The social schedule stays empty of real posts while publishing is off — no fake connected accounts.
+          </p>
+        </div>
       )}
 
       {note && <p className="m-0 text-[13px] text-cyan" role="status">{note}</p>}

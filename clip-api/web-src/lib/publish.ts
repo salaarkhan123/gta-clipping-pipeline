@@ -60,12 +60,73 @@ export const STATUS_LABEL: Record<PostStatus, string> = {
   CANCELED: "Canceled",
 };
 
+/** Chip surface: border + wash + text. Status colour only — never a success claim. */
+export const STATUS_TONE: Record<PostStatus, string> = {
+  SCHEDULED: "border-[rgba(60,240,255,.35)] bg-cyan-wash text-cyan",
+  QUEUED: "border-line-strong bg-chip text-soft",
+  UPLOADING: "border-[rgba(255,182,72,.4)] bg-[rgba(255,182,72,.12)] text-warn",
+  PROCESSING: "border-[rgba(255,182,72,.4)] bg-[rgba(255,182,72,.12)] text-warn",
+  PUBLISHED: "border-[rgba(184,255,60,.4)] bg-lime-wash text-lime",
+  FAILED: "border-[rgba(255,92,122,.4)] bg-[rgba(255,92,122,.12)] text-danger",
+  CANCELED: "border-line-soft bg-surface text-muted",
+};
+
+export const PLATFORM_LABEL: Record<string, string> = {
+  youtube: "YouTube Shorts",
+  tiktok: "TikTok",
+  instagram: "Instagram Reels",
+  facebook: "Facebook Reels",
+};
+
 export const READINESS_LABEL: Record<Readiness, string> = {
   awaiting_approval: "Pending platform approval",
   not_configured: "Not configured on this server",
   held: "Not offered yet",
   production_verified: "Live",
 };
+
+export type CalendarView = "list" | "week" | "month";
+
+/** Gaming-creator tips shown in empty / disabled calendar states. */
+export const SCHEDULE_TIPS = [
+  "Space GTA and ranked clips 3–4 hours apart so Shorts and Reels do not cannibalize each other.",
+  "Weeknights 7–9pm in your viewers' zone usually beat midday drops for reaction clips.",
+  "Keep one draft slot for the best kill or clutch — schedule filler only after the hero clip is locked.",
+  "Failed posts stay Failed until you retry. Reconnect the account first if the error is permission or token.",
+] as const;
+
+export type SampleSlot = {
+  id: string;
+  platform: string;
+  status: PostStatus;
+  title: string;
+  whenLabel: string;
+  tip: string;
+};
+
+/** Illustrative slots only — never mixed into live API rows. */
+export const SAMPLE_SCHEDULE: SampleSlot[] = [
+  {
+    id: "sample-1", platform: "youtube", status: "SCHEDULED",
+    title: "GTA: alley chase → jump scare", whenLabel: "Tue · 7:30pm",
+    tip: "Hero clip first in the week.",
+  },
+  {
+    id: "sample-2", platform: "tiktok", status: "SCHEDULED",
+    title: "Streamer reaction to the clutch", whenLabel: "Wed · 8:15pm",
+    tip: "Reaction cut performs after the play itself.",
+  },
+  {
+    id: "sample-3", platform: "instagram", status: "PUBLISHED",
+    title: "Ranked win montage (9:16)", whenLabel: "Mon · 6:00pm",
+    tip: "Already live — calendar shows the real status.",
+  },
+  {
+    id: "sample-4", platform: "youtube", status: "FAILED",
+    title: "Failstack highlight (retry after reconnect)", whenLabel: "Thu · 9:00pm",
+    tip: "Failed stays Failed until you hit Retry.",
+  },
+];
 
 export async function loadPlatforms(): Promise<{ platforms: Platform[]; enabled: boolean; reason?: string }> {
   try {
@@ -110,6 +171,93 @@ export function formatWhen(iso: string | null, zone = localZone()): string {
   } catch {
     return iso;
   }
+}
+
+export function formatTime(iso: string | null, zone = localZone()): string {
+  if (!iso) return "—";
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      timeZone: zone, hour: "numeric", minute: "2-digit",
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
+
+export function formatDay(d: Date, zone = localZone()): string {
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      timeZone: zone, weekday: "short", month: "short", day: "numeric",
+    }).format(d);
+  } catch {
+    return d.toISOString().slice(0, 10);
+  }
+}
+
+/** Instant used for calendar placement: schedule time, else published, else created. */
+export function postInstant(p: Post): Date | null {
+  const raw = p.publish_at || p.published_at || p.created_at;
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export function startOfLocalDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+export function addDays(d: Date, n: number): Date {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+/** Monday-first week containing `anchor`. */
+export function weekStart(anchor: Date): Date {
+  const day = startOfLocalDay(anchor);
+  const dow = (day.getDay() + 6) % 7; // Mon=0 … Sun=6
+  return addDays(day, -dow);
+}
+
+export function monthGrid(anchor: Date): Date[] {
+  const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const start = weekStart(first);
+  return Array.from({ length: 42 }, (_, i) => addDays(start, i));
+}
+
+export function sameLocalDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate();
+}
+
+export function postsOnDay(posts: Post[], day: Date): Post[] {
+  return posts.filter((p) => {
+    const t = postInstant(p);
+    return t ? sameLocalDay(t, day) : false;
+  }).sort((a, b) => {
+    const ta = postInstant(a)?.getTime() ?? 0;
+    const tb = postInstant(b)?.getTime() ?? 0;
+    return ta - tb;
+  });
+}
+
+export function countByStatus(posts: Post[]): Record<PostStatus | "ALL", number> {
+  const out: Record<PostStatus | "ALL", number> = {
+    ALL: posts.length,
+    SCHEDULED: 0, QUEUED: 0, UPLOADING: 0, PROCESSING: 0,
+    PUBLISHED: 0, FAILED: 0, CANCELED: 0,
+  };
+  for (const p of posts) out[p.status] += 1;
+  return out;
+}
+
+export function toLocalInputValue(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export function idemKey(clipId: string, accountIds: string[]): string {
