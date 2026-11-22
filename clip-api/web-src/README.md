@@ -6,8 +6,14 @@ Next.js, exported as static files. No Node process runs on the server; Caddy ser
 npm install
 NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev        # local, against a local API
 NEXT_PUBLIC_API_URL=https://api.clutchclips.io npm run build # writes ./out
-rm -rf ../web && cp -r out ../web                            # then scp ../web to the server
+rm -rf ../web && cp -r out ../web                            # commit ../web in the same PR
 ```
+
+Production Caddy mounts `clip-api/web/` from the git checkout. `deploy.sh` rebuilds
+only `api` and `worker`; it does **not** run `npm run build`. Every PR that changes
+`web-src/` must rebuild and commit `web/`, or the live site stays on the previous
+export even when the deploy of that commit succeeds. `tests/test_web_export.py`
+fails if a source route is missing from the committed export.
 
 ## Legal pages: draft preview
 
