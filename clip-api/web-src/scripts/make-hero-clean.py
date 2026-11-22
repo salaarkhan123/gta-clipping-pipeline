@@ -28,6 +28,12 @@ SETS = [
     {"id": "forza", "source": "forza", "card": "forza-m1", "tiles": [     # camera top-right
         ("forza-m1", 0, (0, 114, 1516, 852)), ("forza-m6", 0, (630, 0, 608, 1080)), ("forza-m3", 0, (630, 0, 608, 1080)),
         ("forza-m4", 0, (420, 0, 864, 1080)), ("forza-m2", 0, (630, 0, 608, 1080))]},
+    # Burned-in word captions, no camera. m2 opens on a censored swear, so its card and tiles start 3 s in; m3 opens
+    # underwater for 3 s.
+    {"id": "gta-rp", "folder": "gta-rp", "scout": "treyten-rob", "card": "wide--treyten-rob-m2", "card_at": 3, "tiles": [
+        ("wide--treyten-rob-m2", 3, (0, 0, 3840, 2160)), ("wide--treyten-rob-m1", 0, (1312, 0, 1216, 2160)),
+        ("wide--treyten-rob-m3", 3, (1312, 0, 1216, 2160)), ("wide--treyten-rob-m2", 3, (1056, 0, 1728, 2160)),
+        ("wide--treyten-rob-m1", 3, (1312, 0, 1216, 2160))]},
     {"id": "cdl", "folder": "cod-competitive", "scout": "cdl-champs25", "card": "wide--cdl-champs25-m1", "tiles": [   # player camera bottom-right
         ("wide--cdl-champs25-m2", 0, (0, 0, 3128, 1760)), ("wide--cdl-champs25-m1", 0, (1232, 0, 1216, 2160)),
         ("wide--cdl-champs25-m3", 0, (1312, 0, 1216, 2160)), ("wide--cdl-champs25-m1", 4, (700, 0, 1728, 2160)),
@@ -35,6 +41,11 @@ SETS = [
     {"id": "valorant", "source": "timmy", "card": "timmy-m3", "tiles": [  # camera top-left
         ("timmy-m3", 0, (442, 125, 1478, 831)), ("timmy-m5", 0, (700, 0, 608, 1080)), ("timmy-m6", 0, (700, 0, 608, 1080)),
         ("timmy-m4", 0, (595, 0, 864, 1080)), ("timmy-m7", 0, (700, 0, 608, 1080))]},
+    # Stream overlays along the top (camera top-left, chat top-right); kai-gta5a-m1 is left out for its language.
+    {"id": "gta-v", "folder": "gta-v", "scout": "kai-gta5b", "card": "wide--kai-gta5b-m3", "tiles": [
+        ("wide--kai-gta5b-m1", 0, (192, 216, 3456, 1944)), ("wide--kai-gta5b-m3", 0, (1312, 0, 1216, 2160)),
+        ("wide--kai-gta5b-m1", 2, (1312, 0, 1216, 2160)), ("wide--kai-gta5b-m2", 0, (1056, 0, 1728, 2160)),
+        ("wide--kai-gta5b-m3", 3, (1312, 0, 1216, 2160))]},
     {"id": "warzone", "source": "cod-nick", "card": "cod-nick-m1", "tiles": [   # camera right, mid height
         ("cod-nick-m1", 0, (0, 125, 1478, 831)), ("cod-nick-m3", 0, (615, 0, 608, 1080)), ("cod-nick-m2", 0, (615, 0, 608, 1080)),
         ("cod-nick-m1", 2, (500, 0, 864, 1080)), ("cod-nick-m3", 2, (615, 0, 608, 1080))]},
@@ -102,7 +113,7 @@ def hero_clean(media: Path, new_clips: Path, public: Path):
         src = card["source"]
         common = {"set": s["id"], "kind": "video", "game": card["game"], "credit": card["credit"], "commercial_permission": card.get("commercial_permission"),
                   "duration_sec": SECONDS}
-        w, h = encode(master, start, f"scale={CARD_W}:{CARD_H}:flags=lanczos", out, f"{s['id']}-source")
+        w, h = encode(master, start + s.get("card_at", 0), f"scale={CARD_W}:{CARD_H}:flags=lanczos", out, f"{s['id']}-source")
         items.append({**common, "id": f"{s['id']}-source", "role": "source", "label": f"{card['game']}: the stream", "src": f"{s['id']}-source.mp4",
                       "poster": f"{s['id']}-source.webp", "width": w, "height": h, "aspect": "16:9", "source_duration_sec": clips.duration(s),
                       "source": {k: src[k] for k in ("creator", "title", "url") if k in src}})
@@ -122,7 +133,7 @@ def hero_clean(media: Path, new_clips: Path, public: Path):
             items.append(item)
         print(s["id"], "done")
     credits = {i["source"]["creator"]: i["source"].get("url") for i in items if i["role"] == "source"}
-    manifest = {"section": "hero-clean", "version": 2, "permission": "owner-confirmed 2026-11-18; Call of Duty League: owner-approved 2026-11-21",
+    manifest = {"section": "hero-clean", "version": 2, "permission": "owner-confirmed 2026-11-18; Call of Duty League, Treyten, Kai Cenat: owner-approved 2026-11-21",
                 "credits": [{"creator": k, "url": v} for k, v in credits.items()], "items": items}
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n")
     print("hero-clean", sum(f.stat().st_size for f in out.glob("*")) // 1024, "KB in", len(items), "items")

@@ -112,10 +112,11 @@ export function HeroStage({ play }: { play: boolean }) {
           style={{ fontSize: u(1.5), padding: `${u(.95)} ${u(1.8)}`, lineHeight: 1.2 }}>Get clips</span>
         {!reduced && <span className="pointer-events-none absolute z-20 origin-[44%_6%] will-change-transform" data-hand={aimed ? "aimed" : "away"}
           style={{ width: u(3.6), height: u(3.6), right: u(2.4), top: u(2.1), opacity: aimed ? 1 : 0,
-            // One eased glide on the compositor (transform only), a short settle, then a small press. Once faded out it
-            // jumps back to the start; Chrome never runs a 0 ms transition that has a delay, so the jump takes 1 ms.
-            transform: aimed ? `translate3d(0, 0, 0) scale(${pressed ? .88 : 1})` : "translate3d(9cqw, 12cqw, 0) scale(1)",
-            transition: pressed ? "transform 140ms cubic-bezier(.3,0,.2,1)" : aimed ? "transform 820ms cubic-bezier(.45,.05,.2,1), opacity 260ms ease-out" : "opacity 200ms ease-out, transform 1ms linear 220ms" }}><HandPointer /></span>}
+            // One eased glide on the compositor (transform only), a short settle, then a small press. While the video
+            // is read it fades out where it pressed; while hidden it sits at the start with no transition at all, so
+            // every glide starts from there (a delayed transform transition back is not reliably run by Chrome).
+            transform: phase === "read" ? "translate3d(0, 0, 0) scale(.88)" : aimed ? `translate3d(0, 0, 0) scale(${pressed ? .88 : 1})` : "translate3d(9cqw, 12cqw, 0) scale(1)",
+            transition: pressed ? "transform 140ms cubic-bezier(.3,0,.2,1)" : aimed ? "transform 820ms cubic-bezier(.45,.05,.2,1), opacity 260ms ease-out" : phase === "read" ? "opacity 200ms ease-out" : "none" }}><HandPointer /></span>}
       </div>
 
       <ol className="m-0 flex list-none items-start justify-center p-0" style={{ gap: u(1.2), marginTop: u(2.4), height: u(19.5) }} data-set={set?.id}>
