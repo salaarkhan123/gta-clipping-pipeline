@@ -49,9 +49,12 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
   // Home's polish chips arrive as `preset` (captions, speech cleanup, hook); anything else starts from our defaults.
   const [look, setLook] = useState<Look>(() => ({ ...startLook(listed), ...preset, ...(has("caption_emoji") && preset?.captions !== false ? {} : { caption_emoji: false }) }));
   const onLook = (c: Partial<Look>) => setLook((x) => ({ ...x, ...c }));
-  const [f, setF] = useState({ limit: null as number | null, duration: allows(listed, "duration", AUTO) ? AUTO : String(listed.duration?.values?.[0] || AUTO),
-    prompt: "", range: null as Span | null, source_lang: "", chat_region: "none", hook_style: String(listed.hook_style?.default || "serious"),
-    translate: false, target_lang: "", caption_display: "translation", game: "", transcribe_whole: false });
+  const [f, setF] = useState(() => {
+    const fromUrl = typeof window !== "undefined" ? (new URLSearchParams(window.location.search).get("prompt") || "").slice(0, listed.prompt?.maxLength ?? 300) : "";
+    return { limit: null as number | null, duration: allows(listed, "duration", AUTO) ? AUTO : String(listed.duration?.values?.[0] || AUTO),
+      prompt: fromUrl, range: null as Span | null, source_lang: "", chat_region: "none", hook_style: String(listed.hook_style?.default || "serious"),
+      translate: false, target_lang: "", caption_display: "translation", game: "", transcribe_whole: false };
+  });
   const set = (c: Partial<typeof f>) => setF((x) => ({ ...x, ...c }));
   const [templates, setTemplates] = useState<{ presets: any[]; games: any[] }>({ presets: [], games: [] }), [saved, setSaved] = useState<Saved[] | null>(null);
   const [picked, setPicked] = useState("");                      // "" none, "t:<id>" a template, "s:<id>" a saved look

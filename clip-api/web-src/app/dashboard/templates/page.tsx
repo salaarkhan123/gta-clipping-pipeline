@@ -1,8 +1,8 @@
 "use client";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/dash/Icon";
 import { useDash } from "@/components/dash/Shell";
+import { StyleComposer } from "@/components/dash/StyleComposer";
 import { BackTitle } from "@/components/dash/ui";
 import { Tabs } from "@/components/dash/Tabs";
 import { useVideoChooser } from "@/components/dash/Upload";
@@ -12,8 +12,9 @@ import { gameName, gameOf, hasPanels, isPreset, isProvisional, layoutName, loadT
 
 const EDITS: [string, string][] = [["tighten", "dead air cut"], ["punch_zoom", "punch-in zoom"], ["flash_forward", "opens on the best moment"], ["hook_overlay", "on-screen hook"]];
 const PRESETS = "types";      // the tab for game-type presets, which belong to no single game
+const GAMING = "gaming";      // all per-game templates (product default) — not a named-creator recreate
 const groupOf = (t: any) => (isPreset(t) ? PRESETS : gameOf(t));
-const groupName = (g: string) => (g === PRESETS ? "Game types" : gameName(g));
+const groupName = (g: string) => (g === PRESETS ? "Game types" : g === GAMING ? "Gaming" : gameName(g));
 
 // What a template sets, from whichever fields this version of the API sends (in `options` or on the template itself).
 function sets(t: any): { chips: string[]; edits: string[] } {
@@ -35,6 +36,12 @@ const FRAME = "relative grid overflow-hidden rounded-16 ring-1 ring-inset ring-[
 // A template's own clip in the site media's "templates" manifest (one moment per template, published by the media
 // pipeline), or null. Never another template's clip and never another game's footage (owner, 2026-11-18).
 const footageFor = (t: any, items: MediaItem[]): MediaItem | null => items.find((i) => i.id === t.id || (i as any).template === t.id) || null;
+
+function handoffQuery(templateId: string, note: string) {
+  const q = `tool=clips&template=${encodeURIComponent(templateId)}`;
+  const prompt = note.trim();
+  return prompt ? `${q}&prompt=${encodeURIComponent(prompt.slice(0, 300))}` : q;
+}
 
 // The clip: its still first (lazy), the video only while the pointer or focus is on the card.
 function Clip({ t, clip }: { t: any; clip: MediaItem }) {
@@ -97,17 +104,20 @@ function Empty({ t, group }: { t: any; group: string }) {
   );
 }
 
-// Game templates: filter by game, see what each one sets, and start a project with it applied. Templates with a
-// clip come first, in "All" and in each game; a game with no clips at all moves to the end of the tabs.
+// Gaming style gallery: filter by game, Recreate a ClutchClips template onto your footage, optional brand note.
+// Templates with a clip come first; a game with no clips moves to the end of the tabs.
 export default function Templates() {
   const { fail } = useDash();
   const [templates, setTemplates] = useState<any[] | null>(null), [projects, setProjects] = useState<any[] | null>(null);
-  const [game, setGame] = useState("all");
+  const [game, setGame] = useState(GAMING);
+  const [styleId, setStyleId] = useState<string | null>(null);
+  const [note, setNote] = useState("");
   const chooser = useVideoChooser(projects);
   const media = useMedia("templates"), footage = media?.items || [];
 
   useEffect(() => {
-    setGame(new URLSearchParams(window.location.search).get("game") || "all");
+    const g = new URLSearchParams(window.location.search).get("game");
+    setGame(g || GAMING);
     loadTemplates().then((t) => setTemplates([...t.presets, ...t.games])).catch((e) => { setTemplates([]); fail(e); });
     api("/v1/projects").then((r) => setProjects(r.projects)).catch(() => setProjects([]));
   }, [fail]);
@@ -116,37 +126,74 @@ export default function Templates() {
   const all = (templates || []).map((t, i) => ({ t, i })).sort((a, b) => Number(withClip(b.t)) - Number(withClip(a.t)) || a.i - b.i).map((x) => x.t);
   const groups = [...new Set((templates || []).map(groupOf))];
   const games = [...groups.filter((g) => all.some((t) => groupOf(t) === g && withClip(t))), ...groups.filter((g) => !all.some((t) => groupOf(t) === g && withClip(t)))];
-  const shownGame = games.includes(game) ? game : "all";              // an unknown ?game= falls back to everything
-  const shown = all.filter((t) => shownGame === "all" || groupOf(t) === shownGame);
+  const tabIds = new Set([GAMING, "all", ...games]);
+  const shownGame = tabIds.has(game) ? game : GAMING;
+  const shown = all.filter((t) => shownGame === "all" ? true : shownGame === GAMING ? !isPreset(t) : groupOf(t) === shownGame);
   const credits = (media?.credits || []).filter((c) => footage.some((i) => withClipItem(i, all) && i.source?.creator === c.creator));
+  const selected = styleId ? all.find((t) => t.id === styleId) : null;
+  const styleRef = selected ? { id: selected.id, name: selected.name || tidy(String(selected.id)) } : null;
+
   function pick(g: string) {
     setGame(g);
-    window.history.replaceState(null, "", g === "all" ? window.location.pathname : `?game=${encodeURIComponent(g)}`);
+    window.history.replaceState(null, "", g === GAMING ? window.location.pathname : `?game=${encodeURIComponent(g)}`);
+  }
+  function recreate(t: any) {
+    const name = t.name || tidy(String(t.id));
+    setStyleId(t.id);
+    chooser.choose({ title: `Recreate “${name}”`, query: handoffQuery(t.id, note) });
+  }
+  function addFootage() {
+    if (styleId) {
+      chooser.choose({ title: `Clip with “${styleRef?.name || "style"}”`, query: handoffQuery(styleId, note) });
+      return;
+    }
+    const prompt = note.trim();
+    chooser.choose({ title: "Add raw footage", query: prompt ? `tool=clips&prompt=${encodeURIComponent(prompt.slice(0, 300))}` : "tool=clips" });
+  }
+  function clipWithStyle() {
+    if (!styleId) return;
+    chooser.choose({ title: `Clip with “${styleRef?.name || "style"}”`, query: handoffQuery(styleId, note) });
   }
 
+  const tabs: [string, string][] = [
+    [GAMING, "Gaming"],
+    ["all", "All"],
+    ...games.map((g): [string, string] => [g, groupName(g)]),
+  ];
+
   return (
-    <div className="wide stack">
+    <div className="wide stack pb-36">
       <div className="grid gap-2">
         <BackTitle title="Game templates" crumbs={[{ label: "Home", href: "/dashboard/" }, { label: "Game templates" }]} />
-        <p className="muted m-0 max-w-[720px] text-[14px]">A template tunes what we look for in a game and sets the clip length, caption style and editing. You can still change every setting before you start.</p>
+        <p className="m-0 flex flex-wrap items-center gap-2 text-[15px] font-semibold text-text">
+          Choose a gaming style
+          <span className="inline-flex items-center gap-1 rounded-full border border-solid border-lime/40 bg-lime-wash px-2 py-[2px] text-[11px] font-semibold uppercase tracking-[.04em] text-lime">New</span>
+        </p>
+        <p className="muted m-0 max-w-[720px] text-[14px]">
+          Recreate applies a ClutchClips game template (layout, captions, detection) to <em>your</em> footage.
+          It does not copy another creator&apos;s look. Change every setting in Clip Maker before you start.
+        </p>
       </div>
       {templates === null ? <p className="muted">Loading templates…</p> : !templates.length ? <p className="muted">No templates to show right now.</p> : <>
-        <div className="-mx-1 overflow-x-auto px-1 pb-1 [&_.tabs]:flex-nowrap [&_.tabs_button]:whitespace-nowrap">
-          <Tabs label="Game" panel="template-list" value={shownGame} onChange={pick}
-            tabs={[["all", "All"], ...games.map((g): [string, string] => [g, groupName(g)])]} />
+        <div className="-mx-1 flex flex-wrap items-center gap-2 overflow-x-auto px-1 pb-1 [&_.tabs]:flex-nowrap [&_.tabs_button]:whitespace-nowrap">
+          <Tabs label="Style category" panel="template-list" value={shownGame} onChange={pick} tabs={tabs} />
         </div>
-        <div id="template-list" role="tabpanel" aria-label={shownGame === "all" ? "All templates" : `${groupName(shownGame)} templates`}>
+        <div id="template-list" role="tabpanel" aria-label={`${groupName(shownGame)} styles`}>
         <ul className="m-0 flex list-none flex-wrap items-start gap-x-[14px] gap-y-7 p-0 narrow:gap-x-3 narrow:gap-y-6">
           {shown.map((t) => {
             const { chips, edits } = sets(t);
             const name = t.name || tidy(String(t.id)), clip = footageFor(t, footage);
+            const on = styleId === t.id;
             return (
               <li key={t.id} className={`group grid min-w-0 content-start gap-[10px] ${CARD[wideOf(t) ? "wide" : "tall"]}`}>
-                <div className="relative">
+                <div className={`relative ${on ? "rounded-16 ring-2 ring-lime ring-offset-2 ring-offset-bg" : ""}`}>
                   {clip ? <Clip t={t} clip={clip} /> : <Empty t={t} group={groupName(groupOf(t))} />}
                   {clip && <span className="pointer-events-none absolute left-2 top-2 flex flex-wrap gap-1">
                     <span className="rounded-full bg-[rgba(0,0,0,.66)] px-2 py-[2px] text-[11px] font-semibold text-text [backdrop-filter:blur(6px)]">{groupName(groupOf(t))}</span>
                   </span>}
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-[rgba(0,0,0,.72)] to-transparent p-3 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                    <button type="button" className="pointer-events-auto btn small primary" onClick={() => recreate(t)}>Recreate</button>
+                  </div>
                 </div>
                 <div className="grid min-w-0 gap-1 px-[2px]">
                   <h2 className="m-0 flex min-w-0 items-center gap-2 font-body text-[14px] font-semibold leading-[1.3]" title={name}>
@@ -155,8 +202,11 @@ export default function Templates() {
                   {t.description && <p className="m-0 line-clamp-2 text-[12.5px] leading-[1.45] text-muted" title={t.description}>{t.description}</p>}
                   {chips.length > 0 && <p className="m-0 overflow-hidden text-ellipsis whitespace-nowrap text-[12px] text-dim" title={[...chips, ...edits].join(" · ")}>{chips.join(" · ")}</p>}
                 </div>
-                <button className="btn small ghost justify-self-start" onClick={() => chooser.choose({ title: `Use “${name}”`, query: `tool=clips&template=${encodeURIComponent(t.id)}` })}>
-                  Use template</button>
+                <div className="flex flex-wrap gap-2">
+                  <button className="btn small primary justify-self-start" onClick={() => recreate(t)}>Recreate</button>
+                  <button className="btn small ghost justify-self-start" onClick={() => setStyleId(t.id)} aria-pressed={on}>
+                    {on ? "Selected" : "Use as reference"}</button>
+                </div>
               </li>);
           })}
         </ul>
@@ -164,6 +214,8 @@ export default function Templates() {
           <a href={c.url} target="_blank" rel="noreferrer" className="text-label underline">{c.creator}</a></span>)}, used with permission.</p>}
         </div>
       </>}
+      <StyleComposer style={styleRef} note={note} onNote={setNote} onFootage={addFootage} onClip={clipWithStyle}
+        onClearStyle={() => setStyleId(null)} canSubmit={!!styleId} />
       {chooser.element}
     </div>
   );

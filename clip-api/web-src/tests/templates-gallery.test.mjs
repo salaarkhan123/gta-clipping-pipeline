@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const page = readFileSync(new URL("../app/dashboard/templates/page.tsx", import.meta.url), "utf8");
+const composer = readFileSync(new URL("../components/dash/StyleComposer.tsx", import.meta.url), "utf8");
 
 test("templates: a preview is only the template's own clip; none is repeated or borrowed", () => {
   assert.match(page, /const footageFor = \(t: any, items: MediaItem\[\]\): MediaItem \| null => items\.find\(\(i\) => i\.id === t\.id \|\| \(i as any\)\.template === t\.id\) \|\| null;/);
@@ -17,4 +18,23 @@ test("templates: clips first, empty cards drawn not blank, one credit line, noth
   assert.doesNotMatch(page, /clip\.credit/);                         // no per-tile creator chip
   assert.match(page, /Preview footage from/);
   assert.doesNotMatch(page, /shown = all\.filter\(\(t\) => [^)]*withClip/);   // a template without a clip still shows
+});
+
+test("templates: Gaming category default and Recreate handoff into Clip Maker", () => {
+  assert.match(page, /const GAMING = "gaming"/);
+  assert.match(page, /useState\(GAMING\)/);
+  assert.match(page, />Recreate</);
+  assert.match(page, /tool=clips&template=/);
+  assert.match(page, /prompt=/);
+  assert.match(page, /not copy another creator/);
+});
+
+test("style composer: honest disabled chat connectors, real Clip Maker submit", () => {
+  assert.match(composer, /Clip with this style/);
+  assert.match(composer, /Edit in Claude/);
+  assert.match(composer, /ChatGPT plugin/);
+  assert.match(composer, /ComingSoonBadge/);
+  assert.match(composer, /no chat agent is called/);
+  assert.match(composer, /Brand kit/);
+  assert.doesNotMatch(composer, /fetch\(|api\(/);                    // no fake connector calls
 });
