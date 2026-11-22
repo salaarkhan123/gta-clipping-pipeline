@@ -95,6 +95,11 @@ ROUTES: dict[tuple[str, str], Case] = {
     ("POST", "/v1/posts/{post_id}/cancel"): Case(),
     ("POST", "/v1/posts/{post_id}/retry"): Case(),
     ("DELETE", "/v1/social-accounts/{social_id}"): Case(),
+    # AS-3 live scaffold: off by default → 404 live_clipping_off for everyone, including the owner.
+    ("GET", "/v1/live/sessions/{session_id}"): Case(owner=(404, "live_clipping_off")),
+    ("POST", "/v1/live/sessions/{session_id}/segments"): Case(body={
+        "start_sec": 0.0, "duration_sec": 2.0, "rms_db": [-40.0, -40.0]}),
+    ("POST", "/v1/live/sessions/{session_id}/mock"): Case(),
 }
 
 # Routes with an id in the path that are public on purpose.
@@ -143,6 +148,7 @@ PUBLIC_GETS = {
     "/v1/options": "fixed list", "/v1/templates": "catalogue", "/v1/templates/games": "catalogue",
     "/v1/billing/packs": "price list", "/v1/billing/plans": "price list", "/v1/imports/sources": "fixed list",
     "/v1/legal/policies": "the published policy texts (#158)",
+    "/v1/live/status": "live clipping flag honesty (enabled false by default; not a private session)",
 }
 
 
@@ -304,10 +310,12 @@ def world(client, video) -> World:
             publish_at=utcnow() + timedelta(days=1),
         ))
         db.commit()
+    # AS-3 live sessions are in-memory; a synthetic id is enough while LIVE_CLIPPING is off (404 for all).
+    session_id = new_id("ls")
     ids = {"key_id": a_key_id, "job_id": clip_job, "clip_id": clip["id"], "upload_id": up["upload_id"],
            "template_id": template.json()["id"], "import_id": imp["import_id"], "thumb_id": thumb_id,
            "reference": reported.json()["reference"], "font_id": font.json()["id"],
-           "social_id": social_id, "post_id": post_id}
+           "social_id": social_id, "post_id": post_id, "session_id": session_id}
     # Publish bodies need A's real social id so a future PUBLISHING=on run still denies B correctly.
     ROUTES[("POST", "/v1/clips/{clip_id}/publish/check")].body["targets"][0]["social_account_id"] = social_id
     ROUTES[("POST", "/v1/clips/{clip_id}/publish")].body["targets"][0]["social_account_id"] = social_id
