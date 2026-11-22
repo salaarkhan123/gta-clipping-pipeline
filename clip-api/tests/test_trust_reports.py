@@ -208,9 +208,11 @@ def test_case_events_cannot_be_changed_or_deleted(client, mail):
 # ---- admin routes: every one closed to anonymous callers, normal users, API keys, other admins' keys ----
 
 def admin_routes() -> list[tuple[str, str]]:
-    """Read from the OpenAPI document, so a new admin route shows up here without anyone listing it."""
-    return sorted((m.upper(), path) for path, ops in app.openapi()["paths"].items() if path.startswith("/v1/admin/")
-                  for m in ops)
+    """The trust admin routes, read from the OpenAPI document, so a new one shows up here without anyone listing
+    it. Other admin areas have their own list (the league: tests/test_league_admin.py);
+    tests/test_private_access.py checks that the lists together name every admin route."""
+    return sorted((m.upper(), path) for path, ops in app.openapi()["paths"].items()
+                  if path.startswith("/v1/admin/trust/") for m in ops)
 
 
 @pytest.fixture

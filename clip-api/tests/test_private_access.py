@@ -19,7 +19,7 @@ import jwt
 import pytest
 from sqlalchemy import select, update
 
-from app import deps, storage, worker
+from app import deps, league_rules, storage, worker
 from app.config import get_settings
 from app.db import new_session
 from app.ingest import platforms
@@ -30,6 +30,7 @@ from app.pipeline.fonts import FONT_DIR
 from app.security import make_token
 from tests.conftest import FakeTranscriber
 from tests.ingest_support import FakeYDL
+from tests.league_support import competition as league_competition, make_admin as league_admin
 from tests.test_api import balance, upload
 from tests.test_check_storage import s3  # noqa: F401  (fixture: a private bucket on a local S3 server)
 
@@ -102,6 +103,12 @@ PUBLIC_ID_ROUTES = {
     ("GET", "/v1/files/{token}"): "the signed token is the credential; expiry and tampering are tested below",
     ("GET", "/v1/templates/{template_id}/poster"): "catalogue posters are public images, not anyone's content",
     ("POST", "/v1/social-accounts/{platform}/connect"): "platform is a catalogue name (youtube/…), not private content; session + server config gate it",
+    # Creators League: a slug names a competition anyone can see, a username a profile its creator made public.
+    # What these answer with is checked in tests/test_league_entries.py (no email, account id, clip id or flag).
+    ("GET", "/v1/league/{slug}/leaderboard"): "the public board of a competition: approved entries' public fields only",
+    ("GET", "/v1/league/{slug}/featured"): "the same public entries, those with a thumbnail",
+    ("GET", "/v1/league/creators/{username}"): "a creator's public profile; 404 unless they made it public",
+    ("POST", "/v1/league/{slug}/entries"): "the slug is public; the private id is clip_id in the body (BODY_ROUTES)",
 }
 
 # Routes that take an id in the JSON body: (the id field, the rest of the body, the 404 code, A's own answer on
@@ -112,6 +119,7 @@ class BodyCase:
     rest: dict
     denied: str
     owner: int | None = None
+    login_only: bool = False      # a website-login route: B's API key gets 403 session_required, never the route
 
 
 BODY_ROUTES: dict[tuple[str, str], BodyCase] = {
@@ -125,6 +133,11 @@ BODY_ROUTES: dict[tuple[str, str], BodyCase] = {
     ("POST", "/v1/summaries"): BodyCase("upload_id", {}, "upload_not_found"),
     ("POST", "/v1/clips/export"): BodyCase("job_id", {"options": {"resolution": "480"}}, "not_found"),
     ("POST", "/v1/clips/export/quote"): BodyCase("job_id", {"options": {"resolution": "480"}}, "not_found", owner=200),
+    # Entering someone else's clip in the league. B has a creator profile and the competition is open (see
+    # `world`), so the clip's ownership is the only thing left to refuse.
+    ("POST", "/v1/league/{slug}/entries"): BodyCase("clip_id", {
+        "platform": "youtube", "url": "https://www.youtube.com/shorts/AbCdEfGhIjK", "attribution_confirmed": True,
+        "rules_version": league_rules.VERSION}, "not_found", login_only=True),
 }
 PUBLIC_BODY_IDS = {
     ("POST", "/v1/billing/checkout", "pack_id"): "a server-side pack id, the same for every account",
@@ -135,7 +148,8 @@ PUBLIC_BODY_IDS = {
 LISTINGS = ("/v1/me", "/v1/keys", "/v1/uploads", "/v1/jobs", "/v1/clips", "/v1/projects", "/v1/imports",
             "/v1/credits", "/v1/templates/custom", "/v1/me/consents",        # consents: #158
             "/v1/trust/my-cases", "/v1/fonts",                                # fonts: #214
-            "/v1/publish/platforms", "/v1/social-accounts", "/v1/posts")     # publishing UX-C (404 while off)
+            "/v1/publish/platforms", "/v1/social-accounts", "/v1/posts",     # publishing UX-C (404 while off)
+            "/v1/league/me")                                                  # your profile, clips and entry
 # Listings that answer 404 publishing_disabled while PUBLISHING is off (still auth-gated).
 PUBLISHING_LISTINGS = frozenset({"/v1/publish/platforms", "/v1/social-accounts", "/v1/posts"})
 PUBLIC_GETS = {
@@ -143,6 +157,8 @@ PUBLIC_GETS = {
     "/v1/options": "fixed list", "/v1/templates": "catalogue", "/v1/templates/games": "catalogue",
     "/v1/billing/packs": "price list", "/v1/billing/plans": "price list", "/v1/imports/sources": "fixed list",
     "/v1/legal/policies": "the published policy texts (#158)",
+    "/v1/league/current": "the public competition and the top of its public board",
+    "/v1/league/rules": "the published competition rules and the attribution line",
 }
 
 
@@ -210,8 +226,9 @@ def path_params(path: str) -> list[str]:
 
 
 # Admin routes (/v1/admin/...) are closed to every non-admin whatever id is sent, so they have no case in the
-# tables above. tests/test_trust_reports.py calls each one as nobody (401), a normal user (403 admin_required),
-# an admin's API key (403 session_required) and an admin login; its ADMIN_BODIES must list every admin route.
+# tables above. Each admin area has its own test that calls every one of its routes as nobody (401), a normal
+# user (403 admin_required) and an admin's API key (403 session_required): tests/test_trust_reports.py
+# (ADMIN_BODIES) and tests/test_league_admin.py (ADMIN_ROUTES). Together the two lists must name every admin route.
 ADMIN = "/v1/admin/"
 
 
@@ -244,6 +261,7 @@ class World:
     b_account: dict
     ids: dict[str, str]                       # path parameter name -> A's id
     secrets_of_a: set[str] = field(default_factory=set)   # every id of A's that must never reach B
+    public: dict[str, str] = field(default_factory=dict)  # path parameters that are no one's secret (a league slug)
     export_job: str = ""
 
     def call(self, client, method: str, path: str, case: Case, headers: dict | None, ids: dict | None = None):
@@ -274,6 +292,8 @@ def world(client, video) -> World:
     imp = import_link(client, a, video, twitch_url())
     b, b_account = signup(client)
     b_key, _ = api_key(client, b)
+    league_slug = league_competition(client, league_admin(client)[0])     # an open competition B could enter
+    assert client.put("/v1/league/me/profile", json={"username": f"b{uuid.uuid4().hex[:10]}"}, headers=b).status_code == 200
     thumb_id = new_id("thb")                  # (#140) a premium thumbnail of A's clip, stored as the job would
     with new_session() as db:
         db.add(ClipThumbnail(id=thumb_id, clip_id=clip["id"], account_id=a_account["id"], kind="premium",
@@ -319,6 +339,7 @@ def world(client, video) -> World:
     w.secrets_of_a = {*ids.values(), a_account["id"], cap_job, tr_job, export_job, imp["upload_id"], *export_ids,
                       *(c["id"] for c in exported)}
     w.export_job = export_job
+    w.public = {"slug": league_slug}
     return w
 
 
@@ -343,9 +364,12 @@ def test_every_id_route_has_an_access_case():
     assert not (cased | set(PUBLIC_BODY_IDS)) - in_body, "a body case names a route or field that no longer exists"
     gets = {p for m, p, _ in operations() if m == "GET" and not path_params(p)}
     assert gets == set(LISTINGS) | set(PUBLIC_GETS), "a GET route needs a place in LISTINGS or PUBLIC_GETS"
+    from tests.test_league_admin import ADMIN_ROUTES
     from tests.test_trust_reports import ADMIN_BODIES
+    league = {(m.upper(), p.replace("{cup}", "{slug}").replace("{entry}", "{entry_id}")) for m, p, _ in ADMIN_ROUTES}
     admin = {(m, p) for m, p, _ in all_operations() if p.startswith(ADMIN)}
-    assert admin == set(ADMIN_BODIES), "an admin route needs an entry in test_trust_reports.ADMIN_BODIES"
+    assert admin == set(ADMIN_BODIES) | league, \
+        "an admin route needs an entry in test_trust_reports.ADMIN_BODIES or test_league_admin.ADMIN_ROUTES"
 
 
 def test_route_cases_name_only_ids_the_world_has(world):
@@ -393,15 +417,20 @@ def test_others_cannot_start_jobs_on_a_s_ids(client, world, route):
     before = balance(client, world.b)
     real = world.ids[case.id_field]
     answers = []
+    url = path.format(**world.public)
     for sent in (real, guess(real)):
         body = {case.id_field: sent, **case.rest}
-        assert_denied_and_silent(client.request(method, path, json=body), world, {401}, f"anonymous {path}")
+        assert_denied_and_silent(client.request(method, url, json=body), world, {401}, f"anonymous {path}")
         for who, headers in (("B", world.b), ("B's key", world.b_key)):
-            r = client.request(method, path, json=body, headers=headers)
+            r = client.request(method, url, json=body, headers=headers)
+            if case.login_only and who == "B's key":
+                assert r.status_code == 403 and r.json()["error"]["code"] == "session_required", f"{who} {path}"
+                continue
             assert_denied_and_silent(r, world, {404}, f"{who} {path}")
             assert r.json()["error"]["code"] == case.denied
-            answers.append(r.json())
-    assert answers[0] == answers[2]                 # A's real id and a guessed one read the same
+            answers.append((who, r.json()))
+    as_b = [answer for who, answer in answers if who == "B"]
+    assert as_b[0] == as_b[1]                       # A's real id and a guessed one read the same
     assert balance(client, world.b) == before
     assert client.get("/v1/jobs", headers=world.b).json()["jobs"] == []
 
@@ -496,6 +525,7 @@ def test_listings_show_a_their_own(client, world):
     assert ids["template_id"] in client.get("/v1/templates/custom", headers=a).text
     assert ids["key_id"] in client.get("/v1/keys", headers=a).text
     assert ids["reference"] in client.get("/v1/trust/my-cases", headers=a).text
+    assert ids["clip_id"] in client.get("/v1/league/me", headers=a).text          # the clips A could enter
 
 
 # ---- AC2: signed file links ----
