@@ -19,16 +19,19 @@ export function ClipCard({ shape = "tall", poster, video, webm, title, meta, why
   const live = !!video && (autoPlay || hover);
   return (
     <article id={id} aria-label={label} tabIndex={-1} className={`group/clip grid min-w-0 scroll-mt-24 content-start gap-3 focus:outline-none ${dim ? "opacity-50" : ""}`}>
-      <div className={`relative ${SHAPE[shape]} overflow-hidden rounded-16 bg-control transition-[box-shadow,transform] duration-base ease-out
+      <div className={`relative ${SHAPE[shape]} rounded-16 bg-control transition-[box-shadow,transform] duration-base ease-out
         ${selected ? "shadow-[0_0_0_2px_theme(colors.lime)]" : "group-hover/clip:shadow-[0_0_0_1px_rgba(255,255,255,.22)]"}`}
         onPointerEnter={(e) => { if (e.pointerType === "mouse") setHover(true); }} onPointerLeave={() => setHover(false)}>
+        {/* Only the picture is clipped to the rounded box: the score's sub-score panel opens past the card's edges. */}
+        <div className="absolute inset-0 overflow-hidden rounded-16">
         {poster ? <img src={poster} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
           : <span className="absolute inset-0 grid place-items-center text-fg-3"><Icon name="film" size={28} /></span>}
         {live && <video ref={ref} muted autoPlay loop playsInline preload="auto" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover">
           {webm && <source src={webm} type="video/webm" />}<source src={video!} type="video/mp4" /></video>}
         {onOpen && <button type="button" onClick={onOpen} aria-label={openLabel}
           className="absolute inset-0 z-[1] block cursor-pointer border-0 bg-transparent p-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-lime" />}
-        {score && <div className="absolute bottom-2 left-2 z-[2]">{score}</div>}
+        </div>
+        {score && <div className="absolute bottom-2 left-2 z-[2] focus-within:z-30 hover:z-30">{score}</div>}
         {corner && <div className="absolute left-2 top-2 z-[2]">{corner}</div>}
         {side && <div className="absolute right-2 top-2 z-[2]">{side}</div>}
       </div>
