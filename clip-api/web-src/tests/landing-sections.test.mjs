@@ -30,7 +30,7 @@ test("what is not built says Coming soon on the card and offers nothing to click
   const soon = source("components/landing/demos/Soon.tsx");
   assert.match(soon, /<ComingSoonBadge \/>/);
   assert.doesNotMatch(soon, /<button|<a |href=|onClick/);
-  for (const [file, title] of [["sections/TeamsSection.tsx", "Team workspace"]]) {
+  for (const [file, title] of [["sections/WorkflowSection.tsx", "Scheduling"], ["sections/TeamsSection.tsx", "Team workspace"]]) {
     const text = source(`components/landing/${file}`);
     assert.match(text, new RegExp(`title: "${title}", soon: true`), file);
     assert.match(text, /\.soon && <ComingSoonBadge \/>/, file);
@@ -43,6 +43,7 @@ test("what is not built says Coming soon on the card and offers nothing to click
 test("future features are written in the future tense", () => {
   const soon = source("components/landing/demos/Soon.tsx");
   for (const m of soon.matchAll(/text="([^"]+)"/g)) assert.match(m[1], /\bwill\b/, m[1]);
+  assert.match(source("components/landing/sections/WorkflowSection.tsx"), /ClutchClips will post your clips/);
   assert.match(source("components/landing/sections/TeamsSection.tsx"), /will be able to share/);
 });
 
@@ -169,6 +170,8 @@ test("the workflow section claims only what is real: import is a link or an uplo
   assert.doesNotMatch(wf, /automatically (pulls|imports)|latest videos|channel's latest/i);
   assert.doesNotMatch(wf, /B-roll|enhances audio/i);
   assert.match(wf, /const PLATFORMS: PlatformId\[\] = \["youtube", "tiktok", "instagram", "facebook"\];/);
+  assert.doesNotMatch(wf, /every day|\d:\d\d [AP]M|never go quiet|lines them up/i);   // no schedule shown as working
+  assert.match(wf, /ready to download/);
   assert.doesNotMatch(wf, /<button|href=|onClick/);
   assert.match(source("app/page.tsx"), /<WorkflowSection \/>/);
 });

@@ -15,7 +15,8 @@ import st from "./demos.module.css";
 // platform's badge on its top edge and, when the AI judge rated the moment, its AI rating bottom-left. Then the
 // next game. It runs only while its slide is shown and on screen; under prefers-reduced-motion it is the first
 // game's finished row, still. The real field is the one above the stage.
-// Every size is a multiple of --u (1% of the stage's width; larger on a phone), so the slide scales with the stage.
+// Every size is a multiple of --u (1% of the stage's width; larger on a phone), so the slide scales with the stage;
+// only the field's text stops at 12 px.
 
 // One game's set from public/media/hero-clean/manifest.json (scripts/make-hero-clean.py): its source and its clips.
 type HeroItem = Item & { set?: string; role?: "source" | "tile"; source_duration_sec?: number };
@@ -102,13 +103,15 @@ export function HeroStage({ play }: { play: boolean }) {
           style={{ right: u(.6), bottom: u(.6), padding: `${u(.2)} ${u(.6)}`, fontSize: u(1.15) }}>{clock(vod.source_duration_sec)}</span> : null}
       </div>
 
-      <div className="relative z-10 flex flex-none items-center rounded-pill bg-black/45 shadow-[inset_0_0_0_1px_rgba(255,255,255,.1)]"
-        style={{ width: u(46), height: u(4.8), paddingLeft: u(1.7), paddingRight: u(.5), gap: u(.9) }}>
+      {/* The field and its button are sized from their text, --t: 1.5% of the stage (15 px on a full-size stage) but
+          never under 12 px, so they stay readable on a small stage while the rest of the slide scales down. */}
+      <div className="relative z-10 flex max-w-full flex-none items-center rounded-pill bg-black/45 shadow-[inset_0_0_0_1px_rgba(255,255,255,.1)] [--t:max(12px,calc(var(--u)*1.5))]"
+        style={{ width: `max(${u(46)}, calc(var(--t) * 26))`, height: "calc(var(--t) * 3.2)", paddingLeft: u(1.7), paddingRight: "calc(var(--t) / 3)", gap: u(.9) }}>
         <span className="flex-none text-white/55" style={{ width: u(1.7), height: u(1.7) }}><LinkIcon className="block h-full w-full" /></span>
-        <span className="min-w-0 flex-1 truncate text-left text-white/70" style={{ fontSize: u(1.5) }}>{pastePrompt()}</span>
+        <span className="min-w-0 flex-1 truncate text-left text-white/70" style={{ fontSize: "var(--t)" }}>{pastePrompt()}</span>
         {/* The stage's button is the logo's green; the page's real button above stays white. */}
         <span className={`flex-none rounded-pill font-medium text-ink transition-[transform,background-color] duration-fast ease-out ${pressed ? "scale-[.94] bg-[#9fe02f]" : "bg-lime"}`}
-          style={{ fontSize: u(1.5), padding: `${u(.95)} ${u(1.8)}`, lineHeight: 1.2 }}>Get clips</span>
+          style={{ fontSize: "var(--t)", padding: "calc(var(--t) * .63) calc(var(--t) * 1.2)", lineHeight: 1.2 }}>Get clips</span>
         {!reduced && <span className="pointer-events-none absolute z-20 origin-[44%_6%] will-change-transform" data-hand={aimed ? "aimed" : "away"}
           style={{ width: u(3.6), height: u(3.6), right: u(2.4), top: u(2.1), opacity: aimed ? 1 : 0,
             // One eased glide on the compositor (transform only), a short settle, then a small press. While the video
