@@ -1,0 +1,15 @@
+{
+  "dataset": "B",
+  "version": "v0-template",
+  "rows_path": "eval/datasets/dataset-b-template.csv",
+  "games": [
+    "gta",
+    "warzone",
+    "fortnite",
+    "valorant",
+    "counter-strike-2"
+  ],
+  "clips_per_game_target": 30,
+  "popularity_is_not_gt": false,
+  "held_out_labels_must_not_train": true
+}
