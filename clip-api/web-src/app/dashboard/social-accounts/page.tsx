@@ -1,5 +1,6 @@
 "use client";
 // Connect / disconnect social destinations. Tokens never reach this page.
+// Uses #269 PageHeader/EmptyState chrome; keeps honest publishing-off copy from the schedule PR.
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
@@ -74,8 +75,8 @@ function SocialAccounts() {
       <PageHeader title="Social accounts" hint="Connect the accounts you own. ClutchClips uses official OAuth only. Access tokens stay on the server and never appear here." />
 
       {enabled === false && (
-        <EmptyState icon="share" title="No destinations yet">
-          {reason || "Publishing is not enabled on this server yet."} Destinations will appear here after the owner turns publishing on and registers each platform app.
+        <EmptyState icon="share" title="Publishing is not enabled yet">
+          {reason || "Publishing is not enabled on this server yet."} Official OAuth destinations (YouTube Shorts, TikTok, Instagram Reels, Facebook Reels) appear here after the owner turns publishing on and registers each platform app. Until then, download clips and post them yourself. Access tokens never appear in the browser. The social schedule stays empty of real posts while publishing is off — no fake connected accounts.
         </EmptyState>
       )}
 

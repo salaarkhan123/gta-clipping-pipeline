@@ -1,13 +1,19 @@
 "use client";
-// Timezone-aware post calendar: scheduled / draft-ish queued / published / failed / retry / cancel.
+// Publishing calendar: list / week / month, status chips, schedule + edit, honest when PUBLISHING=false.
+// Header uses the #269 PageHeader design-system chrome; board/composer are this PR's schedule UX.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useDash } from "@/components/dash/Shell";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { Tabs } from "@/components/dash/Tabs";
+import { CalendarBoard } from "@/components/publish/CalendarBoard";
+import { CalendarEmpty } from "@/components/publish/CalendarEmpty";
+import { ScheduleComposer } from "@/components/publish/ScheduleComposer";
+import { StatusChip } from "@/components/publish/StatusChip";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
-  formatWhen, loadPlatforms, loadPosts, localZone, Post, STATUS_LABEL, PostStatus,
+  addDays, CalendarView, countByStatus, formatDay, loadPlatforms, loadPosts,
+  localZone, Post, PostStatus, toLocalInputValue, weekStart,
 } from "@/lib/publish";
 
 const FILTERS: Array<PostStatus | "ALL"> = [
@@ -21,8 +27,12 @@ export default function CalendarPage() {
   const [reason, setReason] = useState("");
   const [posts, setPosts] = useState<Post[]>([]);
   const [filter, setFilter] = useState<PostStatus | "ALL">("ALL");
+  const [view, setView] = useState<CalendarView>("week");
+  const [anchor, setAnchor] = useState(() => new Date());
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [composer, setComposer] = useState<"create" | Post | null>(null);
+  const [prefillAt, setPrefillAt] = useState<string>("");
 
   const reload = useCallback(async () => {
     try {
@@ -38,7 +48,42 @@ export default function CalendarPage() {
 
   useEffect(() => { reload(); }, [reload]);
 
+  const counts = useMemo(() => countByStatus(posts), [posts]);
   const shown = filter === "ALL" ? posts : posts.filter((p) => p.status === filter);
+
+  const rangeLabel = useMemo(() => {
+    if (view === "week") {
+      const start = weekStart(anchor);
+      const end = addDays(start, 6);
+      return `${formatDay(start, zone)} – ${formatDay(end, zone)}`;
+    }
+    if (view === "month") {
+      return new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric", timeZone: zone }).format(anchor);
+    }
+    return "All scheduled posts";
+  }, [view, anchor, zone]);
+
+  function shift(dir: -1 | 1) {
+    if (view === "month") {
+      setAnchor(new Date(anchor.getFullYear(), anchor.getMonth() + dir, 1));
+      return;
+    }
+    if (view === "week") {
+      setAnchor(addDays(weekStart(anchor), dir * 7));
+      return;
+    }
+  }
+
+  function openCreate(day?: Date) {
+    if (day) {
+      const local = new Date(day);
+      local.setHours(19, 30, 0, 0);
+      setPrefillAt(toLocalInputValue(local.toISOString()));
+    } else {
+      setPrefillAt("");
+    }
+    setComposer("create");
+  }
 
   async function cancel(id: string) {
     setBusy(id); setNote("");
@@ -64,63 +109,105 @@ export default function CalendarPage() {
 
   return (
     <div className="grid gap-6">
-      <PageHeader title="Calendar" hint={`Scheduled and published posts in ${zone}. Status is live from the job queue, never a fake success.`}>
+      <PageHeader
+        title="Social schedule"
+        hint={`Publishing calendar in ${zone}. Status is live from the job queue — scheduled, draft-queue, published, or failed — never a fake success.`}
+      >
         <Link href="/dashboard/social-accounts/" className="btn small ghost">Social accounts</Link>
+        {enabled && (
+          <button type="button" className="btn small primary" onClick={() => openCreate()}>
+            Schedule clip
+          </button>
+        )}
       </PageHeader>
 
+      {enabled === null && (
+        <p className="m-0 text-[14px] text-muted">Loading calendar…</p>
+      )}
+
       {enabled === false && (
-        <EmptyState icon="calendar" title="No posts yet">
-          {reason || "Publishing is not enabled yet."} When it is on, scheduled and published clips appear here.
-        </EmptyState>
+        <CalendarEmpty mode="disabled" reason={reason} />
       )}
 
       {enabled && (
         <>
-          <div className="flex flex-wrap gap-2" role="tablist" aria-label="Post status">
-            {FILTERS.map((f) => (
-              <button key={f} type="button" role="tab" aria-selected={filter === f}
-                className={`btn small ${filter === f ? "primary" : "ghost"}`}
-                onClick={() => setFilter(f)}>
-                {f === "ALL" ? "All" : STATUS_LABEL[f]}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Tabs
+              seg
+              label="Calendar view"
+              panel="calendar-board"
+              value={view}
+              onChange={setView}
+              tabs={[["week", "Week"], ["month", "Month"], ["list", "List"]]}
+            />
+            {view !== "list" && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" className="btn small ghost" onClick={() => shift(-1)} aria-label="Previous">
+                  ←
+                </button>
+                <button type="button" className="btn small ghost" onClick={() => setAnchor(new Date())}>
+                  Today
+                </button>
+                <button type="button" className="btn small ghost" onClick={() => shift(1)} aria-label="Next">
+                  →
+                </button>
+                <span className="text-[13px] tabular-nums text-muted">{rangeLabel}</span>
+              </div>
+            )}
           </div>
+
+          <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Post status">
+            {FILTERS.map((f) => {
+              const n = counts[f];
+              const active = filter === f;
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  className={`inline-flex items-center gap-2 rounded-pill border border-solid px-3 py-[5px] text-[12.5px] font-medium transition-colors ${
+                    active
+                      ? "border-lime/50 bg-lime-wash text-text"
+                      : "border-line-soft bg-transparent text-muted hover:border-line-strong hover:text-text"
+                  }`}
+                  onClick={() => setFilter(f)}
+                >
+                  {f === "ALL" ? "All" : <StatusChip status={f} compact />}
+                  <span className="tabular-nums text-fg-3">{n}</span>
+                </button>
+              );
+            })}
+          </div>
+
           {note && <p className="m-0 text-[13px] text-cyan" role="status">{note}</p>}
-          {!shown.length && <EmptyState icon="calendar" title="No posts in this view" />}
-          <ul className="m-0 grid list-none gap-2 p-0">
-            {shown.map((p) => (
-              <li key={p.id} className="grid gap-2 rounded-16 bg-card p-4">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="text-[15px] font-medium">{p.platform} · {STATUS_LABEL[p.status]}</span>
-                  <span className="text-[12.5px] tabular-nums text-muted">
-                    {formatWhen(p.publish_at || p.published_at || p.created_at, zone)}
-                  </span>
-                </div>
-                {(p.title || p.caption) && (
-                  <p className="m-0 text-[13px] text-muted line-clamp-2">{p.title || p.caption}</p>
-                )}
-                {p.error_message && (
-                  <p className="m-0 text-[13px] text-rose" role="alert">{p.error_code}: {p.error_message}</p>
-                )}
-                {p.external_url && (
-                  <a href={p.external_url} target="_blank" rel="noreferrer" className="text-[13px] text-cyan underline-offset-2 hover:underline">
-                    View on {p.platform}
-                  </a>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <Link href={`/dashboard/project/?clip=${p.clip_id}`} className="btn small ghost">Clip</Link>
-                  {p.can_cancel && (
-                    <button type="button" className="btn small ghost" disabled={busy === p.id}
-                      onClick={() => cancel(p.id)}>Cancel</button>
-                  )}
-                  {p.can_retry && (
-                    <button type="button" className="btn small primary" disabled={busy === p.id}
-                      onClick={() => retry(p.id)}>Retry</button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
+
+          {composer && (
+            <ScheduleComposer
+              editing={composer === "create" ? null : composer}
+              initialAtLocal={composer === "create" ? prefillAt : undefined}
+              onClose={() => setComposer(null)}
+              onSaved={async () => { setNote(composer === "create" ? "Scheduled." : "Updated."); await reload(); }}
+            />
+          )}
+
+          {!posts.length && !composer ? (
+            <CalendarEmpty mode="empty" canSchedule onSchedule={() => openCreate()} />
+          ) : (
+            <div id="calendar-board" role="tabpanel" aria-label={view}>
+              <CalendarBoard
+                view={view}
+                anchor={anchor}
+                posts={shown}
+                zone={zone}
+                busyId={busy}
+                onSelectDay={(day) => openCreate(day)}
+                onEdit={(p) => setComposer(p)}
+                onCancel={cancel}
+                onRetry={retry}
+              />
+            </div>
+          )}
         </>
       )}
     </div>
