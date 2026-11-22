@@ -77,9 +77,8 @@ function Rotating({ phrases }: { phrases: string[] }) {
   }, [at]);
   const before = (at + phrases.length - 1) % phrases.length;
   return (
-    <span className="relative inline-block overflow-hidden rounded-pill bg-[#10160f] px-[.5em] py-[.14em] align-middle shadow-[inset_0_0_0_1px_rgba(184,255,60,.16)]">
-      <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_120%_at_18%_100%,rgba(184,255,60,.28),transparent_70%),radial-gradient(50%_120%_at_85%_0%,rgba(60,240,255,.16),transparent_70%)]" />
-      <span className="relative grid justify-items-start overflow-hidden transition-[width] duration-slow ease-out" style={{ width: width ?? undefined }}>
+    <span className="inline-block overflow-hidden rounded-pill px-[.5em] py-[.14em] align-middle shadow-[inset_0_0_0_1px_var(--glow-line)] [background:var(--glow-fill)]">
+      <span className="grid justify-items-start overflow-hidden transition-[width] duration-slow ease-out" style={{ width: width ?? undefined }}>
         {phrases.map((p, i) => (
           <span key={p} ref={(el) => { spans.current[i] = el; }} aria-hidden={i !== at}
             className={`col-start-1 row-start-1 whitespace-nowrap transition-[opacity,transform] duration-slow ease-out

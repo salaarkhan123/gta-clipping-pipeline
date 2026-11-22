@@ -119,8 +119,9 @@ export function Nav() {
   const cta = authed ? { href: "/dashboard/", text: "My dashboard" } : { href: "/login/?new=1", text: "Start free" };
   return (
     <header className="sticky top-0 z-50">
-      {/* The slim bar above the nav. It says only what is true today: what a new account starts with. */}
-      <Link href={cta.href} className="flex h-12 items-center justify-center gap-2 bg-[linear-gradient(90deg,#070908,#141a12,#070908)] px-gutter text-center text-[14px] font-medium text-text narrow:h-10 narrow:text-[13px]">
+      {/* The slim bar above the nav, in the headline pill's lime glow. It says only what is true today: what a new
+          account starts with. */}
+      <Link href={cta.href} className="flex h-12 items-center justify-center gap-2 px-gutter shadow-[inset_0_-1px_0_var(--glow-line)] [background:var(--glow-fill)] text-center text-[14px] font-medium text-text narrow:h-10 narrow:text-[13px]">
         <span className="truncate">{`New accounts start with ${freeCredits(signup).toLowerCase()}. No card needed.`}</span>
         <span className="flex-none underline-offset-4 hover:underline narrow:hidden">{cta.text} →</span></Link>
       <div className="relative flex h-nav items-center justify-between gap-5 bg-[rgba(0,0,0,.82)] px-8 backdrop-blur-md narrow:h-[60px] narrow:px-gutter">
