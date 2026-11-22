@@ -22,7 +22,8 @@ BEFORE = {"id", "job_id", "index", "start_sec", "end_sec", "tier", "score", "sig
           "title", "description", "hashtags", "virality", "reason", "titles", "hook", "hook_on_screen", "suggestion",
           "video_url", "thumb_url", "captions_url", "rank", "rank_of"}       # every clip field before this change
 NEW = {"start_ms", "end_ms", "virality_score", "kind", "why", "rank_index", "timeline_index",
-       "display_score", "scores", "scoring_version",   # display_score: calibrated (app/scoring.py); scores: judge v2 (U4)
+       "display_score", "scores", "editorial_scores", "gaming_scores", "scoring_version",
+       # display_score: calibrated (app/scoring.py); scores / gaming_scores: AI quality (U4 / AS-1)
        "preview_url", "export_url", "export_res", "rendered", "edit", "segments"}   # render none / preview / full, export, edit
 GOOD = {"titles": ["a", "b", "c"], "hook": "h", "hashtags": ["gta6"], "virality": {"hook": 70, "flow": 60, "value": 80, "trend": 50},
         "reason": "He never saw the cop coming."}

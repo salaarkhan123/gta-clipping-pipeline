@@ -8,7 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from app import worker
-from app.ai import PROMPT_MAX, PROMPT_RULE, SYSTEM, TOOL, ClaudeAI, clean_prompt
+from app.ai import MAX_TOKENS, PROMPT_MAX, PROMPT_RULE, SYSTEM, TOOL, ClaudeAI, clean_prompt
 from app.db import new_session
 from app.models import Upload
 from app.pipeline import PipelineOptions, run_pipeline
@@ -88,7 +88,7 @@ TIMED_TEXT = ('Clip length: 30 s\nWhy it was picked (signal shares): {"audio": 1
 
 def body_for(text: str) -> dict:
     """The whole request as it was before the option existed, for a candidate whose message text is `text`."""
-    return {"model": "claude-haiku-5-5", "max_tokens": 1024, "system": SYSTEM, "tools": [TOOL],
+    return {"model": "claude-haiku-5-5", "max_tokens": MAX_TOKENS, "system": SYSTEM, "tools": [TOOL],
             "tool_choice": {"type": "tool", "name": "clip_meta"},
             "messages": [{"role": "user", "content": [{"type": "text", "text": text}]}]}
 
