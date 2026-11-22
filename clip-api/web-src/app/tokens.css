@@ -27,6 +27,11 @@
   --accent: #b8ff3c;
   --accent-ink: #0a0d05;
   --accent-wash: rgba(184, 255, 60, .12);
+  /* The lime glow of the headline's phrase pill, also on the bar above the nav: a lime light low on the left, a
+     faint cyan one high on the right, over near-black green, edged by a lime hairline. */
+  --glow-fill: radial-gradient(60% 120% at 18% 100%, rgba(184, 255, 60, .28), transparent 70%),
+    radial-gradient(50% 120% at 85% 0%, rgba(60, 240, 255, .16), transparent 70%), #10160f;
+  --glow-line: rgba(184, 255, 60, .16);
   --danger: #ff5c7a;
   --warn: #ffb648;
   /* Primary action: white, black text. */
