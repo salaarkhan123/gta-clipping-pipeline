@@ -1,20 +1,22 @@
-import { scoreLabel, V1_SCORES, V2_SCORES } from "../../lib/scores.ts";
+import { GAMING_SCORES, scoreLabel, V1_SCORES, V2_SCORES } from "../../lib/scores.ts";
 // What the results page shows about clips and jobs, worked out from the API's own fields only (GET /v1/projects/{id},
 // clip_json and job_json in app/routes_media.py). Its one import is a relative .ts path, so `node --test` runs it as it is.
 
-// ---- AI rating ----------------------------------------------------------------------------------------------
+// ---- AI quality / highlight rating --------------------------------------------------------------------------
 
-// The five sub-scores of judge v2 (`clip.scores`, app/ai.py SCORES), in the order the AI gives them.
+// Gaming highlight-quality components (AS-1 / judge-v3-gaming), preferred when the API sends them.
+const GAMING_PARTS = Object.fromEntries(GAMING_SCORES.map((k) => [k, scoreLabel(k)]));
+// The five editorial sub-scores of judge v2 (`clip.scores` or `clip.editorial_scores`).
 const V2_PARTS = Object.fromEntries(V2_SCORES.map((k) => [k, scoreLabel(k)]));
 // Judge v1's four (`clip.virality`, app/ai.py PARTS): clips rated before judge v2 carry these instead.
 const V1_PARTS = Object.fromEntries(V1_SCORES.map((k) => [k, scoreLabel(k)]));
 
 export type Part = { key: string; label: string; value: number };
 export type Rating = {
-  shown: number | null;       // display_score: the AI rating calibrated across this run (55 to 99), null when not rated
-  raw: number | null;         // virality_score: the AI's own 0-100
-  parts: Part[];              // the sub-scores behind it, five for judge v2 clips, four for older ones
-  version: "v2" | "v1" | null;
+  shown: number | null;       // display_score: AI quality calibrated across this run (55 to 99), null when not rated
+  raw: number | null;         // virality_score field: the AI's own 0-100 highlight rating (not a view forecast)
+  parts: Part[];              // gaming nine, else editorial five, else v1 four
+  version: "gaming" | "v2" | "v1" | null;
   rank: number | null;        // place in its run by AI rating, 1 = best
   of: number | null;          // clips in its run
   why: string | null;         // the AI's one-sentence reason
@@ -28,15 +30,24 @@ function partsOf(src: unknown, names: Record<string, string>): Part[] {
   return Object.keys(names).filter((k) => num(o[k])).map((k) => ({ key: k, label: names[k], value: Math.round(o[k] as number) }));
 }
 
+/** Only accept a complete set — partial overlap (e.g. shared `hook` key) must not look like gaming. */
+function fullParts(src: unknown, names: Record<string, string>): Part[] {
+  const parts = partsOf(src, names);
+  return parts.length === Object.keys(names).length ? parts : [];
+}
+
 export function ratingOf(c: any): Rating {
-  const v2 = partsOf(c.scores, V2_PARTS);
-  const v1 = v2.length ? [] : partsOf(c.virality, V1_PARTS);
+  const gaming = fullParts(c.gaming_scores, GAMING_PARTS);
+  const fromScores = gaming.length ? [] : fullParts(c.scores, GAMING_PARTS);
+  const gamingParts = gaming.length ? gaming : fromScores;
+  const v2 = gamingParts.length ? [] : fullParts(c.editorial_scores || c.scores, V2_PARTS);
+  const v1 = gamingParts.length || v2.length ? [] : fullParts(c.virality, V1_PARTS);
   const rank = num(c.rank_index) ? c.rank_index + 1 : num(c.rank) ? c.rank : null;
   return {
     shown: num(c.display_score) ? Math.round(c.display_score) : null,
     raw: num(c.virality_score) ? Math.round(c.virality_score) : null,
-    parts: v2.length ? v2 : v1,
-    version: v2.length ? "v2" : v1.length ? "v1" : null,
+    parts: gamingParts.length ? gamingParts : v2.length ? v2 : v1,
+    version: gamingParts.length ? "gaming" : v2.length ? "v2" : v1.length ? "v1" : null,
     rank, of: num(c.rank_of) ? c.rank_of : null,
     why: (typeof c.why === "string" && c.why) || (typeof c.reason === "string" && c.reason) || null,
   };

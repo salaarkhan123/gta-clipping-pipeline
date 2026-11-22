@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { coachingFor, scoreBand } from "../lib/coaching.ts";
-import { V1_SCORES, V2_SCORES } from "../lib/scores.ts";
+import { GAMING_SCORES, V1_SCORES, V2_SCORES } from "../lib/scores.ts";
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -17,8 +17,8 @@ test("scoreBand maps numeric values to strong / mid / weak", () => {
   assert.equal(scoreBand(Number.NaN), "weak");
 });
 
-test("coachingFor returns one sentence per band for every known v2 and v1 score", () => {
-  for (const key of [...V2_SCORES, ...V1_SCORES]) {
+test("coachingFor returns one sentence per band for every known v2, v1, and gaming score", () => {
+  for (const key of [...V2_SCORES, ...V1_SCORES, ...GAMING_SCORES]) {
     const strong = coachingFor(key, 90);
     const mid = coachingFor(key, 60);
     const weak = coachingFor(key, 20);
@@ -42,7 +42,7 @@ test("missing or non-finite scores yield no coaching", () => {
 });
 
 test("coaching copy is AI opinion, never a letter grade or view forecast", () => {
-  for (const key of [...V2_SCORES, ...V1_SCORES]) {
+  for (const key of [...V2_SCORES, ...V1_SCORES, ...GAMING_SCORES]) {
     for (const v of [90, 60, 20]) {
       const tip = coachingFor(key, v);
       assert.doesNotMatch(tip, /\b[A-F][+-]?\b/);

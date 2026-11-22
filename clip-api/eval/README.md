@@ -6,9 +6,14 @@ selection PR (understanding track U1 to U5) reports precision@20, precision@40 a
 | File | What |
 |---|---|
 | `labels-v2.csv` | **eval set v2**: about 100 rated moments over 3 videos, one held out |
+| `gi-gta-label-sheet.csv` | GI / AS-1 gaming highlight sheet (human columns empty until owner rates) |
+| `gaming-rating.md` | AS-1 gaming AI quality components + ablation CLI |
 | `labeller.html` | the local page for rating moments (open it in Chrome) |
 | `runs/` | saved runs (moments, best first) that the sheet was filled from, and baselines to compare with |
 | `benchmark-2h-labels.csv`, `wayin-zias-iceman.csv` | eval set v1 (below); still scored the same |
+
+**AS-1 honesty.** `gi-gta-label-sheet.csv` ships with **0** complete human ratings. Do not invent NDCG or a
+virality %. Census: `python scripts/gaming_rating_eval.py sheet-stats eval/gi-gta-label-sheet.csv`.
 
 ## The three videos
 

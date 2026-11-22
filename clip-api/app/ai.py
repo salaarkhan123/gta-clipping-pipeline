@@ -1,7 +1,8 @@
-"""Optional AI layer: titles, descriptions, hashtags and a virality estimate for each clip.
+"""Optional AI layer: titles, descriptions, hashtags and an AI quality / highlight rating for each clip.
 
 Uses the Anthropic Messages API when ANTHROPIC_API_KEY is set. Every failure is swallowed: a clip without
-AI text is still a finished clip. The virality number is a model's opinion, not a forecast of views.
+AI text is still a finished clip. The rating is a model's opinion of highlight quality, not a forecast of views
+or a statistical virality probability.
 """
 import base64
 import json
@@ -17,24 +18,36 @@ import httpx
 from pydantic import BeforeValidator, Field
 
 from .config import get_settings
+from .gaming_rating import (
+    GAMING_COMPONENTS,
+    GAMING_SCORING_VERSION,
+    clean_components,
+    composite as gaming_composite,
+    rubric_lines as gaming_rubric_lines,
+)
 from .languages import name_of
 from .pipeline import ranking
 from .pipeline.moments import KINDS, kind_of
 
 log = logging.getLogger("clipapi.ai")
 API_URL = "https://api.anthropic.com/v1/messages"
-# (U4) Judge v2: five sub-scores, each 0-100; the clip's score is their plain mean until U5 calibrates the weights.
+# (U4) Judge v2: five editorial sub-scores, each 0-100; ranking / SCORE_WEIGHTS still use these.
 SCORES = ranking.SCORES              # hook, payoff, clarity, emotion, pacing
-SCORING_VERSION = "judge-v2-equal"   # five sub-scores, equal weights; U5 recalibrates under a new version id
+SCORING_VERSION = "judge-v2-equal"   # five editorial sub-scores, equal weights; U5 recalibrates under a new version id
+# (AS-1) Gaming highlight-quality components stored beside editorial scores; UI depth + eval / ablation.
+GAMING_SCORES = GAMING_COMPONENTS
 PARTS = ("hook", "flow", "value", "trend")         # judge v1's four, still read from a reply in the older shape
-MAX_TOKENS = 1024
+MAX_TOKENS = 1280
 CUT_RULE = "the best {lo} to {hi} second clip"      # the clip lengths the judge may cut; 15 to 60 unless a bucket is set
 TRANSCRIPT_CHARS = 3200                             # timed transcript sent to the judge, at least (a 60 s cut + room)
 CHARS_PER_SEC = 25                                  # ... and this much per second of the longest clip it may cut
 
+_GAMING_RUBRIC = "; ".join(gaming_rubric_lines())
+
 SYSTEM = (
-    "You package short gaming clips (TikTok, Shorts, Reels) for GTA clippers, and rate how well a clip is likely "
-    "to perform. Answer with the clip_meta tool.\n\n"
+    "You package short gaming clips (TikTok, Shorts, Reels) for GTA clippers, and rate highlight quality "
+    "(AI quality / editorial opinion — never a forecast of views or a chance of going viral). Answer with the "
+    "clip_meta tool.\n\n"
     "TITLES. Give exactly 3 different titles in the style of the best GTA RP and GTA Online Shorts channels. Each "
     "one: under 60 characters, plain words, specific to what actually happens in THIS clip (who, what, how it "
     "ends), and built on curiosity: point at the payoff without giving it away. Make the three different angles: "
@@ -51,16 +64,21 @@ SYSTEM = (
     "says (a number, a player or character name, a game term). Every fact must be in the transcript or the "
     "signals; never a number that is not said. Never name an app, a tool, a clipping service or AI. Hashtags: "
     "the game first, then what happens; never fyp, viral or a tool's name.\n\n"
-    "RATING. virality has five parts, each 0-100, for the clip as you cut it: hook = how strongly the first 3 "
-    "seconds make a scrolling viewer stop; payoff = whether the clip lands what it sets up (the punchline, the "
-    "outcome, the reaction) before it ends; clarity = whether a viewer who never saw the stream understands what "
-    "is happening without any context; emotion = how strong the feeling is (laughter, rage, hype, shock, "
-    "tension); pacing = whether it keeps moving, with no dead air, no slow build-up and nothing after the payoff. "
-    "Be strict: an average clip scores around 50 on each. Base "
-    "everything only on the transcript, the frame and the signals given. Do not invent events, names or games "
-    "that are not evident; if the game is not clearly GTA, write for the game you see. If the frame or transcript "
-    "shows a menu, loading screen, channel branding or intro card, ad, AFK or dead air rather than a real moment, "
-    "score every part below 15.\n\n"
+    "RATING (editorial). virality has five editorial parts, each 0-100, for the clip as you cut it: hook = how "
+    "strongly the first 3 seconds make a scrolling viewer stop; payoff = whether the clip lands what it sets up "
+    "(the punchline, the outcome, the reaction) before it ends; clarity = whether a viewer who never saw the "
+    "stream understands what is happening without any context; emotion = how strong the feeling is (laughter, "
+    "rage, hype, shock, tension); pacing = whether it keeps moving, with no dead air, no slow build-up and "
+    "nothing after the payoff. Be strict: an average clip scores around 50 on each. These five are editorial "
+    "craft scores, not a virality percentage.\n\n"
+    "RATING (gaming highlight quality). Also fill gaming with nine parts, each 0-100, for gaming highlight "
+    "quality of the same cut: " + _GAMING_RUBRIC + ". Score 0 on kills_clutches, funny or chat when that "
+    "dimension is simply absent (not a skilled play, not comedy, no chat) — do not invent it. Be strict: an "
+    "average highlight sits around 50 on the dimensions that apply.\n\n"
+    "Base everything only on the transcript, the frame and the signals given. Do not invent events, names or "
+    "games that are not evident; if the game is not clearly GTA, write for the game you see. If the frame or "
+    "transcript shows a menu, loading screen, channel branding or intro card, ad, AFK or dead air rather than a "
+    "real moment, score every editorial and gaming part below 15.\n\n"
     "TIP. One short, concrete editing tip for the person who will post this clip, 120 characters at most, about "
     "this clip only (for example: strong reaction, weak ending: trim the last 4 s). If cutting the start or the "
     "end would fix it, set tip.action to trim_start or trim_end and tip.seconds to how much; otherwise action is "
@@ -82,7 +100,7 @@ SYSTEM = (
 
 TOOL = {
     "name": "clip_meta",
-    "description": "Record the social copy and the virality rating for this clip.",
+    "description": "Record the social copy and the AI quality / highlight rating for this clip.",
     "input_schema": {
         "type": "object",
         "properties": {
@@ -92,9 +110,13 @@ TOOL = {
             "description": {"type": "string", "description": "Max 150 chars."},
             "hashtags": {"type": "array", "items": {"type": "string"}, "description": "3 to 5 tags without #."},
             "virality": {"type": "object", "properties": {k: {"type": "integer", "minimum": 0, "maximum": 100}
-                                                          for k in SCORES}, "required": list(SCORES)},
+                                                          for k in SCORES}, "required": list(SCORES),
+                         "description": "Editorial craft sub-scores (not a virality %)."},
+            "gaming": {"type": "object", "properties": {k: {"type": "integer", "minimum": 0, "maximum": 100}
+                                                        for k in GAMING_SCORES}, "required": list(GAMING_SCORES),
+                       "description": "Gaming highlight-quality components (AI quality; not a view forecast)."},
             "reason": {"type": "string",
-                       "description": "One sentence, max 200 chars, on why it would or would not perform."},
+                       "description": "One sentence, max 200 chars, on highlight quality of this cut (not view forecasts)."},
             "kind": {"type": "string", "enum": list(KINDS), "description": "The one label that fits the moment best."},
             "tip": {"type": "object", "description": "One editing tip for this clip.",
                     "properties": {"text": {"type": "string", "description": "Max 120 chars."},
@@ -105,7 +127,7 @@ TOOL = {
                     "properties": {"start": {"type": "number"}, "end": {"type": "number"}, "peak": {"type": "number"}},
                     "required": ["start", "end", "peak"]},
         },
-        "required": ["titles", "hook", "hashtags", "virality", "reason", "kind"],
+        "required": ["titles", "hook", "hashtags", "virality", "gaming", "reason", "kind"],
     },
 }
 
@@ -160,6 +182,10 @@ def parse_meta(text) -> dict | None:
     v = raw.get("virality") if isinstance(raw.get("virality"), dict) else {}
     v2 = any(k in v for k in SCORES if k not in PARTS)          # judge v2's five, or v1's four in an older reply
     parts = {k: _clamp(v.get(k)) for k in (SCORES if v2 else PARTS)}
+    gaming = clean_components(raw.get("gaming"))
+    # Overall highlight-quality number: gaming composite when present, else editorial mean.
+    # Editorial parts stay on `scores` for ranking.SCORE_WEIGHTS; gaming is additive depth.
+    overall = gaming_composite(gaming) if gaming is not None else round(sum(parts.values()) / len(parts))
     tags = raw.get("hashtags") if isinstance(raw.get("hashtags"), list) else []
     tags = [re.sub(r"[^A-Za-z0-9_]", "", str(t))[:30] for t in tags]
     given = raw.get("titles") if isinstance(raw.get("titles"), list) else []
@@ -174,9 +200,12 @@ def parse_meta(text) -> dict | None:
     title = titles[0]
     out = {"title": title, "titles": titles, "hook": _hook(raw.get("hook")), "description": str(raw.get("description") or "").strip()[:200],
            "hashtags": [t for t in tags if t][:5],
-           "virality": {"score": round(sum(parts.values()) / len(parts)), **parts},
+           "virality": {"score": overall, **parts},
            "reason": str(raw.get("reason") or "").strip()[:240], "kind": kind_of(raw.get("kind")), "source": "ai",
            **({"scores": dict(parts), "scoring_version": SCORING_VERSION} if v2 else {})}
+    if gaming is not None and v2:
+        out["gaming_scores"] = dict(gaming)
+        out["scoring_version"] = GAMING_SCORING_VERSION
     tip = raw.get("tip")
     if isinstance(tip, dict) and str(tip.get("text") or "").strip():
         action = tip.get("action") if tip.get("action") in ("trim_start", "trim_end") else "none"
@@ -202,20 +231,40 @@ LEGACY_VERSION = "judge-v1"          # clips judged before v2: four parts (hook,
 
 def rating_of(meta) -> dict | None:
     """The one reader of a clip's AI rating, for everything that shows or stores it (the API's clip object, the
-    website's own clips, scripts): {"rating": 0-100, "scores": the five sub-scores or None, "scoring_version"}.
-    `meta` is what clip_meta returned (and what a clip stores). None when the AI did not rate the clip (no meta, or
-    a score made from signals only). A clip judged before v2 still reads: its rating, no `scores`, LEGACY_VERSION.
-    The rating is the model's opinion of the clip, never a probability or a forecast of views."""
+    website's own clips, scripts).
+
+    Returns {"rating": 0-100, "scores": display sub-scores or None, "editorial_scores": judge v2 five or None,
+    "gaming_scores": nine gaming components or None, "scoring_version"}.
+
+    Display `scores` prefer gaming components when present (AI quality / highlight rating bars); editorial five
+    stay available for ranking weights. None when the AI did not rate the clip (no meta, or signals-only).
+    Never a probability or a forecast of views.
+    """
     if not isinstance(meta, dict) or meta.get("source") == "signals":
         return None
     v = meta.get("virality") if isinstance(meta.get("virality"), dict) else {}
     if not isinstance(v.get("score"), (int, float)) or isinstance(v.get("score"), bool):
         return None
-    scores = meta.get("scores") if isinstance(meta.get("scores"), dict) else None
-    if scores is not None and set(scores) != set(SCORES):
-        scores = None
-    return {"rating": v["score"], "scores": scores,
-            "scoring_version": (meta.get("scoring_version") or SCORING_VERSION) if scores is not None else LEGACY_VERSION}
+    editorial = meta.get("scores") if isinstance(meta.get("scores"), dict) else None
+    if editorial is not None and set(editorial) != set(SCORES):
+        editorial = None
+    gaming = clean_components(meta.get("gaming_scores"))
+    if gaming is None:
+        gaming = clean_components(meta.get("gaming"))
+    display = gaming if gaming is not None else editorial
+    if gaming is not None:
+        version = meta.get("scoring_version") or GAMING_SCORING_VERSION
+    elif editorial is not None:
+        version = meta.get("scoring_version") or SCORING_VERSION
+    else:
+        version = LEGACY_VERSION
+    return {
+        "rating": v["score"],
+        "scores": display,
+        "editorial_scores": editorial,
+        "gaming_scores": gaming,
+        "scoring_version": version,
+    }
 
 
 def signal_meta(score: float) -> dict:

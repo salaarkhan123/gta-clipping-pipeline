@@ -1,9 +1,12 @@
-"""How a clip's five sub-scores become its place in the ranking, per game.
+"""How a clip's five editorial sub-scores become its place in the ranking, per game.
 
-The judge rates five things (SCORES, each 0-100). The clip's AI rating is their plain mean and never changes with
-the game. Its **rank score** is their weighted mean, with the weights of the clip's game: a racing clip may lean on
-pacing, a roleplay clip on payoff and clarity. Weights only reorder clips; the sub-scores are stored one by one, so
-new weights need no new judging.
+The judge rates five editorial things (SCORES, each 0-100): hook, payoff, clarity, emotion, pacing. These stay the
+SCORE_WEIGHTS / rank_score surface. Gaming highlight-quality components (app.gaming_rating.GAMING_COMPONENTS) are
+stored separately for AI quality UI and eval — they do not replace these five unless SCORE_WEIGHTS is refit.
+
+When SCORE_WEIGHTS is empty, rank order follows the clip's overall AI quality number from the judge (plain mean of
+editorial scores, or the gaming composite when judge-v3-gaming filled both). Weights only reorder clips; editorial
+sub-scores are stored one by one, so new weights need no new judging.
 
 Weights are data, not opinion: the table is empty (every game ranks by the plain mean) until
 `scripts/fit_score_weights.py` fits it on the owner's labels (tuning videos only) and the result is put in

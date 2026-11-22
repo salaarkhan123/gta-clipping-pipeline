@@ -1,4 +1,7 @@
-"""The score a clip shows: the AI's raw 0-100 rating, calibrated across the clips of one job.
+"""The score a clip shows: the AI's raw 0-100 highlight-quality rating, calibrated across the clips of one job.
+
+Display-only: never a virality probability or view forecast. The raw AI rating (editorial mean or gaming
+composite — see app.ai.rating_of / app.gaming_rating) is left untouched; this module only remaps numbers for UI.
 
 A pure function, no database and no web code. The formula is the one in docs/CONTRACTS.md, "Score calibration (A)":
 the best clip of a job shows 90 to 99 (higher when its raw score is higher), the weakest sits up to 40 points

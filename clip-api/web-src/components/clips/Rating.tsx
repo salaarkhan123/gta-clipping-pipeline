@@ -10,12 +10,12 @@ export function RatingParts({ r, compact }: { r: Rating; compact?: boolean }) {
   return (
     <div className="grid gap-[10px]">
       {r.parts.length > 0 ? (
-        <ul className="m-0 grid list-none gap-[7px] p-0" aria-label="Sub-scores, out of 100">
+        <ul className="m-0 grid list-none gap-[7px] p-0" aria-label="AI quality / highlight rating sub-scores, out of 100">
           {r.parts.map((p) => {
             const tip = coachingFor(p.key, p.value);
             return (
               <li key={p.key} className="grid gap-[3px]" title={tip ?? undefined}>
-                <div className="grid grid-cols-[72px_1fr_28px] items-center gap-[10px] text-[12.5px]">
+                <div className="grid grid-cols-[88px_1fr_28px] items-center gap-[10px] text-[12.5px]">
                   <span className="text-fg-2">{p.label}</span>
                   <span className="h-[5px] overflow-hidden rounded-pill bg-[rgba(255,255,255,.08)]" aria-hidden="true">
                     <span className="block h-full rounded-pill bg-lime" style={{ width: `${Math.max(2, Math.min(100, p.value))}%` }} />
@@ -23,7 +23,7 @@ export function RatingParts({ r, compact }: { r: Rating; compact?: boolean }) {
                   <b className="text-right font-mono text-[12px] font-medium tabular-nums text-text">{p.value}</b>
                 </div>
                 {tip && (
-                  <p className={`m-0 pl-[82px] leading-[1.35] text-fg-3 ${compact ? "text-[10.5px] line-clamp-1" : "text-[11.5px]"}`}>
+                  <p className={`m-0 pl-[98px] leading-[1.35] text-fg-3 ${compact ? "text-[10.5px] line-clamp-1" : "text-[11.5px]"}`}>
                     {tip}
                   </p>
                 )}
@@ -34,8 +34,8 @@ export function RatingParts({ r, compact }: { r: Rating; compact?: boolean }) {
       ) : <p className="m-0 text-[12.5px] text-fg-2">No sub-scores for this clip.</p>}
       {r.why && !compact && <p className="m-0 text-[12.5px] leading-[1.45] text-soft">{r.why}</p>}
       <p className="m-0 text-[11.5px] leading-[1.45] text-fg-3">
-        {r.shown !== null && `${r.shown} is the AI quality score scaled across this run, so its best clip sits in the 90s. `}
-        The AI quality score is the AI's opinion of the clip. It does not say how many views a clip will get.
+        {r.shown !== null && `${r.shown} is the AI quality / highlight rating scaled across this run, so its best clip sits in the 90s. `}
+        AI quality is the AI's opinion of the cut — not a forecast of views or a virality percentage.
       </p>
     </div>
   );
@@ -59,12 +59,12 @@ export function RatingBadge({ clip, size = "md" }: { clip: any; size?: ScoreSize
       onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
       <button type="button" aria-expanded={open} aria-describedby={tip} onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
         onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}
-        aria-label={r.shown !== null ? `AI quality ${r.shown} out of 100. Show the sub-scores.` : `Not rated by the AI. Number ${r.rank} in this run.`}
+        aria-label={r.shown !== null ? `AI quality ${r.shown} out of 100. Show the highlight rating sub-scores.` : `Not rated by the AI. Number ${r.rank} in this run.`}
         className="cursor-pointer border-0 bg-transparent p-0 hover:opacity-90">
         {r.shown !== null ? <Score value={r.shown} kind="ai" size={size} /> : <Score value={r.rank!} of={r.of} kind="rank" size={size} />}
       </button>
       {/* Not laid out while closed, so it never widens a phone's page. On a phone it opens as a sheet at the bottom. */}
-      <div id={tip} role="tooltip" className={`absolute bottom-[calc(100%+8px)] left-0 z-20 w-[248px] animate-[rise_.15s_ease-out] rounded-[14px] border-0 bg-control p-[14px] text-left shadow-pop
+      <div id={tip} role="tooltip" className={`absolute bottom-[calc(100%+8px)] left-0 z-20 w-[280px] animate-[rise_.15s_ease-out] rounded-[14px] border-0 bg-control p-[14px] text-left shadow-pop
         [backdrop-filter:blur(10px)] narrow:fixed narrow:inset-x-4 narrow:bottom-4 narrow:z-50 narrow:w-auto ${open ? "block" : "hidden"}`}>
         <p className="m-0 mb-[10px] flex items-baseline justify-between gap-2 text-[13px] font-semibold">
           {r.shown !== null ? <>AI quality <span className="font-mono text-lime">{r.shown}</span></> : "Not rated by the AI"}

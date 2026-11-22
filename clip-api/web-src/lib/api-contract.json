@@ -96,7 +96,7 @@
     { "method": "POST", "path": "/v1/posts/{post_id}/retry" }
   ],
   "clip_fields": ["id", "job_id", "start_sec", "end_sec", "score", "kind", "title", "titles", "hook", "why", "kept", "reaction", "bookmarked",
-    "video_url", "preview_url", "thumb_url", "captions_url", "segments", "virality", "scores", "scoring_version"],
+    "video_url", "preview_url", "thumb_url", "captions_url", "segments", "virality", "scores", "editorial_scores", "gaming_scores", "scoring_version"],
   "edit_options_optional": [],
   "edit_options": ["aspect", "camera", "caption_accent", "caption_look", "caption_position", "caption_style", "captions", "censor",
     "chat_region", "facecam_box", "facecam_region", "hook_duration_ms", "hook_position", "hook_style", "layout", "render", "resolution",
