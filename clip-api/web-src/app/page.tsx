@@ -13,6 +13,7 @@ import { freeCredits, useSignupCredits } from "@/lib/plans";
 import { isBuilt, TOOLS } from "@/lib/tools";
 import { DemoCarousel } from "@/components/landing/sections/DemoCarousel";
 import { WorkflowSection } from "@/components/landing/sections/WorkflowSection";
+import { HomeLeagueSection } from "@/components/league/HomeLeagueSection";
 import { aiRated, useItems } from "@/components/landing/demos/Footage";
 import { useReducedMotion } from "@/components/landing/demos/motion";
 import { Button } from "@/components/ui/Button";
@@ -145,6 +146,8 @@ export default function Home() {
         <WorkflowSection />
 
         <ClipWall />
+
+        <HomeLeagueSection />
 
         <section id="faq" className="px-gutter pb-[clamp(56px,7vw,112px)] pt-0">
           <h2 className="mb-[clamp(28px,3.4vw,48px)] text-center text-h2 text-fg">Got questions?</h2>
