@@ -106,13 +106,13 @@ export function SourceBar({ onUploaded, pending }: { onUploaded: (uploadId: stri
                 </div>
               </div>
               <form className="mx-auto w-full max-w-[600px]" onSubmit={go}>
-                <div className="flex w-full items-center gap-2 rounded-full border border-solid border-line bg-bg py-[5px] pl-4 pr-[5px] focus-within:border-line-strong">
+                <div className="flex w-full items-center gap-2 rounded-full border border-solid border-transparent bg-control py-[5px] pl-4 pr-[5px] focus-within:border-line-strong">
                   <Icon name="link" size={18} className="flex-none text-muted" />
                   <label htmlFor="source-input" className="sr-only">Video link</label>
                   <input ref={field} id="source-input" value={text} onChange={(e) => setText(e.target.value)} disabled={!links} inputMode="url" autoComplete="off"
                     className="min-w-0 flex-1 border-0 bg-transparent px-0 py-[9px] text-[15px] focus:outline-none disabled:opacity-100 narrow:text-[16px]"
                     placeholder={links ? hint : "Link import is off: upload a file"} />
-                  <button className="btn small primary flex-none" disabled={!me.email_verified || !links || !text.trim()}>Get clips</button>
+                  <button className="btn small primary flex-none !rounded-pill" disabled={!me.email_verified || !links || !text.trim()}>Get clips</button>
                 </div>
               </form>
             </>}
@@ -136,7 +136,7 @@ export function SourceBar({ onUploaded, pending }: { onUploaded: (uploadId: stri
         <ImportBox key={box.n} sources={sources} start={box} onReady={(u) => onUploaded(u.upload_id, query)} />
       </div>}
       {!box && sources && <div className="w-full [&_.import-recent_h3]:text-[14px] [&_.import-recent_h3]:text-muted"><RecentImports reload={0} /></div>}
-      <details className="w-full rounded-16 border border-solid border-line bg-panel px-4 py-2">
+      <details className="w-full rounded-[14px] bg-card px-4 py-2">
         <summary className="cursor-pointer py-2 text-[14px] font-medium text-label">Remove an imported video from this account</summary>
         <div className="pb-3 pt-1"><ImportTakedown /></div>
       </details>

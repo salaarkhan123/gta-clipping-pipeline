@@ -5,7 +5,8 @@
 import { useEffect, useState } from "react";
 
 export type MediaSection = "hero-long-video" | "hero-vertical-clips" | "captions" | "reframe" | "hook" | "editor" | "clip-finding" | "templates" | "brand"
-  | "setup";                 // job-setup screen stills (app screens)
+  | "setup"                  // job-setup screen stills (app screens)
+  | "hero-clean";            // the hero row: one clean gameplay cut per platform shape (scripts/make-hero-clean.py)
 
 export type MediaItem = {
   id: string;               // stable key, e.g. "clip-1" or a template id
@@ -20,6 +21,8 @@ export type MediaItem = {
   rating_source?: "signals" | "ai";
   rank?: number;
   game?: string;
+  aspect?: string;          // "9:16", "16:9", "4:5", "1:1"
+  platform?: string;        // hero-clean: the destination this shape is for (youtube, tiktok, instagram, facebook)
   credit?: string;          // e.g. "Footage: <creator>". Shown wherever the footage is shown.
   words?: string;           // path to a word-timings JSON (captions and editor demos)
   source?: { creator: string; url: string; start_sec?: number; end_sec?: number };

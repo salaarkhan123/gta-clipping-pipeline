@@ -14,11 +14,11 @@ import { isBuilt, ToolEntry, TOOLS } from "@/lib/tools";
 
 const RECENT = 10;
 // One literal per class: Tailwind finds classes by reading the source, so a class may not be split across strings.
-const HERO = "grid w-[min(100%,760px)] justify-items-center pt-6 text-center narrow:pt-2";
+const HERO = "grid w-[min(100%,760px)] justify-items-center pt-2 text-center narrow:pt-1";
 const TILE = "relative grid w-full cursor-pointer content-start justify-items-center gap-[10px] rounded-16 border-0 bg-transparent px-[2px] pb-2 pt-[6px] text-center text-text [font:inherit]";
 const BADGE = "absolute left-[calc(50%+10px)] top-0 rounded-full border border-solid px-[7px] py-px font-body text-[10px] font-bold leading-[1.5]";
 
-// Home: one input for a link or a file, the tools, and the latest projects.
+// Home: one input for a link or a file, the tools that work today, and the latest projects.
 // useSearchParams needs a Suspense boundary in a static export.
 export default function HomePage() { return <Suspense><Home /></Suspense>; }
 
@@ -51,23 +51,23 @@ function Home() {
       <h1 className="sr-only">Home</h1>
       <section className="grid w-full justify-items-center gap-[22px]" aria-label="Start a project">
         <div className={HERO}>
-          <p className="font-display text-[44px] font-semibold leading-[1.08] tracking-[-0.03em] narrow:text-[30px]">Drop the stream. Keep the clutch.</p>
-          <p className="mt-3 text-[17px] text-muted narrow:text-[15px]">One long VOD in, ranked clips out, with your facecam, captions and an AI rating on each.</p>
+          <p className="m-0 font-sans text-[32px] font-semibold leading-[1.15] tracking-[-0.02em] text-fg narrow:text-[24px]">Drop the stream. Keep the clutch.</p>
+          <p className="mt-2 text-[15px] text-fg-2 narrow:text-[14px]">One long VOD in, ranked clips out, captioned and framed for vertical.</p>
         </div>
         <SourceBar onUploaded={open} pending={pending} />
       </section>
 
       <section aria-labelledby="tools-title" className="w-full">
         <h2 id="tools-title" className="sr-only">Tools</h2>
-        <ul className="mx-auto grid max-w-[760px] list-none grid-cols-6 gap-x-2 gap-y-[18px] narrow:grid-cols-4 narrow:gap-x-1 narrow:gap-y-4">
-          {TOOLS.map((t) => {
-            const built = isBuilt(t, on);
+        <ul className="mx-auto flex max-w-[820px] list-none flex-wrap justify-center gap-x-2 gap-y-4 p-0 [&>li]:w-[112px] narrow:[&>li]:w-[25%]">
+          {TOOLS.filter((t) => isBuilt(t, on)).map((t) => {
+            const built = true;
             const body = <>
               <span className={`grid h-14 w-14 place-items-center rounded-16 border border-solid transition-[border-color,color,background,transform] duration-200 ease-[ease] narrow:h-12 narrow:w-12 ${built
-                ? "border-line-soft bg-card text-text group-hover:-translate-y-[2px] group-hover:border-[rgba(255,255,255,.22)] group-hover:bg-card-2"
+                ? "border-transparent bg-card text-text group-hover:-translate-y-[2px] group-hover:bg-control"
                 : "border-dashed border-line bg-transparent text-dim"}`}><Icon name={t.icon} size={22} /></span>
-              <span className={`max-w-[11ch] font-body text-[13px] font-medium leading-[1.25] narrow:text-[12px] ${built ? "" : "text-muted"}`}>{t.name}</span>
-              {built ? t.badge === "new" && <small className={`${BADGE} border-[rgba(184,255,60,.35)] bg-[#1c2a0e] text-lime`}>New</small>
+              <span className={`max-w-[11ch] font-body text-[13px] font-normal leading-[1.25] narrow:text-[12px] ${built ? "" : "text-muted"}`}>{t.name}</span>
+              {built ? t.badge === "new" && <small className={`${BADGE} border-transparent bg-control-hover text-text`}>New</small>
                 : <ComingSoonBadge short className="absolute left-[calc(50%+6px)] top-[-4px] bg-bg" />}
             </>;
             return (
@@ -82,7 +82,7 @@ function Home() {
 
       <section aria-labelledby="recent-title" className="w-full">
         <div className="mb-3 flex items-baseline justify-between gap-3">
-          <h2 id="recent-title" className="m-0 text-[16px]">Recent projects</h2>
+          <h2 id="recent-title" className="m-0 text-[16px] font-semibold">Recent projects</h2>
           {!!projects?.length && <Link className="more" href="/dashboard/library/">See all <Icon name="arrow" size={14} /></Link>}
         </div>
         {projects === null ? <p className="muted">Loading your projects…</p>

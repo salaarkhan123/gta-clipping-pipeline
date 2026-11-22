@@ -1,5 +1,5 @@
 "use client";
-import { ScoreOverlay } from "@/components/clips/ScoreOverlay";
+import { Score } from "@/components/ui/Score";
 import { LinkIcon } from "./Bits";
 import { aiRated, Credits, Footage, Item, useItem, useItems } from "./Footage";
 import { Cam, Gameplay, SplitClip } from "./Frames";
@@ -60,8 +60,8 @@ export function VodToClips({ play }: { play: boolean }) {
   const showScores = phase === "scores" || reduced;
   const badge = (item: Item | null, i: number) => {
     if (!showScores) return null;
-    if (item && aiRated(item)) return <ScoreOverlay value={Math.round(item.rating!)} kind="ai" className="absolute bottom-1.5 left-1.5 z-10" />;
-    return <ScoreOverlay value={SAMPLE_SCORES[i % SAMPLE_SCORES.length]} kind="sample" className="absolute bottom-1.5 left-1.5 z-10" />;
+    if (item && aiRated(item)) return <Score value={Math.round(item.rating!)} kind="ai" size="sm" className="absolute bottom-1.5 left-1.5 z-10" />;
+    return <Score value={SAMPLE_SCORES[i % SAMPLE_SCORES.length]} kind="sample" size="sm" className="absolute bottom-1.5 left-1.5 z-10" />;
   };
 
   return (

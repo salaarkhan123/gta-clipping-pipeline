@@ -7,7 +7,7 @@ const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "u
 
 test("brand kit page: settings left, live preview right", () => {
   const page = source("app/dashboard/brand-kit/page.tsx");
-  assert.match(page, /grid-cols-\[minmax\(0,1fr\)_minmax\(320px,420px\)\]/);
+  assert.match(page, /grid-cols-\[minmax\(0,640px\)_minmax\(303px,1fr\)\]/);     // the measured 640 px settings column
   assert.match(page, /<KitForm /);
   assert.match(page, /aria-label="Preview"/);
   assert.match(page, /mid:order-2/);
@@ -17,8 +17,8 @@ test("brand kit page: settings left, live preview right", () => {
 test("brand kit actions: save, save as, rename, duplicate, delete, set default", () => {
   const page = source("app/dashboard/brand-kit/page.tsx");
   const bar = source("components/dash/brand/KitBar.tsx");
-  assert.match(page, />Save as</);
-  assert.match(page, /current \? "Save" : "Save kit"/);
+  assert.match(page, />Save as new kit</);
+  assert.match(page, /current \? "Save changes" : "Save kit"/);
   assert.match(bar, />Rename</);
   assert.match(bar, />Duplicate</);
   assert.match(bar, /Set as default/);
@@ -30,10 +30,11 @@ test("brand kit actions: save, save as, rename, duplicate, delete, set default",
   assert.match(page, /updateKit\(/);
 });
 
-test("brand kit sections: Basic, Styles, Layout, Additional assets collapsed", () => {
+test("brand kit sections: Basic, Caption styles, Layout, Additional assets collapsed", () => {
   const form = source("components/dash/brand/Sections.tsx");
   assert.match(form, /title="Basic"/);
-  assert.match(form, /title="Styles"/);
+  assert.match(form, /title="Caption styles"/);
+  assert.match(form, /<More>/);                                    // the finer caption options are closed until asked for
   assert.match(form, /title="Layout"/);
   assert.match(form, /title="Additional assets"/);
   assert.match(form, /defaultOpen=\{false\}/);

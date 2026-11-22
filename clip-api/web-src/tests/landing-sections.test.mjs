@@ -78,7 +78,8 @@ test("each card that shows footage names every creator it shows, once, at the bo
   // Every item a card plays is in its Credits line.
   const cards = {
     "demos/VodToClips.tsx": /<Credits items=\{\[vod, wide\?\.item, \.\.\.tall\]\}/,
-    "demos/CaptionStyles.tsx": /<Credits items=\{\[plain\]\} \/>/,
+    "demos/CaptionStyles.tsx": /<Credits items=\{\[clip\]\}/,
+    "demos/HeroStage.tsx": /<Credits items=\{\[vod, \.\.\.tiles\]\}/,
     "demos/Reframe.tsx": /<Credits items=\{items\} \/>/,
     "demos/HookText.tsx": /<Credits items=\{\[real\]\} \/>/,
     "sections/EditorSection.tsx": /<Credits items=\{\[clip\]\}/,

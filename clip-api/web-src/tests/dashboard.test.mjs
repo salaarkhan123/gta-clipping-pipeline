@@ -10,11 +10,14 @@ const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "u
 test("sidebar: every built page is a link, every planned one is Coming soon and never a link", () => {
   const nav = source("components/dash/shell/nav.ts");
   for (const [label, href] of [["Home", "/dashboard/"], ["Projects", "/dashboard/library/"], ["Brand kit", "/dashboard/brand-kit/"],
-    ["Asset library", "/dashboard/assets/"], ["Templates", "/dashboard/templates/"], ["Analytics", "/dashboard/analytics/"],
+    ["Asset library", "/dashboard/assets/"], ["Analytics", "/dashboard/analytics/"],
     ["Calendar", "/dashboard/calendar/"], ["Social accounts", "/dashboard/social-accounts/"],
     ["API access", "/dashboard/keys/"]]) {
     assert.match(nav, new RegExp(`label: "${label}", icon: "[a-zA-Z]+", href: "${href.replace(/\//g, "\\/")}"`), label);
   }
+  // The template gallery is not in the sidebar (templates are picked in job setup); its page stays.
+  assert.doesNotMatch(nav, /label: "Templates"/);
+  assert.match(source("app/dashboard/templates/page.tsx"), /Game templates/);
   for (const label of ["Labs", "Learning centre"]) {
     assert.match(nav, new RegExp(`\\{ label: "${label}", icon: "[a-zA-Z]+" \\}`), label);
   }

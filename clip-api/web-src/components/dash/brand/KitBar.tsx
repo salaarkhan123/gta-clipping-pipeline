@@ -7,8 +7,8 @@ import { Icon } from "../Icon";
 import { useDismiss } from "../shell/useDismiss";
 import { KIT_NAME_MAX, SavedKit } from "@/lib/brandkit";
 
-const ICON_BTN = "grid h-10 w-10 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-text hover:bg-chip disabled:cursor-default disabled:text-dim disabled:hover:bg-transparent";
-const MENU_ITEM = "flex min-h-[38px] w-full cursor-pointer items-center gap-[10px] rounded-8 border-0 bg-transparent px-[10px] py-[6px] text-left font-sans text-[14px] font-medium leading-[normal] text-text hover:bg-chip-hover";
+const ICON_BTN = "grid h-[38px] w-[38px] cursor-pointer place-items-center rounded-control border-0 bg-transparent text-text transition-colors duration-base hover:bg-control disabled:cursor-default disabled:text-fg-3 disabled:hover:bg-transparent";
+const MENU_ITEM = "flex min-h-[38px] w-full cursor-pointer items-center gap-[10px] rounded-8 border-0 bg-transparent px-[10px] py-[6px] text-left font-sans text-[14px] font-normal leading-[normal] text-text hover:bg-control-hover";
 
 export function KitPicker({ kits, current, draftName, defaultId, onPick, onNew, onRename, onDuplicate, onSetDefault, onDelete }: {
   kits: SavedKit[]; current: string | null; draftName: string; defaultId: string | null;
@@ -25,14 +25,14 @@ export function KitPicker({ kits, current, draftName, defaultId, onPick, onNew, 
   return (
     <div ref={box} className="relative min-w-0">
       <button ref={btn} type="button" aria-expanded={open} aria-label={`Brand kit: ${name}`} onClick={() => setOpen(!open)}
-        className="flex h-11 w-[260px] max-w-full cursor-pointer items-center justify-between gap-2 rounded-12 border border-solid border-line-soft bg-surface px-4 font-sans text-[15px] font-medium text-text hover:bg-chip narrow:w-full">
+        className="flex h-[38px] w-[178px] max-w-full cursor-pointer items-center justify-between gap-2 rounded-pill border-0 bg-control px-4 font-sans text-[14px] font-medium text-text transition-colors duration-base hover:bg-control-hover narrow:w-full">
         <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
           {name}
           {!current && <span className="font-normal text-muted"> (not saved)</span>}
           {isDefault && <span className="font-normal text-lime"> · default</span>}
         </span>
         <Icon name="chevron" size={18} className="text-muted" /></button>
-      {open && <div aria-label="Brand kits" className="absolute left-0 top-[calc(100%+8px)] z-[60] grid w-[300px] max-w-[calc(100vw-32px)] gap-[2px] rounded-16 border border-solid border-line bg-card-2 p-2 shadow-pop">
+      {open && <div aria-label="Brand kits" className="absolute left-0 top-[calc(100%+8px)] z-[60] grid w-[300px] max-w-[calc(100vw-32px)] gap-[2px] rounded-[14px] border-0 bg-control p-2 shadow-pop">
         {kits.length > 0 && <p className="m-0 px-[10px] pb-1 pt-1 text-[12px] font-medium text-muted">Your kits</p>}
         {kits.map((k) => <button key={k.id} type="button" className={MENU_ITEM} aria-current={k.id === current ? "true" : undefined} onClick={pick(() => onPick(k.id))}>
           <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{k.name}{k.id === defaultId ? <span className="text-muted"> · default</span> : ""}</span>
@@ -75,7 +75,7 @@ export function NameDialog({ title, start, action, note, full, busy, problem, on
   return (
     <div className="fixed inset-0 z-[90] grid place-items-center bg-[rgba(0,0,0,.6)] p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form role="dialog" aria-modal="true" aria-labelledby="kit-dialog-title" onSubmit={(e) => { e.preventDefault(); if (ok && !full) onSave(name.trim()); }}
-        className="grid w-[min(420px,100%)] gap-4 rounded-[24px] border border-solid border-line bg-surface p-6 shadow-pop">
+        className="grid w-[min(420px,100%)] gap-4 rounded-card border-0 bg-card p-6 shadow-pop">
         <h2 id="kit-dialog-title" className="m-0 text-[18px] font-semibold">{title}</h2>
         {full ? <p className="m-0 text-[14px] leading-[1.5] text-muted">{note} <Link href="/dashboard/pricing/">See plans</Link></p> : <>
           <label className="m-0 grid gap-2 text-[13px] font-medium text-muted">Name

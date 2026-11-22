@@ -1,8 +1,9 @@
 "use client";
-// Brand kit settings column: Basic → Styles → Layout → Additional assets (collapsed). Only what a saved look
+// Brand kit settings column: Basic, Caption styles, Layout, Additional assets (closed until opened); the finer
+// caption options sit behind "More". Only what a saved look
 // stores can be changed; logos, intro/outro, music and overlays stay Coming soon and save nothing.
-import { useState } from "react";
 import { ComingSoonBadge } from "@/components/ComingSoonBadge";
+import { More, SectionCard } from "@/components/ui/SectionCard";
 import { LookSketch } from "../LookSketch";
 import { Icon, IconName } from "../Icon";
 import { CaptionStyles, HookTones } from "../setup/Styles";
@@ -14,30 +15,17 @@ import { DEFAULT_PANELS, hasPanels, layoutChoices, layoutName } from "@/lib/temp
 
 const LIME = "#b8ff3c";
 
+// A settings group: the shared collapsible card, labelled in small capitals.
 export function Section({ title, hint, children, defaultOpen = true }: {
   title: string; hint?: string; children: React.ReactNode; defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const id = `kit-${title.toLowerCase().replace(/[^a-z]+/g, "-")}`;
-  return (
-    <section className="rounded-[20px] border border-solid border-line-soft bg-card" aria-labelledby={`${id}-h`}>
-      <h2 id={`${id}-h`} className="m-0">
-        <button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}
-          className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-[20px] border-0 bg-transparent px-5 py-4 text-left font-sans text-[12px] font-semibold uppercase tracking-[.1em] text-muted hover:text-text narrow:px-4">
-          {title}<Icon name="chevron" size={18} className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`} /></button>
-      </h2>
-      {open && <div id={id} className="grid gap-4 border-t border-solid border-line-soft px-5 pb-5 pt-4 narrow:px-4 narrow:pb-4">
-        {hint && <p className="m-0 text-[13px] leading-[1.5] text-muted">{hint}</p>}
-        {children}
-      </div>}
-    </section>
-  );
+  return <SectionCard label={title} hint={hint} defaultOpen={defaultOpen}>{children}</SectionCard>;
 }
 
 function SoonTile({ label, icon = "plus", wide }: { label: string; icon?: IconName; wide?: boolean }) {
   return (
     <span aria-disabled="true" className="grid justify-items-center gap-[6px]">
-      <span className={`grid place-items-center rounded-16 border border-dashed border-line text-fg-3 ${wide ? "aspect-video w-[120px]" : "h-[72px] w-[72px]"}`}><Icon name={icon} size={20} /></span>
+      <span className={`grid place-items-center rounded-[14px] border border-dashed border-line-strong bg-control text-fg-2 ${wide ? "aspect-video w-[112px]" : "h-[66px] w-[66px]"}`}><Icon name={icon} size={20} /></span>
       <span className="text-[12px] text-fg-3">{label}</span>
     </span>
   );
@@ -58,19 +46,19 @@ export function KitForm({ kit, listed, set, name, onName }: {
   const accentOn = kit.caption_accent !== null;
 
   return (
-    <div className="grid gap-3">
-      <Section title="Basic" hint="Name this look, then set brand colour. Logos land here when uploads ship.">
-        <label className="m-0 grid gap-2 text-[13px] font-medium text-muted">Kit name
+    <div className="grid gap-5">
+      <Section title="Basic">
+        <label className="m-0 grid gap-2 text-[14px] font-medium text-text">Kit name
           <input value={name} maxLength={KIT_NAME_MAX} onChange={(e) => onName(e.target.value)}
-            aria-label="Kit name" className="w-full max-w-md" /></label>
+            aria-label="Kit name" className="h-11 w-full max-w-[360px] rounded-12 border-transparent bg-control px-4 text-[14px]" /></label>
         <div className="grid gap-3">
-          <p className="m-0 flex flex-wrap items-center gap-2 text-[15px] font-medium text-text">Logos <span className="text-[12.5px] font-normal text-muted">(PNG, JPG, SVG, WebP)</span><ComingSoonBadge /></p>
+          <p className="m-0 flex flex-wrap items-center gap-2 text-[14px] font-medium text-text">Logos <span className="text-[12px] font-normal text-fg-2">(PNG, JPG, SVG, WebP)</span><ComingSoonBadge /></p>
           <div className="flex gap-3"><SoonTile label="Add" /></div>
         </div>
         {has("caption_accent") && <div className="grid gap-2">
-          <p className="m-0 text-[15px] font-medium text-text">Brand colour</p>
-          <p className="m-0 text-[13px] text-muted">Keyword accent on Impact captions. Other styles keep their own colours.</p>
-          <label className="m-0 inline-flex min-h-[40px] w-max cursor-pointer items-center gap-3 rounded-12 border border-solid border-line-soft bg-surface px-3 text-[14px] font-normal text-label">
+          <p className="m-0 text-[14px] font-medium text-text">Brand colour</p>
+          <p className="m-0 text-[14px] text-fg-2">Keyword accent on Impact captions. Other styles keep their own colours.</p>
+          <label className="m-0 inline-flex min-h-[40px] w-max cursor-pointer items-center gap-3 rounded-12 border-0 bg-control px-3 text-[14px] font-normal text-text">
             <input type="checkbox" checked={accentOn} onChange={(e) => set({ caption_accent: e.target.checked ? (kit.caption_accent || LIME) : null })} />
             Custom accent
             {accentOn && <input type="color" aria-label="Brand colour" value={kit.caption_accent || LIME}
@@ -80,19 +68,19 @@ export function KitForm({ kit, listed, set, name, onName }: {
         </div>}
       </Section>
 
-      <Section title="Styles" hint="Caption look and opening hook tone for every clip made with this kit.">
+      <Section title="Caption styles" hint="How captions and the opening hook look on every clip made with this kit.">
         <div className="grid gap-5">
           {has("captions") && <div className="grid gap-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="grid gap-0.5">
-                <span className="text-[15px] font-medium text-text">Captions</span>
-                <span className="text-[13px] text-muted">Word-by-word, timed to the voice.</span>
+                <span className="text-[14px] font-medium text-text">Captions</span>
+                <span className="text-[14px] text-fg-2">Word-by-word, timed to the voice.</span>
               </div>
               <Switch on={kit.captions} label="Captions" onChange={(v) => set({ captions: v, ...(v ? {} : { caption_emoji: false }) })} />
             </div>
             {kit.captions && <div className="grid gap-3">
               {has("caption_style") && <CaptionStyles styles={listed.caption_style.values || []} value={kit.caption_style} onChange={(s) => set({ caption_style: s })} />}
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <More><div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 {has("caption_position") && kit.caption_style === "impact" && <InlineSelect label="Position" value={kit.caption_position} shown={kit.caption_position === "auto" ? "Automatic" : kit.caption_position === "seam" ? "Between panels" : kit.caption_position === "lower" ? "Lower third" : "Centre"}
                   onChange={(v) => set({ caption_position: v })}>
                   {(listed.caption_position.values || []).map((v: string) => <option key={v} value={v}>{v === "auto" ? "Automatic" : v === "seam" ? "Between panels" : v === "lower" ? "Lower third" : "Centre"}</option>)}
@@ -101,14 +89,14 @@ export function KitForm({ kit, listed, set, name, onName }: {
                   <input type="checkbox" checked={kit.caption_emoji} onChange={(e) => set({ caption_emoji: e.target.checked })} />Emojis</label>}
                 {has("censor") && <label className="m-0 inline-flex min-h-[36px] cursor-pointer items-center gap-2 px-3 text-[14px] font-normal text-label">
                   <input type="checkbox" checked={kit.censor} onChange={(e) => set({ censor: e.target.checked })} />Censor swears</label>}
-              </div>
+              </div></More>
             </div>}
           </div>}
-          {has("hook_overlay") && <div className="grid gap-3 border-t border-solid border-line-soft pt-5">
+          {has("hook_overlay") && <div className="grid gap-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="grid gap-0.5">
-                <span className="text-[15px] font-medium text-text">Hook</span>
-                <span className="text-[13px] text-muted">Short opening line for the first seconds.</span>
+                <span className="text-[14px] font-medium text-text">Hook</span>
+                <span className="text-[14px] text-fg-2">Short opening line for the first seconds.</span>
               </div>
               <Switch on={kit.hook_overlay} label="Hook" onChange={(v) => set({ hook_overlay: v })} />
             </div>
@@ -117,15 +105,15 @@ export function KitForm({ kit, listed, set, name, onName }: {
         </div>
       </Section>
 
-      <Section title="Layout" hint="Shape and framing. Only layouts this render backend accepts for the chosen shape.">
+      <Section title="Layout" hint="The shape clips are cut to, and how the gameplay and camera are framed in it.">
         {has("aspect") && <div className="flex flex-wrap gap-2" role="group" aria-label="Shape">
           {aspects.map((a) => <button key={a} type="button" aria-pressed={kit.aspect === a} onClick={() => setAspect(a)}
-            className={`inline-flex min-h-[38px] cursor-pointer items-center gap-2 rounded-12 border border-solid px-3.5 font-sans text-[14px] font-medium
-              ${kit.aspect === a ? "border-text bg-text text-bg" : "border-line bg-transparent text-text hover:bg-chip"}`}>
+            className={`inline-flex h-9 cursor-pointer items-center gap-2 rounded-pill border-0 px-4 font-sans text-[13px] font-medium transition-colors duration-base
+              ${kit.aspect === a ? "bg-btn text-btn-ink" : "bg-control text-text hover:bg-control-hover"}`}>
             <Icon name={a === "16:9" ? "film" : "phone"} size={16} />{a}</button>)}
         </div>}
         <div className="grid grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-2.5" role="group" aria-label="Layout">
-          {layouts.map((l) => <Tile key={l} name={layoutName(l)} on={kit.layout === l} onClick={() => setLayout(l)} className="aspect-square w-full bg-surface">
+          {layouts.map((l) => <Tile key={l} name={layoutName(l)} on={kit.layout === l} onClick={() => setLayout(l)} className="aspect-square w-full bg-control">
             <LookSketch aspect={kit.aspect} layout={l} camera={kit.layout === l ? kit.camera : null} split={kit.layout === l ? kit.split_ratio : null} captions={false} box={1} />
           </Tile>)}
         </div>
@@ -137,7 +125,7 @@ export function KitForm({ kit, listed, set, name, onName }: {
       </Section>
 
       <Section title="Additional assets" defaultOpen={false}
-        hint="Editing switches apply today. Intro, outro, logo overlays and music stay Coming soon.">
+        hint="Editing switches work today. Intros, outros, overlays and music are not built yet.">
         <div className="grid divide-x-0 divide-y divide-solid divide-line-soft">
           {has("flash_forward") && <SettingRow icon="rewind" name="Open on the peak" hint="Starts with a flash of the best moment, then plays from the start.">
             <Switch on={kit.flash_forward} label="Open on the peak" onChange={(v) => set({ flash_forward: v })} /></SettingRow>}
@@ -156,12 +144,12 @@ export function KitForm({ kit, listed, set, name, onName }: {
               </div>))}
           </div>
         </div>
-        <div className="grid gap-3 border-t border-solid border-line-soft pt-4">
-          <p className="m-0 flex flex-wrap items-center gap-2 text-[15px] font-medium text-text">Music <span className="text-[12.5px] font-normal text-muted">(background track under every clip)</span><ComingSoonBadge /></p>
+        <div className="grid gap-3">
+          <p className="m-0 flex flex-wrap items-center gap-2 text-[14px] font-medium text-text">Music <span className="text-[12px] font-normal text-fg-2">(background track under every clip)</span><ComingSoonBadge /></p>
           <div className="flex gap-3"><SoonTile label="Add" icon="music" /></div>
         </div>
-        <div className="grid gap-3 border-t border-solid border-line-soft pt-4">
-          <p className="m-0 flex flex-wrap items-center gap-2 text-[15px] font-medium text-text">Overlays <span className="text-[12.5px] font-normal text-muted">(watermarks and lower-thirds)</span><ComingSoonBadge /></p>
+        <div className="grid gap-3">
+          <p className="m-0 flex flex-wrap items-center gap-2 text-[14px] font-medium text-text">Overlays <span className="text-[12px] font-normal text-fg-2">(watermarks and lower-thirds)</span><ComingSoonBadge /></p>
           <div className="flex gap-3"><SoonTile label="Add" icon="image" /></div>
         </div>
       </Section>

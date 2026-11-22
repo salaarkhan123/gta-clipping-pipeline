@@ -7,7 +7,7 @@ import { KitPicker, NameDialog, UndoRedo } from "@/components/dash/brand/KitBar"
 import { KitPreview, Shape, SHAPES } from "@/components/dash/brand/KitPreview";
 import { KitForm } from "@/components/dash/brand/Sections";
 import { useDash } from "@/components/dash/Shell";
-import { BackTitle } from "@/components/dash/ui";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { ApiError } from "@/lib/api";
 import {
   blankKit, createKit, deleteKit, duplicateKit, FIRST_KIT_NAME, getDefaultKitId, Kit, kitFrom, Kits,
@@ -158,34 +158,31 @@ export default function BrandKit() {
   const dialogSave = naming?.mode === "rename" ? rename : naming?.mode === "duplicate" ? duplicate : saveNew;
 
   return (
-    <div className="grid gap-5">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-        <div className="mr-auto grid min-w-0 gap-1">
-          <BackTitle title="Brand kit" crumbs={[{ label: "Home", href: "/dashboard/" }, { label: "Brand kit" }]} />
-          <p className="m-0 text-[14px] text-muted">Settings on the left, live preview on the right. Save a look once, pick it in any job.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 narrow:w-full">
-          <div className="narrow:w-full"><KitPicker kits={store.kits} current={current} draftName={fallbackName} defaultId={defaultId}
-            onPick={(id) => { if (id !== current && leave()) open(store, id); }} onNew={() => { if (leave()) open(store, null); }}
-            onRename={() => setNaming({ mode: "rename", problem: "" })}
-            onDuplicate={() => setNaming({ mode: "duplicate", problem: "" })}
-            onSetDefault={makeDefault} onDelete={remove} /></div>
-          <UndoRedo canUndo={h.past.length > 0} canRedo={h.future.length > 0} onUndo={() => setH(undo(h))} onRedo={() => setH(redo(h))} />
-          <button type="button" className="btn small ghost" disabled={busy} onClick={() => setNaming({ mode: "new", problem: "" })}>Save as</button>
-          <button type="button" className="btn small primary" disabled={busy || (!dirty && !nameDirty && !!current)} onClick={saveChanges}>
-            {busy ? "Saving…" : current ? "Save" : "Save kit"}</button>
-        </div>
-      </div>
+    <div className="wide -ml-3 grid gap-8 pt-[5px] narrow:ml-0 narrow:pt-0">
+      {/* The header row, as measured: title 24 px with the hint beside it; the kit selector, undo and redo, then the two saves, all 38 px tall. */}
+      <PageHeader title="Brand kit" hint="Set up your look once for every clip. Add only what you need.">
+        <div className="narrow:w-full"><KitPicker kits={store.kits} current={current} draftName={fallbackName} defaultId={defaultId}
+          onPick={(id) => { if (id !== current && leave()) open(store, id); }} onNew={() => { if (leave()) open(store, null); }}
+          onRename={() => setNaming({ mode: "rename", problem: "" })}
+          onDuplicate={() => setNaming({ mode: "duplicate", problem: "" })}
+          onSetDefault={makeDefault} onDelete={remove} /></div>
+        <UndoRedo canUndo={h.past.length > 0} canRedo={h.future.length > 0} onUndo={() => setH(undo(h))} onRedo={() => setH(redo(h))} />
+        <button type="button" className="btn ghost !h-[38px] !px-4 !text-[14px]" disabled={busy} onClick={() => setNaming({ mode: "new", problem: "" })}>Save as new kit</button>
+        <button type="button" className="btn primary !h-[38px] !px-4 !text-[14px]" disabled={busy || (!dirty && !nameDirty && !!current)} onClick={saveChanges}>
+          {busy ? "Saving…" : current ? "Save changes" : "Save kit"}</button>
+      </PageHeader>
       {full && !current && <p className="notice m-0">Your plan keeps {store.limit} {store.limit === 1 ? "kit" : "kits"}, and you have {store.kits.length}. Delete one or <Link href="/dashboard/pricing/">upgrade</Link> to save another.</p>}
 
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(320px,420px)] items-start gap-6 mid:grid-cols-1">
-        <div className="mid:order-2 min-w-0">
+      {/* Settings in a 640 px column, the live preview beside it and in view while the settings scroll. */}
+      <div className="grid grid-cols-[minmax(0,640px)_minmax(303px,1fr)] items-start gap-x-[clamp(40px,10.6vw,151px)] gap-y-6 pl-12 mid:grid-cols-1 mid:pl-0">
+        <div className="mid:order-2 grid min-w-0 gap-0">
+          {/* Where the plan's kit allowance stands: the slim strip above the first group. */}
+          {limitNote && <p className="m-0 flex min-h-[37px] items-center justify-between gap-3 rounded-t-[10px] rounded-b-none bg-[#2c271d] px-5 text-[14px] text-text">
+            <span>{limitNote}</span><Link href="/dashboard/pricing/" className="!text-text no-underline hover:underline">Upgrade plan</Link></p>}
           <KitForm kit={kit} listed={listed} set={set} name={draftName} onName={setDraftName} />
         </div>
-        <aside aria-label="Preview" className="sticky top-[calc(theme(spacing.topbar)+16px)] mid:static mid:order-1">
-          <div className="rounded-[20px] border border-solid border-line-soft bg-card p-4">
-            <KitPreview kit={kit} shape={shape} onShape={setShape} />
-          </div>
+        <aside aria-label="Preview" className="sticky top-[20px] grid justify-items-start mid:static mid:order-1 mid:justify-items-center">
+          <KitPreview kit={kit} shape={shape} onShape={setShape} />
         </aside>
       </div>
 

@@ -26,7 +26,8 @@ function Outline({ box, label, tone }: { box: Box; label: string; tone: "lime" |
   const right = box[0] + box[2] > 0.75;
   return (
     <span className={`absolute rounded-[6px] border-2 transition-all duration-500 ${tone === "lime" ? "border-lime" : "border-white/90"}`} style={at(box)} aria-hidden="true">
-      <span className={`absolute whitespace-nowrap rounded-[4px] px-1 py-px text-[9px] font-semibold leading-[12px] ${right ? "right-1" : "left-1"} ${tone === "lime" ? "top-1 bg-lime text-ink" : "bottom-1 bg-white text-black"}`}>{label}</span>
+      {/* The tag hangs outside the outline, under its corner, so it never covers what the box is drawn around. */}
+      <span className={`absolute top-[calc(100%+4px)] whitespace-nowrap rounded-[4px] px-1 py-px text-[9px] font-semibold leading-[12px] ${right ? "right-0" : "left-0"} ${tone === "lime" ? "bg-lime text-ink" : "bg-white text-black"}`}>{label}</span>
     </span>
   );
 }

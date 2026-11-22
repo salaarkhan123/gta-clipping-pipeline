@@ -42,7 +42,8 @@ test("library and templates trail Home then the current page", () => {
 
 test("remaining dashboard PAGE_TITLE pages trail Home then the current page", () => {
   const brand = source("app/dashboard/brand-kit/page.tsx");
-  assert.match(brand, /<BackTitle title="Brand kit" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Brand kit" \}\]\} \/>/);
+  // Brand kit is a top-level page of the sidebar: its header is the shared PageHeader, without a trail.
+  assert.match(brand, /<PageHeader title="Brand kit"/);
   const assets = source("app/dashboard/assets/page.tsx");
   assert.match(assets, /<BackTitle title="Asset library" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Asset library" \}\]\} \/>/);
   const billing = source("app/dashboard/billing/page.tsx");

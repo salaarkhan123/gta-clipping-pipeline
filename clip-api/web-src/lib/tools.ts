@@ -1,6 +1,7 @@
 import type { IconName } from "@/components/dash/Icon";
 
 // Every tool the app names, in one list: the Home grid and the top bar's Tools menu both read it.
+// Game templates are not a tool here: a template is picked in job setup (the gallery page stays at its address).
 // `tool` opens that tool on a video the user picks (the project page's ?tool=); `page` opens that page on a video
 // the user picks (?id=); `href` is a page of its own. A tool with none of them is planned but not built: it is
 // shown as "Coming soon" and is never a link. `needs` names a switch in GET /v1/languages that must be on
@@ -11,7 +12,6 @@ export type ToolEntry = { id: string; icon: IconName; name: string; text: string
 export const TOOLS: ToolEntry[] = [
   { id: "clips", icon: "scissors", name: "AI Clipping", text: "Finds the best moments in a stream and cuts them into ranked clips.", tool: "clips" },
   { id: "find", icon: "search", name: "Find Moments", text: "Type what was said or shown and get a clip of every match.", tool: "find", badge: "new" },
-  { id: "templates", icon: "gamepad", name: "Game Templates", text: "Layouts, captions and length tuned to a game, in one pick.", href: "/dashboard/templates/", badge: "new" },
   { id: "captions", icon: "captions", name: "AI Captions", text: "Burn word-by-word captions into any part of a video.", tool: "captions" },
   { id: "reframe", icon: "reframe", name: "AI Reframe", text: "Reshape wide footage to vertical, portrait or square.", tool: "reframe" },
   { id: "editor", icon: "sliders", name: "Video Editor", text: "Trim, cut by transcript and restyle a clip: open Edit on any clip.", href: "/dashboard/library/?view=clips", badge: "new" },

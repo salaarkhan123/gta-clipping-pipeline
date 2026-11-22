@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
 import { coachingFor } from "../../lib/coaching";
-import { ScoreOverlay } from "./ScoreOverlay";
+import { Score, ScoreSize } from "../ui/Score";
 import { Rating, ratingOf } from "./model";
 
 // The sub-scores as bars, with per-dimension coaching and the AI's overall reason.
@@ -43,7 +43,7 @@ export function RatingParts({ r, compact }: { r: Rating; compact?: boolean }) {
 
 // The AI rating on a card: the number, and its sub-scores on hover, keyboard focus or a tap.
 // A clip the AI did not rate shows its place in the run instead, and says so.
-export function RatingBadge({ clip }: { clip: any }) {
+export function RatingBadge({ clip, size = "md" }: { clip: any; size?: ScoreSize }) {
   const r = ratingOf(clip);
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null), tip = useId();
@@ -61,13 +61,10 @@ export function RatingBadge({ clip }: { clip: any }) {
         onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}
         aria-label={r.shown !== null ? `AI quality ${r.shown} out of 100. Show the sub-scores.` : `Not rated by the AI. Number ${r.rank} in this run.`}
         className="cursor-pointer border-0 bg-transparent p-0 hover:opacity-90">
-        {r.shown !== null
-          ? <ScoreOverlay value={r.shown} kind="ai" />
-          : <span className="inline-flex items-baseline gap-[3px] rounded-[7px] bg-black/70 px-1.5 py-0.5 text-[12px] font-medium tabular-nums text-text shadow-[inset_0_0_0_1px_rgba(255,255,255,.12)] [backdrop-filter:blur(8px)]">
-              #{r.rank}{r.of ? <span className="text-fg-2"> of {r.of}</span> : null}</span>}
+        {r.shown !== null ? <Score value={r.shown} kind="ai" size={size} /> : <Score value={r.rank!} of={r.of} kind="rank" size={size} />}
       </button>
       {/* Not laid out while closed, so it never widens a phone's page. On a phone it opens as a sheet at the bottom. */}
-      <div id={tip} role="tooltip" className={`absolute bottom-[calc(100%+8px)] left-0 z-20 w-[248px] animate-[rise_.15s_ease-out] rounded-16 border border-solid border-line bg-[rgba(20,20,20,.97)] p-[14px] text-left shadow-pop
+      <div id={tip} role="tooltip" className={`absolute bottom-[calc(100%+8px)] left-0 z-20 w-[248px] animate-[rise_.15s_ease-out] rounded-[14px] border-0 bg-control p-[14px] text-left shadow-pop
         [backdrop-filter:blur(10px)] narrow:fixed narrow:inset-x-4 narrow:bottom-4 narrow:z-50 narrow:w-auto ${open ? "block" : "hidden"}`}>
         <p className="m-0 mb-[10px] flex items-baseline justify-between gap-2 text-[13px] font-semibold">
           {r.shown !== null ? <>AI quality <span className="font-mono text-lime">{r.shown}</span></> : "Not rated by the AI"}

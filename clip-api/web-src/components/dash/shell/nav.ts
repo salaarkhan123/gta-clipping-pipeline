@@ -2,6 +2,7 @@ import type { IconName } from "../Icon";
 
 // The sidebar, in groups. An item without `href` is planned but not built: it carries the Coming soon mark and is
 // never a link. `under` lists other routes that light the item up.
+// The template gallery (/dashboard/templates/) is not listed: templates are picked in job setup. The page stays.
 export type NavItem = { label: string; icon: IconName; href?: string; under?: string[]; exact?: boolean };
 
 export const NAV: NavItem[][] = [
@@ -11,7 +12,6 @@ export const NAV: NavItem[][] = [
       under: ["/dashboard/project", "/dashboard/edit", "/dashboard/transcript", "/dashboard/summary"] },
     { label: "Brand kit", icon: "palette", href: "/dashboard/brand-kit/" },
     { label: "Asset library", icon: "folder", href: "/dashboard/assets/" },
-    { label: "Templates", icon: "template", href: "/dashboard/templates/" },
   ],
   [
     { label: "Calendar", icon: "calendar", href: "/dashboard/calendar/" },
