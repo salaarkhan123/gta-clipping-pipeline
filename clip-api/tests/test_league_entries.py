@@ -290,9 +290,38 @@ def test_a_username_outside_the_charset_is_refused(client, name):
     assert client.put("/v1/league/me/profile", json={"username": name}, headers=h).status_code == 422
 
 
-def test_reserved_usernames_are_refused(client):
+IMPERSONATING = ["ClutchClips", "Admin", "clutchclips_", "ClutchClipsHQ", "clutch_clips_team", "c1utchclips",
+                 "ClutchClipsOfficial", "admin_", "moderat0r", "CLUTCH_CLIPS_STAFF", "0ff1c1a1", "the_4dm1n",
+                 "Supp0rt_Desk", "st4ff_pick", "5upport", "Winner", "System"]
+
+
+@pytest.mark.parametrize("name", IMPERSONATING)
+def test_names_that_pass_for_clutchclips_or_its_staff_are_refused(client, name):
     h, _ = signup(client)
-    assert code(client.put("/v1/league/me/profile", json={"username": "ClutchClips"}, headers=h)) == (422, "username_reserved")
+    assert code(client.put("/v1/league/me/profile", json={"username": name}, headers=h)) == (422, "username_reserved")
+
+
+@pytest.mark.parametrize("name", ["clipper_", "AdamClips_", "offside_ace_", "modern_ace_"])
+def test_ordinary_names_are_not_caught_by_the_reserved_words(client, name):
+    h, _ = signup(client)
+    name += uuid.uuid4().hex[:4]
+    assert client.put("/v1/league/me/profile", json={"username": name}, headers=h).status_code == 200
+
+
+def test_a_name_given_up_is_held_for_its_old_owner_for_30_days(client, monkeypatch):
+    old = f"champ{uuid.uuid4().hex[:8]}"
+    a = creator(client, username=old)
+    renamed = client.put("/v1/league/me/profile", json={"username": old + "x", "is_public": True}, headers=a["h"])
+    assert renamed.status_code == 200
+    b, _ = signup(client)
+    assert code(client.put("/v1/league/me/profile", json={"username": old.upper()}, headers=b)) == (409, "username_held")
+    assert code(client.get(f"/v1/league/creators/{old}")) == (404, "not_found")
+    back = client.put("/v1/league/me/profile", json={"username": old, "is_public": True}, headers=a["h"])
+    assert back.status_code == 200                                     # its old owner can take it back
+    assert client.put("/v1/league/me/profile", json={"username": old + "y"}, headers=a["h"]).status_code == 200
+    later = utcnow() + timedelta(days=31)
+    monkeypatch.setattr(league, "utcnow", lambda: later)
+    assert client.put("/v1/league/me/profile", json={"username": old}, headers=b).status_code == 200
 
 
 def test_usernames_are_unique_whatever_their_case(client):
@@ -412,10 +441,50 @@ def test_profile_edits_are_rate_limited(client, monkeypatch):
     assert code(client.put("/v1/league/me/profile", json={"username": name}, headers=h)) == (429, "rate_limited")
 
 
-@pytest.mark.parametrize("path", ["/v1/league/current", "/v1/league/rules", "/v1/league/nope/leaderboard",
-                                  "/v1/league/nope/featured", "/v1/league/creators/nobody"])
+@pytest.mark.parametrize("path", ["/v1/league/nope/leaderboard", "/v1/league/nope/featured", "/v1/league/creators/nobody"])
 def test_public_reads_are_rate_limited_per_address(client, monkeypatch, path):
     monkeypatch.setattr(get_settings(), "league_reads_per_minute", 3)
     for _ in range(3):
         assert client.get(path).status_code in (200, 404)
     assert code(client.get(path)) == (429, "rate_limited")
+
+
+def test_the_homepage_reads_hold_no_limiter_key_and_may_be_cached(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "league_reads_per_minute", 3)
+    for _ in range(10):                                   # a burst of homepage visits, well past the per-address limit
+        for path in ("/v1/league/current", "/v1/league/rules"):
+            r = client.get(path)
+            assert r.status_code == 200 and r.headers["cache-control"] == "public, max-age=30"
+    assert not [k for k in deps._buckets if k.startswith("league:")]
+
+
+def test_the_other_public_reads_may_be_cached_too(client, admin, cup):
+    who = creator(client)
+    approved_entry(client, admin, cup, who)
+    for path in (f"/v1/league/{cup}/leaderboard", f"/v1/league/{cup}/featured", f"/v1/league/creators/{who['username']}"):
+        assert client.get(path).headers["cache-control"] == "public, max-age=30", path
+    assert "public" not in client.get("/v1/league/me", headers=who["h"]).headers.get("cache-control", "")
+
+
+# ---- rules versions ----
+
+def test_an_open_competition_keeps_the_rules_version_it_was_opened_with(client, admin, cup, monkeypatch):
+    first = league_rules.VERSION
+    monkeypatch.setattr(league_rules, "VERSION", "draft-2027-01-01")
+    monkeypatch.setitem(league_rules.TEXTS, "draft-2027-01-01", ("draft", [{"id": "entry", "title": "How to enter",
+                                                                           "needs_legal_review": False, "body": ["New."]}]))
+    assert client.get("/v1/league/rules").json()["version"] == "draft-2027-01-01"
+    served = client.get(f"/v1/league/rules?version={first}").json()
+    assert served["version"] == first and served["sections"] == league_rules.TEXTS[first][1]
+    assert code(client.get("/v1/league/rules?version=nope")) == (404, "not_found")
+    who = creator(client)
+    me = client.get(f"/v1/league/me?competition={cup}", headers=who["h"]).json()
+    assert me["rules_version"] == me["competition"]["rules_version"] == first
+    assert code(enter(client, cup, who, rules_version="draft-2027-01-01")) == (422, "rules_not_accepted")
+    r = enter(client, cup, who, rules_version=first)
+    assert r.status_code == 201 and r.json()["rules_version"] == first
+    listed = {c["slug"]: c for c in client.get("/v1/admin/league/competitions", headers=admin).json()["competitions"]}
+    assert (listed[cup]["rules_version"], listed[cup]["rules_latest"]) == (first, "draft-2027-01-01")
+    newer = competition(client, admin)
+    listed = {c["slug"]: c for c in client.get("/v1/admin/league/competitions", headers=admin).json()["competitions"]}
+    assert listed[newer]["rules_version"] == "draft-2027-01-01"

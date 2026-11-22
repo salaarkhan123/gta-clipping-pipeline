@@ -1,6 +1,7 @@
 "use client";
 // Creators League: the public page. The current competition, its leaderboard, the entered clips, how it works and
 // the rules, all from the public API. Nothing here is invented: with no competition or no entries the page says so.
+// A read that fails or is rate-limited shows one short line with a retry in its own section; nothing spins forever.
 import { useEffect, useState } from "react";
 import { Footer, Nav } from "@/components/Chrome";
 import { ClipThumb, Countdown, CreatorAvatar, CreatorName, PrizeLine, WatchLink } from "@/components/league/Bits";
@@ -9,8 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { api } from "@/lib/api";
-import { Board, Competition, day, dollars, PHASE_LABEL, Row, Rules, useCurrent } from "@/lib/league";
+import { Board, Competition, day, dollars, PHASE_LABEL, Row, Rules, rulesPath, useCurrent, usePublic } from "@/lib/league";
 
 const ENTER = "/dashboard/league/";
 const SECTION = "px-gutter py-[clamp(48px,6vw,96px)]";
@@ -28,14 +28,24 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
     <dd className="m-0 font-sans text-[22px] font-semibold leading-[1.2] tracking-[-0.02em] text-fg narrow:text-[19px]">{children}</dd></div>;
 }
 
-function Hero({ competition }: { competition: Competition | null | undefined }) {
+function LoadFailed({ what, retry }: { what: string; retry: () => void }) {
+  return (
+    <div role="status" className="flex flex-wrap items-center justify-center gap-3 rounded-card border border-dashed border-line-strong px-6 py-8 text-center text-[14.5px] text-fg-2">
+      <span>Couldn&apos;t load {what}.</span>
+      <Button size="sm" variant="secondary" onClick={retry}>Try again</Button>
+    </div>
+  );
+}
+
+function Hero({ competition, failed, retry }: { competition: Competition | null | undefined; failed: boolean; retry: () => void }) {
   return (
     <header className="grid justify-items-center px-gutter pb-[clamp(32px,4vw,56px)] pt-20 text-center narrow:pt-10">
       <p className="m-0 text-eyebrow uppercase text-fg-2">Monthly competition</p>
       <h1 className="m-0 mt-5 font-sans text-[clamp(40px,7.2vw,88px)] font-semibold uppercase leading-[1] tracking-[-0.045em] text-fg">Creators League</h1>
       <p className="m-0 mt-5 text-[clamp(18px,2.2vw,26px)] font-medium tracking-[-0.02em] text-lime">Create. Compete. Climb.</p>
       <p className="m-0 mt-4 max-w-[600px] text-lead text-fg-2">Post a clip you made with ClutchClips. The most-viewed clips of the month take the top of the board. Entry is free.</p>
-      {competition === undefined ? <div className="mt-10 h-[196px] w-full max-w-[880px] rounded-card bg-card" aria-hidden="true" />
+      {competition === undefined && failed ? <div className="mt-10 w-full max-w-[880px]"><LoadFailed what="the current competition" retry={retry} /></div>
+        : competition === undefined ? <div className="mt-10 h-[196px] w-full max-w-[880px] rounded-card bg-card" aria-hidden="true" />
         : competition === null ? (
           <Card className="mt-10 grid w-full max-w-[880px] justify-items-center gap-4 text-center">
             <h2 className="m-0 text-h3 text-fg">The first competition has not opened yet</h2>
@@ -71,13 +81,14 @@ function Hero({ competition }: { competition: Competition | null | undefined }) 
   );
 }
 
-function Featured({ clips }: { clips: Row[] }) {
+function Featured({ clips, failed, retry }: { clips: Row[]; failed: boolean; retry: () => void }) {
   return (
     <section aria-labelledby="featured-title" className={SECTION}>
       <div className={WRAP}>
         <div className="grid gap-2"><h2 id="featured-title" className="m-0 text-h2 text-fg">Featured clips</h2>
           <p className="m-0 text-lead text-fg-2">Entries in this competition, made with ClutchClips.</p></div>
-        {clips.length === 0
+        {failed ? <LoadFailed what="the featured clips" retry={retry} />
+          : clips.length === 0
           ? <EmptyState icon="film" title="No clips to feature yet">Approved entries appear here with the creator&apos;s own thumbnail.</EmptyState>
           : <ul className="m-0 grid list-none grid-cols-6 gap-4 p-0 mid:grid-cols-4 narrow:grid-cols-2 narrow:gap-3">
             {clips.map((c) => (
@@ -92,13 +103,13 @@ function Featured({ clips }: { clips: Row[] }) {
   );
 }
 
-function RulesBlock({ rules }: { rules: Rules | null }) {
+function RulesBlock({ rules, failed, retry }: { rules: Rules | undefined; failed: boolean; retry: () => void }) {
   return (
     <section id="rules" aria-labelledby="rules-title" className={SECTION}>
       <div className="mx-auto grid max-w-prose gap-6">
         <div className="grid gap-2"><h2 id="rules-title" className="m-0 text-h2 text-fg">Competition rules</h2>
           {rules && <p className="m-0 text-[14px] text-fg-2">Version {rules.version}. {rules.legally_reviewed ? "" : "These rules are a draft. Sections marked To be confirmed are completed when the official rules are published."}</p>}</div>
-        {!rules ? <p className="m-0 text-fg-2">Loading the rules…</p> : (
+        {failed ? <LoadFailed what="the rules" retry={retry} /> : !rules ? <p className="m-0 text-fg-2">Loading the rules…</p> : (
           <>
             <Card className="grid gap-3 !p-6">
               <h3 className="m-0 text-title text-fg">Required in your video&apos;s description</h3>
@@ -124,34 +135,34 @@ function RulesBlock({ rules }: { rules: Rules | null }) {
 }
 
 export default function LeaguePage() {
-  const { data, problem } = useCurrent();
-  const [board, setBoard] = useState<Board | null>(null), [featured, setFeatured] = useState<Row[]>([]), [rules, setRules] = useState<Rules | null>(null);
-  const slug = data?.competition?.slug;
-  useEffect(() => { api("/v1/league/rules", { auth: false }).then(setRules).catch(() => {}); }, []);
-  useEffect(() => {
-    if (!slug) return;
-    api(`/v1/league/${slug}/leaderboard`, { auth: false }).then(setBoard).catch(() => {});
-    api(`/v1/league/${slug}/featured`, { auth: false }).then((r) => setFeatured(r.clips)).catch(() => {});
-  }, [slug]);
-  const competition = problem ? null : data?.competition;
+  const current = useCurrent();
+  const competition = current.data?.competition, slug = competition?.slug;
+  const board = usePublic<Board>(slug ? `/v1/league/${slug}/leaderboard` : null);
+  const featured = usePublic<{ clips: Row[] }>(slug ? `/v1/league/${slug}/featured` : null);
+  // The rules of this competition's own version; the entry form links here with ?rules=<the version it accepts>.
+  const [asked, setAsked] = useState<string | null | undefined>(undefined);
+  useEffect(() => { setAsked(new URLSearchParams(window.location.search).get("rules")); }, []);
+  const settled = asked !== undefined && (current.data !== undefined || current.failed);
+  const rules = usePublic<Rules>(settled ? rulesPath(asked || competition?.rules_version) : null);
   return (
     <>
       <Nav />
       <main>
-        <Hero competition={competition} />
-        {problem && <p role="alert" className="error mx-auto max-w-[880px]">{problem}</p>}
+        <Hero competition={competition} failed={current.failed} retry={current.retry} />
 
         <section id="leaderboard" aria-labelledby="board-title" className={SECTION}>
           <div className={WRAP}>
             <div className="grid gap-2"><h2 id="board-title" className="m-0 text-h2 text-fg">Leaderboard</h2>
               <p className="m-0 text-lead text-fg-2">{competition ? `${competition.name}: approved entries by public views.` : "Approved entries by public views."}</p></div>
-            {competition === undefined || (competition && !board) ? <div className="h-[220px] rounded-card bg-card" aria-hidden="true" />
-              : <Leaderboard rows={board?.entries || []} updatedAt={board?.updated_at || null}
+            {current.failed ? <LoadFailed what="the leaderboard" retry={current.retry} />
+              : board.failed ? <LoadFailed what="the leaderboard" retry={board.retry} />
+              : competition === undefined || (competition && !board.data) ? <div className="h-[220px] rounded-card bg-card" aria-hidden="true" />
+              : <Leaderboard rows={board.data?.entries || []} updatedAt={board.data?.updated_at || null}
                 empty={competition?.accepting_entries ? "Be the first on the board: enter your clip and it appears here once it is approved." : "Entries appear here once they are approved."} />}
           </div>
         </section>
 
-        <Featured clips={featured} />
+        <Featured clips={featured.data?.clips || []} failed={current.failed || featured.failed} retry={current.failed ? current.retry : featured.retry} />
 
         <section aria-labelledby="how-title" className={SECTION}>
           <div className={WRAP}>
@@ -167,7 +178,7 @@ export default function LeaguePage() {
           </div>
         </section>
 
-        <RulesBlock rules={rules} />
+        <RulesBlock rules={rules.data} failed={rules.failed} retry={rules.retry} />
       </main>
       <Footer />
     </>

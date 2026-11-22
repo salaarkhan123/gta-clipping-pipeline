@@ -20,7 +20,7 @@ from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import ledger
+from . import league, ledger
 from .config import get_settings
 from .models import Account, CaseEvent, CaseTarget, Clip, Export, Job, TrustCase, Upload, utcnow
 from .storage import get_storage, transcript_key, transcript_parts_key, vindex_key
@@ -105,8 +105,9 @@ def held_elsewhere(db: Session, case: TrustCase, kind: str, target_id: str) -> b
 def hide(db: Session, case: TrustCase) -> int:
     """Hide every live target (an upload's clips and a job's clips with it). Returns how many rows were hidden.
     A clip another case already hides is held by this case too (state disabled), so it stays hidden until every
-    case holding it is restored; a clip its owner deleted is `gone`."""
-    now, hidden = utcnow(), 0
+    case holding it is restored; a clip its owner deleted is `gone`. A clip hidden here leaves the Creators League
+    (league.clips_taken_down)."""
+    now, hidden, newly = utcnow(), 0, []
     for t in [t for t in targets(db, case) if t.state == "live"]:
         found: list[Clip] = []
         if t.kind == "upload":
@@ -129,8 +130,10 @@ def hide(db: Session, case: TrustCase) -> int:
             if clip.deleted_at is None:
                 clip.deleted_at = now
                 hidden += 1
+                newly.append(clip.id)
             if clip.id != t.target_id:
                 _clip_target(db, case, clip, t.account_id).state = "disabled"
+    league.clips_taken_down(db, newly, f"Clip removed by trust case {case.reference}.")
     db.flush()
     return hidden
 

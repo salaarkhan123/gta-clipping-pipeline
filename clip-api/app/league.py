@@ -7,13 +7,17 @@ Entry status      pending -> approved | rejected | disqualified
 Competition       draft -> open -> closed -> finalized         closed -> open (reopened)
 Prize             pending -> sent | forfeited                  (recorded by an admin; nothing is paid by this code)
 
-Every move is one row in league_events with the state before and after, who and why. View counts come only from
-admin observations (league_view_observations, append-only): the newest row per entry is the count the ranking
-uses, the older rows are its history.
+A finalized competition is frozen: no review, flag, count or setting changes. Every move is one row in
+league_events with the state before and after, who and why. View counts come only from admin observations
+(league_view_observations, append-only): the newest reading by observation time is the count the ranking uses, the
+older rows are its history.
+
+A clip removed before its retention ran out (a trust decision, a takedown, its owner) takes its entry off every
+public list; a trust decision also disqualifies the entry (clips_taken_down).
 """
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -23,6 +27,8 @@ from sqlalchemy.orm import Session
 from . import templates
 from .models import (Account, Clip, CreatorProfile, Job, LeagueCompetition, LeagueEntry, LeagueEvent,
                      LeagueViewObservation, new_id, utcnow)
+
+SYSTEM = "system"               # the actor of a move no admin made (a trust decision acting on the league)
 
 Platform = Literal["tiktok", "youtube", "instagram"]
 EntryStatus = Literal["pending", "approved", "rejected", "disqualified"]
@@ -51,6 +57,11 @@ USERNAME = re.compile(r"[A-Za-z0-9_]{3,20}")
 GAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9 :'&.+-]{1,29}")
 RESERVED_USERNAMES = frozenset({"admin", "administrator", "clutchclips", "clutch_clips", "official", "support",
                                 "staff", "moderator", "system", "league", "winner"})
+# Words no username may contain in any case, read without underscores and with look-alike digits ("Clutch_C1ips").
+IMPERSONATION_WORDS = ("clutchclip", "admin", "official", "moderator", "support", "staff")
+_LOOKALIKE = {"i": "[i1]", "l": "[l1]", "o": "[o0]", "e": "[e3]", "a": "[a4]", "s": "[s5]"}
+IMPERSONATION = re.compile("|".join("".join(_LOOKALIKE.get(ch, ch) for ch in w) for w in IMPERSONATION_WORDS))
+USERNAME_HOLD = timedelta(days=30)        # a username given up stays with its old owner this long
 
 
 class Refused(Exception):
@@ -118,9 +129,19 @@ def parse_video_link(platform: str, raw: str) -> VideoLink:
 def clean_username(raw: str) -> str:
     if not USERNAME.fullmatch(raw):
         raise Refused(422, "invalid_username", "A username is 3 to 20 letters, numbers or underscores.")
-    if raw.lower() in RESERVED_USERNAMES:
+    if raw.lower() in RESERVED_USERNAMES or IMPERSONATION.search(raw.lower().replace("_", "")):
         raise Refused(422, "username_reserved", "That username is reserved. Choose another.")
     return raw
+
+
+def username_held(db: Session, username_key: str, account_id: str, now: datetime | None = None) -> bool:
+    """Whether another account gave this username up less than USERNAME_HOLD ago (a `username_released` event
+    per rename, so every name a creator moved away from is held, not only the last one)."""
+    since = (now or utcnow()) - USERNAME_HOLD
+    return db.execute(select(LeagueEvent.id).where(
+        LeagueEvent.entity_kind == "username", LeagueEvent.entity_id == username_key,
+        LeagueEvent.action == "username_released", LeagueEvent.actor_id != account_id,
+        LeagueEvent.created_at >= since).limit(1)).first() is not None
 
 
 def clean_game(raw: str) -> str:
@@ -222,7 +243,15 @@ def entry_of(db: Session, competition_id: str, account_id: str) -> LeagueEntry |
 
 # ---- admin moves ----
 
+def unfrozen(db: Session, entry: LeagueEntry) -> LeagueCompetition:
+    c = db.get(LeagueCompetition, entry.competition_id)
+    if c.status == "finalized":
+        raise Refused(409, "competition_final", "This competition's results are final.")
+    return c
+
+
 def review(db: Session, admin_id: str, entry: LeagueEntry, action: str, reason: str | None) -> None:
+    c = unfrozen(db, entry)
     allowed, after, needs_reason = ENTRY_RULES[action]
     if entry.status not in allowed:
         raise Refused(409, "review_not_allowed", f"An entry that is {entry.status} cannot be moved by '{action}'.")
@@ -232,7 +261,6 @@ def review(db: Session, admin_id: str, entry: LeagueEntry, action: str, reason: 
     if settled:
         if action == "approve":         # a late approval would enter the ranking, perhaps above an approved winner
             raise Refused(409, "winners_approved", "A winner is already approved: no entry can join the ranking now.")
-        c = db.get(LeagueCompetition, entry.competition_id)
         row = next((r for r in ranking(db, c) if r.entry.id == entry.id), None)
         if row is not None and row.rank <= settled:
             raise Refused(409, "winner_already_approved",
@@ -243,6 +271,7 @@ def review(db: Session, admin_id: str, entry: LeagueEntry, action: str, reason: 
 
 
 def flag(db: Session, admin_id: str, entry: LeagueEntry, flagged: bool, reason: str | None) -> None:
+    unfrozen(db, entry)
     if flagged and not reason:
         raise Refused(422, "reason_required", "Say what looks suspicious.")
     before = {"flagged": entry.flagged}
@@ -256,15 +285,16 @@ def observe(db: Session, admin_id: str, entry: LeagueEntry, views: int, source: 
     """Record what an admin read off the video's public page. Unverified: nobody but a person looked."""
     if entry.status != "approved":
         raise Refused(409, "entry_not_approved", "Views are recorded for approved entries only.")
-    competition = db.get(LeagueCompetition, entry.competition_id)
-    if competition.status == "finalized":
-        raise Refused(409, "competition_final", "This competition's results are final.")
+    competition = unfrozen(db, entry)
     if settled_places(db, competition.id):
         raise Refused(409, "winners_approved", "A winner is already approved: the counts are settled.")
     now = utcnow()
     if observed_at and observed_at > now:
         raise Refused(422, "observed_in_future", "The observation time is in the future.")
     before = latest_views(db, [entry.id]).get(entry.id)
+    if before and observed_at and observed_at < before.observed_at:
+        raise Refused(422, "observed_before_latest",
+                      "This entry has a newer reading. Record what the public page shows now.")
     obs = LeagueViewObservation(entry_id=entry.id, views=views, source=source, verified=False, observed_by=admin_id,
                                 observed_at=observed_at or now)
     db.add(obs)
@@ -326,6 +356,25 @@ def set_prize(db: Session, admin_id: str, entry: LeagueEntry, status: str, note:
            {"prize_status": status}, note)
 
 
+def clips_taken_down(db: Session, clip_ids: list[str], reason: str) -> None:
+    """A trust decision hid these clips: each pending or approved entry of theirs is disqualified by the entry
+    rules, with `reason` (it names the case) and the system as the actor. A result an admin already settled is
+    not rewritten here: an entry in a final competition, or an approved winner, is flagged for an admin instead,
+    and leaves the public lists because its clip is removed."""
+    if not clip_ids:
+        return
+    db.flush()
+    for e in db.execute(select(LeagueEntry).where(LeagueEntry.clip_id.in_(clip_ids),
+                                                  LeagueEntry.status.in_(("pending", "approved")))).scalars():
+        c = db.get(LeagueCompetition, e.competition_id)
+        if c.status == "finalized" or e.final_place is not None:
+            before = {"flagged": e.flagged}
+            e.flagged, e.flag_reason, e.updated_at = True, reason, utcnow()
+            record(db, SYSTEM, "flag", "entry", e.id, c.id, before, {"flagged": True}, reason)
+        else:
+            review(db, SYSTEM, e, "disqualify", reason)
+
+
 # ---- ranking ----
 
 @dataclass(frozen=True)
@@ -336,23 +385,34 @@ class Ranked:
     observed_at: datetime | None
     source: str | None
     verified: bool
+    clip_removed: bool                # kept only for an approved winner, so settled places do not move
 
 
 def latest_views(db: Session, entry_ids: list[str]) -> dict[str, LeagueViewObservation]:
-    """The newest observation of each entry: the last one recorded."""
+    """The newest observation of each entry: the latest `observed_at`, then the last recorded."""
     if not entry_ids:
         return {}
-    newest = (select(func.max(LeagueViewObservation.id)).where(LeagueViewObservation.entry_id.in_(entry_ids))
-              .group_by(LeagueViewObservation.entry_id))
-    rows = db.execute(select(LeagueViewObservation).where(LeagueViewObservation.id.in_(newest))).scalars()
+    rows = db.execute(select(LeagueViewObservation).where(LeagueViewObservation.entry_id.in_(entry_ids))
+                      .order_by(LeagueViewObservation.observed_at, LeagueViewObservation.id)).scalars()
     return {o.entry_id: o for o in rows}
+
+
+def clip_removed(deleted_at: datetime | None, expires_at: datetime) -> bool:
+    """Whether an entry's clip was removed: deleted before its retention ran out (a trust decision, a takedown, its
+    owner). The retention sweep deletes every clip after RETENTION_DAYS, at or after `expires_at`; that is not a
+    removal, since the entry is the published video, not our copy of it."""
+    return deleted_at is not None and deleted_at < expires_at
 
 
 def ranking(db: Session, c: LeagueCompetition) -> list[Ranked]:
     """Approved entries, most views first. Ties: the earlier submission, then the entry id. Entries with no
-    count yet come last, in the same tie order. Every entry gets its own rank: no shared places."""
-    entries = list(db.execute(select(LeagueEntry).where(LeagueEntry.competition_id == c.id,
-                                                        LeagueEntry.status == "approved")).scalars())
+    count yet come last, in the same tie order. Every entry gets its own rank: no shared places. An entry whose
+    clip was removed is left out, unless it holds an approved place (public lists skip it by `clip_removed`)."""
+    rows = db.execute(select(LeagueEntry, Clip.deleted_at, Job.expires_at)
+                      .join(Clip, Clip.id == LeagueEntry.clip_id).join(Job, Job.id == Clip.job_id)
+                      .where(LeagueEntry.competition_id == c.id, LeagueEntry.status == "approved")).all()
+    removed = {e.id for e, deleted_at, expires_at in rows if clip_removed(deleted_at, expires_at)}
+    entries = [e for e, _, _ in rows if e.id not in removed or e.final_place is not None]
     seen = latest_views(db, [e.id for e in entries])
 
     def order(e: LeagueEntry):
@@ -362,7 +422,7 @@ def ranking(db: Session, c: LeagueCompetition) -> list[Ranked]:
     for i, e in enumerate(sorted(entries, key=order), start=1):
         o = seen.get(e.id)
         out.append(Ranked(i, e, o.views if o else None, o.observed_at if o else None, o.source if o else None,
-                          bool(o.verified) if o else False))
+                          bool(o.verified) if o else False, e.id in removed))
     return out
 
 

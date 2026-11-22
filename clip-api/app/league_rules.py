@@ -3,10 +3,11 @@
 DRAFT. This text was not written or reviewed by a lawyer and makes no claim that the competition meets any
 contest, sweepstakes, consumer or tax law. Every section marked `needs_legal_review` holds a placeholder the
 owner's lawyer must replace before a competition with cash prizes is opened (LEAGUE_CASH_PRIZES_APPROVED).
-Change VERSION whenever the text changes: each entry records the version its creator accepted.
+Each version's text is kept in TEXTS: a competition serves the version it was created with (its `rules_version`),
+the one its entrants accept, even after a newer one exists. To change the text, add a new version to TEXTS and
+point VERSION at it; new competitions take VERSION. Never edit a version a competition already uses.
 """
 VERSION = "draft-2026-11-22"
-STATUS = "draft"        # draft | official. Only a reviewed text may say official.
 
 ATTRIBUTION_LINE = "Edited with ClutchClips 🎮"
 
@@ -70,5 +71,15 @@ def attribution(public_web_url: str) -> dict:
     return {"url": url, "text": f"{ATTRIBUTION_LINE}\n{url}"}
 
 
-def document() -> dict:
-    return {"version": VERSION, "status": STATUS, "legally_reviewed": False, "sections": SECTIONS}
+# version: (status, sections). Status is draft or official; only a text a lawyer reviewed may say official.
+TEXTS: dict[str, tuple[str, list[dict]]] = {
+    "draft-2026-11-22": ("draft", SECTIONS),
+}
+
+
+def document(version: str) -> dict | None:
+    """The rules text of one version, or None for a version that never existed."""
+    if version not in TEXTS:
+        return None
+    status, sections = TEXTS[version]
+    return {"version": version, "status": status, "legally_reviewed": status == "official", "sections": sections}

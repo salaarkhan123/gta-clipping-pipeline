@@ -371,6 +371,11 @@ A free monthly competition: creators enter one published clip, admins review ent
 counts by hand, and the top three are approved by an admin. The rules are in `app/league.py`; the rules text shown
 on `/league/` is in `app/league_rules.py`.
 
+- Migration order. The league tables are revisions `0012_league` and `0013_league_hide`, which follow `0011`.
+  The security PR #274 adds its own `0012` (admin MFA), also on `0011`. Whichever merges second must set its
+  first revision's `down_revision` to the other branch's newest revision (`0012_league` is already on main, so
+  #274's `0012` must revise the league's newest revision on main), or Alembic finds two heads and `deploy.sh` stops before the restart. Check with
+  `python scripts/check_migrations.py --versions app/migrations/versions --current <live revision>` before a deploy.
 - Run it from `/dashboard/admin/league/`, signed in as an admin account (`scripts/admin.py make-admin`).
   A new competition is a draft only admins see. "Open to the public" publishes it.
 - Entries wait as pending until an admin approves them. Open each video, check that the description carries the
@@ -380,12 +385,25 @@ on `/league/` is in `app/league_rules.py`.
 - After the end date, "Close entries", approve the winners first place first, then "Make results final".
   Nothing is paid by the system. Send each prize yourself, then use "Mark sent" with the payment reference.
 - Every admin action is in the audit log at the bottom of the admin page (`GET /v1/admin/league/events`).
+- An admin cannot review, flag, count or approve as winner an entry of their own (403 `own_entry`): another admin
+  does it. A final competition takes no more reviews, flags, counts or setting changes.
+- A clip removed before its retention ran out (a trust decision, a takedown, its owner) leaves the public board,
+  featured clips and profile pages; the admin list marks it "Clip removed". A trust `disable` or `remove` also
+  disqualifies the entry, with the case reference as the reason and `system` as the actor. In a final competition,
+  or for an approved winner, the entry is flagged instead and the result is left for an admin to decide. A clip
+  deleted by the normal retention sweep is not removed: its entry stays on the board.
+- "Hide profile" on an entry makes the creator's profile private; the creator cannot make it public again until an
+  admin unhides it. A username a creator gives up is held for them for 30 days.
 - Cash prizes are locked. The public page shows no amounts until `LEAGUE_CASH_PRIZES_APPROVED=true` is set on
   the server and an admin ticks "Show cash prizes" on the competition. Set it only after a lawyer has reviewed
   the official rules: the text in `app/league_rules.py` is a draft with placeholders and claims no compliance.
-  When the rules text changes, change `VERSION` there; each entry records the version its creator accepted.
+  When the rules text changes, add the new version to `TEXTS` there and point `VERSION` at it; never edit a
+  version in use. A competition keeps the version it was created with: its page and entry form show that text,
+  and the admin page says when a newer version exists.
 - Limits: `LEAGUE_SUBMITS_PER_HOUR` (5 per account), `LEAGUE_PROFILE_EDITS_PER_HOUR` (10 per account),
-  `LEAGUE_READS_PER_MINUTE` (120 per address, each public league route).
+  `LEAGUE_READS_PER_MINUTE` (120 per address on the leaderboard, featured and creator routes). `/v1/league/current`
+  and `/v1/league/rules`, read on every homepage visit, have no per-address limit; every public league read is
+  sent with `Cache-Control: public, max-age=30`.
 - The attribution link creators paste is `PUBLIC_WEB_URL`. Check it is the live site's address.
 
 ## Premium AI thumbnails

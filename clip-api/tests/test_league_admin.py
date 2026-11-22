@@ -1,16 +1,19 @@
 """Creators League for admins: only admins reach the admin routes, entries move only by the review rules,
 view counts are appended by admins and drive the ranking, ties break by submission time, winners are provisional
-until approved in order, prizes are recorded and never paid, and every move is in the audit log."""
+until approved in order, prizes are recorded and never paid, a final competition is frozen, a removed clip leaves
+the public lists, no admin acts on their own entry, and every move is in the audit log."""
+import uuid
 from datetime import timedelta
 
 import pytest
 from sqlalchemy import select
 
-from app import deps
+from app import deps, routes_trust, worker
 from app.config import get_settings
 from app.db import new_session
-from app.models import LeagueEntry, LeagueViewObservation, utcnow
-from tests.league_support import approved_entry, competition, creator, enter, make_admin, signup, unique_slug
+from app.models import Clip, Job, LeagueEntry, LeagueViewObservation, utcnow
+from tests.league_support import (approved_entry, competition, creator, enter, make_admin, make_clip, signup,
+                                  unique_slug)
 
 PRIZES = [{"place": 1, "amount_cents": 10000}, {"place": 2, "amount_cents": 5000}, {"place": 3, "amount_cents": 2500}]
 
@@ -72,6 +75,7 @@ ADMIN_ROUTES = [
     ("post", "/v1/admin/league/entries/{entry}/winner", {"place": 1}),
     ("post", "/v1/admin/league/entries/{entry}/prize", {"status": "sent", "note": "paid"}),
     ("get", "/v1/admin/league/events", None),
+    ("post", "/v1/admin/league/creators/{account}/visibility", {"hidden": True, "reason": "x"}),
 ]
 
 
@@ -79,7 +83,7 @@ ADMIN_ROUTES = [
 def test_admin_routes_refuse_everyone_but_a_logged_in_admin(client, admin, cup, method, path, body):
     who = creator(client)
     entry = enter(client, cup, who).json()["id"]
-    url = path.format(cup=cup, entry=entry)
+    url = path.format(cup=cup, entry=entry, account=who["account"]["id"])
     kw = {"json": body} if body is not None else {}
     assert getattr(client, method)(url, **kw).status_code == 401                                   # no login
     assert code(getattr(client, method)(url, headers=who["h"], **kw)) == (403, "admin_required")   # a creator
@@ -94,7 +98,8 @@ def test_admin_routes_refuse_everyone_but_a_logged_in_admin(client, admin, cup, 
 def test_every_admin_league_route_is_in_the_list_above(client):
     paths = {(m.lower(), p) for p, ops in client.get("/openapi.json").json()["paths"].items()
              if p.startswith("/v1/admin/league") for m in ops}
-    listed = {(m, p.replace("{cup}", "{slug}").replace("{entry}", "{entry_id}")) for m, p, _ in ADMIN_ROUTES}
+    listed = {(m, p.replace("{cup}", "{slug}").replace("{entry}", "{entry_id}").replace("{account}", "{account_id}"))
+              for m, p, _ in ADMIN_ROUTES}
     assert paths == listed
 
 
@@ -218,6 +223,19 @@ def test_the_board_ranks_approved_entries_by_their_newest_count(client, admin, c
     assert [e["username"] for e in board(client, cup)][:2] == [b["username"], a["username"]]
 
 
+def test_the_newest_reading_by_its_time_is_the_count_and_a_backdated_one_is_refused(client, admin, cup):
+    a, b = creator(client), creator(client)
+    ea = approved_entry(client, admin, cup, a)
+    approved_entry(client, admin, cup, b, views=500)
+    hour_ago = (utcnow() - timedelta(hours=1)).isoformat() + "Z"
+    assert views(client, admin, ea, 1000, observed_at=hour_ago).status_code == 201
+    two_days_ago = (utcnow() - timedelta(days=2)).isoformat() + "Z"
+    assert code(views(client, admin, ea, 10, observed_at=two_days_ago)) == (422, "observed_before_latest")
+    assert [(e["username"], e["views"]) for e in board(client, cup)] == [(a["username"], 1000), (b["username"], 500)]
+    assert views(client, admin, ea, 400).status_code == 201          # read now: newer than an hour ago, so it counts
+    assert [(e["username"], e["views"]) for e in board(client, cup)] == [(b["username"], 500), (a["username"], 400)]
+
+
 def test_counts_are_labelled_unverified_with_their_source_and_time(client, admin, cup):
     who = creator(client)
     entry = approved_entry(client, admin, cup, who)
@@ -271,6 +289,148 @@ def test_the_page_summary_counts_approved_entries_and_shows_the_top_three(client
     now = client.get("/v1/league/current").json()
     assert now["competition"]["slug"] == cup and now["competition"]["participants"] == 4
     assert [e["username"] for e in now["top"]] == [w["username"] for w in reversed(who[1:])]
+
+
+# ---- removed clips ----
+
+def admin_row(client, admin, cup, entry_id):
+    rows = client.get(f"/v1/admin/league/competitions/{cup}/entries", headers=admin).json()["entries"]
+    return next(e for e in rows if e["id"] == entry_id)
+
+
+def public_lists(client, cup, who):
+    """Where a creator's entry can be seen without a login: board, featured, their profile page, the count."""
+    return {"board": [e["username"] for e in board(client, cup)],
+            "featured": [e["username"] for e in client.get(f"/v1/league/{cup}/featured").json()["clips"]],
+            "profile": [x["competition"]["slug"] for x in client.get(f"/v1/league/creators/{who['username']}").json()["entries"]],
+            "participants": client.get(f"/v1/league/{cup}/leaderboard").json()["competition"]["participants"]}
+
+
+def take_down(client, admin, clip_id, action="disable"):
+    """A copyright report against the clip and an admin's trust decision on it. Returns the case reference."""
+    b = {"kind": "copyright", "name": "Rights Holder", "email": "claim@studio-example.com", "relationship": "owner",
+         "address": "1 Main St", "phone": "+1 555 0100", "work": "My recording", "good_faith": True,
+         "accurate": True, "signature": "Rights Holder", "reported_urls": [f"https://api.clutchclips.io/v1/clips/{clip_id}"]}
+    r = client.post("/v1/trust/reports", json=b)
+    assert r.status_code == 201, r.text
+    ref = r.json()["reference"]
+    r = client.post(f"/v1/admin/trust/cases/{ref}/decisions", json={"action": action}, headers=admin)
+    assert r.status_code == 200, r.text
+    return ref
+
+
+@pytest.fixture
+def quiet_mail(monkeypatch):
+    monkeypatch.setattr(routes_trust, "send_email", lambda *a, **kw: None)
+
+
+def test_a_clip_taken_down_by_a_trust_decision_is_disqualified_and_leaves_every_public_list(client, admin, cup, quiet_mail):
+    gone, stays = creator(client), creator(client)
+    e_gone = approved_entry(client, admin, cup, gone, views=900)
+    approved_entry(client, admin, cup, stays, views=100)
+    assert public_lists(client, cup, gone)["board"] == [gone["username"], stays["username"]]
+    ref = take_down(client, admin, gone["clip"])
+    seen = public_lists(client, cup, gone)
+    assert (seen["board"], seen["featured"], seen["profile"], seen["participants"]) == (
+        [stays["username"]], [stays["username"]], [], 1)
+    row = admin_row(client, admin, cup, e_gone)
+    assert (row["status"], row["clip_removed"]) == ("disqualified", True) and ref in row["status_reason"]
+    log = client.get(f"/v1/admin/league/events?competition={cup}", headers=admin).json()["events"]
+    dq = next(e for e in log if e["action"] == "disqualify" and e["entity_id"] == e_gone)
+    assert (dq["actor_id"], dq["before"], dq["after"]) == ("system", {"status": "approved"}, {"status": "disqualified"})
+    assert ref in dq["reason"]
+    mine = client.get(f"/v1/league/me?competition={cup}", headers=gone["h"]).json()["entry"]
+    assert mine["status"] == "disqualified" and ref in mine["status_reason"]
+
+
+def test_a_takedown_in_a_final_competition_flags_the_winner_for_an_admin(client, admin, podium, quiet_mail):
+    cup, ids, who = podium["cup"], podium["ids"], podium["who"]
+    move(client, admin, cup, "close")
+    for place, entry in enumerate(ids[:3], start=1):
+        winner(client, admin, entry, place)
+    move(client, admin, cup, "finalize")
+    ref = take_down(client, admin, who[0]["clip"])
+    row = admin_row(client, admin, cup, ids[0])
+    assert (row["status"], row["final_place"], row["flagged"], row["clip_removed"]) == ("approved", 1, True, True)
+    assert ref in row["flag_reason"]
+    assert [(e["rank"], e["username"]) for e in board(client, cup)] == [
+        (2, who[1]["username"]), (3, who[2]["username"]), (4, who[3]["username"])]       # places do not move
+    flag = next(e for e in client.get(f"/v1/admin/league/events?competition={cup}", headers=admin).json()["events"]
+                if e["action"] == "flag" and e["entity_id"] == ids[0])
+    assert flag["actor_id"] == "system" and ref in flag["reason"]
+
+
+def test_a_creator_who_removes_their_own_clip_leaves_the_public_lists(client, admin, cup):
+    who = creator(client)
+    who = {**who, "clip": make_clip(who["account"]["id"],          # a link import: the creator can take it down
+                                    source_url=f"https://www.twitch.tv/videos/{uuid.uuid4().int % 10**9}")}
+    entry = approved_entry(client, admin, cup, who, views=50)
+    other = creator(client)
+    approved_entry(client, admin, cup, other, views=10)
+    r = client.post("/v1/imports/takedown", json={"all_imports": True, "consent": True}, headers=who["h"])
+    assert r.status_code == 200, r.text
+    seen = public_lists(client, cup, who)
+    assert (seen["board"], seen["featured"], seen["profile"], seen["participants"]) == (
+        [other["username"]], [other["username"]], [], 1)
+    row = admin_row(client, admin, cup, entry)
+    assert (row["status"], row["clip_removed"], row["rank"]) == ("approved", True, None)
+
+
+def test_a_clip_past_its_retention_keeps_its_entry_on_the_board(client, admin, cup):
+    who = creator(client)
+    entry = approved_entry(client, admin, cup, who, views=50)
+    with new_session() as db:
+        db.get(Job, db.get(Clip, who["clip"]).job_id).expires_at = utcnow() - timedelta(minutes=1)
+        db.commit()
+    assert worker.sweep_expired() >= 1
+    with new_session() as db:
+        assert db.get(Clip, who["clip"]).deleted_at is not None
+    assert [(e["username"], e["thumb_url"]) for e in board(client, cup)] == [(who["username"], None)]
+    assert admin_row(client, admin, cup, entry)["clip_removed"] is False
+
+
+# ---- admins and their own entries ----
+
+def test_an_admin_cannot_review_count_or_crown_their_own_entry(client, cup):
+    me, acct = make_admin(client)
+    assert client.put("/v1/league/me/profile", json={"username": f"a{uuid.uuid4().hex[:10]}"}, headers=me).status_code == 200
+    mine = enter(client, cup, {"h": me, "clip": make_clip(acct["id"])})
+    assert mine.status_code == 201, mine.text
+    entry = mine.json()["id"]
+    assert code(review(client, me, entry, "approve")) == (403, "own_entry")
+    assert code(review(client, me, entry, "flag", "x")) == (403, "own_entry")
+    other = make_admin(client)[0]
+    assert review(client, other, entry, "approve").json()["status"] == "approved"
+    assert code(views(client, me, entry, 10**9)) == (403, "own_entry")
+    assert views(client, other, entry, 10).status_code == 201
+    move(client, other, cup, "close")
+    assert code(winner(client, me, entry, 1)) == (403, "own_entry")
+    assert winner(client, other, entry, 1).json()["final_place"] == 1
+    assert [(e["views"], e["final_place"]) for e in board(client, cup)] == [(10, 1)]
+
+
+# ---- creator profiles ----
+
+def test_an_admin_can_hide_a_profile_and_the_creator_cannot_make_it_public_again(client, admin, cup):
+    who = creator(client)
+    approved_entry(client, admin, cup, who, views=5)
+    hide = lambda body: client.post(f"/v1/admin/league/creators/{who['account']['id']}/visibility",  # noqa: E731
+                                    json=body, headers=admin)
+    assert code(hide({"hidden": True})) == (422, "reason_required")
+    r = hide({"hidden": True, "reason": "Offensive username."})
+    assert r.status_code == 200 and (r.json()["is_public"], r.json()["hidden"]) == (False, True)
+    assert code(client.get(f"/v1/league/creators/{who['username']}")) == (404, "not_found")
+    assert board(client, cup)[0]["has_profile"] is False
+    again = {"username": who["username"], "is_public": True}
+    assert code(client.put("/v1/league/me/profile", json=again, headers=who["h"])) == (403, "profile_hidden")
+    row = client.get(f"/v1/admin/league/competitions/{cup}/entries", headers=admin).json()["entries"][0]
+    assert row["profile_hidden"] is True
+    assert hide({"hidden": False}).json() == {**r.json(), "hidden": False}             # still private
+    assert client.put("/v1/league/me/profile", json=again, headers=who["h"]).json()["is_public"] is True
+    assert client.get(f"/v1/league/creators/{who['username']}").status_code == 200
+    log = client.get("/v1/admin/league/events", headers=admin).json()["events"]
+    assert [e["action"] for e in log if e["entity_kind"] == "profile"][:2] == ["profile_unhide", "profile_hide"]
+    assert next(e for e in log if e["action"] == "profile_hide")["reason"] == "Offensive username."
 
 
 # ---- winners ----
@@ -369,6 +529,11 @@ def test_a_final_competition_takes_no_more_changes(client, admin, podium):
         winner(client, admin, entry, place)
     move(client, admin, cup, "finalize")
     assert code(views(client, admin, ids[3], 5)) == (409, "competition_final")
+    assert code(review(client, admin, ids[3], "disqualify", "Late.")) == (409, "competition_final")
+    assert code(review(client, admin, ids[3], "reject", "Late.")) == (409, "competition_final")
+    assert code(review(client, admin, ids[3], "flag", "Odd.")) == (409, "competition_final")
+    assert code(review(client, admin, ids[0], "unflag")) == (409, "competition_final")
+    assert [e["rank"] for e in board(client, cup)] == [1, 2, 3, 4]
     assert code(client.patch(f"/v1/admin/league/competitions/{cup}", json={"name": "Other"}, headers=admin)) == (409, "competition_final")
     assert code(move(client, admin, cup, "reopen")) == (409, "status_not_allowed")
 
