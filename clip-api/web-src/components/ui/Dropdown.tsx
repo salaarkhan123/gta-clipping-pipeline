@@ -1,7 +1,8 @@
 "use client";
 // The one dropdown: a trigger and the panel it opens (a menu of rows, or any content such as a style picker).
 // Every panel in the app shares this surface (grey, radius, shadow, padding) and this behaviour: Escape or a press
-// outside closes it and focus returns to the trigger; arrow keys, Home and End move between its `data-item`s.
+// outside closes it; closing from inside the panel returns focus to the trigger, and tabbing out closes it; arrow
+// keys, Home and End move between its `data-item`s.
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -28,7 +29,26 @@ export function Dropdown({ trigger, children, label, kind = "menu", align = "sta
   const [open, setOpen] = useState(false);
   const [at, setAt] = useState<{ left: number; top: number; max: number } | null>(null);
   const wrap = useRef<HTMLSpanElement>(null), panel = useRef<HTMLDivElement>(null), button = useRef<HTMLButtonElement>(null);
-  const close = useCallback(() => setOpen(false), []);
+  // Closing from inside the panel (an item chosen, Escape) gives focus back to the trigger instead of the page.
+  const close = useCallback(() => {
+    const now = document.activeElement;
+    if (!now || now === document.body || panel.current?.contains(now)) button.current?.focus({ preventScroll: true });
+    setOpen(false);
+  }, []);
+  // The panel sits at the end of the page (a portal), so Tab past its last control (Shift+Tab before its first)
+  // closes it and goes on from the trigger, to the trigger's own neighbour, as if the panel were inline.
+  const tabOut = (e: React.KeyboardEvent) => {
+    const all = Array.from(panel.current?.querySelectorAll<HTMLElement>("a[href], button:not(:disabled), input:not(:disabled), select, textarea, [tabindex]:not([tabindex='-1'])") || []);
+    if (e.target !== (e.shiftKey ? all[0] : all[all.length - 1])) return;
+    button.current?.focus({ preventScroll: true });
+    setOpen(false);
+  };
+  // Focus moving to another element outside the panel closes it too. A blur with no new target (a press on plain
+  // content, the window losing focus) leaves it open.
+  const leave = (e: React.FocusEvent) => {
+    const to = e.relatedTarget as Node | null;
+    if (to && !panel.current?.contains(to) && !wrap.current?.contains(to)) setOpen(false);
+  };
   const items = () => Array.from(panel.current?.querySelectorAll<HTMLElement>("[data-item]:not(:disabled):not([aria-disabled=true])") || []);
 
   const place = useCallback(() => {
@@ -67,6 +87,7 @@ export function Dropdown({ trigger, children, label, kind = "menu", align = "sta
   }, [placed]);
 
   function onKey(e: React.KeyboardEvent) {
+    if (e.key === "Tab") return tabOut(e);
     const move = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
     if (move === undefined && e.key !== "Home" && e.key !== "End") return;
     if ((e.target as HTMLElement).matches("input, textarea, select")) return;
@@ -82,7 +103,7 @@ export function Dropdown({ trigger, children, label, kind = "menu", align = "sta
     <span ref={wrap} className={`inline-flex ${className}`}>
       {trigger({ ref: button, onClick: () => setOpen((o) => !o), "aria-expanded": open, "aria-haspopup": kind }, open)}
       {open && createPortal(
-        <div ref={panel} role={kind} aria-label={label} onKeyDown={onKey}
+        <div ref={panel} role={kind} aria-label={label} onKeyDown={onKey} onBlur={leave}
           style={at ? { left: at.left, top: at.top, maxHeight: at.max } : { left: 0, top: 0, visibility: "hidden" }}
           className={`fixed max-w-[calc(100vw-24px)] overflow-y-auto overscroll-contain ${PANEL} ${panelClass}`}>
           {typeof children === "function" ? children(close) : children}
