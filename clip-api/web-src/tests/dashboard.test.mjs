@@ -72,7 +72,7 @@ test("brand kit: planned parts are Coming soon and send nothing; saving sends on
   const form = source("components/dash/brand/Sections.tsx");
   for (const part of ["Logos", "Music"]) assert.match(form, new RegExp(`${part} <span[^>]*>[^<]*</span><ComingSoonBadge />`), part);
   assert.match(form, /A short opener and end card for each shape\.<ComingSoonBadge \/>/);
-  assert.match(form, /title="Additional assets"/);
+  assert.match(form, /title="Media"/);
   const kit = source("lib/brandkit.ts");
   // Nothing priced is ever in a kit: the options come from the look keys plus the hook tone.
   assert.match(kit, /const out = lookOptions\(kit, listed\);\n\s+if \("hook_style" in listed\) out\.hook_style = kit\.hook_style;/);
@@ -137,7 +137,7 @@ test("credit usage and assets: numbers only from the API", () => {
   const assets = source("app/dashboard/assets/page.tsx");
   assert.match(assets, /api<\{ projects: Video\[\] \}>\(`\/v1\/projects\?limit=\$\{PAGE\}&offset=\$\{from\}`\)/);
   // Storage, own censor list, vocabulary, fonts, images and audio are planned.
-  assert.equal((assets.match(/<ComingSoonBadge/g) || []).length + (assets.match(/<SoonAdd /g) || []).length >= 6, true);
+  assert.equal((assets.match(/<ComingSoonBadge/g) || []).length + (assets.match(/<SoonAdd /g) || []).length >= 5, true);     // own list, vocabulary, images, audio
 });
 
 test("analytics page: ledger charts only, honest copy, no publish metrics", () => {

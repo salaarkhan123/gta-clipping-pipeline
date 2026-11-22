@@ -25,7 +25,7 @@ export function KitPicker({ kits, current, draftName, defaultId, onPick, onNew, 
   return (
     <div ref={box} className="relative min-w-0">
       <button ref={btn} type="button" aria-expanded={open} aria-label={`Brand kit: ${name}`} onClick={() => setOpen(!open)}
-        className="flex h-[38px] w-[178px] max-w-full cursor-pointer items-center justify-between gap-2 rounded-pill border-0 bg-control px-4 font-sans text-[14px] font-medium text-text transition-colors duration-base hover:bg-control-hover narrow:w-full">
+        className="flex h-[38px] w-[200px] max-w-full cursor-pointer items-center justify-between gap-2 rounded-pill border-0 bg-control pl-5 pr-4 font-sans text-[15px] font-medium text-text transition-colors duration-base hover:bg-control-hover">
         <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
           {name}
           {!current && <span className="font-normal text-muted"> (not saved)</span>}
@@ -52,7 +52,7 @@ export function KitPicker({ kits, current, draftName, defaultId, onPick, onNew, 
 
 export function UndoRedo({ canUndo, canRedo, onUndo, onRedo }: { canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void }) {
   return (
-    <div className="flex items-center">
+    <div className="flex items-center gap-[10px]">
       <button type="button" className={ICON_BTN} aria-label="Undo" title="Undo (Ctrl/Cmd+Z)" disabled={!canUndo} onClick={onUndo}><Icon name="undo" size={19} /></button>
       <button type="button" className={ICON_BTN} aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)" disabled={!canRedo} onClick={onRedo}><Icon name="redo" size={19} /></button>
     </div>

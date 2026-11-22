@@ -42,7 +42,7 @@ export function ProjectCard({ p, onDeleted }: { p: any; onDeleted?: (uploadId: s
       </Link>
       <div className="mt-[10px] flex min-w-0 items-center gap-2">
         <Link href={href} title={p.filename} tabIndex={-1} className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-sans text-[15px] font-medium leading-[24px] text-text no-underline">{p.filename}</Link>
-        <Dropdown label={`Actions for ${p.filename}`} align="end" panelClass="w-[190px]"
+        <Dropdown label={`Actions for ${p.filename}`} align="end" panelClass="w-[190px] rounded-[16px] p-2"
           trigger={(t) => <button {...t} type="button" aria-label={`Actions for ${p.filename}`} title="More"
             className="grid h-6 w-7 flex-none cursor-pointer place-items-center rounded-8 border-0 bg-transparent text-fg-2 transition-colors duration-base hover:bg-control hover:text-text aria-expanded:bg-control"><Icon name="dots" size={18} /></button>}>
           {(close) => <>

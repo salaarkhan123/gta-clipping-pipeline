@@ -6,6 +6,7 @@ import { Icon, IconName } from "../Icon";
 import { Pills } from "@/components/ui/Pill";
 import { PhonePreview } from "@/components/ui/PhonePreview";
 import { mediaUrl, useMedia } from "@/lib/media";
+import { kitPreviewId } from "./Pickers";
 import { CAPTION, HOOK_LINES } from "../setup/Styles";
 import { useDismiss } from "../shell/useDismiss";
 import type { Kit } from "@/lib/brandkit";
@@ -17,32 +18,22 @@ type Show = { captions: boolean; hook: boolean; social: boolean; safe: boolean }
 const SHOW_NAMES: [keyof Show, string][] = [["captions", "Captions"], ["hook", "Hook"], ["social", "App buttons"], ["safe", "Safe zones"]];
 // Overlay text is sized to the frame's width, scaled per shape so a wide frame doesn't get giant captions.
 const UNIT: Record<Shape, number> = { "9:16": 1, "4:5": 0.8, "1:1": 0.72, "16:9": 0.56 };
+// The frame's width for each shape: 303 px upright beside the cards (335 px under them), wider as the shape widens.
+const PREVIEW_WIDTH: Record<Shape, string> = { "9:16": "w-[303px] wide:w-[335px]", "4:5": "w-[340px]", "1:1": "w-[340px]", "16:9": "w-full max-w-[420px] wide:w-[420px]" };
 const ratio = (s: string) => { const [w, h] = s.split(":").map(Number); return w > 0 && h > 0 ? w / h : 9 / 16; };
 
-// The footage behind the preview: the approved reframe clips (public/media/reframe, one render per layout of the
-// same moment). The layout picks the clip; a shape other than the clip's own shows its middle.
-const CLIP_OF: Record<string, string> = { full: "full", fill: "full", pip: "pip", screen_first: "screen_first", split2: "split2", auto: "split2" };
-function clipFor(kit: Kit, shape: string): string {
-  if (shape === "16:9" || kit.layout === "fit" || kit.layout === "classic") return "original";
-  if (hasPanels(kit.layout) && kit.camera) return kit.camera === "top" ? "split2" : "screen_first";
-  return CLIP_OF[kit.layout] || "full";
-}
-
+// The footage behind the preview: the engine's own render of the kit's layout at the shape being looked at
+// (public/media/kit-preview, made by scripts/make_kit_previews.py with captions and the hook off, which this
+// preview draws on top). A layout the API does not offer at a shape falls back to that shape's automatic layout.
 function Panels({ kit, shape, onCredit }: { kit: Kit; shape: string; onCredit?: (credit: string | null) => void }) {
-  const items = useMedia("reframe")?.items || [];
-  const id = clipFor(kit, shape), item = items.find((i) => i.id === id) || null;
+  const items = useMedia("kit-preview")?.items || [];
+  const item = items.find((i) => i.id === kitPreviewId(shape, kit.layout, kit.camera)) || items.find((i) => i.id === kitPreviewId(shape, "auto")) || null;
   useEffect(() => { onCredit?.(item?.credit || null); }, [item?.credit]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (!item) return <span className="absolute inset-0 grid place-items-center bg-control text-[13px] text-fg-3">Preview clip unavailable</span>;
-  // A wide clip in an upright frame sits whole in the middle (fit); "classic" fills the sides with its own blur.
-  const letterbox = id === "original" && shape !== "16:9";
-  const video = (cls: string) => (
-    <video key={`${id}${cls}`} muted loop autoPlay playsInline preload="metadata" poster={item.poster ? mediaUrl("reframe", item.poster) : undefined} aria-hidden="true" className={cls}>
-      {item.webm && <source src={mediaUrl("reframe", item.webm)} type="video/webm" />}
-      <source src={mediaUrl("reframe", item.src)} type="video/mp4" /></video>);
   return (
     <span className="absolute inset-0 overflow-hidden bg-black">
-      {letterbox && kit.layout === "classic" && video("absolute inset-0 h-full w-full scale-125 object-cover opacity-70 blur-[14px]")}
-      {video(letterbox ? "absolute inset-x-0 top-1/2 w-full -translate-y-1/2" : "absolute inset-0 h-full w-full object-cover")}
+      <video key={item.id} muted loop autoPlay playsInline preload="metadata" poster={item.poster ? mediaUrl("kit-preview", item.poster) : undefined} aria-hidden="true"
+        className="absolute inset-0 h-full w-full object-cover"><source src={mediaUrl("kit-preview", item.src)} type="video/mp4" /></video>
     </span>
   );
 }
@@ -91,7 +82,7 @@ function ShowMenu({ show, onChange }: { show: Show; onChange: (s: Show) => void 
         {SHOW_NAMES.map(([k, name]) => (
           <label key={k} className="m-0 flex min-h-[36px] cursor-pointer items-center gap-3 rounded-8 px-1 text-[14px] font-normal text-text">
             <input type="checkbox" checked={show[k]} onChange={(e) => onChange({ ...show, [k]: e.target.checked })} />{name}
-            {k === "social" && <span className="ml-auto text-[12px] text-fg-3">Upright shapes</span>}</label>))}
+            {k === "social" && <span className="ml-auto text-[12px] text-fg-3">Not on 16:9</span>}</label>))}
       </fieldset>}
     </div>
   );
@@ -100,31 +91,31 @@ function ShowMenu({ show, onChange }: { show: Show; onChange: (s: Show) => void 
 export function KitPreview({ kit, shape, onShape }: { kit: Kit; shape: Shape; onShape: (s: Shape) => void }) {
   const [show, setShow] = useState<Show>({ captions: true, hook: true, social: true, safe: false });
   const [credit, setCredit] = useState<string | null>(null);
-  const r = ratio(shape), vertical = r < 1;
+  const r = ratio(shape), vertical = r < 1, wide = shape === "16:9";
   const split = shape !== "16:9" && (hasPanels(kit.layout) || kit.layout === "auto");
   const top = kit.camera || (kit.layout === "screen_first" ? "bottom" : "top"), seam = split ? (kit.split_ratio ?? (top === "top" ? 0.38 : 0.6)) * 100 : null;
   const hookLine = HOOK_LINES[kit.hook_style] || tidy(kit.hook_style);
 
   // Measured from the reference: ratio pills 75 x 32 with 8 px between, the frame 303 px wide 22 px below them.
   return (
-    <div className="grid justify-items-start gap-[22px] mid:justify-items-center">
-      <div className="-ml-5 flex items-center gap-3 mid:ml-0">
+    <div className="grid justify-items-center gap-[22px]">
+      <div className="flex items-center gap-3">
         <Pills label="Preview shape" value={shape} onChange={onShape} options={SHAPES.map((s) => ({ value: s, label: s }))} />
         <span title={`Preview only. Clips made with this kit are cut to ${kit.aspect}.`} className="grid h-8 w-6 place-items-center text-fg-2"><Icon name="info" size={17} />
           <span className="sr-only">Preview only. Clips made with this kit are cut to {kit.aspect}.</span></span>
       </div>
-      <div id="kit-preview" className={`[container-type:inline-size] ${vertical ? (shape === "9:16" ? "w-[303px]" : "w-[340px]") : "w-full max-w-[420px]"} max-w-full`}
+      <div id="kit-preview" className={`[container-type:inline-size] ${PREVIEW_WIDTH[shape]} max-w-full`}
         style={{ "--u": `${UNIT[shape]}cqw` } as React.CSSProperties}>
         <PhonePreview ratio={shape} label={`Preview at ${shape}`}>
           <Panels kit={kit} shape={shape} onCredit={setCredit} />
-          {show.hook && kit.hook_overlay && <span className="absolute inset-x-[10%] top-[9%] grid place-items-center">
+          {show.hook && kit.hook_overlay && <span className={`absolute grid place-items-center ${wide ? "inset-x-[24%] top-[8%]" : shape === "9:16" ? "inset-x-[10%] top-[9%]" : "inset-x-[14%] top-[7%]"}`}>
             <span className="rounded-[calc(1.6*var(--u))] bg-white px-[calc(3*var(--u))] py-[calc(1.4*var(--u))] text-center font-sans text-[calc(4.6*var(--u))] font-bold leading-[1.15] text-black shadow-[0_2px_8px_rgba(0,0,0,.35)]">{hookLine}</span></span>}
           {show.captions && kit.captions && <Caption kit={kit} seam={seam} />}
-          {show.social && vertical && <Social />}
+          {show.social && !wide && <Social />}
           {show.safe && <span aria-hidden="true" className="absolute bottom-[18%] left-[5%] right-[16%] top-[10%] rounded-[calc(2*var(--u))] border-[1.5px] border-dashed border-[rgba(60,240,255,.9)]" />}
         </PhonePreview>
       </div>
-      <div className="grid justify-items-start gap-2 mid:justify-items-center">
+      <div className="grid justify-items-center gap-2">
         <ShowMenu show={show} onChange={setShow} />
         {credit && <p className="m-0 text-[11.5px] text-fg-3">{credit}</p>}
       </div>

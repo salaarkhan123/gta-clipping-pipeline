@@ -46,7 +46,7 @@ test("HookTones and brand kit / job setup pass catalogue; Editor uses labels", (
   assert.match(styles, /hookToneLabel\(s, entries\)/);
   assert.match(styles, /title=\{tip\}/);
   assert.match(styles, /hookCatalogueOf\(catalogue\)/);
-  assert.match(source("components/dash/brand/Sections.tsx"), /catalogue=\{listed\.hook_style\.catalogue\}/);
+  assert.match(source("components/dash/brand/Pickers.tsx"), /hookCatalogueOf\(listed\.hook_style\?\.catalogue\)/);
   assert.match(source("components/dash/setup/JobSetup.tsx"), /catalogue=\{listed\.hook_style\.catalogue\}/);
   assert.match(source("components/dash/Editor.tsx"), /hookToneLabel\(v, hookCatalogueOf\(listed\.hook_style\.catalogue\)\)/);
 });
@@ -56,5 +56,5 @@ test("brand kit Logos/Music/Intro stay Coming soon; assets images/audio stay Soo
   for (const part of ["Logos", "Music"]) assert.match(form, new RegExp(`${part} <span[^>]*>[^<]*</span><ComingSoonBadge />`), part);
   assert.match(form, /A short opener and end card for each shape\.<ComingSoonBadge \/>/);
   const assets = source("app/dashboard/assets/page.tsx");
-  assert.equal((assets.match(/<ComingSoonBadge/g) || []).length + (assets.match(/<SoonAdd /g) || []).length >= 6, true);
+  assert.equal((assets.match(/<ComingSoonBadge/g) || []).length + (assets.match(/<SoonAdd /g) || []).length >= 5, true);     // own list, vocabulary, images, audio
 });

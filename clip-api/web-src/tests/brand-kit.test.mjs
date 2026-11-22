@@ -5,13 +5,13 @@ import { test } from "node:test";
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("brand kit page: settings left, live preview right", () => {
+test("brand kit page: settings in a 640 px column, the live preview beside it (under it on a narrow window)", () => {
   const page = source("app/dashboard/brand-kit/page.tsx");
-  assert.match(page, /grid-cols-\[minmax\(0,640px\)_minmax\(303px,1fr\)\]/);     // the measured 640 px settings column
+  assert.match(page, /grid-cols-\[minmax\(0,640px\)_minmax\(340px,1fr\)\]/);     // the measured 640 px settings column
+  assert.match(page, /wide:grid-cols-\[minmax\(0,720px\)\]/);
   assert.match(page, /<KitForm /);
   assert.match(page, /aria-label="Preview"/);
-  assert.match(page, /mid:order-2/);
-  assert.match(page, /mid:order-1/);
+  assert.ok(page.indexOf("<KitForm ") < page.indexOf('aria-label="Preview"'));    // the preview comes after the cards
 });
 
 test("brand kit actions: save, save as, rename, duplicate, delete, set default", () => {
@@ -30,17 +30,22 @@ test("brand kit actions: save, save as, rename, duplicate, delete, set default",
   assert.match(page, /updateKit\(/);
 });
 
-test("brand kit sections: Basic, Caption styles, Layout, Additional assets collapsed", () => {
-  const form = source("components/dash/brand/Sections.tsx");
-  assert.match(form, /title="Basic"/);
-  assert.match(form, /title="Caption styles"/);
-  assert.match(form, /<More>/);                                    // the finer caption options are closed until asked for
-  assert.match(form, /title="Layout"/);
-  assert.match(form, /title="Additional assets"/);
-  assert.match(form, /defaultOpen=\{false\}/);
-  assert.match(form, /Kit name/);
+test("brand kit sections: compact rows whose choices open in pickers", () => {
+  const form = source("components/dash/brand/Sections.tsx"), pickers = source("components/dash/brand/Pickers.tsx");
+  for (const title of ["Basic", "Styles", "Layout", "Editing", "Intro & outro", "Media"]) assert.match(form, new RegExp(`title="${title}"`), title);
+  assert.match(form, /<CaptionRow /);
+  assert.match(form, /<HookRow /);
+  assert.match(form, /<LayoutRows /);
+  assert.match(form, /<More>/);
   assert.match(form, /Brand colour/);
-  assert.match(form, /layoutChoices\(listed, kit\.aspect, kit\.layout\)/);
+  assert.doesNotMatch(form, /CaptionStyles|HookTones/);                // no always-open strips of tiles
+  assert.match(pickers, /layoutChoices\(listed, a, used \? kit\.layout : "auto"\)/);
+  assert.match(pickers, /<Dropdown label=\{`\$\{title\} style`\} kind="dialog"/);
+  assert.match(pickers, />Reset<\/button>/);
+  assert.match(pickers, />Save as new<\/button>/);
+  // Layout pictures and the preview are the engine's own renders, listed by the kit-preview manifest.
+  assert.match(pickers, /useMedia\("kit-preview"\)/);
+  assert.match(source("components/dash/brand/KitPreview.tsx"), /kitPreviewId\(shape, kit\.layout, kit\.camera\)/);
 });
 
 test("brand kit: Coming soon assets never enter kitOptions", () => {

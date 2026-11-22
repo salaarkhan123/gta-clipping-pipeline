@@ -16,8 +16,8 @@ export function SectionCard({ label, hint, defaultOpen = true, children, classNa
         {label}
         <Icon name="chevron" size={18} className={`transition-transform duration-base ease-out ${open ? "rotate-180" : ""}`} />
       </button>
-      <div id={body} hidden={!open} className="grid gap-6 px-8 pb-8 narrow:px-5 narrow:pb-6">
-        {hint && <p className="m-0 -mt-1 text-[14px] leading-[1.45] text-fg-2">{hint}</p>}
+      <div id={body} hidden={!open} className="grid gap-5 px-8 pb-6 narrow:px-5">
+        {hint && <p className="m-0 -mt-3 text-[14px] leading-[20px] text-fg-2">{hint}</p>}
         {children}
       </div>
     </section>

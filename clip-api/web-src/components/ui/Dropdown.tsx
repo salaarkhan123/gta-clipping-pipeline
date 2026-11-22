@@ -3,33 +3,56 @@
 // Every panel in the app shares this surface (grey, radius, shadow, padding) and this behaviour: Escape or a press
 // outside closes it and focus returns to the trigger; arrow keys, Home and End move between its `data-item`s.
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon, IconName } from "@/components/dash/Icon";
 
-export const PANEL = "z-[70] rounded-[16px] bg-control p-2 shadow-pop";
-const ALIGN = { start: "left-0", end: "right-0", center: "left-1/2 -translate-x-1/2" };
-const SIDE = { bottom: "top-[calc(100%+8px)]", top: "bottom-[calc(100%+8px)]" };
+// The surface every panel shares. Its corner and padding are the `panelClass` default, so a larger picker can set its own.
+export const PANEL = "z-[95] bg-control shadow-pop";
+const GAP = 8, EDGE = 12;
 
 export type TriggerProps = {
   ref: React.RefObject<HTMLButtonElement | null>; onClick: () => void; "aria-expanded": boolean; "aria-haspopup": "menu" | "dialog";
 };
 
-// `anchor="parent"`: the panel is placed against the nearest positioned ancestor instead of the trigger (a wide
-// picker that lines up with its card). `panelClass` then carries the position.
-export function Dropdown({ trigger, children, label, kind = "menu", align = "start", side = "bottom", anchor = "trigger", panelClass = "", className = "" }: {
+// The panel is drawn over the page (a portal into the app's theme root, fixed to the window), so no card can clip
+// it. It opens under its anchor, or over it when there is more room there, never leaves the window, and scrolls
+// inside when it is taller than the room it has.
+// `anchor`: the element the panel lines up with (default: the trigger). `dx`: a nudge sideways from that edge.
+export function Dropdown({ trigger, children, label, kind = "menu", align = "start", side = "bottom", anchor, dx = 0, panelClass = "rounded-[16px] p-2", className = "" }: {
   trigger: (props: TriggerProps, open: boolean) => React.ReactNode;
   children: React.ReactNode | ((close: () => void) => React.ReactNode);
-  label: string; kind?: "menu" | "dialog"; align?: keyof typeof ALIGN; side?: keyof typeof SIDE; anchor?: "trigger" | "parent";
-  panelClass?: string; className?: string;
+  label: string; kind?: "menu" | "dialog"; align?: "start" | "end" | "center"; side?: "bottom" | "top";
+  anchor?: React.RefObject<HTMLElement | null>; dx?: number; panelClass?: string; className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [at, setAt] = useState<{ left: number; top: number; max: number } | null>(null);
   const wrap = useRef<HTMLSpanElement>(null), panel = useRef<HTMLDivElement>(null), button = useRef<HTMLButtonElement>(null);
   const close = useCallback(() => setOpen(false), []);
   const items = () => Array.from(panel.current?.querySelectorAll<HTMLElement>("[data-item]:not(:disabled):not([aria-disabled=true])") || []);
 
+  const place = useCallback(() => {
+    const el = panel.current, to = (anchor?.current || button.current)?.getBoundingClientRect();
+    if (!el || !to) return;
+    const width = el.offsetWidth, height = el.scrollHeight, vw = window.innerWidth, vh = window.innerHeight;
+    const want = align === "start" ? to.left + dx : align === "end" ? to.right - width + dx : to.left + to.width / 2 - width / 2;
+    const below = vh - to.bottom - GAP - EDGE, above = to.top - GAP - EDGE;
+    const up = side === "top" ? above >= Math.min(height, below) : below < Math.min(height, 260) && above > below;
+    const max = Math.max(160, up ? above : below);
+    setAt({ left: Math.max(EDGE, Math.min(want, vw - width - EDGE)), top: up ? Math.max(EDGE, to.top - GAP - Math.min(height, max)) : to.bottom + GAP, max });
+  }, [align, side, anchor, dx]);
+
+  useLayoutEffect(() => {
+    if (!open) { setAt(null); return; }
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
+  }, [open, place]);
+
   useEffect(() => {
     if (!open) return;
-    const away = (e: Event) => { if (!wrap.current?.contains(e.target as Node)) close(); };
+    const away = (e: Event) => { const t = e.target as Node; if (!wrap.current?.contains(t) && !panel.current?.contains(t)) close(); };
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); button.current?.focus(); } };
     document.addEventListener("pointerdown", away);
     document.addEventListener("keydown", key);
@@ -45,18 +68,20 @@ export function Dropdown({ trigger, children, label, kind = "menu", align = "sta
     const list = items();
     if (!list.length) return;
     e.preventDefault();
-    const at = list.indexOf(document.activeElement as HTMLElement);
-    const next = e.key === "Home" ? 0 : e.key === "End" ? list.length - 1 : (at + move! + list.length) % list.length;
+    const now = list.indexOf(document.activeElement as HTMLElement);
+    const next = e.key === "Home" ? 0 : e.key === "End" ? list.length - 1 : (now + move! + list.length) % list.length;
     list[next].focus();
   }
 
   return (
-    <span ref={wrap} className={`${anchor === "trigger" ? "relative" : ""} inline-flex ${className}`}>
+    <span ref={wrap} className={`inline-flex ${className}`}>
       {trigger({ ref: button, onClick: () => setOpen((o) => !o), "aria-expanded": open, "aria-haspopup": kind }, open)}
-      {open && <div ref={panel} role={kind} aria-label={label} onKeyDown={onKey}
-        className={`absolute ${PANEL} ${anchor === "trigger" ? `${ALIGN[align]} ${SIDE[side]}` : ""} ${panelClass}`}>
-        {typeof children === "function" ? children(close) : children}
-      </div>}
+      {open && createPortal(
+        <div ref={panel} role={kind} aria-label={label} onKeyDown={onKey}
+          style={at ? { left: at.left, top: at.top, maxHeight: at.max } : { left: 0, top: 0, visibility: "hidden" }}
+          className={`fixed max-w-[calc(100vw-24px)] overflow-y-auto overscroll-contain ${PANEL} ${panelClass}`}>
+          {typeof children === "function" ? children(close) : children}
+        </div>, document.querySelector<HTMLElement>("[data-theme]") || document.body)}
     </span>
   );
 }

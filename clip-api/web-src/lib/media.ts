@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 export type MediaSection = "hero-long-video" | "hero-vertical-clips" | "captions" | "reframe" | "hook" | "editor" | "clip-finding" | "templates" | "brand"
   | "setup"                  // job-setup screen stills (app screens)
+  | "kit-preview"            // brand kit: one real render per shape and layout (scripts/make_kit_previews.py)
   | "hero-clean";            // the hero row: one clean gameplay cut per platform shape (scripts/make-hero-clean.py)
 
 export type MediaItem = {

@@ -1,0 +1,898 @@
+{
+ "section": "kit-preview",
+ "version": 1,
+ "permission": "owner-confirmed 2026-11-18",
+ "credits": [
+  {
+   "creator": "FP Good Game",
+   "url": "https://www.youtube.com/watch?v=GURcXM3OcPE"
+  },
+  {
+   "creator": "NICKMERCS",
+   "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
+  },
+  {
+   "creator": "Ninja",
+   "url": "https://www.youtube.com/watch?v=ogbIEh-4rYw"
+  },
+  {
+   "creator": "TGG",
+   "url": "https://www.youtube.com/watch?v=1GtrjKhSwzM"
+  },
+  {
+   "creator": "TmarTn2",
+   "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
+  },
+  {
+   "creator": "iiTzTimmy",
+   "url": "https://www.youtube.com/watch?v=ovyMOe_017I"
+  },
+  {
+   "creator": "xQc",
+   "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU"
+  }
+ ],
+ "items": [
+  {
+   "id": "9x16-auto",
+   "label": "auto at 9:16",
+   "kind": "video",
+   "src": "9x16-auto.mp4",
+   "poster": "9x16-auto.jpg",
+   "width": 360,
+   "height": 640,
+   "duration_sec": 5.0,
+   "aspect": "9:16",
+   "layout": "auto",
+   "camera": null,
+   "game": "Forza Horizon 5",
+   "credit": "Footage: TmarTn2",
+   "source": {
+    "id": "forza-m2",
+    "creator": "TmarTn2",
+    "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "9x16-full",
+   "label": "full at 9:16",
+   "kind": "video",
+   "src": "9x16-full.mp4",
+   "poster": "9x16-full.jpg",
+   "width": 360,
+   "height": 640,
+   "duration_sec": 5.0,
+   "aspect": "9:16",
+   "layout": "full",
+   "camera": null,
+   "game": "GTA VI",
+   "credit": "Footage: xQc",
+   "source": {
+    "id": "xqc-m1",
+    "creator": "xQc",
+    "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "9x16-fit",
+   "label": "fit at 9:16",
+   "kind": "video",
+   "src": "9x16-fit.mp4",
+   "poster": "9x16-fit.jpg",
+   "width": 360,
+   "height": 640,
+   "duration_sec": 5.0,
+   "aspect": "9:16",
+   "layout": "fit",
+   "camera": null,
+   "game": "Valorant",
+   "credit": "Footage: iiTzTimmy",
+   "source": {
+    "id": "timmy-m1",
+    "creator": "iiTzTimmy",
+    "url": "https://www.youtube.com/watch?v=ovyMOe_017I"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "9x16-split2-bottom",
+   "label": "split2 at 9:16",
+   "kind": "video",
+   "src": "9x16-split2-bottom.mp4",
+   "poster": "9x16-split2-bottom.jpg",
+   "width": 360,
+   "height": 640,
+   "duration_sec": 5.0,
+   "aspect": "9:16",
+   "layout": "split2",
+   "camera": "bottom",
+   "game": "Call of Duty: Warzone",
+   "credit": "Footage: NICKMERCS",
+   "source": {
+    "id": "cod-nick-m1",
+    "creator": "NICKMERCS",
+    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "9x16-split2-top",
+   "label": "split2 at 9:16",
+   "kind": "video",
+   "src": "9x16-split2-top.mp4",
+   "poster": "9x16-split2-top.jpg",
+   "width": 360,
+   "height": 640,
+   "duration_sec": 5.0,
+   "aspect": "9:16",
+   "layout": "split2",
+   "camera": "top",
+   "game": "Call of Duty: Warzone",
+   "credit": "Footage: NICKMERCS",
+   "source": {
+    "id": "cod-nick-m1",
+    "creator": "NICKMERCS",
+    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "9x16-pip",
+   "label": "pip at 9:16",
+   "kind": "video",
+   "src": "9x16-pip.mp4",
+   "poster": "9x16-pip.jpg",
+   "width": 360,
+   "height": 640,
+   "duration_sec": 5.0,
+   "aspect": "9:16",
+   "layout": "pip",
+   "camera": null,
+   "game": "Fortnite",
+   "credit": "Footage: Ninja",
+   "source": {
+    "id": "ninja-m1",
+    "creator": "Ninja",
+    "url": "https://www.youtube.com/watch?v=ogbIEh-4rYw"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "9x16-screen_first-bottom",
+   "label": "screen_first at 9:16",
+   "kind": "video",
+   "src": "9x16-screen_first-bottom.mp4",
+   "poster": "9x16-screen_first-bottom.jpg",
+   "width": 360,
+   "height": 640,
+   "duration_sec": 5.0,
+   "aspect": "9:16",
+   "layout": "screen_first",
+   "camera": "bottom",
+   "game": "GTA VI",
+   "credit": "Footage: TGG",
+   "source": {
+    "id": "tgg2-m3",
+    "creator": "TGG",
+    "url": "https://www.youtube.com/watch?v=1GtrjKhSwzM"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "9x16-screen_first-top",
+   "label": "screen_first at 9:16",
+   "kind": "video",
+   "src": "9x16-screen_first-top.mp4",
+   "poster": "9x16-screen_first-top.jpg",
+   "width": 360,
+   "height": 640,
+   "duration_sec": 5.0,
+   "aspect": "9:16",
+   "layout": "screen_first",
+   "camera": "top",
+   "game": "GTA VI",
+   "credit": "Footage: TGG",
+   "source": {
+    "id": "tgg2-m3",
+    "creator": "TGG",
+    "url": "https://www.youtube.com/watch?v=1GtrjKhSwzM"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "9x16-gameplay_a-bottom",
+   "label": "gameplay_a at 9:16",
+   "kind": "video",
+   "src": "9x16-gameplay_a-bottom.mp4",
+   "poster": "9x16-gameplay_a-bottom.jpg",
+   "width": 360,
+   "height": 640,
+   "duration_sec": 5.0,
+   "aspect": "9:16",
+   "layout": "gameplay_a",
+   "camera": "bottom",
+   "game": "Forza Horizon 5",
+   "credit": "Footage: TmarTn2",
+   "source": {
+    "id": "forza-m2",
+    "creator": "TmarTn2",
+    "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "9x16-gameplay_a-top",
+   "label": "gameplay_a at 9:16",
+   "kind": "video",
+   "src": "9x16-gameplay_a-top.mp4",
+   "poster": "9x16-gameplay_a-top.jpg",
+   "width": 360,
+   "height": 640,
+   "duration_sec": 5.0,
+   "aspect": "9:16",
+   "layout": "gameplay_a",
+   "camera": "top",
+   "game": "Forza Horizon 5",
+   "credit": "Footage: TmarTn2",
+   "source": {
+    "id": "forza-m2",
+    "creator": "TmarTn2",
+    "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "9x16-gameplay_b-bottom",
+   "label": "gameplay_b at 9:16",
+   "kind": "video",
+   "src": "9x16-gameplay_b-bottom.mp4",
+   "poster": "9x16-gameplay_b-bottom.jpg",
+   "width": 360,
+   "height": 640,
+   "duration_sec": 5.0,
+   "aspect": "9:16",
+   "layout": "gameplay_b",
+   "camera": "bottom",
+   "game": "Call of Duty: Warzone",
+   "credit": "Footage: NICKMERCS",
+   "source": {
+    "id": "cod-nick-m1",
+    "creator": "NICKMERCS",
+    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "9x16-gameplay_b-top",
+   "label": "gameplay_b at 9:16",
+   "kind": "video",
+   "src": "9x16-gameplay_b-top.mp4",
+   "poster": "9x16-gameplay_b-top.jpg",
+   "width": 360,
+   "height": 640,
+   "duration_sec": 5.0,
+   "aspect": "9:16",
+   "layout": "gameplay_b",
+   "camera": "top",
+   "game": "Call of Duty: Warzone",
+   "credit": "Footage: NICKMERCS",
+   "source": {
+    "id": "cod-nick-m1",
+    "creator": "NICKMERCS",
+    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "9x16-classic",
+   "label": "classic at 9:16",
+   "kind": "video",
+   "src": "9x16-classic.mp4",
+   "poster": "9x16-classic.jpg",
+   "width": 360,
+   "height": 640,
+   "duration_sec": 5.0,
+   "aspect": "9:16",
+   "layout": "classic",
+   "camera": null,
+   "game": "EA SPORTS FC 27",
+   "credit": "Footage: FP Good Game",
+   "source": {
+    "id": "fc27-fpgg-m1",
+    "creator": "FP Good Game",
+    "url": "https://www.youtube.com/watch?v=GURcXM3OcPE"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "4x5-auto",
+   "label": "auto at 4:5",
+   "kind": "video",
+   "src": "4x5-auto.mp4",
+   "poster": "4x5-auto.jpg",
+   "width": 432,
+   "height": 540,
+   "duration_sec": 5.0,
+   "aspect": "4:5",
+   "layout": "auto",
+   "camera": null,
+   "game": "Fortnite",
+   "credit": "Footage: Ninja",
+   "source": {
+    "id": "ninja-m1",
+    "creator": "Ninja",
+    "url": "https://www.youtube.com/watch?v=ogbIEh-4rYw"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "4x5-full",
+   "label": "full at 4:5",
+   "kind": "video",
+   "src": "4x5-full.mp4",
+   "poster": "4x5-full.jpg",
+   "width": 432,
+   "height": 540,
+   "duration_sec": 5.0,
+   "aspect": "4:5",
+   "layout": "full",
+   "camera": null,
+   "game": "Valorant",
+   "credit": "Footage: iiTzTimmy",
+   "source": {
+    "id": "timmy-m1",
+    "creator": "iiTzTimmy",
+    "url": "https://www.youtube.com/watch?v=ovyMOe_017I"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "4x5-fit",
+   "label": "fit at 4:5",
+   "kind": "video",
+   "src": "4x5-fit.mp4",
+   "poster": "4x5-fit.jpg",
+   "width": 432,
+   "height": 540,
+   "duration_sec": 5.0,
+   "aspect": "4:5",
+   "layout": "fit",
+   "camera": null,
+   "game": "EA SPORTS FC 27",
+   "credit": "Footage: FP Good Game",
+   "source": {
+    "id": "fc27-fpgg-m1",
+    "creator": "FP Good Game",
+    "url": "https://www.youtube.com/watch?v=GURcXM3OcPE"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "4x5-split2-bottom",
+   "label": "split2 at 4:5",
+   "kind": "video",
+   "src": "4x5-split2-bottom.mp4",
+   "poster": "4x5-split2-bottom.jpg",
+   "width": 432,
+   "height": 540,
+   "duration_sec": 5.0,
+   "aspect": "4:5",
+   "layout": "split2",
+   "camera": "bottom",
+   "game": "GTA VI",
+   "credit": "Footage: TGG",
+   "source": {
+    "id": "tgg2-m3",
+    "creator": "TGG",
+    "url": "https://www.youtube.com/watch?v=1GtrjKhSwzM"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "4x5-split2-top",
+   "label": "split2 at 4:5",
+   "kind": "video",
+   "src": "4x5-split2-top.mp4",
+   "poster": "4x5-split2-top.jpg",
+   "width": 432,
+   "height": 540,
+   "duration_sec": 5.0,
+   "aspect": "4:5",
+   "layout": "split2",
+   "camera": "top",
+   "game": "GTA VI",
+   "credit": "Footage: TGG",
+   "source": {
+    "id": "tgg2-m3",
+    "creator": "TGG",
+    "url": "https://www.youtube.com/watch?v=1GtrjKhSwzM"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "4x5-pip",
+   "label": "pip at 4:5",
+   "kind": "video",
+   "src": "4x5-pip.mp4",
+   "poster": "4x5-pip.jpg",
+   "width": 432,
+   "height": 540,
+   "duration_sec": 5.0,
+   "aspect": "4:5",
+   "layout": "pip",
+   "camera": null,
+   "game": "Forza Horizon 5",
+   "credit": "Footage: TmarTn2",
+   "source": {
+    "id": "forza-m2",
+    "creator": "TmarTn2",
+    "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "4x5-screen_first-bottom",
+   "label": "screen_first at 4:5",
+   "kind": "video",
+   "src": "4x5-screen_first-bottom.mp4",
+   "poster": "4x5-screen_first-bottom.jpg",
+   "width": 432,
+   "height": 540,
+   "duration_sec": 5.0,
+   "aspect": "4:5",
+   "layout": "screen_first",
+   "camera": "bottom",
+   "game": "Call of Duty: Warzone",
+   "credit": "Footage: NICKMERCS",
+   "source": {
+    "id": "cod-nick-m1",
+    "creator": "NICKMERCS",
+    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "4x5-screen_first-top",
+   "label": "screen_first at 4:5",
+   "kind": "video",
+   "src": "4x5-screen_first-top.mp4",
+   "poster": "4x5-screen_first-top.jpg",
+   "width": 432,
+   "height": 540,
+   "duration_sec": 5.0,
+   "aspect": "4:5",
+   "layout": "screen_first",
+   "camera": "top",
+   "game": "Call of Duty: Warzone",
+   "credit": "Footage: NICKMERCS",
+   "source": {
+    "id": "cod-nick-m1",
+    "creator": "NICKMERCS",
+    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "4x5-gameplay_a-bottom",
+   "label": "gameplay_a at 4:5",
+   "kind": "video",
+   "src": "4x5-gameplay_a-bottom.mp4",
+   "poster": "4x5-gameplay_a-bottom.jpg",
+   "width": 432,
+   "height": 540,
+   "duration_sec": 5.0,
+   "aspect": "4:5",
+   "layout": "gameplay_a",
+   "camera": "bottom",
+   "game": "Fortnite",
+   "credit": "Footage: Ninja",
+   "source": {
+    "id": "ninja-m1",
+    "creator": "Ninja",
+    "url": "https://www.youtube.com/watch?v=ogbIEh-4rYw"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "4x5-gameplay_a-top",
+   "label": "gameplay_a at 4:5",
+   "kind": "video",
+   "src": "4x5-gameplay_a-top.mp4",
+   "poster": "4x5-gameplay_a-top.jpg",
+   "width": 432,
+   "height": 540,
+   "duration_sec": 5.0,
+   "aspect": "4:5",
+   "layout": "gameplay_a",
+   "camera": "top",
+   "game": "Fortnite",
+   "credit": "Footage: Ninja",
+   "source": {
+    "id": "ninja-m1",
+    "creator": "Ninja",
+    "url": "https://www.youtube.com/watch?v=ogbIEh-4rYw"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "4x5-gameplay_b-bottom",
+   "label": "gameplay_b at 4:5",
+   "kind": "video",
+   "src": "4x5-gameplay_b-bottom.mp4",
+   "poster": "4x5-gameplay_b-bottom.jpg",
+   "width": 432,
+   "height": 540,
+   "duration_sec": 5.0,
+   "aspect": "4:5",
+   "layout": "gameplay_b",
+   "camera": "bottom",
+   "game": "GTA VI",
+   "credit": "Footage: TGG",
+   "source": {
+    "id": "tgg2-m3",
+    "creator": "TGG",
+    "url": "https://www.youtube.com/watch?v=1GtrjKhSwzM"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "4x5-gameplay_b-top",
+   "label": "gameplay_b at 4:5",
+   "kind": "video",
+   "src": "4x5-gameplay_b-top.mp4",
+   "poster": "4x5-gameplay_b-top.jpg",
+   "width": 432,
+   "height": 540,
+   "duration_sec": 5.0,
+   "aspect": "4:5",
+   "layout": "gameplay_b",
+   "camera": "top",
+   "game": "GTA VI",
+   "credit": "Footage: TGG",
+   "source": {
+    "id": "tgg2-m3",
+    "creator": "TGG",
+    "url": "https://www.youtube.com/watch?v=1GtrjKhSwzM"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "4x5-classic",
+   "label": "classic at 4:5",
+   "kind": "video",
+   "src": "4x5-classic.mp4",
+   "poster": "4x5-classic.jpg",
+   "width": 432,
+   "height": 540,
+   "duration_sec": 5.0,
+   "aspect": "4:5",
+   "layout": "classic",
+   "camera": null,
+   "game": "Forza Horizon 5",
+   "credit": "Footage: TmarTn2",
+   "source": {
+    "id": "forza-m2",
+    "creator": "TmarTn2",
+    "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "1x1-auto",
+   "label": "auto at 1:1",
+   "kind": "video",
+   "src": "1x1-auto.mp4",
+   "poster": "1x1-auto.jpg",
+   "width": 480,
+   "height": 480,
+   "duration_sec": 5.0,
+   "aspect": "1:1",
+   "layout": "auto",
+   "camera": null,
+   "game": "Forza Horizon 5",
+   "credit": "Footage: TmarTn2",
+   "source": {
+    "id": "forza-m2",
+    "creator": "TmarTn2",
+    "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "1x1-full",
+   "label": "full at 1:1",
+   "kind": "video",
+   "src": "1x1-full.mp4",
+   "poster": "1x1-full.jpg",
+   "width": 480,
+   "height": 480,
+   "duration_sec": 5.0,
+   "aspect": "1:1",
+   "layout": "full",
+   "camera": null,
+   "game": "EA SPORTS FC 27",
+   "credit": "Footage: FP Good Game",
+   "source": {
+    "id": "fc27-fpgg-m1",
+    "creator": "FP Good Game",
+    "url": "https://www.youtube.com/watch?v=GURcXM3OcPE"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "1x1-fit",
+   "label": "fit at 1:1",
+   "kind": "video",
+   "src": "1x1-fit.mp4",
+   "poster": "1x1-fit.jpg",
+   "width": 480,
+   "height": 480,
+   "duration_sec": 5.0,
+   "aspect": "1:1",
+   "layout": "fit",
+   "camera": null,
+   "game": "Forza Horizon 5",
+   "credit": "Footage: TmarTn2",
+   "source": {
+    "id": "forza-m2",
+    "creator": "TmarTn2",
+    "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "1x1-split2-bottom",
+   "label": "split at 1:1",
+   "kind": "video",
+   "src": "1x1-split2-bottom.mp4",
+   "poster": "1x1-split2-bottom.jpg",
+   "width": 480,
+   "height": 480,
+   "duration_sec": 5.0,
+   "aspect": "1:1",
+   "layout": "split",
+   "camera": "bottom",
+   "game": "Call of Duty: Warzone",
+   "credit": "Footage: NICKMERCS",
+   "source": {
+    "id": "cod-nick-m1",
+    "creator": "NICKMERCS",
+    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "1x1-split2-top",
+   "label": "split at 1:1",
+   "kind": "video",
+   "src": "1x1-split2-top.mp4",
+   "poster": "1x1-split2-top.jpg",
+   "width": 480,
+   "height": 480,
+   "duration_sec": 5.0,
+   "aspect": "1:1",
+   "layout": "split",
+   "camera": "top",
+   "game": "Call of Duty: Warzone",
+   "credit": "Footage: NICKMERCS",
+   "source": {
+    "id": "cod-nick-m1",
+    "creator": "NICKMERCS",
+    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "1x1-classic",
+   "label": "classic at 1:1",
+   "kind": "video",
+   "src": "1x1-classic.mp4",
+   "poster": "1x1-classic.jpg",
+   "width": 480,
+   "height": 480,
+   "duration_sec": 5.0,
+   "aspect": "1:1",
+   "layout": "classic",
+   "camera": null,
+   "game": "Fortnite",
+   "credit": "Footage: Ninja",
+   "source": {
+    "id": "ninja-m1",
+    "creator": "Ninja",
+    "url": "https://www.youtube.com/watch?v=ogbIEh-4rYw"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "16x9-auto",
+   "label": "auto at 16:9",
+   "kind": "video",
+   "src": "16x9-auto.mp4",
+   "poster": "16x9-auto.jpg",
+   "width": 640,
+   "height": 360,
+   "duration_sec": 5.0,
+   "aspect": "16:9",
+   "layout": "auto",
+   "camera": null,
+   "game": "Fortnite",
+   "credit": "Footage: Ninja",
+   "source": {
+    "id": "ninja-m1",
+    "creator": "Ninja",
+    "url": "https://www.youtube.com/watch?v=ogbIEh-4rYw"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "16x9-full",
+   "label": "full at 16:9",
+   "kind": "video",
+   "src": "16x9-full.mp4",
+   "poster": "16x9-full.jpg",
+   "width": 640,
+   "height": 360,
+   "duration_sec": 5.0,
+   "aspect": "16:9",
+   "layout": "full",
+   "camera": null,
+   "game": "Forza Horizon 5",
+   "credit": "Footage: TmarTn2",
+   "source": {
+    "id": "forza-m2",
+    "creator": "TmarTn2",
+    "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "16x9-fit",
+   "label": "fit at 16:9",
+   "kind": "video",
+   "src": "16x9-fit.mp4",
+   "poster": "16x9-fit.jpg",
+   "width": 640,
+   "height": 360,
+   "duration_sec": 5.0,
+   "aspect": "16:9",
+   "layout": "fit",
+   "camera": null,
+   "game": "Call of Duty: Warzone",
+   "credit": "Footage: NICKMERCS",
+   "source": {
+    "id": "cod-nick-m1",
+    "creator": "NICKMERCS",
+    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "16x9-split2-bottom",
+   "label": "split2 at 16:9",
+   "kind": "video",
+   "src": "16x9-split2-bottom.mp4",
+   "poster": "16x9-split2-bottom.jpg",
+   "width": 640,
+   "height": 360,
+   "duration_sec": 5.0,
+   "aspect": "16:9",
+   "layout": "split2",
+   "camera": "bottom",
+   "game": "GTA VI",
+   "credit": "Footage: TGG",
+   "source": {
+    "id": "tgg2-m3",
+    "creator": "TGG",
+    "url": "https://www.youtube.com/watch?v=1GtrjKhSwzM"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "16x9-split2-top",
+   "label": "split2 at 16:9",
+   "kind": "video",
+   "src": "16x9-split2-top.mp4",
+   "poster": "16x9-split2-top.jpg",
+   "width": 640,
+   "height": 360,
+   "duration_sec": 5.0,
+   "aspect": "16:9",
+   "layout": "split2",
+   "camera": "top",
+   "game": "GTA VI",
+   "credit": "Footage: TGG",
+   "source": {
+    "id": "tgg2-m3",
+    "creator": "TGG",
+    "url": "https://www.youtube.com/watch?v=1GtrjKhSwzM"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "16x9-pip",
+   "label": "pip at 16:9",
+   "kind": "video",
+   "src": "16x9-pip.mp4",
+   "poster": "16x9-pip.jpg",
+   "width": 640,
+   "height": 360,
+   "duration_sec": 5.0,
+   "aspect": "16:9",
+   "layout": "pip",
+   "camera": null,
+   "game": "Forza Horizon 5",
+   "credit": "Footage: TmarTn2",
+   "source": {
+    "id": "forza-m2",
+    "creator": "TmarTn2",
+    "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "16x9-screen_first-bottom",
+   "label": "screen_first at 16:9",
+   "kind": "video",
+   "src": "16x9-screen_first-bottom.mp4",
+   "poster": "16x9-screen_first-bottom.jpg",
+   "width": 640,
+   "height": 360,
+   "duration_sec": 5.0,
+   "aspect": "16:9",
+   "layout": "screen_first",
+   "camera": "bottom",
+   "game": "Call of Duty: Warzone",
+   "credit": "Footage: NICKMERCS",
+   "source": {
+    "id": "cod-nick-m1",
+    "creator": "NICKMERCS",
+    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "16x9-screen_first-top",
+   "label": "screen_first at 16:9",
+   "kind": "video",
+   "src": "16x9-screen_first-top.mp4",
+   "poster": "16x9-screen_first-top.jpg",
+   "width": 640,
+   "height": 360,
+   "duration_sec": 5.0,
+   "aspect": "16:9",
+   "layout": "screen_first",
+   "camera": "top",
+   "game": "Call of Duty: Warzone",
+   "credit": "Footage: NICKMERCS",
+   "source": {
+    "id": "cod-nick-m1",
+    "creator": "NICKMERCS",
+    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "16x9-classic",
+   "label": "classic at 16:9",
+   "kind": "video",
+   "src": "16x9-classic.mp4",
+   "poster": "16x9-classic.jpg",
+   "width": 640,
+   "height": 360,
+   "duration_sec": 5.0,
+   "aspect": "16:9",
+   "layout": "classic",
+   "camera": null,
+   "game": "Fortnite",
+   "credit": "Footage: Ninja",
+   "source": {
+    "id": "ninja-m1",
+    "creator": "Ninja",
+    "url": "https://www.youtube.com/watch?v=ogbIEh-4rYw"
+   },
+   "commercial_permission": "owner-confirmed 2026-11-18"
+  }
+ ]
+}
