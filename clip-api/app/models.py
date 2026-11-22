@@ -386,3 +386,106 @@ class ScheduledPost(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class CreatorProfile(Base):
+    """The public face of an account in the Creators League (app/league.py): a username, a preset avatar and the
+    games the creator plays. Nothing else about the account is public. `username_key` is the lowercased username:
+    usernames are unique whatever their case."""
+    __tablename__ = "creator_profiles"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), unique=True)
+    username: Mapped[str] = mapped_column(String(20))
+    username_key: Mapped[str] = mapped_column(String(20), unique=True)
+    avatar: Mapped[str] = mapped_column(String(16), default="lime")          # one of league.AVATARS
+    games: Mapped[list] = mapped_column(JSON, default=list)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())   # has a profile page
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class LeagueCompetition(Base):
+    """One monthly competition. `status` moves only by league.COMPETITION_RULES. Cash amounts are public only
+    when `cash_prizes_enabled` is true, which the server allows only with LEAGUE_CASH_PRIZES_APPROVED set."""
+    __tablename__ = "league_competitions"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    slug: Mapped[str] = mapped_column(String(40), unique=True)
+    name: Mapped[str] = mapped_column(String(80))
+    starts_at: Mapped[datetime] = mapped_column(DateTime)
+    ends_at: Mapped[datetime] = mapped_column(DateTime)
+    status: Mapped[str] = mapped_column(String(12), default="draft")         # draft | open | closed | finalized
+    prizes: Mapped[list] = mapped_column(JSON, default=list)                 # [{place, amount_cents, currency, label}]
+    rules_version: Mapped[str] = mapped_column(String(32))
+    cash_prizes_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    created_by: Mapped[str] = mapped_column(ForeignKey("accounts.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class LeagueEntry(Base):
+    """A creator's one clip in a competition. `url` is the canonical link rebuilt from the validated parts and
+    `url_key` names the video (platform:id), so the same video cannot be entered twice. `status` moves only by
+    league.ENTRY_RULES. `snapshot` keeps the clip's facts as they were at submission, for later analysis."""
+    __tablename__ = "league_entries"
+    __table_args__ = (
+        UniqueConstraint("competition_id", "account_id", name="uq_league_entry_account"),
+        UniqueConstraint("competition_id", "url_key", name="uq_league_entry_url"),
+    )
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    competition_id: Mapped[str] = mapped_column(ForeignKey("league_competitions.id"), index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    clip_id: Mapped[str] = mapped_column(ForeignKey("clips.id"))
+    platform: Mapped[str] = mapped_column(String(12))                        # tiktok | youtube | instagram
+    url: Mapped[str] = mapped_column(String(300))
+    url_key: Mapped[str] = mapped_column(String(80))
+    game: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    status: Mapped[str] = mapped_column(String(12), default="pending")       # pending | approved | rejected | disqualified
+    status_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)   # shown to the creator
+    flagged: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    flag_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)     # admins only
+    attribution_confirmed_at: Mapped[datetime] = mapped_column(DateTime)
+    rules_version: Mapped[str] = mapped_column(String(32))                   # the rules the creator accepted
+    snapshot: Mapped[dict] = mapped_column(JSON)
+    final_place: Mapped[int | None] = mapped_column(Integer, nullable=True)  # set when an admin approves the winner
+    winner_approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    prize_status: Mapped[str | None] = mapped_column(String(12), nullable=True)     # pending | sent | forfeited
+    submitted_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class LeagueViewObservation(Base):
+    """Append-only: a view count an admin read off the public page of an entry's video. The newest row is the
+    count the ranking uses; the older rows are the ranking's history. Never written from creator input."""
+    __tablename__ = "league_view_observations"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    entry_id: Mapped[str] = mapped_column(ForeignKey("league_entries.id"), index=True)
+    views: Mapped[int] = mapped_column(BigInteger)
+    source: Mapped[str] = mapped_column(String(24))                          # league.OBSERVATION_SOURCES
+    verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())   # false: read by hand
+    observed_by: Mapped[str] = mapped_column(ForeignKey("accounts.id"))
+    observed_at: Mapped[datetime] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class LeagueEvent(Base):
+    """Append-only audit log of the league: every admin action and every submission, with the state before and
+    after, the reason given, who and when."""
+    __tablename__ = "league_events"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    competition_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    actor_id: Mapped[str] = mapped_column(String(40))
+    action: Mapped[str] = mapped_column(String(32))
+    entity_kind: Mapped[str] = mapped_column(String(16))                     # competition | entry
+    entity_id: Mapped[str] = mapped_column(String(40), index=True)
+    before: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    after: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+@event.listens_for(LeagueViewObservation, "before_update")
+@event.listens_for(LeagueViewObservation, "before_delete")
+@event.listens_for(LeagueEvent, "before_update")
+@event.listens_for(LeagueEvent, "before_delete")
+def _league_append_only(_mapper, _conn, target):
+    raise RuntimeError(f"{target.__tablename__} is append-only: add a new row instead")

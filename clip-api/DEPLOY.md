@@ -365,6 +365,29 @@ every admin account when it is empty. A report changes no content.
   send a counter-notice there; a copy goes to the claimant, and the admin decides on `restore` after 10 business
   days.
 
+## Creators League
+
+A free monthly competition: creators enter one published clip, admins review entries and record public view
+counts by hand, and the top three are approved by an admin. The rules are in `app/league.py`; the rules text shown
+on `/league/` is in `app/league_rules.py`.
+
+- Run it from `/dashboard/admin/league/`, signed in as an admin account (`scripts/admin.py make-admin`).
+  A new competition is a draft only admins see. "Open to the public" publishes it.
+- Entries wait as pending until an admin approves them. Open each video, check that the description carries the
+  attribution link, then approve or reject with a reason the creator sees.
+- View counts are typed in by an admin from the video's public page. Each reading is kept; the newest one ranks
+  the entry. They are shown as unverified with the time of the reading.
+- After the end date, "Close entries", approve the winners first place first, then "Make results final".
+  Nothing is paid by the system. Send each prize yourself, then use "Mark sent" with the payment reference.
+- Every admin action is in the audit log at the bottom of the admin page (`GET /v1/admin/league/events`).
+- Cash prizes are locked. The public page shows no amounts until `LEAGUE_CASH_PRIZES_APPROVED=true` is set on
+  the server and an admin ticks "Show cash prizes" on the competition. Set it only after a lawyer has reviewed
+  the official rules: the text in `app/league_rules.py` is a draft with placeholders and claims no compliance.
+  When the rules text changes, change `VERSION` there; each entry records the version its creator accepted.
+- Limits: `LEAGUE_SUBMITS_PER_HOUR` (5 per account), `LEAGUE_PROFILE_EDITS_PER_HOUR` (10 per account),
+  `LEAGUE_READS_PER_MINUTE` (120 per address, each public league route).
+- The attribution link creators paste is `PUBLIC_WEB_URL`. Check it is the live site's address.
+
 ## Premium AI thumbnails
 
 A paid option on top of the free thumbnail (#140). The free frame-based thumbnail is always made and stays free,

@@ -19,6 +19,7 @@ export const NAV: NavGroup[] = [
     { label: "Calendar", icon: "calendar", href: "/dashboard/calendar/" },
     { label: "Analytics", icon: "chart", href: "/dashboard/analytics/" },
     { label: "Social accounts", icon: "share", href: "/dashboard/social-accounts/" },
+    { label: "Creators League", icon: "gamepad", href: "/dashboard/league/" },
   ] },
   { items: [
     { label: "Labs", icon: "flask" },

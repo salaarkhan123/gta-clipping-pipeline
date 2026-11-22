@@ -107,6 +107,13 @@ class Settings(BaseSettings):
     trust_reports_per_ip_per_hour: int = 5
     trust_reports_per_ip_per_day: int = 20
     trust_reports_per_email_per_day: int = 3
+    # Creators League (app/league.py). Limits: entries and profile edits per account, public reads per address.
+    # LEAGUE_CASH_PRIZES_APPROVED: an admin can show cash amounts on a competition only when this is true. Leave
+    # it false until the official rules have been reviewed by a lawyer (owner decision).
+    league_submits_per_hour: int = 5
+    league_profile_edits_per_hour: int = 10
+    league_reads_per_minute: int = 120
+    league_cash_prizes_approved: bool = False
     # Repeat infringers (owner, 2026-11-18: three strikes). Strikes expire after this many days; 0 = never.
     # Both are owner decisions (app/trust_decisions.py).
     repeat_infringer_strikes: int = 3

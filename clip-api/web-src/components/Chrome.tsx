@@ -128,6 +128,7 @@ export function Nav() {
         <Logo />
         <nav aria-label="Main" className="flex flex-1 items-center justify-center narrow:hidden">
           <ToolsMenu />
+          <Link href="/league/" className={NAV_LINK}>Creators League</Link>
           <Link href="/pricing/" className={NAV_LINK}>Pricing</Link>
           <a href={DOCS} className={NAV_LINK}>API</a>
           <Link href="/contact/" className={NAV_LINK}>Contact</Link>
@@ -147,6 +148,7 @@ export function Nav() {
             ? <Link key={t.id} href={toolHref(t)} className="flex min-h-[44px] items-center gap-3 rounded-12 px-1 text-[16px] text-fg"><Icon name={t.icon} size={18} className="text-fg-2" />{t.name}</Link>
             : <div key={t.id} className="flex min-h-[44px] items-center gap-3 px-1 text-[16px] text-fg-2"><Icon name={t.icon} size={18} />{t.name}<ComingSoonBadge short /></div>)}
           <p className="px-1 pb-1 pt-4 text-caption font-medium uppercase tracking-[.04em] text-fg-3">ClutchClips</p>
+          <Link href="/league/" className="flex min-h-[44px] items-center px-1 text-[16px] text-fg">Creators League</Link>
           <Link href="/pricing/" className="flex min-h-[44px] items-center px-1 text-[16px] text-fg">Pricing</Link>
           <a href={DOCS} className="flex min-h-[44px] items-center px-1 text-[16px] text-fg">API</a>
           <Link href="/contact/" className="flex min-h-[44px] items-center px-1 text-[16px] text-fg">Contact</Link>
@@ -175,6 +177,7 @@ export function Footer() {
         <nav aria-label="Product">
           <h3 className={FOOT_HEAD}>Product</h3>
           <Link href="/#features" className={FOOT_LINK}>Features</Link>
+          <Link href="/league/" className={FOOT_LINK}>Creators League</Link>
           <Link href="/pricing/" className={FOOT_LINK}>Pricing</Link>
           <a href={DOCS} className={FOOT_LINK}>API docs</a>
         </nav>
