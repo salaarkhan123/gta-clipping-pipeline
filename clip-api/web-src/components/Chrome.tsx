@@ -57,10 +57,14 @@ function MenuItem({ icon, name, text, tag, href, external, onPick }: { icon: Ico
 // The Tools panel: one wide panel centred under the nav. Its fill is nearly opaque on purpose: the nav bar above it
 // already blurs the page, and a blur nested inside another does not reach the page, so the fill alone must hide it. Three columns of tools, then what there is for
 // developers behind a divider. Opens on hover and on click; Escape or a click outside closes it.
+// The trigger, an invisible bridge over the gap under it, and the panel are one hover region: the menu closes only
+// LEAVE_MS after the pointer has left all three, so a diagonal move to a far column does not close it.
+const LEAVE_MS = 200;
 function ToolsMenu() {
   const tools = useTools();
   const [open, setOpen] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement>(null), leave = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(leave.current), []);
   useEffect(() => {
     if (!open) return;
     const away = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
@@ -68,15 +72,20 @@ function ToolsMenu() {
     document.addEventListener("pointerdown", away); document.addEventListener("keydown", key);
     return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", key); };
   }, [open]);
-  const close = () => setOpen(false);
+  const close = () => { clearTimeout(leave.current); setOpen(false); };
   // Built tools first, column by column; the planned ones last.
   const ordered = [...tools.filter((t) => t.built), ...tools.filter((t) => !t.built)];
   const perCol = Math.ceil(ordered.length / 3);
   return (
-    <div ref={box} onMouseEnter={() => setOpen(true)} onMouseLeave={close}>
-      <button type="button" className={`${NAV_LINK} outline-none focus-visible:shadow-[0_0_0_2px_#fff] ${open ? "bg-[#262626] !text-fg" : ""}`} aria-expanded={open} aria-haspopup="true" aria-controls="tools-panel" onClick={() => setOpen(!open)}>
-        Tools<Icon name="chevron" size={18} className={`transition-transform duration-base ${open ? "rotate-180" : ""}`} />
-      </button>
+    <div ref={box} onPointerEnter={() => { clearTimeout(leave.current); setOpen(true); }}
+      onPointerLeave={(e) => { if (e.pointerType !== "touch") { clearTimeout(leave.current); leave.current = setTimeout(() => setOpen(false), LEAVE_MS); } }}>
+      <span className="relative inline-flex">
+        <button type="button" className={`${NAV_LINK} !rounded-full outline-none focus:shadow-none focus-visible:!shadow-[0_0_0_2px_#fff] ${open ? "!bg-[#2c2c2e] !text-fg" : ""}`}
+          aria-expanded={open} aria-haspopup="true" aria-controls="tools-panel" onClick={() => { clearTimeout(leave.current); setOpen((o) => !o); }}>
+          Tools<Icon name="chevron" size={18} className={`transition-transform duration-base ${open ? "rotate-180" : ""}`} />
+        </button>
+        {open && <span aria-hidden="true" className="absolute inset-x-[-24px] top-full h-[24px]" />}
+      </span>
       {open && <div className="absolute inset-x-0 top-full z-[60] px-6 pt-[6px]">
         <div id="tools-panel" className="mx-auto grid w-[min(1280px,100%)] animate-rise grid-cols-[minmax(0,3fr)_1px_minmax(0,1fr)] gap-x-8 rounded-20 bg-[#2c2c2e] p-[30px] pb-6
           shadow-[inset_0_1px_0_rgba(255,255,255,.1),0_30px_80px_rgba(0,0,0,.6)] [animation-duration:.2s] [backdrop-filter:blur(32px)_saturate(1.3)]">

@@ -1,5 +1,5 @@
 "use client";
-// The landing page: the headline and the import field, the stage showing the product working, the four steps, the
+// The landing page: the headline and the import field, the stage showing the product working, the workflow (import, auto editing, scheduling), the
 // finished clips, FAQ and a closing call to action; the import field again as a bar pinned to the bottom once the
 // hero's has scrolled away.
 // Numbers that can change (sign-up credits, languages) come from the public API; nothing about a plan is written here.
@@ -12,9 +12,9 @@ import { Languages, useLanguages } from "@/lib/languages";
 import { freeCredits, useSignupCredits } from "@/lib/plans";
 import { isBuilt, TOOLS } from "@/lib/tools";
 import { DemoCarousel } from "@/components/landing/sections/DemoCarousel";
+import { WorkflowSection } from "@/components/landing/sections/WorkflowSection";
 import { aiRated, useItems } from "@/components/landing/demos/Footage";
 import { useReducedMotion } from "@/components/landing/demos/motion";
-import { Icon, IconName } from "@/components/dash/Icon";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ClipCard } from "@/components/ui/ClipCard";
@@ -89,13 +89,6 @@ function Rotating({ phrases }: { phrases: string[] }) {
   );
 }
 
-const STEPS: { icon: IconName; title: string; text: string }[] = [
-  { icon: "upload", title: "Import gameplay", text: "Upload a recording, or paste a link to a stream you own." },
-  { icon: "sparkle", title: "Find highlights", text: "The clutch plays, fails and reactions are found and ranked for you." },
-  { icon: "sliders", title: "Edit clips", text: "Trim, restyle the captions and change the layout in the editor." },
-  { icon: "download", title: "Export or publish", text: "Download each clip in the shape you need: 9:16, 1:1, 4:5 or 16:9." },
-];
-
 // The finished clips, large: the approved footage of the hero section with the AI's rating of each.
 function ClipWall() {
   // clip-6 (Fortnite) is left out: it is soft, with the character half out of frame, and the other approved Fortnite
@@ -149,27 +142,7 @@ export default function Home() {
 
         <DemoCarousel />
 
-        <section aria-labelledby="steps-title" className="px-gutter pb-0 pt-[clamp(56px,7vw,112px)]">
-          <div className="mx-auto grid max-w-site gap-[clamp(28px,3.4vw,48px)]">
-            <h2 id="steps-title" className="m-0 text-center text-h2 text-fg">From stream to clip in four steps</h2>
-            <ol className="m-0 grid list-none grid-cols-4 gap-4 p-0 mid:grid-cols-2 tiny:grid-cols-1">
-              {STEPS.map((s, i) => (
-                <li key={s.title}>
-                  <Card className="grid h-full content-start gap-4 !p-6">
-                    <span className="flex items-center justify-between text-fg-2">
-                      <span className="grid h-10 w-10 place-items-center rounded-12 bg-control text-fg"><Icon name={s.icon} size={20} /></span>
-                      <span className="font-mono text-[12px] tabular-nums">0{i + 1}</span>
-                    </span>
-                    <span className="grid gap-[6px]">
-                      <h3 className="m-0 text-title text-fg">{s.title}</h3>
-                      <p className="m-0 text-body text-fg-2">{s.text}</p>
-                    </span>
-                  </Card>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </section>
+        <WorkflowSection />
 
         <ClipWall />
 

@@ -37,8 +37,8 @@ test("the hero stage is decorative, loops only while shown, and is still under r
   const demo = source("components/landing/demos/HeroStage.tsx");
   assert.match(demo, /aria-hidden="true"/);
   assert.match(demo, /useReducedMotion/);
-  assert.match(demo, /const phase: Phase = reduced \? "clips" : moving;/);      // the still end state
-  assert.match(demo, /usePhase\(play && !reduced\)/);                          // paused off screen and off its slide
+  assert.match(demo, /const phase: Phase = reduced \? "clips" : loop\.phase;/);  // the still end state
+  assert.match(demo, /useLoop\(play && !reduced/);                             // paused off screen and off its slide
   assert.match(demo, /pressed \? "scale-\[\.94\] bg-\[#9fe02f\]" : "bg-lime"/);  // the button's press state
   assert.doesNotMatch(demo, /virality/i);
 });
