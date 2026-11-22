@@ -182,7 +182,7 @@ function EntryForm({ me, onDone }: { me: Me; onDone: () => void }) {
         <div className="grid gap-4">
           <p className={STEP}>5. Accept the rules</p>
           <label className={CHECK}><input type="checkbox" name="rules_version" value={c.rules_version} checked={rules} onChange={(e) => setRules(e.target.checked)} required />
-            <span>I have read and accept the <Link href="/league/#rules" target="_blank" className="text-fg underline underline-offset-4">competition rules</Link> (version {c.rules_version}), and I agree that my username, avatar, game, this clip&apos;s thumbnail, the video link and its public view count are shown on the public leaderboard.</span></label>
+            <span>I have read and accept the <Link href={`/league/?rules=${encodeURIComponent(c.rules_version)}#rules`} target="_blank" className="text-fg underline underline-offset-4">competition rules</Link> (version {c.rules_version}), and I agree that my username, avatar, game, this clip&apos;s thumbnail, the video link and its public view count are shown on the public leaderboard.</span></label>
         </div>
 
         {problem && <p role="alert" className="error m-0">{problem}</p>}

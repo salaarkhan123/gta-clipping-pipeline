@@ -15,7 +15,8 @@ export type Board = { competition: Competition; updated_at: string | null; entri
 export type RulesSection = { id: string; title: string; needs_legal_review: boolean; body: string[] };
 export type Attribution = { url: string; text: string };
 export type Rules = { version: string; status: string; legally_reviewed: boolean; sections: RulesSection[]; attribution: Attribution };
-export type Profile = { username: string; avatar: string; games: string[]; is_public: boolean };
+export type Profile = { username: string; avatar: string; games: string[]; is_public: boolean; hidden: boolean };
+export type Current = { competition: Competition | null; top: Row[] };
 export type EntryStatus = "pending" | "approved" | "rejected" | "disqualified";
 export type MyEntry = { id: string; status: EntryStatus; status_reason: string | null; platform: Platform; video_url: string; game: string | null;
   clip_id: string; submitted_at: string; rank: number | null; views: number | null; observed_at: string | null; final_place: number | null;
@@ -83,10 +84,24 @@ export function useCountdown(iso: string | null): { d: number; h: number; m: num
   return { d: Math.floor(left / 86400), h: Math.floor((left % 86400) / 3600), m: Math.floor((left % 3600) / 60), s: left % 60 };
 }
 
-// The current competition with the top of its board. `undefined` while loading; `competition: null` when none is open.
-export function useCurrent() {
-  const [data, setData] = useState<{ competition: Competition | null; top: Row[] } | undefined>(undefined);
-  const [problem, setProblem] = useState("");
-  useEffect(() => { api("/v1/league/current", { auth: false }).then(setData).catch((e) => setProblem(e.message)); }, []);
-  return { data, problem };
+// One public league read. `data` is undefined until it arrives; a failed or rate-limited read sets `failed`, never
+// leaves the caller loading, and `retry` asks again. A null `path` waits (nothing to ask for yet).
+export function usePublic<T>(path: string | null) {
+  const [state, setState] = useState<{ data?: T; failed: boolean }>({ failed: false });
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!path) return;
+    let live = true;
+    setState({ failed: false });
+    api<T>(path, { auth: false }).then((data) => { if (live) setState({ data, failed: false }); })
+      .catch(() => { if (live) setState({ failed: true }); });
+    return () => { live = false; };
+  }, [path, attempt]);
+  return { ...state, retry: () => setAttempt((n) => n + 1) };
 }
+
+// The current competition with the top of its board; `competition: null` when none is open.
+export const useCurrent = () => usePublic<Current>("/v1/league/current");
+
+// The rules text a competition's entrants accept: its own version, which stays after a newer one is published.
+export const rulesPath = (version?: string | null) => "/v1/league/rules" + (version ? `?version=${encodeURIComponent(version)}` : "");

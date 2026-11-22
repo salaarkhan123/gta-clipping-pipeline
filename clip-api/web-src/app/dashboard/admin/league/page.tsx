@@ -11,10 +11,11 @@ import { COMPETITION_RULES, CompetitionAction, dollars, ENTRY_RULES, EntryAction
 
 type Counts = Record<"pending" | "approved" | "rejected" | "disqualified", number>;
 type Competition = { id: string; slug: string; name: string; starts_at: string; ends_at: string; status: string; phase: string; prizes: Prize[];
-  rules_version: string; cash_prizes_enabled: boolean; cash_prizes_approved: boolean; entries: Counts };
+  rules_version: string; rules_latest: string; cash_prizes_enabled: boolean; cash_prizes_approved: boolean; entries: Counts };
 type Observation = { views: number; source: string; verified: boolean; observed_at: string; observed_by: string };
 type Entry = { id: string; status: string; status_reason: string | null; flagged: boolean; flag_reason: string | null; platform: Platform; video_url: string;
-  game: string | null; thumb_url: string | null; username: string | null; email: string | null; submitted_at: string; rank: number | null; views: number | null;
+  game: string | null; thumb_url: string | null; clip_removed: boolean; username: string | null; email: string | null; account_id: string;
+  profile_hidden: boolean; submitted_at: string; rank: number | null; views: number | null;
   final_place: number | null; prize_status: string | null; observations: Observation[]; snapshot: Record<string, unknown> };
 type Winner = Entry & { place: number; state: "provisional" | "final"; prize: Prize | null };
 type Event = { id: number; action: string; entity_kind: string; entity_id: string; actor_id: string; before: unknown; after: unknown; reason: string | null; created_at: string };
@@ -114,6 +115,7 @@ function Manage({ c, reload }: { c: Competition; reload: () => void }) {
             {c.status === "draft" && <button type="button" className="btn small ghost" onClick={() => { if (window.confirm(`Delete the draft ${c.name}?`)) act(`/v1/admin/league/competitions/${c.slug}`, undefined, "DELETE"); }}>Delete draft</button>}
           </div>
         </div>
+        {c.status !== "finalized" && c.rules_version !== c.rules_latest && <p className="m-0 text-[14px] text-warn">This competition is still on rules version {c.rules_version}: its entrants read and accept that text. Version {c.rules_latest} is newer and applies to competitions created from now on.</p>}
         <p className="muted text-[14px]">Entries: {c.entries.pending} pending, {c.entries.approved} approved, {c.entries.rejected} rejected, {c.entries.disqualified} disqualified.</p>
         {c.status !== "finalized" && <Settings c={c} save={(body) => act(`/v1/admin/league/competitions/${c.slug}`, body, "PATCH")} />}
       </section>
@@ -201,7 +203,9 @@ function EntryRow({ e, act, final }: { e: Entry; act: (path: string, body: unkno
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[14px]">
           <strong>{e.username || "No username"}</strong><span className="muted [overflow-wrap:anywhere]">{e.email}</span>
           <span>{e.status}{e.rank ? ` · #${e.rank}` : ""}{e.final_place ? ` · ${ordinal(e.final_place)} place approved` : ""}</span>
+          {e.clip_removed && <span className="font-semibold text-warn">Clip removed: off the public board</span>}
           {e.flagged && <span className="text-warn">Flagged: {e.flag_reason}</span>}
+          {e.profile_hidden && <span className="text-warn">Profile hidden</span>}
         </div>
         <p className="muted m-0 flex flex-wrap gap-x-4 gap-y-1 text-[13px]">
           <span>{PLATFORM_LABEL[e.platform]}</span><span>{e.game || "No game"}</span><span>Submitted {moment(e.submitted_at)}</span>
@@ -217,6 +221,13 @@ function EntryRow({ e, act, final }: { e: Entry; act: (path: string, body: unkno
             <button type="button" className="btn small ghost" onClick={() => review(e.flagged ? "unflag" : "flag")}>{e.flagged ? "Remove flag" : "Flag"}</button>
           </span>
         </div>}
+        <span className="flex flex-wrap gap-2">
+          <button type="button" className="btn small ghost" onClick={() => {
+            if (e.profile_hidden) { act(`/v1/admin/league/creators/${e.account_id}/visibility`, { hidden: false }); return; }
+            const why = window.prompt(`Hide ${e.username || "this creator"}'s profile? It becomes private and they cannot make it public again until an admin unhides it. Reason (kept in the audit log):`);
+            if (why?.trim()) act(`/v1/admin/league/creators/${e.account_id}/visibility`, { hidden: true, reason: why.trim() });
+          }}>{e.profile_hidden ? "Unhide profile" : "Hide profile"}</button>
+        </span>
         {!final && e.status === "approved" && <form className="flex flex-wrap items-end gap-3" onSubmit={(ev) => { ev.preventDefault(); act(`/v1/admin/league/entries/${e.id}/observations`, { views: Number(count), source: "public_page" }); setCount(""); }}>
           <label className={LABEL}>Views on the public page now<input className={`${INPUT} w-[200px]`} type="number" min={0} step={1} value={count} onChange={(ev) => setCount(ev.target.value)} required /></label>
           <button type="submit" className="btn small ghost">Record views</button>
