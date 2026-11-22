@@ -307,6 +307,29 @@ def test_winners_are_provisional_until_an_admin_approves_them(client, admin, pod
     assert profile["awards"][0]["place"] == 1 and profile["entries"][0]["rank"] == 1
 
 
+def test_no_public_response_carries_a_prize_amount_while_the_server_lock_is_off(client, admin, podium, monkeypatch):
+    cup, ids, first = podium["cup"], podium["ids"], podium["who"][0]
+    amounts = [{"place": 1, "amount_cents": 13579}, {"place": 2, "amount_cents": 8642}, {"place": 3, "amount_cents": 7531}]
+    monkeypatch.setattr(get_settings(), "league_cash_prizes_approved", True)
+    saved = client.patch(f"/v1/admin/league/competitions/{cup}", json={"prizes": amounts, "cash_prizes_enabled": True},
+                         headers=admin).json()
+    assert saved["cash_prizes_enabled"] is True and [p["amount_cents"] for p in saved["prizes"]] == [13579, 8642, 7531]
+    monkeypatch.setattr(get_settings(), "league_cash_prizes_approved", False)
+    move(client, admin, cup, "close")
+    for place, entry in enumerate(ids[:3], start=1):
+        assert winner(client, admin, entry, place).status_code == 200
+    seen = [client.get(path, headers=h) for path, h in (
+        ("/v1/league/current", {}), ("/v1/league/rules", {}), (f"/v1/league/{cup}/leaderboard", {}),
+        (f"/v1/league/{cup}/featured", {}), (f"/v1/league/creators/{first['username']}", {}),
+        (f"/v1/league/me?competition={cup}", first["h"]), ("/v1/league/me", first["h"]))]
+    move(client, admin, cup, "finalize")
+    seen.append(client.get(f"/v1/league/{cup}/leaderboard"))
+    for r in seen:
+        assert r.status_code == 200, (r.request.url, r.text)
+        assert "amount_cents" not in r.text and "13579" not in r.text and "8642" not in r.text, r.request.url
+        assert '"prize_pool_cents":null' in r.text.replace(" ", "") or "prize_pool_cents" not in r.text, r.request.url
+
+
 def test_a_disqualification_before_approval_moves_the_next_entry_up(client, admin, podium):
     cup, ids = podium["cup"], podium["ids"]
     move(client, admin, cup, "close")
