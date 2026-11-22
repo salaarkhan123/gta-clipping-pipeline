@@ -20,7 +20,7 @@ Three options change what is selected (all optional; without them nothing change
   inside it. Windows are nominated at the bucket's nominal length, the judge gets enough transcript to cut
   anywhere in the bucket, and its cut is accepted only inside it.
 - `limit`: how many clips to return, best first. With `duration` and no limit: every moment that passes the
-  judge's floor, up to moments.MAX_CLIPS.
+  judge's floor, up to highlights.suggest_want(analysed length) (at most moments.MAX_CLIPS).
 - `range`: only this part of the source is measured, transcribed and clipped. Clip times stay source times.
 """
 import json
@@ -55,6 +55,7 @@ from . import hooks as hook_lines
 from .ranking import EQUAL, rank_score
 from .copy_check import check_copy
 from .moments import BUCKETS, MAX_CLIPS, NOMINAL, Moment
+from .highlights import suggest_want
 from .llm_pass import PASS_BUDGET_SEC, PassResult, Proposal, Proposer, mix, run_pass
 from .variety import HORIZON, min_gap_for, pick_distinct, picture_hash
 from .windows import fits, pick_spread, pick_windows
@@ -75,7 +76,7 @@ JUDGE_WEIGHT = 0.75                           # final rank = 0.75 * judge score 
 JUDGE_FLOOR = 20                              # judge scores below this are junk (menus, intro cards, dead air)
 JUDGE_THREADS = 4
 # (U4) Automatic discovery (a `duration` and no `limit`): a moment becomes a clip only when the judge rates it at
-# least this; there is no quota, so a long video gets as many clips as it has moments this good (at most MAX_CLIPS).
+# least this; there is no quota to fill. The upper bound is highlights.suggest_want(analysed length) (≤ MAX_CLIPS).
 # The prompt anchors an ordinary clip at 50, so 40 keeps ordinary-or-better moments. Not tuned yet: tune it on the
 # tuning videos only (never the held-out one). The worker sets it from CLIP_QUALITY_FLOOR.
 QUALITY_FLOOR = 40
@@ -124,7 +125,7 @@ class PipelineOptions:
     judge_focus: str | None = None        # what kind of moment the judge should favour
     duration: str | None = None           # a key of moments.BUCKETS: every clip's length is inside it. None: clip_length
     limit: int | None = None              # clips to return, best first. None: max_clips, or with `duration` every
-                                          # moment that passes the judge's floor (at most moments.MAX_CLIPS)
+                                          # moment that passes the judge's floor (at most suggest_want(span))
     range: dict | None = None             # {"start": s, "end": s}: analyse and clip only this part of the source
     project_name: str | None = None       # the user's label for this run (recorded, not interpreted here)
     # (languages, agent F)
@@ -280,8 +281,10 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     part = {"start": float(base), "length": span} if ranged else {}
     n = int(span) + 1
     limits = _limits(options.duration, t1 - t0)       # (shortest, longest) clip in seconds, or None: no bucket
-    want = _wanted(options)
+    want = _wanted(options, t1 - t0)
     timer.count("source_sec", round(info.duration, 1))
+    if options.duration is not None and options.limit is None:
+        timer.count("suggest_want", want)
     if ranged:
         timer.count("analysed_sec", round(t1 - t0, 1))
     with timer.stage("facecam_detect"):
@@ -703,14 +706,16 @@ def _limits(bucket: str | None, available: float) -> tuple[float, float] | None:
     return float(max(shortest, min(MIN_CLIP, available))), float(longest)
 
 
-def _wanted(options: PipelineOptions) -> int:
+def _wanted(options: PipelineOptions, span_sec: float | None = None) -> int:
     """How many clips to select: `limit` when given; with a bucket and no limit, every good moment up to
-    MAX_CLIPS; otherwise max_clips."""
+    suggest_want(span) (capped at MAX_CLIPS); otherwise max_clips."""
     if options.limit is not None:
         if options.limit < 1:
             raise PipelineError("bad_options", "limit must be at least 1.")
         return min(MAX_CLIPS, options.limit)
-    return MAX_CLIPS if options.duration is not None else options.max_clips
+    if options.duration is not None:
+        return suggest_want(span_sec if span_sec is not None else 0.0)
+    return options.max_clips
 
 
 def pool_size(want: int, judged: bool, with_transcript: bool) -> int:

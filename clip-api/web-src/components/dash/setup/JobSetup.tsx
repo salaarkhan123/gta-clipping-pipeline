@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ComingSoonBadge } from "@/components/ComingSoonBadge";
 import { clock } from "@/lib/api";
 import { useLanguages } from "@/lib/languages";
+import { suggestWant } from "@/lib/highlights";
 import { allows, inside, layoutsFor, Listed, offeredBucket, onlyListed, RENDER } from "@/lib/options";
 import { extrasFrom, gameName, gameOf, isPreset, loadCustom, loadTemplates, Look, lookFrom, Saved, startLook, tidy } from "@/lib/templates";
 import { Icon } from "../Icon";
@@ -118,10 +119,16 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
   const total = price.state === "ok" ? `${price.credits.toLocaleString()} credit${price.credits === 1 ? "" : "s"}` : price.state === "asking" ? "Working it out…"
     : price.state === "failed" ? "No price yet" : "Shown before you start";
 
-  // After a failed import the way forward is the action under the problem (Upload original video): Create steps back
-  // to an outline button and says it tries the link again.
+  // Auto discovery: duration bucket + null limit → pipeline suggest_want(analysed length); quality floor still filters.
+  const analysed = f.range ? f.range.end - f.range.start : source.duration;
+  const autoCap = f.limit === null && has("duration") && typeof analysed === "number" && analysed > 0 ? suggestWant(analysed) : null;
+  const highlightLine = f.limit === 1 ? "The best highlight"
+    : f.limit != null ? `Up to ${f.limit} ranked highlights`
+    : autoCap != null ? `Up to ~${autoCap} ranked highlights` : "Ranked highlights that make the cut";
+  // After a failed import the way forward is the action under the problem (Upload original video): the button steps
+  // back to an outline and says it tries the link again.
   const create = <button type="button" className={`btn w-full ${afterProblem ? "ghost" : "primary"}`} disabled={!ready} onClick={() => onCreate(options)}>
-    {step ? "Working…" : afterProblem ? "Try the link again" : "Create"}</button>;
+    {step ? "Working…" : afterProblem ? "Try the link again" : "Generate Highlights"}</button>;
 
   // The Brand kit pickers, for this one job: the look lives in `look`, the hook tone in the form.
   const styleLook: StyleLook = { ...look, hook_style: f.hook_style };
@@ -208,8 +215,10 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
             {open && <div className="grid divide-x-0 divide-y divide-solid divide-line-soft">
               <SettingRow icon="scissors" name="Clipping" hint="Finds the best moments and cuts them into clips with an AI rating." under={<div className="grid gap-3 pl-12 narrow:pl-0">
                 <div className="flex flex-wrap gap-1">
-                  {limits.length > 0 && <InlineSelect label="AI picks" value={f.limit === null ? "" : String(f.limit)} shown={f.limit === null ? "Auto" : f.limit === 1 ? "The best one" : `The best ${f.limit}`}
-                    onChange={(v) => set({ limit: v ? +v : null })}><option value="">Auto: every clip that makes the cut</option>
+                  {limits.length > 0 && <InlineSelect label="AI picks" value={f.limit === null ? "" : String(f.limit)}
+                    shown={f.limit === null ? (autoCap != null ? `Auto (up to ~${autoCap})` : "Auto") : f.limit === 1 ? "The best one" : `The best ${f.limit}`}
+                    onChange={(v) => set({ limit: v ? +v : null })}>
+                    <option value="">{autoCap != null ? `Auto: up to ~${autoCap} that make the cut` : "Auto: every clip that makes the cut"}</option>
                     {limits.map((n) => <option key={n} value={n}>{n === 1 ? "The best one" : `The best ${n}`}</option>)}</InlineSelect>}
                   {has("duration") && <InlineSelect label="Clip length" value={f.duration} shown={LENGTHS[f.duration] || f.duration} onChange={(v) => set({ duration: v })}>
                     {lengths.map((b) => <option key={b} value={b} disabled={!!span && shortest(b) > span}>{LENGTHS[b] || b}</option>)}</InlineSelect>}
@@ -276,7 +285,10 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
         {/* The summary: what runs, the server's price, and the button. */}
         <aside aria-label="Summary" className={`${CARD} sticky top-[88px] grid gap-4 mid:static`}>
           <h2 className="m-0 text-[16px] font-semibold">Summary</h2>
+          <p className="m-0 text-[13.5px] text-muted">One click: analyse, rank, clip, captions and framing — platform-ready previews.</p>
           <dl className="m-0 grid gap-3 text-[14px]">
+            <div className="flex items-baseline justify-between gap-3"><dt className="text-muted">Highlights</dt>
+              <dd className="m-0 text-right text-fg-2">{highlightLine}</dd></div>
             <div className="flex items-baseline justify-between gap-3"><dt className="text-muted">Video processing</dt>
               <dd className="m-0 text-right tabular-nums">{price.state === "ok" ? `${price.credits.toLocaleString()} credits` : price.state === "asking" ? "…" : "—"}</dd></div>
             {included.filter(([, on]) => on).map(([name]) => <div key={name} className="flex items-baseline justify-between gap-3"><dt className="text-muted">{name}</dt><dd className="m-0 text-fg-2">Included</dd></div>)}

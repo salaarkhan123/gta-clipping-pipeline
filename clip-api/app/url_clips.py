@@ -40,12 +40,13 @@ NO_LENGTH = ("duration_unknown", "This link's length cannot be read before it is
                                  "Import it with POST /v1/imports, then start clips on the upload.")
 
 
-AUTO_DURATION = "0-90"      # automatic discovery: every moment that passes, 0 to 90 s each, at most MAX_CLIPS
+AUTO_DURATION = "0-90"      # automatic discovery: every moment that passes, 0 to 90 s each; count = suggest_want(span)
 
 
 def with_defaults(options: ClipOptions | None) -> ClipOptions:
-    """Owner, 2026-11-18: automatic clip discovery is the default, with no 3-clip limit. Options that name a count
-    or a length bucket (`max_clips`, `limit`, `duration`) are kept as sent."""
+    """Owner, 2026-11-18: automatic clip discovery is the default, with no 3-clip limit. The pipeline caps auto
+    volume with highlights.suggest_want(analysed length). Options that name a count or a length bucket
+    (`max_clips`, `limit`, `duration`) are kept as sent."""
     options = options or ClipOptions()
     if options.model_fields_set & {"max_clips", "limit", "duration"}:
         return options
