@@ -8,6 +8,7 @@ from functools import lru_cache
 from fastapi import APIRouter
 from pydantic import ValidationError
 
+from .live.routes_live import listing as live_clipping_listing
 from .render_options import provisional_on
 from .routes_media import ClipOptions
 from .templates import hook_style_catalogue
@@ -80,4 +81,8 @@ def list_options():
     `clips.hook_style.catalogue` is the hook-styles resource (id, label, description); default stays `serious`.
     Send only options listed here: an unknown option is rejected with 422."""
     premium = premium_thumbnail_listing()      # (#140) listed only while PREMIUM_THUMBNAILS is on
-    return {"clips": clip_options(), **({"premium_thumbnail": premium} if premium else {})}
+    live = live_clipping_listing()             # AS-3 scaffold; listed only while LIVE_CLIPPING is on
+    out = {"clips": clip_options(), **({"premium_thumbnail": premium} if premium else {})}
+    if live:
+        out["live_clipping"] = live
+    return out

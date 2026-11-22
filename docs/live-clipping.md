@@ -236,7 +236,9 @@ Price options, for the owner:
 
 ## 7. Stage 2 plan (after the owner's answers)
 
-- a. `clip-api/app/live/`: segment reader, audio ring, trailing-baseline timeline, trigger, clip builder that calls the existing render and judge. Flag `LIVE_CLIPPING=false`; nothing imported by the API or the worker when it is off.
+**Scaffold started (AS-3 / CPR-79, flag still off):** `clip-api/app/live/` holds a rolling buffer, trailing-baseline detect stub, segment ingest hooks, `tool=live_clip` helpers, and a CPU mock pipeline with unit tests. `/v1/live/*` answers 404 `live_clipping_off` unless `LIVE_CLIPPING=true` (env; not yet on `Settings` while security #274 is open). No MediaMTX, no credits, no FE enable, no measured real-time claim.
+
+- a. `clip-api/app/live/`: segment reader, audio ring, trailing-baseline timeline, trigger, clip builder that calls the existing render and judge. Flag `LIVE_CLIPPING=false`; nothing imported by the API or the worker when it is off. *(buffer / detect / mock / routes scaffold: done; render/judge/worker: residual)*
 - b. Local ingest: MediaMTX binary run locally, a file pushed with `ffmpeg -re` over RTMP.
 - c. `scripts/live_bench.py`: trigger-to-preview latency per stage, wall and CPU, median and p95, on the owner's test footage, run through `heavy.sh`.
 - d. Session credits in `app/live/credits.py` with tests for a to e in 4.4, billing off.
