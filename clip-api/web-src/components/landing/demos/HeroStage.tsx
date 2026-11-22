@@ -65,16 +65,15 @@ function useLoop(run: boolean, count: number): { phase: Phase; at: number } {
   return s;
 }
 
-// The next game's media, fetched while this one plays, so its video and clips appear without a blank frame.
+// The next game's posters, fetched while this one plays, so its video and clips come in on a still frame instead of
+// a blank one. Only the posters: each video starts loading when its game is shown (Footage), and the poster stays
+// under it until it plays, so a visitor never downloads a game they do not see.
 function Preload({ set }: { set: HeroSet | undefined }) {
   if (!set) return null;
   return (
     <span className="pointer-events-none absolute h-0 w-0 overflow-hidden opacity-0" aria-hidden="true">
-      {[set.vod, ...set.tiles].map((i) => <span key={i.id}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        {i.poster && <img src={mediaUrl("hero-clean", i.poster)} alt="" decoding="async" />}
-        <video src={mediaUrl("hero-clean", i.src)} muted playsInline preload="auto" />
-      </span>)}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {[set.vod, ...set.tiles].map((i) => i.poster && <img key={i.id} src={mediaUrl("hero-clean", i.poster)} alt="" decoding="async" />)}
     </span>
   );
 }

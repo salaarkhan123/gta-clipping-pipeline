@@ -172,3 +172,11 @@ test("the workflow section claims only what is real: import is a link or an uplo
   assert.doesNotMatch(wf, /<button|href=|onClick/);
   assert.match(source("app/page.tsx"), /<WorkflowSection \/>/);
 });
+
+test("the clipping slide fetches only the next game's posters ahead, never its videos", () => {
+  const stage = source("components/landing/demos/HeroStage.tsx");
+  const preload = stage.slice(stage.indexOf("function Preload"), stage.indexOf("export function HeroStage"));
+  assert.match(preload, /<img key=\{i\.id\} src=\{mediaUrl\("hero-clean", i\.poster\)\}/);
+  assert.doesNotMatch(preload, /<video|preload="auto"/);
+  assert.match(source("components/landing/demos/Footage.tsx"), /autoPlay preload="none" poster=/);
+});
