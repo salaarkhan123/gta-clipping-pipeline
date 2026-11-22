@@ -326,6 +326,19 @@ def test_once_a_winner_is_approved_the_result_above_it_is_settled(client, admin,
     assert winner(client, admin, ids[2], 2).status_code == 200
 
 
+def test_a_rejected_entry_cannot_rejoin_the_ranking_above_an_approved_winner(client, admin, cup):
+    low, high = creator(client), creator(client)
+    e_low = approved_entry(client, admin, cup, low, views=500)
+    e_high = approved_entry(client, admin, cup, high, views=1000)
+    assert review(client, admin, e_high, "reject", "No attribution link.").status_code == 200
+    move(client, admin, cup, "close")
+    assert winner(client, admin, e_low, 1).status_code == 200
+    assert code(review(client, admin, e_high, "approve")) == (409, "winners_approved")
+    assert [(e["username"], e["final_place"]) for e in board(client, cup)] == [(low["username"], 1)]
+    assert code(move(client, admin, cup, "reopen")) == (409, "winners_approved")
+    assert move(client, admin, cup, "finalize").json()["status"] == "finalized"
+
+
 def test_a_final_competition_takes_no_more_changes(client, admin, podium):
     cup, ids = podium["cup"], podium["ids"]
     move(client, admin, cup, "close")

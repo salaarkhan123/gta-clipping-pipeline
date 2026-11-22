@@ -443,6 +443,8 @@ class ReviewBody(BaseModel):
 
 def admin_move(db: Session, entry_id: str, move) -> dict:
     e = entry_or_404(db, entry_id)
+    # One admin move at a time per competition: a count and a winner approval must not pass each other.
+    db.execute(select(LeagueCompetition.id).where(LeagueCompetition.id == e.competition_id).with_for_update())
     try:
         move(e)
     except league.Refused as err:

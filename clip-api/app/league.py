@@ -2,7 +2,8 @@
 
 Entry status      pending -> approved | rejected | disqualified
                   approved -> rejected | disqualified          rejected -> approved
-                  disqualified is final.
+                  disqualified is final. Once a winner is approved no entry can be approved, and only entries
+                  ranked below the approved places can still be rejected or disqualified.
 Competition       draft -> open -> closed -> finalized         closed -> open (reopened)
 Prize             pending -> sent | forfeited                  (recorded by an admin; nothing is paid by this code)
 
@@ -229,6 +230,8 @@ def review(db: Session, admin_id: str, entry: LeagueEntry, action: str, reason: 
         raise Refused(422, "reason_required", f"Give the reason for '{action}': the creator sees it.")
     settled = settled_places(db, entry.competition_id)
     if settled:
+        if action == "approve":         # a late approval would enter the ranking, perhaps above an approved winner
+            raise Refused(409, "winners_approved", "A winner is already approved: no entry can join the ranking now.")
         c = db.get(LeagueCompetition, entry.competition_id)
         row = next((r for r in ranking(db, c) if r.entry.id == entry.id), None)
         if row is not None and row.rank <= settled:
@@ -274,6 +277,8 @@ def move_competition(db: Session, admin_id: str, c: LeagueCompetition, action: s
     allowed, after = COMPETITION_RULES[action]
     if c.status not in allowed:
         raise Refused(409, "status_not_allowed", f"A competition that is {c.status} cannot be moved by '{action}'.")
+    if action == "reopen" and settled_places(db, c.id):
+        raise Refused(409, "winners_approved", "A winner is already approved: entries cannot be reopened.")
     if action == "finalize":
         board = ranking(db, c)
         owed = [r.rank for r in board[:len(PRIZE_PLACES)] if r.views is not None and r.entry.final_place is None]

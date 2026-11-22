@@ -24,7 +24,7 @@ function Profile() {
   const [creator, setCreator] = useState<Creator | null | undefined>(undefined);
   useEffect(() => {
     if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) { setCreator(null); return; }
-    api(`/v1/league/creators/${username}`, { auth: false }).then(setCreator).catch(() => setCreator(null));
+    api(`/v1/league/creators/${encodeURIComponent(username)}`, { auth: false }).then(setCreator).catch(() => setCreator(null));
   }, [username]);
   return (
     <>
