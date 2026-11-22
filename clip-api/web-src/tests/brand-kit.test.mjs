@@ -7,7 +7,7 @@ const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "u
 
 test("brand kit page: settings in a 640 px column, the live preview beside it (under it on a narrow window)", () => {
   const page = source("app/dashboard/brand-kit/page.tsx");
-  assert.match(page, /grid-cols-\[minmax\(0,640px\)_minmax\(340px,1fr\)\]/);     // the measured 640 px settings column
+  assert.match(page, /grid-cols-\[minmax\(0,640px\)_minmax\(372px,1fr\)\]/);     // the measured 640 px settings column
   assert.match(page, /wide:grid-cols-\[minmax\(0,720px\)\]/);
   assert.match(page, /<KitForm /);
   assert.match(page, /aria-label="Preview"/);

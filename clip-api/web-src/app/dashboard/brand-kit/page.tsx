@@ -180,7 +180,7 @@ export default function BrandKit() {
       {full && !current && <p className="notice mb-4 mt-0">Your plan keeps {store.limit} {store.limit === 1 ? "kit" : "kits"}, and you have {store.kits.length}. Delete one or <Link href="/dashboard/pricing/">upgrade</Link> to save another.</p>}
 
       {/* Settings in a 640 px column with the live preview beside it when both fit (wider than 1360 px), under it otherwise. */}
-      <div className="grid grid-cols-[minmax(0,640px)_minmax(340px,1fr)] items-start gap-x-[clamp(40px,10.6vw,151px)] gap-y-12 pl-12 pt-[14px] wide:grid-cols-[minmax(0,720px)] wide:pl-0 mid:grid-cols-1">
+      <div className="grid grid-cols-[minmax(0,640px)_minmax(372px,1fr)] items-start gap-x-[clamp(40px,5vw,151px)] gap-y-12 pl-12 pt-[14px] wide:grid-cols-[minmax(0,720px)] wide:pl-0 mid:grid-cols-1">
         <div className="grid min-w-0 gap-5">
           {/* Where the plan's kit allowance stands: the slim strip above the first group. */}
           {limitNote && <p className="m-0 flex min-h-[34px] items-center justify-between gap-3 rounded-[10px] bg-[#2c271d] px-5 text-[14px] text-text">

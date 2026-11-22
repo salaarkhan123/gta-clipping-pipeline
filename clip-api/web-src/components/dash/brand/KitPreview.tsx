@@ -100,7 +100,7 @@ export function KitPreview({ kit, shape, onShape }: { kit: Kit; shape: Shape; on
   return (
     <div className="grid justify-items-center gap-[22px]">
       <div className="flex items-center gap-3">
-        <Pills label="Preview shape" value={shape} onChange={onShape} options={SHAPES.map((s) => ({ value: s, label: s }))} />
+        <Pills label="Preview shape" className="!flex-nowrap" value={shape} onChange={onShape} options={SHAPES.map((s) => ({ value: s, label: s }))} />
         <span title={`Preview only. Clips made with this kit are cut to ${kit.aspect}.`} className="grid h-8 w-6 place-items-center text-fg-2"><Icon name="info" size={17} />
           <span className="sr-only">Preview only. Clips made with this kit are cut to {kit.aspect}.</span></span>
       </div>
