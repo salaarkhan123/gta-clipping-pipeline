@@ -11,6 +11,8 @@ import numpy as np
 from .ff import SAFE_IN, Deadline, run
 
 CHAT_LAG = 4  # seconds: chat reacts a few seconds after the moment happens
+# How densely the chat band is sampled. dense = historical fps=2 path; sparse = fps=1 (half the frames).
+CHAT_MOTION_SAMPLES = ("dense", "sparse")
 
 
 def _seek(start: float, length: float | None) -> list[str]:
@@ -31,19 +33,31 @@ def audio_rms_db(path: Path, deadline: Deadline | None = None, start: float = 0.
 
 
 def onscreen_chat_motion(path: Path, chat_region: str, deadline: Deadline | None = None, start: float = 0.0,
-                         length: float | None = None) -> list[float] | None:
+                         length: float | None = None, sample: str = "dense") -> list[float] | None:
     """How fast the on-screen chat band is changing each second (scrolling text = many edge changes).
-    With `length`, only that part of the file is read (see audio_rms_db)."""
+    With `length`, only that part of the file is read (see audio_rms_db).
+
+    `sample`:
+    - `dense` (default): decode at 2 fps and average pairs → one value per second (historical behaviour).
+    - `sparse`: decode at 1 fps → one value per second with about half the frames (research A3).
+    """
+    if sample not in CHAT_MOTION_SAMPLES:
+        raise ValueError(f"chat motion sample must be one of {CHAT_MOTION_SAMPLES}, not {sample!r}")
     band_y, band_h = (0.0, 0.32) if chat_region.startswith("top") else (0.58, 0.42)
+    fps = 2 if sample == "dense" else 1
     res = run(["ffmpeg", "-hide_banner", "-nostats", *_seek(start, length), *SAFE_IN, "-i", path, "-an",
-               "-vf", f"fps=2,crop=iw:ih*{band_h}:0:ih*{band_y},scale=480:-2,format=gray,"
+               "-vf", f"fps={fps},crop=iw:ih*{band_h}:0:ih*{band_y},scale=480:-2,format=gray,"
                       "edgedetect=low=0.15:high=0.4,tblend=all_mode=difference,signalstats,"
                       "metadata=print:key=lavfi.signalstats.YAVG:file=-",
                "-f", "null", "-"], deadline)
     vals = [float(v) for v in re.findall(r"YAVG=([\d.]+)", res.stdout)]
-    if len(vals) < 20:
+    if sample == "dense":
+        if len(vals) < 20:
+            return None
+        return [sum(vals[i:i + 2]) / len(vals[i:i + 2]) for i in range(0, len(vals), 2)]
+    if len(vals) < 10:
         return None
-    return [sum(vals[i:i + 2]) / len(vals[i:i + 2]) for i in range(0, len(vals), 2)]
+    return vals
 
 
 def baseline_z(vals: list[float], window: int = 300, floor: float = 1.0) -> np.ndarray:

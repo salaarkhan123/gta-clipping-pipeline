@@ -481,6 +481,7 @@ def process_job(job_id: str, transcriber: Transcriber | None = None, pipeline=ru
             opts = PipelineOptions(caption_font=s.caption_font, source_lang=language, target_lang=target,
                                    moment_layout=s.provisional_layouts, quality_floor=s.clip_quality_floor,
                                    score_weights=weights, score_weights_version=weights_version,
+                                   chat_motion_sample=s.chat_motion_sample,
                                    **options)   # (render, agent B; U4 quality floor; per-game rank weights)
             # The pipeline's judge takes (text, frame, context); the AI client takes (text, context, frame).
             extra = ({"judge": lambda text, frame, ctx: ai.clip_meta(text, {**ctx, **lang_ctx}, frame),
