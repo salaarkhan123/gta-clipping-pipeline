@@ -391,3 +391,28 @@
   background: radial-gradient(circle at 100% 0, transparent 19.5px, var(--card) 20px); }
 .start-tab:not(:first-child)::before { content: ""; position: absolute; left: -20px; bottom: 0; width: 20px; height: 20px; pointer-events: none;
   background: radial-gradient(circle at 0 0, transparent 19.5px, var(--card) 20px); }
+
+/* ---- The app theme for the older shared classes ---------------------------------------------------------------
+   Pages and panels that still use these classes (the editor's side panels, forms, tables, dialogs) follow the
+   same rules as the rebuilt pages: grey blocks one step lighter per layer, no outlines, 10 px controls.
+   :where() keeps each rule as weak as the one it replaces, so a utility class on the element still wins. */
+:where([data-theme="app"]) :is(input, select, textarea) { background-color: theme('colors.control'); border-color: transparent; border-radius: var(--radius-control); font-size: 14px; padding: 9px 12px; }
+:where([data-theme="app"]) :is(input, select, textarea):focus { border-color: theme('colors.line-strong'); }
+:where([data-theme="app"]) :is(.line, .panels, .options.edits, .picker) :is(input, select, textarea) { background-color: theme('colors.control-hover'); border-color: transparent; border-radius: var(--radius-control); padding-left: 12px; padding-right: 12px; }
+:where([data-theme="app"]) :is(.panel, .form-col .panel, .job) { border: 0; border-radius: var(--radius-card); }
+:where([data-theme="app"]) :is(.picker, .picker.confirm) { border: 0; border-radius: var(--radius-card); background: theme('colors.card'); }
+:where([data-theme="app"]) :is(.line, .panels, .options.edits) { border: 0; border-radius: var(--radius-sm); background: theme('colors.control'); }
+:where([data-theme="app"]) .seg { border: 0; border-radius: var(--radius-control); background: theme('colors.control'); }
+:where([data-theme="app"]) .seg button { border-radius: 8px; }
+:where([data-theme="app"]) .seg button[aria-pressed="true"] { background: theme('colors.raised'); }
+:where([data-theme="app"]) .tabs button { border: 0; border-radius: var(--radius-control); background: theme('colors.control'); color: theme('colors.text'); }
+:where([data-theme="app"]) .tabs button:hover { background: theme('colors.control-hover'); }
+:where([data-theme="app"]) .tabs button.on { background: theme('colors.btn'); color: theme('colors.btn-ink'); }
+:where([data-theme="app"]) .table-wrap { border: 0; border-radius: var(--radius-md); background: theme('colors.card'); }
+:where([data-theme="app"]) :is(.ledger th, .ledger td) { padding: 12px 16px; border-bottom-color: theme('colors.line-soft'); }
+:where([data-theme="app"]) .ledger th { font-weight: 400; color: theme('colors.fg-2'); }
+:where([data-theme="app"]) .icon-btn { border: 0; border-radius: var(--radius-control); background: theme('colors.control'); color: theme('colors.text'); }
+:where([data-theme="app"]) .icon-btn:hover { background: theme('colors.control-hover'); }
+:where([data-theme="app"]) .notice { border: 0; background: theme('colors.card'); border-radius: var(--radius-md); }
+:where([data-theme="app"]) .error { border: 0; background: rgba(255, 92, 122, .12); color: theme('colors.text'); }
+:where([data-theme="app"]) .dash-title { font-size: var(--text-page-title); letter-spacing: -.01em; }
