@@ -3,16 +3,19 @@
 // Tabs: sections of a page, plain words with the current one underlined.
 export type Option<T extends string> = { value: T; label: React.ReactNode; disabled?: boolean };
 
-export function Pills<T extends string>({ options, value, onChange, label, size = "md", className = "" }: {
-  options: Option<T>[]; value: T; onChange: (v: T) => void; label: string; size?: "sm" | "md"; className?: string;
+// `tone="quiet"`: a filter above a list (All / Images / Videos): the chosen one is a grey block, the rest plain words.
+export function Pills<T extends string>({ options, value, onChange, label, size = "md", tone = "solid", className = "" }: {
+  options: Option<T>[]; value: T; onChange: (v: T) => void; label: string; size?: "sm" | "md"; tone?: "solid" | "quiet"; className?: string;
 }) {
-  const dims = size === "sm" ? "h-7 min-w-[52px] px-3 text-[12px]" : "h-8 min-w-[75px] px-4 text-[13px]";
+  const quiet = tone === "quiet";
+  const dims = quiet ? "h-9 px-3 text-[14.5px] rounded-8" : `rounded-pill ${size === "sm" ? "h-7 min-w-[52px] px-3 text-[12px]" : "h-8 min-w-[75px] px-4 text-[13px]"}`;
+  const look = (on: boolean) => quiet ? (on ? "bg-control text-text" : "bg-transparent text-fg-2 hover:text-text") : (on ? "bg-btn text-btn-ink" : "bg-control text-text hover:bg-control-hover");
   return (
-    <div role="radiogroup" aria-label={label} className={`inline-flex flex-wrap items-center gap-2 ${className}`}>
+    <div role="radiogroup" aria-label={label} className={`inline-flex flex-wrap items-center ${quiet ? "gap-1" : "gap-2"} ${className}`}>
       {options.map((o) => (
         <button key={o.value} type="button" role="radio" aria-checked={o.value === value} disabled={o.disabled} onClick={() => onChange(o.value)}
-          className={`${dims} inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-pill border-0 font-sans font-medium tabular-nums transition-colors duration-base disabled:cursor-default disabled:opacity-45
-            ${o.value === value ? "bg-btn text-btn-ink" : "bg-control text-text hover:bg-control-hover"}`}>{o.label}</button>
+          className={`${dims} inline-flex cursor-pointer items-center justify-center gap-1.5 border-0 font-sans font-medium tabular-nums transition-colors duration-base disabled:cursor-default disabled:opacity-45
+            ${look(o.value === value)}`}>{o.label}</button>
       ))}
     </div>
   );
