@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useDash } from "@/components/dash/Shell";
-import { BackTitle, BALANCE, PAGE_HEAD } from "@/components/dash/ui";
+import { BackTitle, PAGE_HEAD } from "@/components/dash/ui";
 import { api } from "@/lib/api";
 import { tidy } from "@/lib/templates";
 
@@ -28,10 +28,10 @@ export default function Billing() {
         <button className="btn small ghost" onClick={portal}>Manage billing</button>
       </div>}
       {ends && <p className="notice bill-note">Your {plan} plan ends on {ends.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}. You keep it until then.</p>}
-      <section className={BALANCE} aria-label="Balance">
+      <section className="flex flex-wrap items-center justify-between gap-4 rounded-card bg-card p-6 narrow:p-5" aria-label="Balance">
         <div>
-          <p className="flex items-baseline gap-2 font-display text-[34px] font-bold leading-[normal] tabular-nums text-lime">{me.credits.toLocaleString()}
-            <small className="font-body text-[14px] font-medium leading-[normal] text-muted">credits · {plan} plan</small></p>
+          <p className="flex items-baseline gap-2 font-sans text-[28px] font-semibold leading-[1.1] tracking-[-0.02em] tabular-nums text-lime">{me.credits.toLocaleString()}
+            <small className="font-sans text-[14px] font-normal leading-[normal] tracking-normal text-fg-2">credits · {plan} plan</small></p>
           <p className="muted small">One credit is one minute of video. A failed or cancelled job is refunded in full.</p>
         </div>
         <div className="row">
@@ -40,7 +40,7 @@ export default function Billing() {
         </div>
       </section>
       <section>
-        <h2>Credit history</h2>
+        <h2 className="!mb-3 !text-[16px] font-semibold">Credit history</h2>
         {history === null ? <p className="muted">Loading…</p> : !history.length ? <p className="muted">Nothing yet.</p>
           : <div className="table-wrap"><table className="ledger">
               <thead><tr><th scope="col">When</th><th scope="col">What</th><th scope="col">Credits</th></tr></thead>
