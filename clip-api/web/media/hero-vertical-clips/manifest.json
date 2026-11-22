@@ -12,10 +12,6 @@
    "url": "https://www.youtube.com/watch?v=78kntDlbjMI"
   },
   {
-   "creator": "iShowSpeed",
-   "url": "https://www.youtube.com/watch?v=qNOcoUKzt80"
-  },
-  {
    "creator": "iiTzTimmy",
    "url": "https://www.youtube.com/watch?v=ovyMOe_017I"
   },
@@ -26,6 +22,10 @@
   {
    "creator": "Ninja",
    "url": "https://www.youtube.com/watch?v=ogbIEh-4rYw"
+  },
+  {
+   "creator": "FP Good Game",
+   "url": "https://www.youtube.com/watch?v=GURcXM3OcPE"
   }
  ],
  "items": [
@@ -168,12 +168,12 @@
   },
   {
    "id": "clip-3",
-   "candidate": "fifa-speed-m1",
-   "label": "EA FC 27 pack opening",
-   "kind": "video",
    "src": "clip-3.mp4",
    "webm": "clip-3.webm",
    "poster": "clip-3.webp",
+   "candidate": "fc27-fpgg-m2",
+   "label": "EA SPORTS FC 27 gameplay",
+   "kind": "video",
    "width": 540,
    "height": 960,
    "duration_sec": 8.0,
@@ -181,39 +181,39 @@
    "aspect": "9:16",
    "layout": "auto",
    "caption_style": "impact",
-   "rank": 1,
-   "rating": 90,
+   "rank": 2,
+   "rating": 71,
    "rating_source": "ai",
-   "credit": "Footage: iShowSpeed",
+   "credit": "Footage: FP Good Game",
    "commercial_permission": "owner-confirmed 2026-11-18",
    "source": {
-    "id": "fifa-speed",
-    "creator": "iShowSpeed",
-    "title": "iShowSpeed's FIRST FC 27 Pack Opening!",
-    "url": "https://www.youtube.com/watch?v=qNOcoUKzt80",
-    "start_sec": 745.1,
-    "end_sec": 753.1
+    "id": "fc27-fpgg",
+    "creator": "FP Good Game",
+    "title": "EA Sport FC 27 PS5 Next Gen Gameplay 4K HDR 60FPS",
+    "url": "https://www.youtube.com/watch?v=GURcXM3OcPE",
+    "start_sec": 554.0,
+    "end_sec": 562.0
    },
-   "rating_raw": 49,
+   "rating_raw": 28,
    "ai_model": "claude-haiku-5-5",
    "ai_scores": {
-    "hook": 55,
-    "payoff": 45,
+    "hook": 30,
+    "payoff": 25,
     "clarity": 35,
-    "emotion": 60,
-    "pacing": 50
+    "emotion": 20,
+    "pacing": 30
    },
    "scoring_version": "judge-v2-equal",
-   "ai_reason": "Loud excited shouting gives energy, but the frame shows only an Arsenal crest and the outcome is not clear, so a viewer who never saw the stream won't know what the guard call means.",
-   "ai_kind": "reaction",
+   "ai_reason": "Silent football footage with no visible goal, no reaction and no context; the frame shows a light-blue player near the box and a red-shirted defender, so it is unclear what happens.",
+   "ai_kind": "clutch",
    "ai_calls": [
     {
-     "cid": "fifa-speed-m1",
+     "cid": "fc27-fpgg-m2",
      "model": "claude-haiku-5-5",
      "status": 200,
-     "input_tokens": 2911,
-     "output_tokens": 413,
-     "cost_usd": 0.000498,
+     "input_tokens": 2883,
+     "output_tokens": 400,
+     "cost_usd": 0.000488,
      "price_per_mtok": [
       0.1,
       0.5
