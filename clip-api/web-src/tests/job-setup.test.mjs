@@ -32,14 +32,16 @@ test("job setup: the price only comes from the server, and Create waits for cons
   assert.match(source("components/dash/setup/MakeView.tsx"), /useQuote\(known\?\.quote \? QUOTE : null/);
 });
 
-test("start card: polish chips preset real options; B-roll and the two unbuilt tabs are Coming soon", () => {
+test("start card: a new project starts with every built polish option; Auto-edit is Coming soon, Open editor goes to the clips", () => {
   const polish = source("lib/polish.ts"), card = source("components/dash/SourceBar.tsx");
   assert.match(polish, /\{ id: "captions", name: "Captions", icon: "captions", built: true, option: "captions" \}/);
   assert.match(polish, /\{ id: "tighten", name: "Speech cleanup", icon: "mic", built: true, option: "tighten" \}/);
   assert.match(polish, /\{ id: "hook", name: "Hook", icon: "hook", built: true, option: "hook_overlay" \}/);
   assert.match(polish, /\{ id: "broll", name: "B-roll", icon: "image", built: false \}/);
-  assert.match(card, /<ComingSoonBadge short \/><\/span>\)\}/);                       // an unbuilt chip is a span, never a button
+  assert.match(card, /const ALL_POLISH = Object\.fromEntries\(POLISH\.filter\(\(p\) => p\.built\)/);     // unbuilt options are never sent
+  assert.match(card, /polishQuery\(ALL_POLISH\)/);
   assert.match(card, /\{tab !== "clip" \? <div [^>]*>\s*<ComingSoonBadge \/>/);
+  assert.match(card, /<Link href="\/dashboard\/library\/\?view=clips"[^>]*>\s*<Icon name="sliders" size=\{19\} \/>Open editor<\/Link>/);
   for (const f of ["components/dash/LinkChooser.tsx", "components/dash/setup/MakeView.tsx"]) assert.match(source(f), /polishLook\(window\.location\.search\)/, f);
 });
 

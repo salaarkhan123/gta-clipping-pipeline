@@ -12,10 +12,6 @@
    "url": "https://www.youtube.com/watch?v=ovyMOe_017I"
   },
   {
-   "creator": "iShowSpeed",
-   "url": "https://www.youtube.com/watch?v=qNOcoUKzt80"
-  },
-  {
    "creator": "NICKMERCS",
    "url": "https://www.youtube.com/watch?v=eZ2rIdme-3c"
   }
@@ -81,36 +77,6 @@
     "end_sec": 2208.06
    },
    "commercial_permission": "owner-confirmed 2026-11-18"
-  },
-  {
-   "id": "hook-3",
-   "candidate": "fifa-speed-m1",
-   "label": "Hook text over the opening",
-   "kind": "video",
-   "src": "hook-3.mp4",
-   "poster": "hook-3.webp",
-   "width": 540,
-   "height": 960,
-   "duration_sec": 8.0,
-   "game": "EA SPORTS FC 27",
-   "aspect": "9:16",
-   "layout": "auto",
-   "caption_style": "impact",
-   "hook": "WAIT FOR THE WALKOUT",
-   "hook_source": "shot-list",
-   "rank": 1,
-   "rating": 99,
-   "rating_source": "signals",
-   "credit": "Footage: iShowSpeed",
-   "commercial_permission": "owner-confirmed 2026-11-18",
-   "source": {
-    "id": "fifa-speed",
-    "creator": "iShowSpeed",
-    "title": "iShowSpeed's FIRST FC 27 Pack Opening!",
-    "url": "https://www.youtube.com/watch?v=qNOcoUKzt80",
-    "start_sec": 748.15,
-    "end_sec": 756.15
-   }
   },
   {
    "id": "hook-4",

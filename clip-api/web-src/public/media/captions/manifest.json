@@ -6,6 +6,10 @@
   {
    "creator": "xQc",
    "url": "https://www.youtube.com/watch?v=VWNBp6SIEPU"
+  },
+  {
+   "creator": "theRadBrad",
+   "url": "https://www.youtube.com/watch?v=mATQ5maJ234"
   }
  ],
  "items": [
@@ -386,6 +390,30 @@
     "end_sec": 8798.71
    },
    "commercial_permission": "owner-confirmed 2026-11-18"
+  },
+  {
+   "id": "lucia-jason",
+   "candidate": "lj-1",
+   "label": "No captions, wide (words for a live overlay)",
+   "kind": "video",
+   "src": "lucia-jason.mp4",
+   "webm": "lucia-jason.webm",
+   "poster": "lucia-jason.webp",
+   "width": 1920,
+   "height": 1080,
+   "duration_sec": 10.0,
+   "game": "GTA VI",
+   "aspect": "16:9",
+   "words": "lucia-jason.words.json",
+   "credit": "Footage: theRadBrad",
+   "commercial_permission": "owner-approved 2026-11-21: YouTube creator clips with credit, no watermark",
+   "source": {
+    "creator": "theRadBrad",
+    "title": "GTA 6 Walkthrough Gameplay Part 3 - LUCIA CAMINOS (GRAND THEFT AUTO 6)",
+    "url": "https://www.youtube.com/watch?v=mATQ5maJ234",
+    "start_sec": 3984.0,
+    "end_sec": 3994.0
+   }
   }
  ]
 }

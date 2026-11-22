@@ -18,7 +18,8 @@ const files = (dir) => readdirSync(join(root, dir)).flatMap((n) => {
 const PLATFORMS = ["Twitch", "Kick", "YouTube", "Google Drive", "Dropbox"];
 // Not copy about link imports: the link chooser's label for a link already pasted, and the coming-soon posting
 // destinations ("YouTube Shorts"). The privacy notice and terms follow the rule too (owner decision).
-const NOT_COPY = ["components/dash/LinkChooser.tsx"];
+// components/ui/PlatformGlyph.tsx names the posting destinations for its badges' labels (owner decision): not import copy.
+const NOT_COPY = ["components/dash/LinkChooser.tsx", "components/ui/PlatformGlyph.tsx"];
 
 test("the copy names only verified platforms (none today)", () => {
   assert.deepEqual([...VERIFIED_PLATFORMS], []);
@@ -40,6 +41,6 @@ test("the link prompts read right with none, one or several platforms", () => {
 });
 
 test("the paste bars and placeholders use the shared prompt", () => {
-  for (const f of ["components/StartInput.tsx", "components/landing/demos/VodToClips.tsx"])
+  for (const f of ["components/StartInput.tsx", "components/landing/demos/VodToClips.tsx", "components/landing/demos/HeroStage.tsx"])
     assert.match(readFileSync(join(root, f), "utf8"), /pastePrompt\(\)/, f);
 });

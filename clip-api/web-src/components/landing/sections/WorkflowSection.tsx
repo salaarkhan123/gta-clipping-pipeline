@@ -1,77 +1,134 @@
 "use client";
 import { useRef } from "react";
-import { ComingSoonBadge } from "../../ComingSoonBadge";
+import { PlatformBadge, PlatformId } from "@/components/ui/PlatformGlyph";
 import { LinkIcon } from "../demos/Bits";
-import { Credits, Footage, useItems } from "../demos/Footage";
-import { useInView } from "../demos/motion";
-import { Section } from "../../site/Section";
+import { Credits, Footage, Item, useItems } from "../demos/Footage";
+import { useInView, useReducedMotion } from "../demos/motion";
+import { Eyebrow } from "../../site/Section";
 import { EyebrowIcon } from "./EyebrowIcon";
-import { platformNames, VERIFIED_PLATFORMS } from "@/lib/platforms";
 
-// Import, auto edit, post. Importing and editing work today; posting on a schedule is not built and says so.
-function Arrow() {
+// Import, auto editing, scheduling: three columns in one warm card, each a picture of the step on approved footage
+// over its title and a line about it, joined by dashed arrows with a slowly turning sync mark in the logo's green.
+// Step 1 is what the product does today (a pasted link or an upload; nothing is pulled from a channel by itself).
+// Step 2 names only what one run does today. Step 3 shows the platforms the publishing code targets
+// (app/publish/platforms.py: YouTube, TikTok, Instagram, Facebook); the owner decided to show scheduling in full.
+const PLATFORMS: PlatformId[] = ["youtube", "tiktok", "instagram", "facebook"];
+const clock = (sec: number) => {
+  const t = Math.round(sec), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), x = t % 60;
+  return `${h ? `${h}:${String(m).padStart(2, "0")}` : m}:${String(x).padStart(2, "0")}`;
+};
+
+function Sync({ still }: { still: boolean }) {
   return (
-    <span className="flex items-center gap-1 text-white/35 narrow:rotate-90" aria-hidden="true">
-      <span className="h-px w-6 border-t border-dashed border-current" />
-      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12h14m-6-6 6 6-6 6" /></svg>
+    <span className="grid h-11 w-11 flex-none place-items-center rounded-full bg-[#141612] text-lime shadow-[inset_0_0_0_1.5px_#b8ff3c,0_0_18px_rgba(184,255,60,.18)]">
+      <svg viewBox="0 0 24 24" className={`h-5 w-5 ${still ? "" : "animate-[spin_6s_linear_infinite]"}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 12a8 8 0 0 1 14-5.3L20 9" /><path d="M20 4v5h-5" /><path d="M20 12a8 8 0 0 1-14 5.3L4 15" /><path d="M4 20v-5h5" /></svg>
     </span>
   );
 }
 
-const STEPS = [
-  { title: "Import", soon: false, icon: <path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" />,
-    text: `Paste ${VERIFIED_PLATFORMS.length ? `recorded ${platformNames()} video links` : "recorded video links"}, several at once, or upload the recording itself.`,
-    visual: <div className="flex w-full max-w-[230px] flex-col gap-2">
-      {["twitch.tv/videos/…", "kick.com/…/videos/…", "stream-friday.mkv"].map((t, i) =>
-        <span key={t} className="flex items-center gap-2 rounded-[9px] bg-black/40 px-3 py-2 text-[12px] text-white/80 ring-1 ring-white/10">
-          {i < 2 ? <LinkIcon className="h-3.5 w-3.5 text-white/50" /> : <span className="h-3.5 w-3.5 rounded-[3px] border border-white/40" />}{t}</span>)}
-    </div> },
-  { title: "Auto editing", soon: false, icon: <><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="M14 6l4 4" /></>,
-    text: "In one run the AI finds the moments, reframes them to vertical, adds captions and a hook, and cuts the dead air.",
-    visual: <EditedClips /> },
-  { title: "Auto posting", soon: true, icon: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 10h16M9 3v4M15 3v4" /></>,
-    text: "ClutchClips will post the clips you pick to TikTok, YouTube Shorts and Instagram on a schedule you set. Until then, download and post.",
-    visual: <div className="grid w-full max-w-[200px] grid-cols-4 gap-1.5 opacity-70">
-      {Array.from({ length: 12 }, (_, i) => <span key={i} className="aspect-square rounded-[6px] border border-dashed border-white/25" />)}
-    </div> },
-];
-
-// Three finished clips from three different games, from the media pipeline. Empty frames until it has them.
-function EditedClips() {
-  const box = useRef<HTMLDivElement>(null), seen = useInView(box, "0px");
-  const games = new Set<string>();
-  const clips = useItems("hero-vertical-clips").filter((i) => /^clip-\d+$/.test(i.id) && i.game && !games.has(i.game) && !!games.add(i.game)).slice(0, 3);
+function Arrow({ still }: { still: boolean }) {
   return (
-    <div ref={box} className="flex flex-col items-center gap-2">
-      <div className="flex items-end gap-2">
-        {[0, 1, 2].map((i) => <span key={clips[i]?.id ?? i} className="relative aspect-[9/16] overflow-hidden rounded-[9px] bg-white/[.04] ring-1 ring-white/10" style={{ height: 130 - i * 14 }}>
-          {clips[i] && <Footage section="hero-vertical-clips" item={clips[i]} play={seen} />}</span>)}
-      </div>
-      <Credits items={clips} />
-    </div>
+    <span className="flex items-center gap-1.5 text-white/40 narrow:rotate-90" aria-hidden="true">
+      <span className="h-0 w-7 border-0 border-t-2 border-dashed border-current mid:w-4" />
+      <Sync still={still} />
+      <span className="h-0 w-5 border-0 border-t-2 border-dashed border-current mid:w-3" />
+      <svg viewBox="0 0 24 24" className="-ml-2 h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6" /></svg>
+    </span>
   );
 }
 
+// A layer of a stack: out of place and faded until the card is on screen, then settling in after `delay` ms.
+const settle = (on: boolean, from: string, delay: number) => ({
+  transform: on ? undefined : from, opacity: on ? undefined : 0,
+  transition: `transform 700ms cubic-bezier(.2,.8,.2,1) ${delay}ms, opacity 500ms ease-out ${delay}ms`,
+});
+
 export function WorkflowSection() {
+  const box = useRef<HTMLDivElement>(null), seen = useInView(box, "-80px"), reduced = useReducedMotion();
+  const on = seen || reduced, still = reduced;
+  const hero = useItems("hero-clean"), captions = useItems("captions");
+  const find = (id: string) => hero.find((i) => i.id === id) ?? null;
+  const stream = find("gta-vi-source") as (Item & { source_duration_sec?: number }) | null;
+  const front = captions.find((i) => i.id === "impact") ?? null;
+  const behind = [find("cdl-2"), find("cdl-5")];
+  const posted = find("cdl-3");
+  const clips = [stream, front, ...behind, posted];
+  const play = seen && !reduced;
+
+  const steps = [
+    { title: "Import", icon: <path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" />,
+      text: "Paste a link to a recorded stream or upload the file, up to six hours long. Last night's VOD is enough.",
+      visual: <div className="relative h-[118px] w-[210px]">
+        {[2, 1].map((k) => <span key={k} className="absolute inset-x-0 top-0 aspect-video rounded-[12px] bg-white/[.06] ring-1 ring-white/10"
+          style={{ ...settle(on, "translateY(0) scale(1)", 0), transform: on ? `translateY(${k * 9}px) scale(${1 - k * .06})` : "translateY(0) scale(1)" }} />)}
+        <span className="absolute inset-x-0 top-0 aspect-video overflow-hidden rounded-[12px] bg-black shadow-[0_12px_30px_rgba(0,0,0,.45)] ring-1 ring-white/10"
+          style={settle(on, "translateY(10px)", 120)}>
+          {stream && <Footage section="hero-clean" item={stream} play={play} />}
+          {stream?.source_duration_sec ? <span className="absolute bottom-1.5 right-1.5 rounded-[5px] bg-black/70 px-1.5 py-px text-[10px] font-medium tabular-nums text-white">{clock(stream.source_duration_sec)}</span> : null}
+        </span>
+        <span className="absolute -right-6 top-3 flex items-center gap-1.5 rounded-[9px] bg-white px-2.5 py-1.5 text-[11px] font-medium text-[#111] shadow-[0_8px_20px_rgba(0,0,0,.35)]"
+          style={settle(on, "translate(8px, -6px)", 380)}>
+          <LinkIcon className="h-3 w-3 text-[#555]" />Recorded stream
+          <span className="rounded-[5px] bg-lime px-1.5 py-px text-[10px] font-semibold text-ink">New</span>
+        </span>
+      </div> },
+    { title: "Auto editing", icon: <><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="M14 6l4 4" /></>,
+      text: "The AI finds the best moments, cuts them into clips, frames them for vertical, captions every word and cuts the dead air.",
+      visual: <div className="relative h-[170px] w-[150px]">
+        {behind.map((c, k) => <span key={k} className="absolute left-1/2 top-0 aspect-[9/16] h-[160px] overflow-hidden rounded-[12px] bg-white/[.06] ring-1 ring-white/10"
+          style={{ ...settle(on, "translateX(-50%) rotate(0deg)", 80 * k), transform: on ? `translateX(calc(-50% + ${(k + 1) * 16}px)) rotate(${(k + 1) * 5}deg)` : "translateX(-50%)",
+            transformOrigin: "50% 100%", zIndex: 1 - k }}>
+          {c && <Footage section="hero-clean" item={c} play={false} className="opacity-80" />}</span>)}
+        <span className="absolute left-1/2 top-0 z-10 aspect-[9/16] h-[160px] -translate-x-1/2 overflow-hidden rounded-[12px] bg-black shadow-[0_12px_30px_rgba(0,0,0,.45)] ring-1 ring-white/15"
+          style={settle(on, "translate(-50%, 10px)", 220)}>
+          {front && <Footage section="captions" item={front} play={play} />}
+        </span>
+      </div> },
+    { title: "Scheduling", icon: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 10h16M9 3v4M15 3v4" /></>,
+      text: "Pick a time and your clips go out to the platforms you post to, every day if you want, so your channels never go quiet.",
+      visual: <div className="flex h-[170px] items-center gap-4">
+        <span className="relative aspect-[9/16] h-[160px] flex-none overflow-hidden rounded-[12px] bg-black shadow-[0_12px_30px_rgba(0,0,0,.45)] ring-1 ring-white/15"
+          style={settle(on, "translateY(10px)", 0)}>
+          {posted && <Footage section="hero-clean" item={posted} play={play} />}
+        </span>
+        <span className="grid gap-3" style={settle(on, "translateX(-8px)", 200)}>
+          <span className="text-[15px] font-medium text-fg">New clip</span>
+          <span className="flex">{PLATFORMS.map((p, i) => <span key={p} className="-ml-2 h-9 w-9 rounded-full ring-2 ring-[#2a231d] first:ml-0" style={{ zIndex: PLATFORMS.length - i }}>
+            <PlatformBadge id={p} className="h-full w-full" /></span>)}</span>
+          <span className="grid leading-tight"><span className="text-[17px] font-semibold tabular-nums text-fg">6:00 PM</span><span className="text-[14px] text-fg-2">every day</span></span>
+        </span>
+      </div> },
+  ];
+
   return (
-    <Section id="workflow" eyebrow="Workflow" icon={<EyebrowIcon name="loop" />} title={<>Your clipping routine,<br className="narrow:hidden" /> mostly on autopilot</>}
-      sub="Bring in last night's stream, let the AI do the edit, and download clips ready to post. Posting for you is next.">
-      <div className="flex items-start justify-center gap-4 rounded-stage px-10 py-14 shadow-card narrow:flex-col narrow:items-center narrow:px-5 narrow:py-8"
-        style={{ background: "radial-gradient(90% 120% at 20% 10%, #33281e, #121214 75%)" }}>
-        {STEPS.map((st, i) => (
+    // The header is set larger than the other sections' (a 48 px headline, a 20 px line under it), as the reference.
+    <section id="workflow" className="px-gutter py-[clamp(64px,8vw,120px)]">
+      <div className="mx-auto max-w-site">
+      <header className="mx-auto mb-[clamp(32px,4vw,56px)] grid max-w-prose justify-items-center gap-4 text-center">
+        <Eyebrow icon={<EyebrowIcon name="loop" />}>Stream to post</Eyebrow>
+        <h2 className="m-0 text-[clamp(28px,3.4vw,48px)] font-semibold leading-[1.1] tracking-[-0.03em] text-fg">Stream once,<br /> post all week</h2>
+        <p className="m-0 max-w-[700px] text-[clamp(15px,1.4vw,20px)] leading-[1.5] tracking-[-0.01em] text-fg-2">
+          Drop in last night&apos;s stream. ClutchClips cuts the clips, captions and frames them, and lines them up for every platform you post to.</p>
+      </header>
+      <div ref={box} className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-x-4 rounded-stage px-12 pb-14 pt-16 shadow-card mid:gap-x-2 mid:px-8 narrow:grid-cols-1 narrow:justify-items-center narrow:gap-y-6 narrow:px-5 narrow:py-10"
+        style={{ background: "radial-gradient(70% 90% at 22% 18%, rgba(160,120,86,.38), transparent 70%), radial-gradient(60% 80% at 85% 90%, rgba(120,92,70,.32), transparent 70%), linear-gradient(160deg, #3a3029, #241f1b 60%, #1c1917)" }}>
+        {steps.map((st, i) => (
           <div key={st.title} className="contents">
-            {i > 0 && <span className="mt-[72px] narrow:mt-0"><Arrow /></span>}
-            <article className="flex max-w-[300px] flex-1 flex-col items-start gap-5 narrow:max-w-[340px]">
-              <div className="flex h-[150px] w-full items-center justify-center" aria-hidden="true">{st.visual}</div>
-              <h3 className="flex flex-wrap items-center gap-2.5 text-h3 text-fg">
-                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{st.icon}</svg>
-                {st.title}{st.soon && <ComingSoonBadge />}
+            {i > 0 && <span className="flex h-[170px] items-center narrow:h-auto">{<Arrow still={still} />}</span>}
+            <article className="grid max-w-[330px] content-start gap-3 narrow:max-w-[360px]">
+              <div className="mb-6 flex h-[170px] items-center justify-center mid:scale-[.82] narrow:scale-100" aria-hidden="true">{st.visual}</div>
+              <h3 className="m-0 flex items-center gap-2.5 text-[20px] font-semibold leading-tight tracking-[-0.01em] text-fg">
+                <svg viewBox="0 0 24 24" className="h-[22px] w-[22px] flex-none" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{st.icon}</svg>
+                {st.title}
               </h3>
-              <p className="-mt-2 text-body-lg text-fg-2">{st.text}</p>
+              <p className="m-0 text-[15px] leading-[1.55] text-fg-2">{st.text}</p>
             </article>
           </div>
         ))}
       </div>
-    </Section>
+      <div className="mt-3"><Credits items={clips} /></div>
+      </div>
+    </section>
   );
 }

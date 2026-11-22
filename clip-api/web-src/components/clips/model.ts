@@ -42,6 +42,29 @@ export function ratingOf(c: any): Rating {
   };
 }
 
+// ---- Why this clip ---------------------------------------------------------------------------------------------
+
+// What made the engine pick a moment when the AI gave no reason: the strongest of the signals the API reports for
+// the clip (`clip.signals`, app/pipeline WEIGHTS), in a gamer's words. Nothing here is a new number. The signals are
+// this clip's own shares, so each line speaks about this moment only, never about the whole stream.
+const SIGNAL_LINES: Record<string, string> = {
+  chat_motion: "Chat sped up here.",
+  audio: "Loud reaction here.",
+  audio_bursts: "Sudden shouts and bursts of noise.",
+  audio_flux: "The sound changes fast here: action on screen.",
+  transcript: "What was said stood out.",
+  scene: "A lot changes on screen here.",
+};
+// One short line under a clip: the AI's own reason (its first sentence) when there is one, otherwise the signal
+// that stood out most. null when the API gave neither.
+export function whyLine(c: any): string | null {
+  const said = (typeof c.why === "string" && c.why) || (typeof c.reason === "string" && c.reason) || "";
+  if (said) return said.match(/^.*?[.!?](?=\s|$)/)?.[0] || said;
+  const signals = c.signals && typeof c.signals === "object" ? Object.entries(c.signals as Record<string, unknown>).filter(([k, v]) => k in SIGNAL_LINES && num(v) && (v as number) > 0) : [];
+  if (!signals.length) return null;
+  return SIGNAL_LINES[signals.sort((a, b) => (b[1] as number) - (a[1] as number))[0][0]];
+}
+
 // ---- Kinds ----------------------------------------------------------------------------------------------------
 
 // The labels the AI gives a moment (app/pipeline/moments.py KINDS). A kind the API adds later is shown by its own name.

@@ -83,6 +83,12 @@ const PATHS = {
   font: <path d="M4.5 19 9.5 5h1l5 14M6.5 14h7M15.5 19l2.5-6.5L20.5 19M16.3 17h3.4" />,
   shield: <path d="M12 3.5 19 6v5.5c0 4.3-3 7.6-7 9-4-1.4-7-4.7-7-9V6l7-2.5Z" />,
   swap: <path d="M7 4.5 4 7.5l3 3M4 7.5h12M17 13.5l3 3-3 3M20 16.5H8" />,
+  heart: <path d="M12 20s-7.5-4.4-7.5-10A4.3 4.3 0 0 1 12 7.2 4.3 4.3 0 0 1 19.5 10c0 5.6-7.5 10-7.5 10Z" />,
+  dots: <path d="M5.5 12h.01M12 12h.01M18.5 12h.01" strokeWidth="2.6" />,
+  help: <><circle cx="12" cy="12" r="8.5" /><path d="M9.7 9.6a2.4 2.4 0 1 1 3.5 2.1c-.8.5-1.2 1-1.2 1.8M12 16.6h.01" /></>,
+  collapse: <path d="M5 5v14M19.5 12h-10M13 8l-4 4 4 4" />,
+  alignLeft: <path d="M4.5 6h15M4.5 10.5h9M4.5 15h15M4.5 19.5h9" />,
+  alignCenter: <path d="M4.5 6h15M7.5 10.5h9M4.5 15h15M7.5 19.5h9" />,
 } as const;
 
 export type IconName = keyof typeof PATHS;

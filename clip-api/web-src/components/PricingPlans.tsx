@@ -24,12 +24,12 @@ export function yearlySaving(plans: Plan[]): number {
 }
 
 export function PeriodToggle({ yearly, onChange, save }: { yearly: boolean; onChange: (yearly: boolean) => void; save: number }) {
-  const button = (on: boolean) => `cursor-pointer rounded-full border-0 px-[18px] py-2 font-body text-[14px] font-semibold leading-[normal] ${on ? "bg-chip-hover text-text" : "bg-transparent text-muted"}`;
+  const button = (on: boolean) => `inline-flex h-8 cursor-pointer items-center rounded-control border-0 px-4 font-sans text-[13px] font-medium leading-[normal] transition-colors duration-base ${on ? "bg-btn text-btn-ink" : "bg-transparent text-fg-2 hover:text-text"}`;
   return (
-    <div className="inline-flex items-center gap-[2px] rounded-full border border-solid border-line bg-panel p-1" role="group" aria-label="Billing period">
+    <div className="inline-flex items-center gap-[2px] rounded-control bg-control p-[3px]" role="group" aria-label="Billing period">
       <button type="button" className={button(!yearly)} aria-pressed={!yearly} onClick={() => onChange(false)}>Monthly</button>
       <button type="button" className={button(yearly)} aria-pressed={yearly} onClick={() => onChange(true)}>Yearly
-        {save > 0 && <span className="ml-[6px] rounded-full bg-[#1c2a0e] px-[7px] py-px text-[11px] text-lime">Save {save}%</span>}</button>
+        {save > 0 && <span className={`ml-[6px] rounded-[6px] px-[6px] py-px text-[11px] ${yearly ? "bg-black/10 text-btn-ink" : "bg-lime/[.14] text-lime"}`}>Save {save}%</span>}</button>
     </div>
   );
 }
@@ -47,24 +47,23 @@ export function PlanCards({ plans, currency, yearly, current, busy, onPick, free
       {plans.map((p) => {
         const isPaid = p.price_month_cents > 0, pop = p.id === popular;
         const perMonth = yearly ? p.price_year_cents / 12 : p.price_month_cents;
-        const button = `btn w-full rounded-full ${pop ? "primary" : "ghost border-transparent bg-[#16200c] text-lime"}`;
+        const button = `btn w-full ${pop ? "primary" : "ghost"}`;
         return (
-          <article key={p.id} aria-label={`${p.name} plan`} className={`relative flex flex-col gap-[14px] rounded-20 border border-solid bg-panel px-[22px] pb-6
-            ${pop ? "border-lime pt-0 shadow-[0_0_48px_rgba(184,255,60,.12)]" : `border-line pt-6 ${popular ? "mt-9 narrow:mt-0" : ""}`}`}>
-            {pop && <p className="mx-[-22px] mb-[6px] rounded-t-[19px] bg-lime py-[9px] text-center font-display text-[12px] font-bold uppercase leading-[normal] tracking-[.14em] text-ink">Most popular</p>}
-            <h3 className="font-display text-[26px] font-bold leading-[normal]">{p.name}</h3>
+          <article key={p.id} aria-label={`${p.name} plan`} className={`relative flex flex-col gap-[14px] rounded-card border border-solid bg-card p-6 shadow-card ${pop ? "border-lime" : "border-transparent"}`}>
+            <h3 className="flex items-center justify-between gap-2 font-sans text-[20px] font-semibold leading-[normal]">{p.name}
+              {pop && <span className="rounded-[6px] bg-lime/[.14] px-[7px] py-[3px] text-[11px] font-medium leading-none text-lime">Most popular</span>}</h3>
             {p.description && <p className="min-h-[42px] text-[14px] text-muted">{p.description}</p>}
             <div className="flex flex-wrap items-baseline gap-2">
-              {isPaid && yearly && perMonth < p.price_month_cents && <s className="text-[18px] font-semibold text-[#69717c]" aria-label={`was ${fmt(p.price_month_cents)}`}>{fmt(p.price_month_cents)}</s>}
-              <b className="font-display text-[40px] font-bold leading-none text-lime">{fmt(Math.round(perMonth))}</b><small className="text-[14px] font-semibold text-text">/ month</small>
+              {isPaid && yearly && perMonth < p.price_month_cents && <s className="text-[18px] font-medium text-fg-3" aria-label={`was ${fmt(p.price_month_cents)}`}>{fmt(p.price_month_cents)}</s>}
+              <b className="font-sans text-[36px] font-semibold leading-none tracking-[-0.02em] text-text">{fmt(Math.round(perMonth))}</b><small className="text-[14px] font-normal text-fg-2">/ month</small>
             </div>
             <p className="-mt-2 min-h-[20px] text-[13px] text-muted">{!isPaid ? "Free forever" : yearly ? `Billed ${fmt(p.price_year_cents)} yearly` : "Billed monthly"}</p>
-            {current === p.id ? <button className="btn ghost w-full rounded-full border-transparent bg-[#16200c] text-lime" disabled>Your plan</button>
+            {current === p.id ? <button className="btn ghost w-full" disabled>Your plan</button>
               : isPaid ? <button className={button} disabled={busy === p.id} onClick={() => onPick(p)}>{busy === p.id ? "Opening checkout…" : `Get ${p.name}`}</button>
               : <a className={button} href={freeHref}>Start free</a>}
             <p className="grid grid-cols-[auto_1fr] gap-x-[10px] gap-y-[2px] border-0 border-b border-solid border-line pb-[14px]">
               <Icon name="bolt" size={18} className="row-span-2 mt-[2px] text-lime" />
-              <b className="text-[15px]">{!isPaid ? freeCredits(p.signup_credits ?? null) : `${p.monthly_credits.toLocaleString()} credits every month${yearly ? ", billed yearly" : ""}`}</b>
+              <b className="text-[15px] font-medium">{!isPaid ? freeCredits(p.signup_credits ?? null) : `${p.monthly_credits.toLocaleString()} credits every month${yearly ? ", billed yearly" : ""}`}</b>
               <span className="text-[13px] text-muted">1 credit processes 1 minute of source video</span></p>
             <ul className="grid list-none gap-[10px] text-[14px]">
               {!isPaid && <li className="flex items-start gap-[10px] text-lime"><Check hi />{freeCredits(p.signup_credits ?? null)} when you confirm your email</li>}
@@ -73,7 +72,7 @@ export function PlanCards({ plans, currency, yearly, current, busy, onPick, free
               {(p.features || []).map((f) => <li key={f} className="flex items-start gap-[10px] text-label"><Check />{f}</li>)}
             </ul>
             {!isPaid && <>
-              <p className="border-0 border-t border-solid border-line pt-[14px] font-display text-[12px] font-bold uppercase leading-[normal] tracking-[.12em]">Every plan includes:</p>
+              <p className="border-0 border-t border-solid border-line pt-[14px] font-sans text-[13px] font-normal uppercase leading-[normal] text-fg-2">Every plan includes:</p>
               <ul className="grid list-none gap-[10px] text-[14px]">{INCLUDED.map((f) => <li key={f} className="flex items-start gap-[10px] text-label"><Check />{f}</li>)}</ul>
             </>}
           </article>

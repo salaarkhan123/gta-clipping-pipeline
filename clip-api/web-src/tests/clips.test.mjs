@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { arrange, aspectFromOptions, aspectRatioOf, ASPECT_FRAME, isLowResPreview, kindsIn, lengthOf, outcomeOf, OVERLAY_ASPECTS, parseVtt, ratingOf, resolutionChoices, shapeOf, stageName, steady } from "../components/clips/model.ts";
+import { arrange, aspectFromOptions, aspectRatioOf, ASPECT_FRAME, isLowResPreview, kindsIn, lengthOf, outcomeOf, OVERLAY_ASPECTS, parseVtt, ratingOf, resolutionChoices, shapeOf, stageName, steady, whyLine } from "../components/clips/model.ts";
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -21,6 +21,15 @@ test("the AI rating shows judge v2's five sub-scores, else judge v1's four, and 
   assert.equal(none.rank, 4);
   for (const f of ["components/clips/Rating.tsx", "components/clips/ClipTile.tsx", "components/clips/ClipPlayer.tsx"])
     assert.doesNotMatch(source(f), /virality probability|chance to go viral|% viral/i);
+});
+
+test("the why line is the AI's first sentence, else this clip's strongest signal, never a claim about the whole stream", () => {
+  assert.equal(whyLine({ why: "He clutches the 1v3. Then laughs.", signals: { audio: 0.9 } }), "He clutches the 1v3.");
+  assert.equal(whyLine({ signals: { audio: 0.7, chat_motion: 0.2 } }), "Loud reaction here.");
+  assert.equal(whyLine({ signals: { audio: 0.1, chat_motion: 0.6 } }), "Chat sped up here.");
+  assert.equal(whyLine({ signals: {} }), null);
+  for (const signal of ["chat_motion", "audio", "audio_bursts", "audio_flux", "transcript", "scene"])
+    assert.doesNotMatch(whyLine({ signals: { [signal]: 1 } }), /stream|loudest|most|best/i, signal);
 });
 
 test("kinds come from the clips themselves, most common first", () => {
@@ -123,7 +132,7 @@ test("results chrome shares Library's grid/list toggle; list rows still open the
   const results = source("components/clips/Results.tsx");
   const tile = source("components/clips/ClipTile.tsx");
   assert.match(results, /import \{ CLIP_LIST, LayoutToggle, nameOf, numbering, useClipLayout \} from "@\/components\/dash\/ClipCard"/);
-  assert.match(results, /<ResultsBar view=\{view\} onView=\{setView\} kinds=\{kinds\} total=\{clips\.length\}>/);
+  assert.match(results, /<ResultsBar view=\{view\} onView=\{setView\} kinds=\{kinds\} total=\{clips\.length\}/);
   assert.match(results, /<LayoutToggle value=\{layout\} onChange=\{setLayout\} \/>/);
   assert.match(results, /layout === "list" \? CLIP_LIST : GRID\[shape\]/);
   assert.match(results, /onOpen=\{\(\) => setPlaying\(c\.id\)\}/);

@@ -52,8 +52,8 @@ const TOOLS: { id: Tool; icon: IconName; label: string; needs: string[]; section
 const PLANNED: [IconName, string][] = [["image", "AI B-roll"], ["music", "Music"], ["transitions", "Transitions"], ["mic", "AI voice hook"], ["send", "Publish"]];
 
 const RAIL_ITEM = "grid w-full justify-items-center gap-1 rounded-12 border-0 bg-transparent px-1 py-2 text-center font-body text-[11.5px] font-medium leading-[1.2] mid:w-[84px] mid:flex-none";
-const PILL_SELECT = "h-9 cursor-pointer rounded-full border border-solid border-line bg-card-2 py-0 pl-3 pr-8 text-[13px] font-medium narrow:h-10";
-const ICON_BTN = "grid h-9 w-9 flex-none cursor-pointer place-items-center rounded-full border-0 bg-transparent text-soft enabled:hover:bg-chip-hover enabled:hover:text-text disabled:cursor-default disabled:opacity-40 narrow:h-10 narrow:w-10";
+const PILL_SELECT = "h-9 cursor-pointer rounded-control border-0 bg-control py-0 pl-3 pr-8 text-[13px] font-medium transition-colors duration-base hover:bg-control-hover narrow:h-10";
+const ICON_BTN = "grid h-9 w-9 flex-none cursor-pointer place-items-center rounded-control border-0 bg-transparent text-fg-2 transition-colors duration-base enabled:hover:bg-control enabled:hover:text-text disabled:cursor-default disabled:opacity-40 narrow:h-10 narrow:w-10";
 
 type Tab = "transcript" | "captions";
 // The editor for one clip, laid out like a desktop editor: what was said on the left, the preview in the
@@ -240,7 +240,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
         {render.problem && <p className="error">{render.problem}</p>}
       </div>}
 
-      <div className="flex flex-col overflow-hidden rounded-[24px] border border-solid border-line-soft [background:radial-gradient(ellipse_at_50%_0%,rgba(255,255,255,.05),transparent_60%),theme(colors.panel)]">
+      <div className="flex flex-col overflow-hidden rounded-card bg-card">
         <div className={`grid h-[min(680px,calc(100vh-250px))] min-h-[520px] ${open ? "grid-cols-[minmax(260px,1fr)_minmax(300px,1.1fr)_288px_88px]" : "grid-cols-[minmax(280px,1fr)_minmax(320px,1.35fr)_88px]"}
           mid:contents`}>
 
@@ -277,7 +277,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
                 {!mapping.exact && (job?.options?.tighten || job?.options?.flash_forward) && !!words?.length &&
                   <p className="muted m-0 text-[12.5px]">Word times may be off by a moment: dead air was cut from this clip when it was made, and the exact parts aren&apos;t known yet.</p>}
                 {edit.cuts.length > 0 && <ul className="m-0 flex list-none flex-wrap gap-2" aria-label="Cuts">
-                  {edit.cuts.map((c) => <li key={c.join("-")} className="flex items-center gap-2 rounded-full border border-solid border-[rgba(255,92,122,.45)] px-3 py-1 text-[12.5px]">
+                  {edit.cuts.map((c) => <li key={c.join("-")} className="flex items-center gap-2 rounded-control bg-danger/[.14] px-3 py-1 text-[12.5px]">
                     <span className="tabular-nums">{stamp(c[0])} to {stamp(c[1])}</span>
                     <button type="button" className="link" onClick={() => set({ cuts: removeSpan(edit.cuts, c) })}>Restore</button></li>)}
                 </ul>}
@@ -319,7 +319,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
             </div>
             <div className="relative grid min-h-0 w-full flex-1 place-items-center mid:flex-none">
               <div style={{ aspectRatio: `${aw || 9} / ${ah || 16}`, "--w": `calc(62vh * ${aw || 9} / ${ah || 16})`, containerType: "size" } as React.CSSProperties}
-                className="relative h-full max-h-full max-w-full overflow-hidden rounded-16 bg-black shadow-[0_20px_60px_rgba(0,0,0,.55)] mid:h-auto mid:w-[min(100%,var(--w))]">
+                className="relative h-full max-h-full max-w-full overflow-hidden rounded-[14px] bg-black mid:h-auto mid:w-[min(100%,var(--w))]">
                 {clip.thumb_url && <img src={clip.thumb_url} alt="" aria-hidden="true" className="absolute inset-[-24px] h-[calc(100%+48px)] w-[calc(100%+48px)] object-cover blur-[18px] brightness-[.4]" />}
                 <video ref={video} key={view} preload="metadata" playsInline src={view === "edit" ? project.source_url : clip.export_url || clip.video_url}
                   poster={view === "file" ? clip.thumb_url || undefined : undefined} controls={view === "file"}
@@ -331,7 +331,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
                     : lineNow ? [{ start: lineNow.start, end: lineNow.end, text: lineNow.text, hidden: false, cut: false, highlight: null, emoji: null, break_before: false }] : null;
                   return cap ? <CaptionOverlay words={cap} look={captionLook} /> : null;
                 })()}
-                {view === "edit" && <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-[rgba(0,0,0,.6)] px-[10px] py-[3px] text-[11.5px] font-medium text-soft">Source preview</span>}
+                {view === "edit" && <span className="pointer-events-none absolute left-3 top-3 rounded-8 bg-black/60 px-[10px] py-[3px] text-[12px] font-medium text-white">Source preview</span>}
               </div>
             </div>
             <p className="muted m-0 max-w-[420px] text-center text-[12px]">{view === "edit"
@@ -340,7 +340,7 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
           </section>
 
           {/* The open tool's settings. */}
-          {open && <section aria-label={open.title} className="flex min-h-0 flex-col gap-3 border-0 border-l border-solid border-line-soft bg-[rgba(255,255,255,.02)] p-4 mid:order-4 mid:border-l-0 mid:border-t">
+          {open && <section aria-label={open.title} className="flex min-h-0 flex-col gap-3 border-0 border-l border-solid border-line-soft p-4 mid:order-4 mid:border-l-0 mid:border-t">
             <div className="flex items-center justify-between gap-2">
               <h2 className="m-0 text-[15px] font-semibold">{open.title}</h2>
               <button type="button" className={ICON_BTN} aria-label={`Close ${open.title}`} onClick={() => setTool(null)}><Icon name="close" size={18} /></button>
@@ -366,10 +366,10 @@ export function Editor({ project, clip, job, listed, known, number, onClip }: { 
           <nav aria-label="Editing tools" className="flex min-h-0 flex-col gap-1 overflow-y-auto border-0 border-l border-solid border-line-soft p-2
             mid:order-3 mid:flex-row mid:overflow-x-auto mid:border-l-0 mid:border-t">
             {tools.map((x) => <button key={x.id} type="button" aria-pressed={tool === x.id} onClick={() => setTool(tool === x.id ? null : x.id)}
-              className={`${RAIL_ITEM} cursor-pointer text-soft hover:bg-chip hover:text-text aria-pressed:bg-chip-hover aria-pressed:text-text`}>
+              className={`${RAIL_ITEM} cursor-pointer text-fg-2 transition-colors duration-base hover:bg-control hover:text-text aria-pressed:bg-control aria-pressed:text-text`}>
               <Icon name={x.icon} size={22} /><span>{x.label}</span></button>)}
             <span className="mx-3 my-1 h-px flex-none bg-line-soft mid:mx-1 mid:my-2 mid:h-auto mid:w-px" aria-hidden="true" />
-            {PLANNED.map(([icon, label]) => <span key={label} aria-disabled="true" title={`${label}: coming soon`} className={`${RAIL_ITEM} cursor-default text-dim`}>
+            {PLANNED.map(([icon, label]) => <span key={label} aria-disabled="true" title={`${label}: coming soon`} className={`${RAIL_ITEM} cursor-default text-fg-3`}>
               <Icon name={icon} size={22} /><span>{label}</span><Soon short /></span>)}
           </nav>
         </div>
@@ -439,7 +439,7 @@ function Timeline({ duration, clip, edit, t, sel, playing, view, onToggle, onTri
         </div>
         <div className="flex items-center justify-center gap-1">
           <button type="button" className={ICON_BTN} aria-label="Go to the start of the clip" onClick={() => onSeek(edit.trim.start)}><Icon name="skipBack" size={18} /></button>
-          <button type="button" className="grid h-10 w-10 cursor-pointer place-items-center rounded-full border-0 bg-text text-bg disabled:opacity-40" disabled={view !== "edit"}
+          <button type="button" className="grid h-10 w-10 cursor-pointer place-items-center rounded-full border-0 bg-btn text-btn-ink disabled:opacity-40" disabled={view !== "edit"}
             aria-label={playing ? "Pause" : "Play the edit"} onClick={onToggle}><Icon name={playing ? "pause" : "play"} size={18} /></button>
           <button type="button" className={ICON_BTN} aria-label="Go to the end of the clip" onClick={() => onSeek(Math.max(edit.trim.start, edit.trim.end - 0.5))}><Icon name="skipForward" size={18} /></button>
           <span className="ml-2 font-body text-[13px] tabular-nums text-soft">{stamp(Math.max(0, t - edit.trim.start))} <span className="text-dim">/ {stamp(keptLength(edit))}</span></span>
@@ -452,19 +452,19 @@ function Timeline({ duration, clip, edit, t, sel, playing, view, onToggle, onTri
       <div className="relative h-5 select-none text-[11px] tabular-nums text-dim narrow:[&>span:nth-child(even)]:hidden" aria-hidden="true">
         {ticks.map((s) => <span key={s} className="absolute top-0 -translate-x-1/2 whitespace-nowrap" style={{ left: pct(s) }}>{stamp(s).replace(/\.0$/, "")}</span>)}
       </div>
-      <div className="relative h-14 cursor-pointer overflow-hidden rounded-12 border border-solid border-line bg-card-2
+      <div className="relative h-14 cursor-pointer overflow-hidden rounded-12 bg-control
         [background-image:repeating-linear-gradient(90deg,transparent_0_calc(10%-1px),rgba(255,255,255,.05)_calc(10%-1px)_10%)]" onPointerDown={(e) => {
           if ((e.target as HTMLElement).tagName === "INPUT") return;
           const box = e.currentTarget.getBoundingClientRect();
           onSeek(round(lo + ((e.clientX - box.left) / box.width) * (hi - lo)));
         }}>
-        <span className="pointer-events-none absolute inset-y-0 rounded-8 border border-dashed border-[rgba(255,255,255,.3)]" title="Where the clip was first cut"
+        <span className="pointer-events-none absolute inset-y-0 rounded-8 border border-dashed border-line-strong" title="Where the clip was first cut"
           style={{ left: pct(clip.start_sec), width: `calc(${pct(clip.end_sec)} - ${pct(clip.start_sec)})` }} />
-        <span className="pointer-events-none absolute inset-y-0 border-x-[3px] border-y-0 border-solid border-lime bg-[rgba(184,255,60,.16)]"
+        <span className="pointer-events-none absolute inset-y-0 border-x-[3px] border-y-0 border-solid border-lime bg-lime/[.16]"
           style={{ left: pct(edit.trim.start), width: `calc(${pct(edit.trim.end)} - ${pct(edit.trim.start)})` }} />
         {inside.map((c) => <span key={c.join("-")} className="pointer-events-none absolute inset-y-0 [background:repeating-linear-gradient(45deg,rgba(255,92,122,.55)_0_6px,rgba(255,92,122,.25)_6px_12px)]"
           title={`Cut ${stamp(c[0])} to ${stamp(c[1])}`} style={{ left: pct(c[0]), width: `calc(${pct(c[1])} - ${pct(c[0])})` }} />)}
-        {sel && <span className="pointer-events-none absolute inset-y-0 bg-[rgba(255,255,255,.22)]" style={{ left: pct(sel[0]), width: `calc(${pct(sel[1])} - ${pct(sel[0])})` }} />}
+        {sel && <span className="pointer-events-none absolute inset-y-0 bg-white/[.22]" style={{ left: pct(sel[0]), width: `calc(${pct(sel[1])} - ${pct(sel[0])})` }} />}
         <span className="pointer-events-none absolute inset-y-0 -ml-px w-[2px] bg-text shadow-[0_0_6px_rgba(255,255,255,.8)]" style={{ left: pct(Math.min(hi, Math.max(lo, t))) }} />
         <div className="range2 trim-handles" style={{ "--a": pct(edit.trim.start), "--b": pct(edit.trim.end) } as React.CSSProperties}>
           <input type="range" min={lo} max={hi} step={0.1} value={edit.trim.start} aria-label="Trim start" aria-valuetext={stamp(edit.trim.start)}

@@ -6,7 +6,9 @@ import { useRoutes } from "@/lib/routes";
 import { BulkEdit } from "@/components/dash/BulkEdit";
 import { CLIP_LIST, LayoutToggle, nameOf, numbering, useClipLayout } from "@/components/dash/ClipCard";
 import { Icon, IconName } from "@/components/dash/Icon";
-import { ComingSoonBadge } from "@/components/ComingSoonBadge";
+import { Badge } from "@/components/ui/Badge";
+import { Dropdown, MenuItem } from "@/components/ui/Dropdown";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { useDash } from "@/components/dash/Shell";
 import { ClipPlayer } from "./ClipPlayer";
 import { ClipTile, Feedback, TileSkeleton } from "./ClipTile";
@@ -16,9 +18,9 @@ import { arrange, isActive, kindsIn, Shape, shapeOf, steady, View } from "./mode
 import { ResultsBar } from "./ResultsBar";
 
 const GRID: Record<Shape, string> = {
-  tall: "grid grid-cols-[repeat(auto-fill,minmax(184px,1fr))] gap-x-4 gap-y-6 narrow:grid-cols-2 narrow:gap-x-3 narrow:gap-y-5",
-  square: "grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-x-4 gap-y-6 narrow:grid-cols-2 narrow:gap-x-3 narrow:gap-y-5",
-  wide: "grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-x-4 gap-y-6 narrow:grid-cols-1 narrow:gap-y-5",
+  tall: "grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-x-5 gap-y-7 narrow:grid-cols-2 narrow:gap-x-3 narrow:gap-y-6",
+  square: "grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-x-5 gap-y-7 narrow:grid-cols-2 narrow:gap-x-3 narrow:gap-y-6",
+  wide: "grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-x-5 gap-y-7 narrow:grid-cols-1 narrow:gap-y-6",
 };
 const SHAPE_NAMES: Record<Shape, string> = { tall: "Vertical clips", square: "Square clips", wide: "Horizontal clips" };
 const BULK_SOON: [IconName, string][] = [["send", "Bulk schedule"], ["sparkle", "Create montage"]];
@@ -44,7 +46,7 @@ export function Results({ project, onChange, reload, onMake, jump }: {
   const [view, setView] = useState<View>({ sort: "rating", kind: null, mark: "all" });
   const [layout, setLayout] = useClipLayout();
   const [playing, setPlaying] = useState<string | null>(null);
-  const [picked, setPicked] = useState<Set<string>>(new Set()), [bulkEdit, setBulkEdit] = useState(false), [saving, setSaving] = useState(0);
+  const [picked, setPicked] = useState<Set<string>>(new Set()), [selecting, setSelecting] = useState(false), [bulkEdit, setBulkEdit] = useState(false), [saving, setSaving] = useState(0);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   const clips: any[] = project.clips || [];
@@ -117,47 +119,45 @@ export function Results({ project, onChange, reload, onMake, jump }: {
         {problems.map((j) => <JobStatus key={j.job_id} job={j} made={madeBy(j)} onCancel={cancel} onDismiss={() => setDismissed((d) => new Set(d).add(j.job_id))} />)}
       </div>}
 
-      {clips.length > 0 && <ResultsBar view={view} onView={setView} kinds={kinds} total={clips.length}>
+      {clips.length > 0 && <ResultsBar view={view} onView={setView} kinds={kinds} total={clips.length} shown={shown.length}
+        selecting={selecting || chosen.length > 0} onSelecting={(on) => { setSelecting(on); if (!on) setPicked(new Set()); }}>
         <LayoutToggle value={layout} onChange={setLayout} />
       </ResultsBar>}
-
-      {clips.length > 0 && <div className="flex min-h-[48px] flex-wrap items-center justify-between gap-[10px] rounded-16 border border-solid border-line-soft bg-card py-2 pl-4 pr-2">
-        <label className="flex cursor-pointer items-center gap-[10px] text-[13px] text-soft">
-          <input type="checkbox" className="h-4 w-4 accent-lime" checked={shown.length > 0 && chosen.length === shown.length}
+      {clips.length > 0 && (selecting || chosen.length > 0) && <div className="sticky top-[calc(var(--topbar,72px)+8px)] z-[5] flex min-h-[52px] flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-16 bg-card py-2 pl-4 pr-2 shadow-pop narrow:static narrow:shadow-none">
+        <label className="m-0 flex cursor-pointer items-center gap-[10px] text-[14px] font-normal text-text">
+          <input type="checkbox" className="h-[18px] w-[18px] accent-lime" checked={shown.length > 0 && chosen.length === shown.length}
             ref={(el) => { if (el) el.indeterminate = chosen.length > 0 && chosen.length < shown.length; }}
             onChange={(e) => setPicked(e.target.checked ? new Set(shown.map((c) => c.id)) : new Set())} />
           <span aria-live="polite">{chosen.length ? `${chosen.length} of ${shown.length} selected` : `Select all ${shown.length}`}</span>
         </label>
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Actions for the selected clips">
-          {BULK_SOON.map(([icon, label]) => <span key={label} aria-disabled="true" className="inline-flex cursor-default items-center gap-[6px] px-2 text-[13px] text-fg-3 narrow:hidden"><Icon name={icon} size={15} />{label}<ComingSoonBadge short /></span>)}
           {known?.exportRoute && listed && <button type="button" className="btn small ghost" disabled={!chosen.length} onClick={() => setBulkEdit(true)}><Icon name="pencil" size={15} />Bulk edit</button>}
           <button type="button" className="btn small primary" disabled={!chosen.length || saving > 0} onClick={exportChosen}
             title="Downloads the files as they are. Nothing is rendered again and no credits are used.">
             <Icon name="download" size={15} />{saving ? `Downloading ${Math.min(saving, chosen.length)} of ${chosen.length}…` : "Download"}</button>
+          <Dropdown label="More actions for the selected clips" align="end" panelClass="w-[230px] rounded-[16px] p-2"
+            trigger={(t) => <button {...t} type="button" aria-label="More actions" title="More actions" className="btn small ghost !w-9 !px-0"><Icon name="dots" size={16} /></button>}>
+            {BULK_SOON.map(([icon, label]) => <MenuItem key={label} icon={icon} after={<Badge tone="soon" />}>{label}</MenuItem>)}
+          </Dropdown>
         </div>
       </div>}
-
       {!clips.length && (running.length > 0 ? (
         <div className={layout === "list" ? CLIP_LIST : GRID[runShape]}>{[0, 1, 2, 3].map((i) => <TileSkeleton key={i} shape={runShape} layout={layout} />)}</div>
       ) : (
-        <div className="grid place-items-center gap-3 rounded-24 border border-dashed border-line-strong px-6 py-16 text-center">
-          <span className="grid h-12 w-12 place-items-center rounded-full bg-chip text-fg-2" aria-hidden="true"><Icon name="film" size={22} /></span>
-          <h2 className="m-0 text-[18px] font-semibold">{problems.length ? "No clips from this run" : "No clips yet"}</h2>
-          <p className="m-0 max-w-[420px] text-[14px] text-fg-2">{problems.length ? "Try again with other settings, or pick a different part of the video." : "Find the best moments in this video. You see the exact price before anything is charged."}</p>
-          <button type="button" className="btn small primary" onClick={onMake}><Icon name="sparkle" size={15} />{problems.length ? "Try again" : "Make clips"}</button>
-        </div>
+        <EmptyState title={problems.length ? "No clips from this run" : "No clips yet"}
+          action={<button type="button" className="btn small primary" onClick={onMake}><Icon name="sparkle" size={15} />{problems.length ? "Try again" : "Make clips"}</button>}>
+          {problems.length ? "Try again with other settings, or pick a different part of the video." : "Find the best moments in this video. You see the exact price before anything is charged."}</EmptyState>
       ))}
-      {clips.length > 0 && !shown.length && <div className="grid place-items-center gap-2 rounded-24 border border-dashed border-line-strong px-6 py-12 text-center">
-        <p className="m-0 text-[14px] text-fg-2">No clips match these filters.</p>
-        <button type="button" className="btn small ghost" onClick={() => setView({ ...view, kind: null, mark: "all" })}>Clear filters</button>
-      </div>}
+      {clips.length > 0 && !shown.length && <EmptyState icon="sliders" title="No clips match these filters"
+        action={<button type="button" className="btn small ghost" onClick={() => setView({ ...view, kind: null, mark: "all" })}>Clear filters</button>} />}
 
       {groups.map(([shape, cs], gi) => (
         <div key={shape} className="grid gap-3">
           {groups.length > 1 && <h3 className="m-0 text-[13px] font-medium text-fg-2">{SHAPE_NAMES[shape]} <span className="font-mono tabular-nums">{cs.length}</span></h3>}
           <div className={layout === "list" ? CLIP_LIST : GRID[shape]}>
-            {cs.map((c) => <ClipTile key={c.id} clip={c} name={nameFor(c)} shape={shape} game={gameFor(c)} selected={picked.has(c.id)}
-              layout={layout} onSelect={select} onOpen={() => setPlaying(c.id)} onFeedback={(f) => feedback(c, f)} />)}
+            {cs.map((c) => <ClipTile key={c.id} clip={c} name={nameFor(c)} shape={shape} game={gameFor(c)} selected={picked.has(c.id)} selecting={selecting}
+              layout={layout} onSelect={select} onOpen={() => setPlaying(c.id)} onFeedback={(f) => feedback(c, f)}
+              editHref={`/dashboard/edit/?project=${encodeURIComponent(project.upload_id)}&clip=${encodeURIComponent(c.id)}`} />)}
             {gi === groups.length - 1 && running.length > 0 && [0, 1].map((i) => <TileSkeleton key={`s${i}`} shape={shape} layout={layout} />)}
           </div>
         </div>

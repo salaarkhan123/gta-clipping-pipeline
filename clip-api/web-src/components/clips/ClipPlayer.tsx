@@ -127,7 +127,7 @@ export function ClipPlayer(p: PlayerProps) {
             </div>
           </div>
 
-          <aside className="flex min-h-0 flex-col gap-4 narrow:flex-none overflow-y-auto rounded-24 border border-solid border-line bg-card p-5 narrow:overflow-visible narrow:rounded-none narrow:border-x-0 narrow:border-b-0 narrow:p-4">
+          <aside className="flex min-h-0 flex-col gap-4 narrow:flex-none overflow-y-auto rounded-card bg-card p-5 narrow:overflow-visible narrow:rounded-none narrow:p-4">
             <div className="grid gap-[10px]">
               <div className="flex items-start gap-3">
                 {r.shown !== null && <div className="grid flex-none place-items-center rounded-16 bg-lime-wash px-3 py-2 text-center" title="AI rating">
@@ -144,7 +144,7 @@ export function ClipPlayer(p: PlayerProps) {
                     <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); rename(naming); }}>
                       <input autoFocus value={naming} maxLength={80} aria-label="Clip title" onChange={(e) => setNaming(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); setNaming(null); } }}
-                        className="min-w-0 flex-1 rounded-12 border border-solid border-line-strong bg-bg-2 px-3 py-2 font-sans text-[14px] text-text focus:border-lime focus:outline-none" />
+                        className="min-w-0 flex-1 rounded-12 border border-solid border-transparent bg-control px-3 py-2 font-sans text-[14px] text-text focus:border-line-strong focus:outline-none" />
                       <button type="submit" className="btn small primary">Save</button>
                     </form>
                   )}
@@ -159,7 +159,7 @@ export function ClipPlayer(p: PlayerProps) {
               {naming !== null && titles.length > 0 && <div className="grid gap-[6px]">
                 <span className="text-[12px] text-fg-2">The AI's other titles</span>
                 {titles.map((t) => <button key={t} type="button" onClick={() => rename(t)}
-                  className="cursor-pointer rounded-12 border border-solid border-line bg-transparent px-3 py-2 text-left font-sans text-[13px] text-soft hover:border-line-strong hover:text-text">{t}</button>)}
+                  className="cursor-pointer rounded-12 border-0 bg-control px-3 py-2 text-left font-sans text-[13px] text-fg-2 transition-colors duration-base hover:bg-control-hover hover:text-text">{t}</button>)}
               </div>}
             </div>
 
@@ -173,12 +173,12 @@ export function ClipPlayer(p: PlayerProps) {
             </div>
             {publishing && <PublishPanel clipId={clip.id} onClose={() => setPublishing(false)} />}
             <div role="radiogroup" aria-label="Aspect" className="flex flex-wrap items-center gap-[6px]">
-              <span className="text-[12px] text-fg-2">Aspect</span>
+              <span className="mr-1 text-[13px] text-fg-2">Aspect</span>
               {OVERLAY_ASPECTS.map((a) => (
                 <button key={a} type="button" role="radio" aria-checked={aspect === a} onClick={() => setFrame(a)}
                   title={`Show the player as ${a}. Does not re-render the file; export or the editor changes the real shape.`}
-                  className={`min-h-[32px] cursor-pointer rounded-pill border border-solid px-3 font-sans text-[12.5px] font-medium tabular-nums
-                    ${aspect === a ? "border-lime bg-lime text-ink" : "border-line-strong bg-transparent text-soft hover:bg-[rgba(255,255,255,.06)] hover:text-text"}`}>{a}</button>
+                  className={`h-8 min-w-[52px] cursor-pointer rounded-pill border-0 px-3 font-sans text-[13px] font-medium tabular-nums transition-colors duration-base
+                    ${aspect === a ? "bg-btn text-btn-ink" : "bg-control text-text hover:bg-control-hover"}`}>{a}</button>
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-[6px]" role="group" aria-label="Your feedback">
@@ -229,13 +229,13 @@ export function ClipPlayer(p: PlayerProps) {
 
 function RoundBtn({ icon, label, disabled, onClick }: { icon: IconName; label: string; disabled?: boolean; onClick: () => void }) {
   return <button type="button" aria-label={label} title={label} disabled={disabled} onClick={onClick}
-    className={`grid h-10 w-10 cursor-pointer place-items-center rounded-full border border-solid border-line-strong bg-[rgba(20,20,20,.9)] text-text enabled:hover:bg-raised disabled:cursor-default disabled:opacity-30`}>
+    className="grid h-10 w-10 cursor-pointer place-items-center rounded-control border-0 bg-control text-text transition-colors duration-base enabled:hover:bg-control-hover disabled:cursor-default disabled:opacity-30">
     <Icon name={icon} size={18} /></button>;
 }
 
 function Pill({ on, onClick, icon, label, children }: { on: boolean; onClick: () => void; icon?: IconName; label?: string; children?: React.ReactNode }) {
   return <button type="button" aria-pressed={on} aria-label={label} title={label} onClick={onClick}
-    className={`inline-flex min-h-[32px] cursor-pointer items-center gap-[6px] rounded-pill border border-solid px-3 font-sans text-[12.5px] font-medium
-      ${on ? "border-lime bg-lime text-ink" : "border-line-strong bg-transparent text-soft hover:bg-[rgba(255,255,255,.06)] hover:text-text"}`}>
+    className={`inline-flex h-8 min-w-8 cursor-pointer items-center justify-center gap-[6px] rounded-control border-0 px-3 font-sans text-[13px] font-medium transition-colors duration-base
+      ${on ? "bg-lime text-ink" : "bg-control text-text hover:bg-control-hover"}`}>
     {icon && <Icon name={icon} size={15} />}{children}</button>;
 }

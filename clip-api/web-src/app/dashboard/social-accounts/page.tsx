@@ -1,10 +1,12 @@
 "use client";
 // Connect / disconnect social destinations. Tokens never reach this page.
+// Uses #269 PageHeader/EmptyState chrome; keeps honest publishing-off copy from the schedule PR.
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useDash } from "@/components/dash/Shell";
-import { PAGE_HEAD, PAGE_TITLE } from "@/components/dash/ui";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import {
   loadAccounts, loadPlatforms, Platform, READINESS_LABEL, SocialAccount,
 } from "@/lib/publish";
@@ -70,25 +72,12 @@ function SocialAccounts() {
 
   return (
     <div className="grid gap-6">
-      <div className={PAGE_HEAD}>
-        <div className="grid gap-1">
-          <h1 className={PAGE_TITLE}>Social accounts</h1>
-          <p className="m-0 max-w-[56ch] text-[14px] text-muted">
-            Connect the accounts you own. ClutchClips uses official OAuth only. Access tokens stay on the server and never appear here.
-          </p>
-        </div>
-      </div>
+      <PageHeader title="Social accounts" hint="Connect the accounts you own. ClutchClips uses official OAuth only. Access tokens stay on the server and never appear here." />
 
       {enabled === false && (
-        <div className="grid gap-3 rounded-20 border border-solid border-line-soft bg-card p-5">
-          <h2 className="m-0 text-[18px] font-semibold tracking-[-0.02em]">Publishing is not enabled yet</h2>
-          <p className="m-0 max-w-[60ch] text-[14px] text-muted">
-            {reason || "Publishing is not enabled on this server yet."} Official OAuth destinations (YouTube Shorts, TikTok, Instagram Reels, Facebook Reels) appear here after the owner turns publishing on and registers each platform app. Until then, download clips and post them yourself.
-          </p>
-          <p className="m-0 text-[13px] text-fg-3">
-            Access tokens never appear in the browser. The social schedule stays empty of real posts while publishing is off — no fake connected accounts.
-          </p>
-        </div>
+        <EmptyState icon="share" title="Publishing is not enabled yet">
+          {reason || "Publishing is not enabled on this server yet."} Official OAuth destinations (YouTube Shorts, TikTok, Instagram Reels, Facebook Reels) appear here after the owner turns publishing on and registers each platform app. Until then, download clips and post them yourself. Access tokens never appear in the browser. The social schedule stays empty of real posts while publishing is off — no fake connected accounts.
+        </EmptyState>
       )}
 
       {note && <p className="m-0 text-[13px] text-cyan" role="status">{note}</p>}
@@ -96,11 +85,11 @@ function SocialAccounts() {
       {enabled && (
         <>
           <section className="grid gap-3" aria-labelledby="connected-title">
-            <h2 id="connected-title" className="m-0 text-[18px]">Connected</h2>
+            <h2 id="connected-title" className="m-0 text-[16px] font-semibold">Connected</h2>
             {!accounts.length && <p className="m-0 text-[14px] text-muted">None yet.</p>}
             <ul className="m-0 grid list-none gap-2 p-0">
               {accounts.map((a) => (
-                <li key={a.id} className="flex flex-wrap items-center justify-between gap-3 rounded-20 border border-solid border-line-soft bg-card px-4 py-3">
+                <li key={a.id} className="flex flex-wrap items-center justify-between gap-3 rounded-16 bg-card px-4 py-3">
                   <div className="grid gap-0.5">
                     <span className="text-[15px] font-medium">{a.display_name || a.platform}</span>
                     <span className="text-[12.5px] text-muted">{a.platform} · {a.status}</span>
@@ -113,12 +102,12 @@ function SocialAccounts() {
           </section>
 
           <section className="grid gap-3" aria-labelledby="available-title">
-            <h2 id="available-title" className="m-0 text-[18px]">Available destinations</h2>
+            <h2 id="available-title" className="m-0 text-[16px] font-semibold">Available destinations</h2>
             <ul className="m-0 grid list-none gap-2 p-0">
               {platforms.map((p) => {
                 const can = p.configured && p.readiness !== "held";
                 return (
-                  <li key={p.id} className="grid gap-2 rounded-20 border border-solid border-line-soft bg-card p-4">
+                  <li key={p.id} className="grid gap-2 rounded-16 bg-card p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="grid gap-0.5">
                         <span className="text-[15px] font-medium">{p.name}</span>

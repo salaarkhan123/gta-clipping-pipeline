@@ -43,7 +43,7 @@ export function ImportTakedown({ onDone }: { onDone?: () => void }) {
   }
 
   return (
-    <section className="grid gap-3 rounded-16 border border-solid border-line bg-panel p-4" aria-labelledby="import-takedown-title">
+    <section className="grid gap-3 rounded-card bg-card p-6 narrow:p-5" aria-labelledby="import-takedown-title">
       <div className="grid gap-1">
         <h2 id="import-takedown-title" className="m-0 flex items-center gap-2 text-[16px] font-semibold">
           <Icon name="shield" size={18} className="text-muted" />Remove my imported videos</h2>
@@ -64,7 +64,7 @@ export function ImportTakedown({ onDone }: { onDone?: () => void }) {
       {mode === "url" && (
         <label className="grid gap-1 text-[13.5px]">Source URL
           <input type="url" inputMode="url" value={url} placeholder="https://www.twitch.tv/videos/…"
-            className="min-h-[42px] rounded-12 border border-solid border-line bg-bg px-3 text-[14px]"
+            className="min-h-[40px] px-3 text-[14px]"
             onChange={(e) => { setUrl(e.target.value); setAsk(false); }} />
         </label>
       )}
@@ -84,7 +84,7 @@ export function ImportTakedown({ onDone }: { onDone?: () => void }) {
             Continue</button>
         </div>
       ) : (
-        <div role="group" aria-label="Confirm import takedown" className="grid gap-2 rounded-12 border border-solid border-line bg-card-2 p-3">
+        <div role="group" aria-label="Confirm import takedown" className="grid gap-2 rounded-12 bg-control p-3">
           <p className="m-0 text-[13.5px] text-label">
             {mode === "all"
               ? "Remove all link imports on this account? Waiting jobs are refunded."

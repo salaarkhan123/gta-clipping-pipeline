@@ -4,16 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import { ComingSoonBadge } from "@/components/ComingSoonBadge";
 import { Icon, IconName } from "../Icon";
 
-export const CARD = "rounded-[24px] border border-solid border-line-soft bg-card p-6 narrow:p-4";
-export const LABEL = "text-[13px] font-medium uppercase tracking-[.06em] text-muted";
+export const CARD = "rounded-card bg-card p-6 narrow:p-4";
+export const LABEL = "text-[14px] font-normal uppercase text-fg-2";
 
 // An on/off switch. `disabled` keeps it where it is.
 export function Switch({ on, onChange, label, disabled }: { on: boolean; onChange?: (on: boolean) => void; label: string; disabled?: boolean }) {
   return (
     <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange?.(!on)}
-      className={`relative h-7 w-12 flex-none cursor-pointer rounded-full border-0 p-0 transition-colors duration-150 disabled:cursor-default
+      className={`relative h-7 w-12 flex-none cursor-pointer rounded-full border-0 p-0 transition-colors duration-fast disabled:cursor-default
         ${on ? "bg-text" : "bg-raised"} ${disabled && !on ? "opacity-50" : ""}`}>
-      <span className={`absolute top-[3px] h-[22px] w-[22px] rounded-full transition-[left] duration-150 ${on ? "left-[23px] bg-bg" : "left-[3px] bg-muted"}`} />
+      <span className={`absolute top-[3px] h-[22px] w-[22px] rounded-full transition-[left] duration-fast ${on ? "left-[23px] bg-bg" : "left-[3px] bg-muted"}`} />
     </button>
   );
 }
@@ -42,7 +42,7 @@ export function SettingRow({ icon, name, hint, soon, children, under }: { icon: 
 export function InlineSelect({ label, value, shown, onChange, children, disabled }: { label: string; value: string; shown: string;
   onChange: (v: string) => void; children: React.ReactNode; disabled?: boolean }) {
   return (
-    <label className={`relative m-0 inline-flex min-h-[36px] max-w-full cursor-pointer items-center gap-1 rounded-full px-3 text-[14px] font-normal hover:bg-chip ${disabled ? "pointer-events-none opacity-50" : ""}`}>
+    <label className={`relative m-0 inline-flex min-h-[36px] max-w-full cursor-pointer items-center gap-1 rounded-control px-3 text-[14px] font-normal transition-colors duration-base hover:bg-control ${disabled ? "pointer-events-none opacity-50" : ""}`}>
       <span className="text-muted">{label}:</span><span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-text">{shown}</span>
       <Icon name="chevron" size={16} className="text-muted" />
       <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} aria-label={label}
@@ -66,9 +66,9 @@ export function Popover({ button, label, children, wide }: { button: React.React
   return (
     <div ref={box} className="relative">
       <button ref={btn} type="button" aria-expanded={open} aria-label={label} onClick={() => setOpen(!open)}
-        className="inline-flex min-h-[36px] cursor-pointer items-center gap-2 rounded-full border-0 bg-transparent px-3 font-sans text-[14px] text-text hover:bg-chip aria-expanded:bg-chip">{button}</button>
+        className="inline-flex min-h-[36px] cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent px-3 font-sans text-[14px] text-text transition-colors duration-base hover:bg-control aria-expanded:bg-control">{button}</button>
       {open && <div role="dialog" aria-label={label}
-        className={`absolute left-0 top-[calc(100%+8px)] z-[60] grid max-h-[min(70vh,640px)] gap-5 overflow-y-auto rounded-[20px] border border-solid border-line bg-surface p-5 shadow-pop
+        className={`absolute left-0 top-[calc(100%+8px)] z-[60] grid max-h-[min(70vh,640px)] gap-5 overflow-y-auto rounded-card bg-control p-5 shadow-pop
           ${wide ? "w-[min(640px,calc(100vw-32px))]" : "w-[min(380px,calc(100vw-32px))]"} narrow:fixed narrow:inset-x-4 narrow:bottom-4 narrow:top-auto narrow:w-auto`}>{children}</div>}
     </div>
   );
@@ -78,8 +78,8 @@ export function Popover({ button, label, children, wide }: { button: React.React
 export function Tile({ on, onClick, name, children, soon, className = "" }: { on?: boolean; onClick?: () => void; name: string; children: React.ReactNode;
   soon?: boolean; className?: string }) {
   const body = <>
-    <span className={`relative grid place-items-center overflow-hidden rounded-12 bg-raised ring-inset transition-shadow duration-150 ${className}
-      ${on ? "ring-2 ring-text" : "ring-1 ring-[rgba(255,255,255,.08)] group-hover/tile:ring-[rgba(255,255,255,.3)]"} ${soon ? "opacity-50" : ""}`}>
+    <span className={`relative grid place-items-center overflow-hidden rounded-12 bg-raised ring-inset transition-shadow duration-fast ${className}
+      ${on ? "ring-2 ring-text" : "ring-1 ring-line group-hover/tile:ring-line-strong"} ${soon ? "opacity-50" : ""}`}>
       {children}
       {on && <span className="absolute right-[6px] top-[6px] grid h-5 w-5 place-items-center rounded-full bg-text text-bg" aria-hidden="true"><Icon name="check" size={14} /></span>}
     </span>

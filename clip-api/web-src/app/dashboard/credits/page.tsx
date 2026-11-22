@@ -6,26 +6,18 @@ import { Icon, IconName } from "@/components/dash/Icon";
 import { useDash } from "@/components/dash/Shell";
 import { Tabs } from "@/components/dash/Tabs";
 import { BackTitle, PAGE_HEAD } from "@/components/dash/ui";
+import { StatCard } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { api } from "@/lib/api";
 import { byDay, Ledger, LEDGER_PAGE, LedgerRow, rowName, Side, sideOf, totals } from "@/lib/credits";
 
 const ICONS: Record<string, IconName> = { grant: "sparkle", topup: "card", reserve: "scissors", release: "undo", adjust: "sliders" };
 
-function Stat({ label, value, hint, tone = "text-text" }: { label: string; value: string; hint?: string; tone?: string }) {
-  return (
-    <div className="grid content-start gap-1 rounded-20 border border-solid border-line-soft bg-card p-5">
-      <span className="text-[13px] font-medium text-muted">{label}</span>
-      <span className={`font-sans text-[28px] font-semibold leading-[1.1] tracking-[-0.02em] tabular-nums ${tone}`}>{value}</span>
-      {hint && <span className="text-[12.5px] text-fg-3">{hint}</span>}
-    </div>
-  );
-}
-
 function Entry({ r }: { r: LedgerRow }) {
   const t = new Date(r.created_at);
   return (
     <li className="flex items-center gap-3 px-4 py-3">
-      <span className="grid h-9 w-9 flex-none place-items-center rounded-12 bg-surface text-muted" aria-hidden="true"><Icon name={ICONS[r.kind] || "bolt"} size={18} /></span>
+      <span className="grid h-9 w-9 flex-none place-items-center rounded-12 bg-control text-fg-2" aria-hidden="true"><Icon name={ICONS[r.kind] || "bolt"} size={18} /></span>
       <span className="grid min-w-0 flex-1 gap-[2px]">
         <span className="overflow-hidden text-ellipsis whitespace-nowrap text-[14.5px] font-medium text-text">{rowName(r)}</span>
         <span className="flex flex-wrap gap-x-2 text-[12.5px] text-muted">
@@ -61,22 +53,22 @@ export default function Credits() {
         </div>
       </div>
       <section aria-label="Summary" className="grid grid-cols-3 gap-3 narrow:grid-cols-1">
-        <Stat label="Balance" value={(ledger?.balance ?? me.credits).toLocaleString()} tone="text-lime" />
-        <Stat label="Used by jobs" value={ledger ? sum.used.toLocaleString() : "…"} hint={ledger ? "In the entries below, after refunds" : undefined} />
-        <Stat label="Added" value={ledger ? sum.added.toLocaleString() : "…"} hint={ledger ? "Plan credits, purchases and grants below" : undefined} />
+        <StatCard label="Balance" value={(ledger?.balance ?? me.credits).toLocaleString()} tone="text-lime" />
+        <StatCard label="Used by jobs" value={ledger ? sum.used.toLocaleString() : "…"} hint={ledger ? "In the entries below, after refunds" : undefined} />
+        <StatCard label="Added" value={ledger ? sum.added.toLocaleString() : "…"} hint={ledger ? "Plan credits, purchases and grants below" : undefined} />
       </section>
       <section className="grid gap-3" aria-labelledby="history-title">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 id="history-title" className="m-0 text-[18px]">History</h2>
+          <h2 id="history-title" className="m-0 text-[16px] font-semibold">History</h2>
           <Tabs seg label="Show" panel="history" value={side} onChange={setSide} tabs={[["all", "All"], ["used", "Used"], ["added", "Added"]]} />
         </div>
         <div id="history" role="tabpanel">
           {!ledger ? <p className="muted">Loading…</p>
-            : !shown.length ? <p className="m-0 rounded-20 border border-dashed border-line p-8 text-center text-muted">{rows.length ? "Nothing of this kind in your recent history." : "No credit activity yet."}</p>
+            : !shown.length ? <EmptyState icon="bolt" title={rows.length ? "Nothing of this kind in your recent history" : "No credit activity yet"} />
             : <div className="grid gap-5">{byDay(shown).map((g) => (
                 <div key={g.day} className="grid gap-2">
                   <h3 className="m-0 text-[13px] font-medium text-muted">{g.day}</h3>
-                  <ul className="m-0 list-none divide-x-0 divide-y divide-solid divide-line-soft overflow-hidden rounded-20 border border-solid border-line-soft bg-card p-0">
+                  <ul className="m-0 list-none divide-x-0 divide-y divide-solid divide-line-soft overflow-hidden rounded-16 bg-card p-0">
                     {g.rows.map((r, i) => <Entry key={`${r.created_at}-${i}`} r={r} />)}</ul>
                 </div>))}
               </div>}

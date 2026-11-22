@@ -30,7 +30,7 @@ test("what is not built says Coming soon on the card and offers nothing to click
   const soon = source("components/landing/demos/Soon.tsx");
   assert.match(soon, /<ComingSoonBadge \/>/);
   assert.doesNotMatch(soon, /<button|<a |href=|onClick/);
-  for (const [file, title] of [["sections/WorkflowSection.tsx", "Auto posting"], ["sections/TeamsSection.tsx", "Team workspace"]]) {
+  for (const [file, title] of [["sections/TeamsSection.tsx", "Team workspace"]]) {
     const text = source(`components/landing/${file}`);
     assert.match(text, new RegExp(`title: "${title}", soon: true`), file);
     assert.match(text, /\.soon && <ComingSoonBadge \/>/, file);
@@ -43,7 +43,6 @@ test("what is not built says Coming soon on the card and offers nothing to click
 test("future features are written in the future tense", () => {
   const soon = source("components/landing/demos/Soon.tsx");
   for (const m of soon.matchAll(/text="([^"]+)"/g)) assert.match(m[1], /\bwill\b/, m[1]);
-  assert.match(source("components/landing/sections/WorkflowSection.tsx"), /ClutchClips will post/);
   assert.match(source("components/landing/sections/TeamsSection.tsx"), /will be able to share/);
 });
 
@@ -78,7 +77,8 @@ test("each card that shows footage names every creator it shows, once, at the bo
   // Every item a card plays is in its Credits line.
   const cards = {
     "demos/VodToClips.tsx": /<Credits items=\{\[vod, wide\?\.item, \.\.\.tall\]\}/,
-    "demos/CaptionStyles.tsx": /<Credits items=\{\[plain\]\} \/>/,
+    "demos/CaptionStyles.tsx": /<Credits items=\{\[clip\]\}/,
+    "demos/HeroStage.tsx": /<Credits items=\{\[vod, \.\.\.tiles\]\}/,
     "demos/Reframe.tsx": /<Credits items=\{items\} \/>/,
     "demos/HookText.tsx": /<Credits items=\{\[real\]\} \/>/,
     "sections/EditorSection.tsx": /<Credits items=\{\[clip\]\}/,
@@ -96,9 +96,9 @@ test("each card that shows footage names every creator it shows, once, at the bo
   assert.doesNotMatch(source("components/landing/sections/TeamsSection.tsx"), /<Footage /);
 });
 
-test("hook demo prefers non-Fortnite approved footage when available", () => {
+test("hook demo shows one clear subject (NICKMERCS, Warzone), else non-Fortnite approved footage", () => {
   const hook = source("components/landing/demos/HookText.tsx");
-  assert.match(hook, /hook-2/);
+  assert.match(hook, /items\.find\(\(i\) => i\.id === "hook-4"\)/);
   assert.match(hook, /!\/fortnite\/i/);
 });
 
@@ -137,4 +137,46 @@ test("the caption presets follow the clip's real words with the renderer's line 
   assert.match(demo, /"No captions"/);
   assert.match(demo, /Font <ComingSoonBadge short \/>/);           // the app has no font or effect choice yet
   assert.match(demo, /Effects <ComingSoonBadge short \/>/);
+});
+
+test("the clipping slide's rotation: one set per game, each a source and five clips of that same source", async () => {
+  const { readFileSync } = await import("node:fs");
+  const m = JSON.parse(readFileSync(new URL("../public/media/hero-clean/manifest.json", import.meta.url), "utf8"));
+  const sets = [];
+  for (const i of m.items) {
+    if (i.role === "source") sets.push({ source: i, tiles: [] });
+    else sets.at(-1).tiles.push(i);
+  }
+  const games = sets.map((s) => s.source.game);
+  assert.ok(new Set(games).size >= 6, games.join(", "));
+  games.forEach((g, i) => assert.notEqual(g, games[(i + 1) % games.length], `${g} twice in a row`));
+  const cod = games.map((g, i) => (/call of duty/i.test(g) ? i : -1)).filter((i) => i >= 0);
+  for (const i of cod) assert.ok(!cod.includes((i + 1) % games.length), "the two Call of Duty sets are adjacent");
+  for (const { source, tiles } of sets) {
+    assert.ok(source.source_duration_sec > 600, `${source.id}: the stream's own length`);
+    assert.deepEqual(tiles.map((t) => `${t.platform} ${t.aspect}`), ["youtube 16:9", "tiktok 9:16", "instagram 9:16", "facebook 4:5", "youtube 9:16"]);
+    for (const t of tiles) {
+      assert.equal(t.source.title, source.source.title, `${t.id} is cut from its set's source`);
+      assert.equal(t.credit, source.credit, t.id);
+      if ("rating" in t) assert.equal(t.rating_source, "ai", `${t.id}: a number is shown only when the AI judge rated the moment`);
+    }
+  }
+});
+
+test("the workflow section claims only what is real: import is a link or an upload, editing is today's run, posting targets the publish platforms", () => {
+  const wf = source("components/landing/sections/WorkflowSection.tsx");
+  assert.match(wf, /title: "Import"/);
+  assert.doesNotMatch(wf, /automatically (pulls|imports)|latest videos|channel's latest/i);
+  assert.doesNotMatch(wf, /B-roll|enhances audio/i);
+  assert.match(wf, /const PLATFORMS: PlatformId\[\] = \["youtube", "tiktok", "instagram", "facebook"\];/);
+  assert.doesNotMatch(wf, /<button|href=|onClick/);
+  assert.match(source("app/page.tsx"), /<WorkflowSection \/>/);
+});
+
+test("the clipping slide fetches only the next game's posters ahead, never its videos", () => {
+  const stage = source("components/landing/demos/HeroStage.tsx");
+  const preload = stage.slice(stage.indexOf("function Preload"), stage.indexOf("export function HeroStage"));
+  assert.match(preload, /<img key=\{i\.id\} src=\{mediaUrl\("hero-clean", i\.poster\)\}/);
+  assert.doesNotMatch(preload, /<video|preload="auto"/);
+  assert.match(source("components/landing/demos/Footage.tsx"), /autoPlay preload="none" poster=/);
 });

@@ -9,6 +9,7 @@ const publish = source("lib/publish.ts");
 test("calendar page: week/month/list, status chips, schedule composer, honest disabled state", () => {
   const page = source("app/dashboard/calendar/page.tsx");
   assert.match(page, /Social schedule/);
+  assert.match(page, /PageHeader/);
   assert.match(page, /\["week", "Week"\], \["month", "Month"\], \["list", "List"\]/);
   assert.match(page, /CalendarEmpty/);
   assert.match(page, /ScheduleComposer/);
@@ -87,6 +88,8 @@ test("status chip uses STATUS_TONE", () => {
 
 test("social accounts: honest disabled copy while PUBLISHING is off", () => {
   const page = source("app/dashboard/social-accounts/page.tsx");
+  assert.match(page, /PageHeader/);
+  assert.match(page, /EmptyState/);
   assert.match(page, /Publishing is not enabled yet/);
   assert.match(page, /Access tokens never appear/);
   assert.match(page, /no fake connected accounts/);

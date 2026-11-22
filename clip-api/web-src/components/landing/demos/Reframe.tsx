@@ -18,15 +18,18 @@ type Box = [number, number, number, number];             // x, y, w, h as fracti
 type Boxes = { facecam?: Box; crop?: Record<string, Box> };
 
 const isBox = (b: unknown): b is Box => Array.isArray(b) && b.length === 4 && b.every((n) => typeof n === "number" && n >= 0 && n <= 1);
-const at = (b: Box) => ({ left: `${b[0] * 100}%`, top: `${b[1] * 100}%`, width: `${b[2] * 100}%`, height: `${b[3] * 100}%` });
+const place = (b: Box) => ({ left: `${b[0] * 100}%`, top: `${b[1] * 100}%`, width: `${b[2] * 100}%`, height: `${b[3] * 100}%` });
 
-// An outline the engine reported, with its label inside it: the camera's at the top, the crop's at the bottom,
-// so the two never cover each other. Neutral (white) labels only — no green Facecam sticker.
-function Outline({ box, label, tone }: { box: Box; label: string; tone: "lime" | "white" }) {
-  const right = box[0] + box[2] > 0.75;
+// An outline the engine reported, with its label hanging outside it so it never covers what the box is drawn around.
+// The camera's tag sits beside the box, on the gameplay side and level with its top: the engine's box is the face, and
+// the camera panel runs on below it, so a tag under the box would land on the streamer. The crop's sits under it.
+// Neutral (white) labels only: no green Facecam sticker.
+function Outline({ box, label, tone, beside }: { box: Box; label: string; tone: "lime" | "white"; beside?: boolean }) {
+  const right = box[0] + box[2] / 2 > 0.5;
+  const at = beside ? `top-0 ${right ? "right-[calc(100%+6px)]" : "left-[calc(100%+6px)]"}` : `top-[calc(100%+4px)] ${box[0] + box[2] > 0.75 ? "right-0" : "left-0"}`;
   return (
-    <span className={`absolute rounded-[6px] border-2 transition-all duration-500 ${tone === "lime" ? "border-lime" : "border-white/90"}`} style={at(box)} aria-hidden="true">
-      <span className={`absolute whitespace-nowrap rounded-[4px] px-1 py-px text-[9px] font-semibold leading-[12px] ${right ? "right-1" : "left-1"} ${tone === "lime" ? "top-1 bg-lime text-ink" : "bottom-1 bg-white text-black"}`}>{label}</span>
+    <span className={`absolute rounded-[6px] border-2 border-solid transition-all duration-500 ${tone === "lime" ? "border-lime" : "border-white/90"}`} style={place(box)} aria-hidden="true">
+      <span className={`absolute ${at} whitespace-nowrap rounded-[4px] px-1 py-px text-[9px] font-semibold leading-[12px] ${tone === "lime" ? "bg-lime text-ink" : "bg-white text-black"}`}>{label}</span>
     </span>
   );
 }
@@ -43,7 +46,7 @@ export function BeforeFrame({ item, layout, play }: { item: Item | null; layout:
       {item && <>
         <Footage section="reframe" item={item} play={play} />
         {crop && <Outline box={crop} label="Gameplay crop" tone="white" />}
-        {cam && <Outline box={cam} label="Camera" tone="white" />}
+        {cam && <Outline box={cam} label="Camera" tone="white" beside />}
       </>}
     </div>
   );

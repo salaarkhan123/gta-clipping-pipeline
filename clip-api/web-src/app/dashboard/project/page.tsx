@@ -16,8 +16,8 @@ import { api, ApiError, clock } from "@/lib/api";
 import { applyFindHandoff, findHandoffFromSearch } from "@/lib/globalFind";
 
 type View = "clips" | "find";
-const TAB = "relative inline-flex min-h-[36px] cursor-pointer items-center gap-2 rounded-pill border-0 bg-transparent px-4 font-sans text-[14px] font-medium text-fg-2 hover:text-text "
-  + "aria-selected:bg-chip-hover aria-selected:text-text";
+const TAB = "relative inline-flex h-9 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent px-3 font-sans text-[14px] font-normal text-fg-2 transition-colors duration-base hover:text-text "
+  + "aria-selected:bg-control aria-selected:text-text";
 
 // Every read signs new links for the same files. A refresh keeps the links already on the page, so polling a
 // running job does not restart the source video or a clip that is playing. Links are valid for an hour, so
@@ -134,14 +134,14 @@ function Project() {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
           <BackTitle title={project.filename} crumbs={[{ label: "Home", href: "/dashboard/" }, { label: project.filename }]} />
-          <p className="m-0 text-[13px] tabular-nums text-fg-2">
+          <p className="m-0 text-[14px] tabular-nums text-fg-2">
             {clock(project.duration_sec)} · {clips.length} clip{clips.length === 1 ? "" : "s"} · kept until {until}</p>
         </div>
         <button type="button" className="btn small primary" onClick={() => setMaking(true)}><Icon name="plus" size={16} />Make more</button>
       </header>
 
-      <details className="group rounded-16 border border-solid border-line-soft bg-card [&_summary::-webkit-details-marker]:hidden">
-        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-[13.5px] font-medium text-soft hover:text-text">
+      <details className="group rounded-[14px] bg-card [&_summary::-webkit-details-marker]:hidden">
+        <summary className="flex min-h-[48px] cursor-pointer list-none items-center gap-2 px-4 text-[14px] text-fg-2 hover:text-text">
           <Icon name="chevron" size={16} className="-rotate-90 transition-transform group-open:rotate-0" />Source video and where each clip came from</summary>
         <div className="grid gap-3 px-4 pb-4">
           <video controls preload="metadata" src={project.source_url} className="max-h-[420px] w-full rounded-12 bg-black"

@@ -1,15 +1,16 @@
 "use client";
 // Publishing calendar: list / week / month, status chips, schedule + edit, honest when PUBLISHING=false.
+// Header uses the #269 PageHeader design-system chrome; board/composer are this PR's schedule UX.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useDash } from "@/components/dash/Shell";
 import { Tabs } from "@/components/dash/Tabs";
-import { PAGE_HEAD, PAGE_TITLE } from "@/components/dash/ui";
 import { CalendarBoard } from "@/components/publish/CalendarBoard";
 import { CalendarEmpty } from "@/components/publish/CalendarEmpty";
 import { ScheduleComposer } from "@/components/publish/ScheduleComposer";
 import { StatusChip } from "@/components/publish/StatusChip";
+import { PageHeader } from "@/components/ui/PageHeader";
 import {
   addDays, CalendarView, countByStatus, formatDay, loadPlatforms, loadPosts,
   localZone, Post, PostStatus, toLocalInputValue, weekStart,
@@ -108,22 +109,17 @@ export default function CalendarPage() {
 
   return (
     <div className="grid gap-6">
-      <div className={PAGE_HEAD}>
-        <div className="grid gap-1">
-          <h1 className={PAGE_TITLE}>Social schedule</h1>
-          <p className="m-0 max-w-[58ch] text-[14px] text-muted">
-            Publishing calendar in {zone}. Status is live from the job queue — scheduled, draft-queue, published, or failed — never a fake success.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/dashboard/social-accounts/" className="btn small ghost">Social accounts</Link>
-          {enabled && (
-            <button type="button" className="btn small primary" onClick={() => openCreate()}>
-              Schedule clip
-            </button>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="Social schedule"
+        hint={`Publishing calendar in ${zone}. Status is live from the job queue — scheduled, draft-queue, published, or failed — never a fake success.`}
+      >
+        <Link href="/dashboard/social-accounts/" className="btn small ghost">Social accounts</Link>
+        {enabled && (
+          <button type="button" className="btn small primary" onClick={() => openCreate()}>
+            Schedule clip
+          </button>
+        )}
+      </PageHeader>
 
       {enabled === null && (
         <p className="m-0 text-[14px] text-muted">Loading calendar…</p>

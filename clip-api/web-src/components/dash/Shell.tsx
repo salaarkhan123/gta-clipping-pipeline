@@ -36,7 +36,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <Ctx.Provider value={{ me, reloadMe, fail, say: setNotice }}>
       <a className="skip" href="#dash-main">Skip to content</a>
       <Frame me={me} path={path} onLogout={() => { setToken(null); router.push("/"); }}>
-        <main className={`dash px-7 pb-[72px] pt-3 narrow:px-4 narrow:pb-10 narrow:pt-[18px] ${WIDE.some((w) => path.startsWith(w)) ? "max-w-[1440px]" : ""}`} id="dash-main" tabIndex={-1}>
+        <main className={`dash px-11 pb-[72px] pt-3 mid:pr-[72px] narrow:px-4 narrow:pb-10 narrow:pt-[18px] ${WIDE.some((w) => path.startsWith(w)) ? "max-w-[1440px]" : ""}`} id="dash-main" tabIndex={-1}>
           {!me.email_verified && <p className="notice">Confirm your email to start making clips. We sent a link to {me.email}.{" "}
             <button className="link" onClick={() => api("/v1/auth/resend-verification", { body: {} }).then(() => setNotice("We sent the link again.")).catch(fail)}>Send it again</button></p>}
           <PolicyBanner />

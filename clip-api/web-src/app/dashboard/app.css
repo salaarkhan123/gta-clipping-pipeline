@@ -73,24 +73,6 @@
 .timeline-note { min-height: 1.6em; overflow-wrap: anywhere; }
 #tools { scroll-margin-top: 88px; }
 .dash-title { font-size: 28px; font-weight: 600; letter-spacing: -.02em; overflow-wrap: anywhere; }
-.score-badge { position: relative; display: inline-block; justify-self: start; }
-.score-badge .rank { padding: 4px 10px; border-radius: 999px; border: 1px solid theme('colors.line'); background: theme('colors.card-2'); color: theme('colors.text');
-  font: 500 13px theme('fontFamily.body'); cursor: help; font-variant-numeric: tabular-nums; }
-.score-badge .rank b { font-weight: 700; }
-.score-badge .rank.top { border-color: theme('colors.lime'); color: theme('colors.lime'); }
-.score-badge .rank.strong { border-color: theme('colors.cyan'); color: theme('colors.cyan'); }
-.score-tip { display: none; position: absolute; z-index: 10; left: 0; top: calc(100% + 8px); width: min(280px, 80vw); padding: 12px 14px;
-  background: theme('colors.card-2'); border: 1px solid theme('colors.line'); border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,.5); font-size: 13px; }
-.score-badge .rank:focus-visible + .score-tip, .score-badge.open .score-tip { display: grid; gap: 6px; }
-/* Hover only where there is a pointer that hovers: on a touch screen the last thing tapped stays "hovered". */
-@media (hover: hover) { .score-badge:hover .score-tip { display: grid; gap: 6px; } }
-.score-badge.shut .score-tip { display: none !important; }
-/* Escape, or a second press: closed until the pointer or focus leaves */
-.score-badge .rank.score { display: inline-flex; align-items: baseline; gap: 4px; padding: 0 2px; border: 0; background: none; color: theme('colors.lime'); }
-.score-badge .rank.score b { font: 700 26px/1.1 theme('fontFamily.display'); }
-.score-badge .rank.score small { font: 500 13px theme('fontFamily.body'); color: theme('colors.muted'); }
-.score-tip .parts { display: flex; flex-wrap: wrap; gap: 4px 12px; color: theme('colors.muted'); }
-.score-tip .parts b { color: theme('colors.text'); font-variant-numeric: tabular-nums; }
 .options.edits { border: 1px solid theme('colors.line'); border-radius: 12px; padding: 4px 14px 10px; align-items: center; }
 .options.edits legend { padding: 0 6px; font-size: 13px; color: theme('colors.muted'); }
 .options.edits label.check { padding-bottom: 0; }
@@ -338,9 +320,7 @@
   .dash { padding: 20px 16px 56px; }
   /* Touch targets: every button and field in the app is at least 40 px tall. */
   .dash .btn, .picker .btn, .dash .tabs button, .dash select, .dash input:not([type=checkbox]) { min-height: 40px; }
-  .dash button.link, .dash .score-badge .rank { display: inline-flex; align-items: center; gap: .3em; min-height: 40px; }
-  .dash .score-badge .rank { padding: 4px 14px; }
-  .dash .score-badge .rank.score { padding: 0 2px; }
+  .dash button.link { display: inline-flex; align-items: center; gap: .3em; min-height: 40px; }
   .look-tools .icon-btn { width: 40px; height: 40px; }
   .line-set { padding-left: 0; }
   .panel { padding: 16px; }
@@ -373,7 +353,6 @@
 .dash:has(> .wide) { max-width: 1680px; }      /* a page that wants the full width wraps itself in .wide */
 .more { display: inline-flex; align-items: center; gap: 4px; }
 .empty-note { padding: 32px 20px; border: 1px dashed theme('colors.line-strong'); border-radius: 20px; color: theme('colors.muted'); text-align: center; }
-.dash .score-badge .rank.score b { font-size: 22px; }
 /* The project's settings form: one centred column around the job form's own parts. */
 .form-col { display: grid; gap: 18px; width: 100%; max-width: 760px; margin: 0 auto; }
 .form-col .panel { padding: 24px; border-radius: 24px; background: theme('colors.card'); border-color: theme('colors.line-soft'); }
@@ -407,3 +386,33 @@
   border-radius: 999px; padding-left: 16px; padding-right: 16px; background-color: theme('colors.surface'); border-color: theme('colors.line'); }
 .dash select:focus, .dash input:focus { border-color: theme('colors.line-strong'); }
 
+/* Home's start card: the selected tab is part of the card, joined to it by a concave corner on its right. */
+.start-tab::after { content: ""; position: absolute; right: -20px; bottom: 0; width: 20px; height: 20px; pointer-events: none;
+  background: radial-gradient(circle at 100% 0, transparent 19.5px, var(--card) 20px); }
+.start-tab:not(:first-child)::before { content: ""; position: absolute; left: -20px; bottom: 0; width: 20px; height: 20px; pointer-events: none;
+  background: radial-gradient(circle at 0 0, transparent 19.5px, var(--card) 20px); }
+
+/* ---- The app theme for the older shared classes ---------------------------------------------------------------
+   Pages and panels that still use these classes (the editor's side panels, forms, tables, dialogs) follow the
+   same rules as the rebuilt pages: grey blocks one step lighter per layer, no outlines, 10 px controls.
+   :where() keeps each rule as weak as the one it replaces, so a utility class on the element still wins. */
+:where([data-theme="app"]) :is(input, select, textarea) { background-color: theme('colors.control'); border-color: transparent; border-radius: var(--radius-control); font-size: 14px; padding: 9px 12px; }
+:where([data-theme="app"]) :is(input, select, textarea):focus { border-color: theme('colors.line-strong'); }
+:where([data-theme="app"]) :is(.line, .panels, .options.edits, .picker) :is(input, select, textarea) { background-color: theme('colors.control-hover'); border-color: transparent; border-radius: var(--radius-control); padding-left: 12px; padding-right: 12px; }
+:where([data-theme="app"]) :is(.panel, .form-col .panel, .job) { border: 0; border-radius: var(--radius-card); }
+:where([data-theme="app"]) :is(.picker, .picker.confirm) { border: 0; border-radius: var(--radius-card); background: theme('colors.card'); }
+:where([data-theme="app"]) :is(.line, .panels, .options.edits) { border: 0; border-radius: var(--radius-sm); background: theme('colors.control'); }
+:where([data-theme="app"]) .seg { border: 0; border-radius: var(--radius-control); background: theme('colors.control'); }
+:where([data-theme="app"]) .seg button { border-radius: 8px; }
+:where([data-theme="app"]) .seg button[aria-pressed="true"] { background: theme('colors.raised'); }
+:where([data-theme="app"]) .tabs button { border: 0; border-radius: var(--radius-control); background: theme('colors.control'); color: theme('colors.text'); }
+:where([data-theme="app"]) .tabs button:hover { background: theme('colors.control-hover'); }
+:where([data-theme="app"]) .tabs button.on { background: theme('colors.btn'); color: theme('colors.btn-ink'); }
+:where([data-theme="app"]) .table-wrap { border: 0; border-radius: var(--radius-md); background: theme('colors.card'); }
+:where([data-theme="app"]) :is(.ledger th, .ledger td) { padding: 12px 16px; border-bottom-color: theme('colors.line-soft'); }
+:where([data-theme="app"]) .ledger th { font-weight: 400; color: theme('colors.fg-2'); }
+:where([data-theme="app"]) .icon-btn { border: 0; border-radius: var(--radius-control); background: theme('colors.control'); color: theme('colors.text'); }
+:where([data-theme="app"]) .icon-btn:hover { background: theme('colors.control-hover'); }
+:where([data-theme="app"]) .notice { border: 0; background: theme('colors.card'); border-radius: var(--radius-md); }
+:where([data-theme="app"]) .error { border: 0; background: rgba(255, 92, 122, .12); color: theme('colors.text'); }
+:where([data-theme="app"]) .dash-title { font-size: var(--text-page-title); letter-spacing: -.01em; }
