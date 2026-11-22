@@ -96,3 +96,13 @@ def test_the_public_site_and_the_app_link_to_the_league():
 def test_the_views_are_labelled_unverified_wherever_they_are_listed():
     for f in (WEB / "components/league/Leaderboard.tsx", HOME, CREATOR, ENTER, ADMIN):
         assert "unverified" in f.read_text(), f.name
+
+
+def test_a_failed_or_rate_limited_read_never_leaves_a_league_page_loading():
+    for f in (PUBLIC, HOME, LIB):
+        assert ".catch(() => {})" not in f.read_text(), f.name               # no read is dropped silently
+    assert "failed: true" in LIB.read_text() and "retry" in LIB.read_text()
+    page = PUBLIC.read_text()
+    assert page.count("<LoadFailed") >= 4 and "Try again" in page           # competition, board, featured, rules
+    home = HOME.read_text()
+    assert "{!failed &&" in home and 'role="alert"' not in home and 'href="/league/"' in home

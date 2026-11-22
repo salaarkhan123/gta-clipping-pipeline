@@ -22,13 +22,15 @@ def make_admin(client):
     return h, acct
 
 
-def make_clip(account_id: str, options: dict | None = None, deleted: bool = False) -> str:
-    """A finished clip of the account's, written straight to the database (no render needed for these tests)."""
+def make_clip(account_id: str, options: dict | None = None, deleted: bool = False, source_url: str | None = None) -> str:
+    """A finished clip of the account's, written straight to the database (no render needed for these tests).
+    `source_url` makes its upload a link import, which the account's own takedown removes."""
     now = utcnow()
     with new_session() as db:
         up = Upload(id=new_id("upl"), account_id=account_id, filename="vod.mp4", storage_key="k/vod.mp4",
                     size_bytes=1, duration_sec=60.0, width=1920, height=1080, has_audio=True,
-                    expires_at=now + timedelta(days=3))
+                    expires_at=now + timedelta(days=3), source_url=source_url,
+                    source_platform="twitch" if source_url else None)
         job = Job(id=new_id("job"), account_id=account_id, upload_id=up.id, status="SUCCEEDED",
                   options=options or {"template": None, "caption_style": "impact"}, duration_sec=60.0,
                   credits_reserved=1, credits_charged=1, expires_at=now + timedelta(days=3))

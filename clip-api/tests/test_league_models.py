@@ -1,4 +1,4 @@
-"""Creators League storage: migration 0012 is additive and reversible, the observation and audit tables refuse
+"""Creators League storage: migrations 0012 and 0013 are additive and reversible, the observation and audit tables refuse
 changes, and the status tables in app/league.py name every state."""
 import pytest
 from sqlalchemy import inspect
@@ -12,10 +12,10 @@ from tests.test_migrations import db, diffs  # noqa: F401
 TABLES = {"creator_profiles", "league_competitions", "league_entries", "league_view_observations", "league_events"}
 
 
-def test_migration_0012_league_is_the_head_and_builds_the_league_tables(db):  # noqa: F811
+def test_migration_0012_league_builds_the_league_tables_under_the_head(db):  # noqa: F811
     e = db("league")
     migrate(e)
-    assert head() == "0012_league"
+    assert head() == "0013_league_hide"
     assert TABLES <= set(inspect(e).get_table_names())
     assert diffs(e) == []
     uniques = {tuple(u["column_names"]) for u in inspect(e).get_unique_constraints("league_entries")}
@@ -35,6 +35,22 @@ def test_migration_0012_league_downgrades_to_0011_and_leaves_the_older_tables(db
     assert current(e) == "0011" and not (TABLES & names) and {"accounts", "clips", "scheduled_posts"} <= names
     migrate(e)
     assert TABLES <= set(inspect(e).get_table_names())
+
+
+def test_migration_0013_adds_the_hidden_mark_to_profiles_and_takes_it_back(db):  # noqa: F811
+    from alembic import command
+
+    from app.migrate import config, current
+    e = db("leaguehide")
+    migrate(e)
+    assert "hidden_at" in {c["name"] for c in inspect(e).get_columns("creator_profiles")}
+    with e.connect() as c:
+        command.downgrade(config(c), "0012_league")
+        c.commit()
+    assert current(e) == "0012_league"
+    assert "hidden_at" not in {c["name"] for c in inspect(e).get_columns("creator_profiles")}
+    migrate(e)
+    assert current(e) == head() and diffs(e) == []
 
 
 def test_the_audit_log_refuses_updates_and_deletes(client):

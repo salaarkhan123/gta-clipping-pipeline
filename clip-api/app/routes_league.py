@@ -7,7 +7,7 @@ thumbnail, the published link and the recorded view count. Admin routes need a w
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -38,6 +38,11 @@ def public_reads(request: Request) -> None:
     rate_limit(f"league:r:{client_ip(request)}", get_settings().league_reads_per_minute, 60)
 
 
+def shared_cache(response: Response) -> None:
+    """For a public read with nothing about the caller in it: browsers and proxies may reuse it for 30 seconds."""
+    response.headers["Cache-Control"] = "public, max-age=30"
+
+
 def by_slug(db: Session, slug: str, drafts: bool = False) -> LeagueCompetition:
     c = db.execute(select(LeagueCompetition).where(LeagueCompetition.slug == slug)).scalar_one_or_none()
     if c is None or (c.status == "draft" and not drafts):
@@ -53,10 +58,14 @@ def thumb_url(clip: Clip | None) -> str | None:
 
 # ---- shapes ----
 
+def shown(db: Session, c: LeagueCompetition) -> list[league.Ranked]:
+    """The ranking as the public sees it: an entry whose clip was removed is not listed."""
+    return [r for r in league.ranking(db, c) if not r.clip_removed]
+
+
 def competition_json(db: Session, c: LeagueCompetition) -> dict:
     cash = bool(c.cash_prizes_enabled and get_settings().league_cash_prizes_approved)
-    participants = db.execute(select(func.count(LeagueEntry.id)).where(
-        LeagueEntry.competition_id == c.id, LeagueEntry.status == "approved")).scalar_one()
+    participants = len(shown(db, c))
     return {"slug": c.slug, "name": c.name, "starts_at": iso(c.starts_at), "ends_at": iso(c.ends_at),
             "phase": league.phase(c), "accepting_entries": league.accepting(c), "participants": participants,
             "rules_version": c.rules_version, "cash_prizes": cash,
@@ -73,7 +82,7 @@ def profiles_of(db: Session, account_ids: set[str]) -> dict[str, CreatorProfile]
 
 
 def board_json(db: Session, c: LeagueCompetition, limit: int | None = None) -> list[dict]:
-    board = league.ranking(db, c)[:limit]
+    board = shown(db, c)[:limit]
     who = profiles_of(db, {r.entry.account_id for r in board})
     out = []
     for r in board:
@@ -88,7 +97,8 @@ def board_json(db: Session, c: LeagueCompetition, limit: int | None = None) -> l
 
 
 def profile_json(p: CreatorProfile | None) -> dict | None:
-    return p and {"username": p.username, "avatar": p.avatar, "games": p.games, "is_public": p.is_public}
+    return p and {"username": p.username, "avatar": p.avatar, "games": p.games, "is_public": p.is_public,
+                  "hidden": p.hidden_at is not None}
 
 
 def my_entry_json(db: Session, c: LeagueCompetition, e: LeagueEntry | None) -> dict | None:
@@ -104,7 +114,9 @@ def my_entry_json(db: Session, c: LeagueCompetition, e: LeagueEntry | None) -> d
 
 # ---- public ----
 
-@router.get("/v1/league/current", dependencies=[Depends(public_reads)])
+# /current and /rules are read on every homepage visit: no per-address limit (each address would hold a limiter
+# key), only the shared cache. The other public reads keep the per-address limit.
+@router.get("/v1/league/current", dependencies=[Depends(shared_cache)])
 def current(db: Session = Depends(get_db)):
     """The competition the Creators League page is about, with the top of its leaderboard, or `competition: null`
     when none has been opened. Cash amounts appear only for a competition with cash prizes switched on."""
@@ -112,14 +124,18 @@ def current(db: Session = Depends(get_db)):
     return {"competition": competition_json(db, c) if c else None, "top": board_json(db, c, 3) if c else []}
 
 
-@router.get("/v1/league/rules", dependencies=[Depends(public_reads)])
-def rules():
-    """The competition rules with their version, and the attribution line every entry's video must carry. The
-    rules are a draft: sections marked `needs_legal_review` hold placeholders."""
-    return {**league_rules.document(), "attribution": league_rules.attribution(get_settings().public_web_url)}
+@router.get("/v1/league/rules", dependencies=[Depends(shared_cache)])
+def rules(version: str | None = Query(None, max_length=32)):
+    """The competition rules with their version, and the attribution line every entry's video must carry.
+    `version` is a competition's `rules_version`, the text its entrants accept; without it, the newest version.
+    The rules are a draft: sections marked `needs_legal_review` hold placeholders."""
+    doc = league_rules.document(version or league_rules.VERSION)
+    if doc is None:
+        raise ApiError(404, "not_found", "No rules with that version.")
+    return {**doc, "attribution": league_rules.attribution(get_settings().public_web_url)}
 
 
-@router.get("/v1/league/creators/{username}", dependencies=[Depends(public_reads)])
+@router.get("/v1/league/creators/{username}", dependencies=[Depends(public_reads), Depends(shared_cache)])
 def creator(username: str, db: Session = Depends(get_db)):
     """A creator's public profile: username, avatar, games, and their approved entries with rank and awards.
     404 unless the creator made the profile public."""
@@ -132,7 +148,9 @@ def creator(username: str, db: Session = Depends(get_db)):
         LeagueEntry.account_id == p.account_id, LeagueEntry.status == "approved",
         LeagueCompetition.status != "draft").order_by(LeagueCompetition.starts_at.desc())).all()
     for e, c in rows:
-        row = next(r for r in league.ranking(db, c) if r.entry.id == e.id)
+        row = next((r for r in shown(db, c) if r.entry.id == e.id), None)
+        if row is None:
+            continue
         entries.append({"competition": {"slug": c.slug, "name": c.name, "phase": league.phase(c)},
                         "platform": e.platform, "video_url": e.url, "game": e.game,
                         "thumb_url": thumb_url(db.get(Clip, e.clip_id)), "rank": row.rank, "views": row.views,
@@ -142,7 +160,7 @@ def creator(username: str, db: Session = Depends(get_db)):
                        if x["final_place"] is not None]}
 
 
-@router.get("/v1/league/{slug}/leaderboard", dependencies=[Depends(public_reads)])
+@router.get("/v1/league/{slug}/leaderboard", dependencies=[Depends(public_reads), Depends(shared_cache)])
 def leaderboard(slug: str, limit: int = Query(50, ge=1, le=100), db: Session = Depends(get_db)):
     """Approved entries by recorded public views, most first; ties go to the earlier submission. Counts are read
     by hand from each video's public page (`views_verified` false) and `updated_at` is the newest reading."""
@@ -152,7 +170,7 @@ def leaderboard(slug: str, limit: int = Query(50, ge=1, le=100), db: Session = D
     return {"competition": competition_json(db, c), "updated_at": newest, "entries": rows}
 
 
-@router.get("/v1/league/{slug}/featured", dependencies=[Depends(public_reads)])
+@router.get("/v1/league/{slug}/featured", dependencies=[Depends(public_reads), Depends(shared_cache)])
 def featured(slug: str, db: Session = Depends(get_db)):
     """Up to six approved entries that have a thumbnail, best ranked first. Real entries only."""
     rows = [r for r in board_json(db, by_slug(db, slug)) if r["thumb_url"]][:6]
@@ -181,7 +199,7 @@ def me(competition: str | None = Query(None, max_length=40), p: Principal = Depe
             "avatars": list(league.AVATARS), "clips": my_clips(db, p.account.id),
             "competition": competition_json(db, c) if c else None, "entry": my_entry_json(db, c, entry),
             "attribution": league_rules.attribution(get_settings().public_web_url),
-            "rules_version": league_rules.VERSION}
+            "rules_version": c.rules_version if c else league_rules.VERSION}
 
 
 class ProfileBody(BaseModel):
@@ -196,7 +214,9 @@ class ProfileBody(BaseModel):
 
 @router.put("/v1/league/me/profile")
 def put_profile(body: ProfileBody, p: Principal = Depends(session_principal), db: Session = Depends(get_db)):
-    """Create or change your creator profile. Usernames are unique whatever their case. 409 `username_taken`."""
+    """Create or change your creator profile. Usernames are unique whatever their case (409 `username_taken`), and
+    a username another creator gave up is held for them for 30 days (409 `username_held`). A profile an admin
+    hid cannot be made public (403 `profile_hidden`)."""
     rate_limit(f"league:p:{p.account.id}", get_settings().league_profile_edits_per_hour, 3600)
     try:
         username = league.clean_username(body.username)
@@ -206,10 +226,17 @@ def put_profile(body: ProfileBody, p: Principal = Depends(session_principal), db
     taken = db.execute(select(CreatorProfile).where(CreatorProfile.username_key == username.lower())).scalar_one_or_none()
     if taken is not None and taken.account_id != p.account.id:
         raise ApiError(409, "username_taken", "That username is taken. Choose another.")
+    if league.username_held(db, username.lower(), p.account.id):
+        raise ApiError(409, "username_held", "That username was in use until recently. Choose another.")
     profile = league.profile_of(db, p.account.id)
+    if profile is not None and profile.hidden_at is not None and body.is_public:
+        raise ApiError(403, "profile_hidden", "An admin has hidden your profile. Contact support to make it public.")
     if profile is None:
         profile = CreatorProfile(id=new_id("cpro"), account_id=p.account.id)
         db.add(profile)
+    elif profile.username_key != username.lower():
+        league.record(db, p.account.id, "username_released", "username", profile.username_key, None,
+                      {"username": profile.username}, {"username": username})
     profile.username, profile.username_key, profile.avatar = username, username.lower(), body.avatar
     profile.games, profile.is_public, profile.updated_at = games, body.is_public, utcnow()
     try:
@@ -291,7 +318,7 @@ def admin_competition_json(db: Session, c: LeagueCompetition) -> dict:
         LeagueEntry.competition_id == c.id).group_by(LeagueEntry.status)).all())
     return {"id": c.id, "slug": c.slug, "name": c.name, "starts_at": iso(c.starts_at), "ends_at": iso(c.ends_at),
             "status": c.status, "phase": league.phase(c), "prizes": c.prizes, "rules_version": c.rules_version,
-            "cash_prizes_enabled": c.cash_prizes_enabled,
+            "rules_latest": league_rules.VERSION, "cash_prizes_enabled": c.cash_prizes_enabled,
             "cash_prizes_approved": get_settings().league_cash_prizes_approved,
             "entries": {s: counts.get(s, 0) for s in ("pending", "approved", "rejected", "disqualified")}}
 
@@ -393,12 +420,15 @@ def competition_status(slug: str, body: StatusBody, admin: Principal = Depends(a
 
 def admin_entry_json(db: Session, e: LeagueEntry, rank: league.Ranked | None) -> dict:
     account, profile = db.get(Account, e.account_id), league.profile_of(db, e.account_id)
+    clip = db.get(Clip, e.clip_id)
+    removed = league.clip_removed(clip.deleted_at, db.get(Job, clip.job_id).expires_at)
     seen = db.execute(select(LeagueViewObservation).where(LeagueViewObservation.entry_id == e.id)
                       .order_by(LeagueViewObservation.id.desc()).limit(20)).scalars()
     return {"id": e.id, "status": e.status, "status_reason": e.status_reason, "flagged": e.flagged,
             "flag_reason": e.flag_reason, "platform": e.platform, "video_url": e.url, "game": e.game,
-            "clip_id": e.clip_id, "thumb_url": thumb_url(db.get(Clip, e.clip_id)), "snapshot": e.snapshot,
+            "clip_id": e.clip_id, "clip_removed": removed, "thumb_url": thumb_url(clip), "snapshot": e.snapshot,
             "username": profile.username if profile else None, "email": account.email if account else None,
+            "profile_hidden": bool(profile and profile.hidden_at),
             "account_id": e.account_id, "submitted_at": iso(e.submitted_at),
             "attribution_confirmed_at": iso(e.attribution_confirmed_at), "rules_version": e.rules_version,
             "rank": rank.rank if rank else None, "views": rank.views if rank else None,
@@ -441,8 +471,10 @@ class ReviewBody(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
-def admin_move(db: Session, entry_id: str, move) -> dict:
+def admin_move(db: Session, admin: Principal, entry_id: str, move) -> dict:
     e = entry_or_404(db, entry_id)
+    if e.account_id == admin.account.id:
+        raise ApiError(403, "own_entry", "This is your own entry. Another admin must review it.")
     # One admin move at a time per competition: a count and a winner approval must not pass each other.
     db.execute(select(LeagueCompetition.id).where(LeagueCompetition.id == e.competition_id).with_for_update())
     try:
@@ -463,11 +495,12 @@ def review_entry(entry_id: str, body: ReviewBody, admin: Principal = Depends(adm
             league.flag(db, admin.account.id, e, body.action == "flag", body.reason)
         else:
             league.review(db, admin.account.id, e, body.action, body.reason)
-    return admin_move(db, entry_id, move)
+    return admin_move(db, admin, entry_id, move)
 
 
 class ObservationBody(BaseModel):
-    """A view count read from the video's public page. Stored as unverified with who read it and when."""
+    """A view count read from the video's public page. Stored as unverified with who read it and when.
+    `observed_at` (default now) may not be in the future or before the entry's newest reading."""
     model_config = ConfigDict(extra="forbid")
     views: int = Field(ge=0, le=100_000_000_000)
     source: league.ObservationSource = "public_page"
@@ -480,7 +513,7 @@ def record_views(entry_id: str, body: ObservationBody, admin: Principal = Depend
     """Admins only: record the view count of an approved entry. Counts are appended, never changed: the newest
     is the one the ranking uses."""
     when = league.naive_utc(body.observed_at) if body.observed_at else None
-    return admin_move(db, entry_id, lambda e: league.observe(db, admin.account.id, e, body.views, body.source, when))
+    return admin_move(db, admin, entry_id, lambda e: league.observe(db, admin.account.id, e, body.views, body.source, when))
 
 
 @router.get("/v1/admin/league/competitions/{slug}/winners")
@@ -504,7 +537,7 @@ def approve_winner(entry_id: str, body: WinnerBody, admin: Principal = Depends(a
                    db: Session = Depends(get_db)):
     """Admins only: approve a provisional winner at the place the ranking gives it, first place first. The
     competition must be closed. Sets the prize to pending; nothing is paid."""
-    return admin_move(db, entry_id, lambda e: league.approve_winner(db, admin.account.id, e, body.place))
+    return admin_move(db, admin, entry_id, lambda e: league.approve_winner(db, admin.account.id, e, body.place))
 
 
 class PrizeBody(BaseModel):
@@ -518,7 +551,37 @@ def prize_status(entry_id: str, body: PrizeBody, admin: Principal = Depends(admi
                  db: Session = Depends(get_db)):
     """Admins only: record that an approved winner's prize was sent by hand, or forfeited. A record only: this
     API moves no money."""
-    return admin_move(db, entry_id, lambda e: league.set_prize(db, admin.account.id, e, body.status, body.note))
+    return admin_move(db, admin, entry_id, lambda e: league.set_prize(db, admin.account.id, e, body.status, body.note))
+
+
+class VisibilityBody(BaseModel):
+    """hidden true makes a creator's profile private and keeps it private until an admin unhides it. `reason`
+    (required to hide) stays in the audit log."""
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    hidden: bool
+    reason: str | None = Field(default=None, max_length=500)
+
+
+@router.post("/v1/admin/league/creators/{account_id}/visibility")
+def creator_visibility(account_id: str, body: VisibilityBody, admin: Principal = Depends(admin_principal),
+                       db: Session = Depends(get_db)):
+    """Admins only: hide a creator's profile (private, and the creator cannot make it public again), or unhide
+    it (it stays private until the creator makes it public). Each change is one audit event."""
+    profile = league.profile_of(db, account_id)
+    if profile is None:
+        raise ApiError(404, "not_found", "No such creator profile.")
+    if body.hidden and not body.reason:
+        raise ApiError(422, "reason_required", "Say why the profile is hidden.")
+    before = {"is_public": profile.is_public, "hidden": profile.hidden_at is not None}
+    if body.hidden:
+        profile.is_public, profile.hidden_at = False, profile.hidden_at or utcnow()
+    else:
+        profile.hidden_at = None
+    profile.updated_at = utcnow()
+    league.record(db, admin.account.id, "profile_hide" if body.hidden else "profile_unhide", "profile", profile.id,
+                  None, before, {"is_public": profile.is_public, "hidden": body.hidden}, body.reason)
+    db.commit()
+    return profile_json(profile)
 
 
 @router.get("/v1/admin/league/events")

@@ -400,6 +400,7 @@ class CreatorProfile(Base):
     avatar: Mapped[str] = mapped_column(String(16), default="lime")          # one of league.AVATARS
     games: Mapped[list] = mapped_column(JSON, default=list)
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())   # has a profile page
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)   # an admin hid it: stays private
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
@@ -475,7 +476,7 @@ class LeagueEvent(Base):
     competition_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     actor_id: Mapped[str] = mapped_column(String(40))
     action: Mapped[str] = mapped_column(String(32))
-    entity_kind: Mapped[str] = mapped_column(String(16))                     # competition | entry
+    entity_kind: Mapped[str] = mapped_column(String(16))     # competition | entry | profile | username
     entity_id: Mapped[str] = mapped_column(String(40), index=True)
     before: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     after: Mapped[dict | None] = mapped_column(JSON, nullable=True)
