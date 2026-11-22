@@ -9,7 +9,7 @@ const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "u
 
 test("sidebar: every built page is a link, every planned one is Coming soon and never a link", () => {
   const nav = source("components/dash/shell/nav.ts");
-  for (const [label, href] of [["Home", "/dashboard/"], ["Projects", "/dashboard/library/"], ["Brand kit", "/dashboard/brand-kit/"],
+  for (const [label, href] of [["Home", "/dashboard/"], ["My projects", "/dashboard/library/"], ["Brand kit", "/dashboard/brand-kit/"],
     ["Asset library", "/dashboard/assets/"], ["Analytics", "/dashboard/analytics/"],
     ["Calendar", "/dashboard/calendar/"], ["Social accounts", "/dashboard/social-accounts/"],
     ["API access", "/dashboard/keys/"]]) {

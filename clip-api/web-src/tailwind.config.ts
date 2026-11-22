@@ -18,7 +18,7 @@ const config: Config = {
       colors: {
         bg: "var(--canvas)", "bg-2": "var(--canvas-2)", panel: "var(--panel)", card: "var(--card)", surface: "var(--surface)",
         "card-2": "var(--control)", raised: "var(--raised)", chip: "var(--control)", "chip-hover": "var(--control-hover)",
-        control: "var(--control)", "control-hover": "var(--control-hover)",
+        control: "var(--control)", "control-hover": "var(--control-hover)", "nav-on": "var(--nav-on)",
         line: "var(--line)", "line-soft": "var(--line-soft)", "line-strong": "var(--line-strong)",
         text: "var(--text)", fg: "var(--fg)", "fg-2": "var(--fg-2)", "fg-3": "var(--fg-3)",
         muted: "#a1a1a1", dim: "#5c5c5c", soft: "#d4d4d4", label: "#e2e3e7",

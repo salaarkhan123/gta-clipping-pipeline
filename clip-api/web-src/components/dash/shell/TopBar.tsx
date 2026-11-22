@@ -12,7 +12,7 @@ import { Icon } from "../Icon";
 export function TopBar({ me, onMenu, onFind, quiet }: { me: any; onMenu: () => void; onFind: () => void; quiet?: boolean }) {
   const keys = shortcutLabel();
   return (
-    <header className={`sticky top-0 z-40 ${quiet ? "hidden narrow:flex" : "flex"} h-[60px] items-center justify-end gap-2 bg-bg pl-6 pr-6 narrow:justify-between narrow:pl-2 narrow:pr-3`}>
+    <header className={`sticky top-0 z-40 ${quiet ? "hidden narrow:flex" : "flex"} h-[60px] items-center justify-end gap-2 bg-bg pl-6 pr-[23px] narrow:justify-between narrow:pl-2 narrow:pr-3`}>
       <div className="hidden items-center gap-1 narrow:flex">
         <button type="button" onClick={onMenu} aria-label="Open menu"
           className="grid h-10 w-10 cursor-pointer place-items-center rounded-control border-0 bg-transparent text-text hover:bg-control"><Icon name="menu" size={22} /></button>
@@ -31,7 +31,7 @@ export function TopBar({ me, onMenu, onFind, quiet }: { me: any; onMenu: () => v
           className="mr-2 inline-flex h-9 items-center gap-[6px] rounded-control px-[10px] tabular-nums text-lime no-underline transition-colors duration-base hover:bg-control">
           <Icon name="bolt" size={17} /><b className="font-sans text-[15px] font-medium leading-none text-text">{Number(me.credits).toLocaleString()}</b>
           <span className="sr-only"> credits</span></Link>
-        <Link href="/dashboard/pricing/" className="btn small ghost whitespace-nowrap">Add credits</Link>
+        <Link href="/dashboard/pricing/" className="btn small ghost whitespace-nowrap !px-4 !text-[14px]">Add credits</Link>
       </div>
     </header>
   );

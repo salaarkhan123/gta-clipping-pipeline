@@ -6,13 +6,15 @@ import { Logo } from "@/components/Chrome";
 import { ComingSoonBadge } from "@/components/ComingSoonBadge";
 import { Icon } from "../Icon";
 import { AccountMenu } from "./AccountMenu";
-import { isHere, NAV, NavItem } from "./nav";
+import { isHere, NAV, NavGroup, NavItem } from "./nav";
 
 // Widths measured from the reference app: 224 px with labels, 60 px as an icon rail (--side-open, --side-shut).
 export const SIDE_OPEN = 224, SIDE_SHUT = 60;
 
-const ITEM = "flex h-10 items-center gap-[10px] rounded-control font-sans text-[15px] font-normal leading-[1.2] no-underline transition-colors duration-base";
+// Rows are 38 px tall and 46 px apart; the open page's row is one step lighter than the sidebar, with no outline.
+const ITEM = "flex h-[38px] items-center gap-2 rounded-control font-sans text-[15px] font-medium leading-[1.2] no-underline transition-colors duration-base";
 const SQUARE = "grid h-[37px] w-[37px] flex-none cursor-pointer place-items-center rounded-control border border-solid border-line bg-transparent text-text transition-colors duration-base hover:bg-control";
+const GROUP_LABEL = "m-0 px-0 pb-[9px] font-sans text-[14px] font-normal leading-[18px] text-fg-3";
 
 function Item({ item, path, compact }: { item: NavItem; path: string; compact: boolean }) {
   const here = isHere(path, item);
@@ -26,36 +28,47 @@ function Item({ item, path, compact }: { item: NavItem; path: string; compact: b
   );
   return (
     <Link href={item.href} aria-current={here ? "page" : undefined} title={compact ? item.label : undefined}
-      className={`${ITEM} ${pad} text-text hover:bg-card aria-[current=page]:bg-control`}>
+      className={`${ITEM} ${pad} text-text hover:bg-nav-on aria-[current=page]:bg-nav-on`}>
       <Icon name={item.icon} size={18} />
       {compact ? <span className="sr-only">{item.label}</span> : <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{item.label}</span>}
     </Link>
   );
 }
 
+function Group({ group, path, compact, className = "" }: { group: NavGroup; path: string; compact: boolean; className?: string }) {
+  return (
+    <div className={className}>
+      {group.label && (compact ? <div className="mx-auto mb-2 h-px w-6 bg-line" aria-hidden="true" /> : <p className={GROUP_LABEL}>{group.label}</p>)}
+      <ul className="m-0 grid list-none gap-2 p-0" aria-label={group.label}>
+        {group.items.map((item) => <li key={item.label}><Item item={item} path={path} compact={compact} /></li>)}
+      </ul>
+    </div>
+  );
+}
+
 // `compact`: icons only. `onToggle`: the collapse button (a computer); `onClose`: the drawer's close button (a phone).
 export function Sidebar({ me, path, compact, onToggle, onClose, onLogout }: { me: any; path: string; compact: boolean;
   onToggle?: () => void; onClose?: () => void; onLogout: () => void }) {
+  const labelled = NAV.filter((g) => g.label), pinned = NAV.filter((g) => !g.label);
   return (
-    <div className="flex h-full flex-col px-3 pb-4 pt-[14px]">
+    <div className="flex h-full flex-col px-3 pb-[10px] pt-[14px]">
       <div className={`flex items-center ${compact ? "flex-col gap-[22px]" : "h-[37px] justify-between pl-1"}`}>
         {compact ? null : onClose ? <Logo /> : <Logo small />}
         {onToggle && <button type="button" onClick={onToggle} aria-label={compact ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!compact}
           title={compact ? "Expand sidebar" : "Collapse sidebar"} className={SQUARE}>
-          <Icon name="sidebar" size={18} /></button>}
+          <Icon name="collapse" size={18} className={compact ? "rotate-180" : ""} /></button>}
         {onClose && <button type="button" onClick={onClose} aria-label="Close menu" className={SQUARE}><Icon name="close" size={18} /></button>}
       </div>
       <div className="mt-[25px]"><AccountMenu me={me} onLogout={onLogout} compact={compact} /></div>
       {/* The slot under the account card: the one thing most visits start with. */}
       <Link href="/dashboard/" title="New project" aria-label="New project"
-        className={`mt-4 flex h-[37px] flex-none items-center justify-center gap-2 rounded-control border border-solid border-line bg-transparent font-sans text-[14px] text-text no-underline transition-colors duration-base hover:bg-control ${compact ? "w-[37px] self-center" : ""}`}>
-        <Icon name="plus" size={17} />{!compact && "New project"}</Link>
-      <nav aria-label="App" className="-mx-1 mt-[52px] flex-1 overflow-y-auto px-1">
-        {NAV.map((group, i) => (
-          <ul key={i} className={`m-0 grid list-none gap-[6px] p-0 ${i ? "mt-[22px]" : ""}`}>
-            {group.map((item) => <li key={item.label}><Item item={item} path={path} compact={compact} /></li>)}
-          </ul>
-        ))}
+        className={`mt-2 flex h-[33px] flex-none items-center gap-2 rounded-control border border-solid border-line bg-transparent font-sans text-[15px] font-medium text-text no-underline transition-colors duration-base hover:bg-nav-on ${compact ? "w-[37px] justify-center self-center" : "px-[10px]"}`}>
+        <Icon name="plus" size={18} />{!compact && "New project"}</Link>
+      <nav aria-label="App" className="-mx-1 mt-[26px] grid min-h-0 flex-1 content-start gap-[25px] overflow-y-auto px-1">
+        {labelled.map((group) => <Group key={group.label} group={group} path={path} compact={compact} />)}
+      </nav>
+      <nav aria-label="More" className="mt-4 flex-none">
+        {pinned.map((group, i) => <Group key={i} group={group} path={path} compact={compact} />)}
       </nav>
     </div>
   );

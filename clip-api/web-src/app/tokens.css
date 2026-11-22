@@ -13,6 +13,7 @@
   --control: #1c1c1f;
   --control-hover: #2a2a2e;
   --raised: #262629;
+  --nav-on: var(--control);
   /* Hairlines: white at low opacity, so they read the same on every surface. */
   --line-soft: rgba(255, 255, 255, .06);
   --line: rgba(255, 255, 255, .1);
@@ -91,6 +92,8 @@
   --control: #303030;
   --control-hover: #3a3a3a;
   --raised: #3d3d3d;
+  /* The open page's row in the sidebar: measured #212123 on the #1a1a1a sidebar. */
+  --nav-on: #232325;
   --line-soft: rgba(255, 255, 255, .05);
   --line: rgba(255, 255, 255, .09);
   --line-strong: rgba(255, 255, 255, .16);

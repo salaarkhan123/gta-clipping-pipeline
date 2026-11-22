@@ -18,15 +18,26 @@ export function Pills<T extends string>({ options, value, onChange, label, size 
   );
 }
 
-export function Tabs<T extends string>({ options, value, onChange, label, className = "" }: {
-  options: Option<T>[]; value: T; onChange: (v: T) => void; label: string; className?: string;
+// 38 px tall, 16 px words, 16 px apart; the underline is as wide as the tab.
+export function Tabs<T extends string>({ options, value, onChange, label, panel, className = "" }: {
+  options: Option<T>[]; value: T; onChange: (v: T) => void; label: string; panel?: string; className?: string;
 }) {
+  function onKey(e: React.KeyboardEvent<HTMLDivElement>) {
+    const move = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (!move) return;
+    const open = options.filter((o) => !o.disabled), at = open.findIndex((o) => o.value === value);
+    const next = open[(at + move + open.length) % open.length];
+    e.preventDefault();
+    onChange(next.value);
+    e.currentTarget.querySelector<HTMLElement>(`[data-tab="${next.value}"]`)?.focus();
+  }
   return (
-    <div role="tablist" aria-label={label} className={`flex flex-wrap items-center gap-x-5 gap-y-1 ${className}`}>
+    <div role="tablist" aria-label={label} onKeyDown={onKey} className={`flex flex-wrap items-center gap-x-4 gap-y-1 ${className}`}>
       {options.map((o) => (
-        <button key={o.value} type="button" role="tab" aria-selected={o.value === value} disabled={o.disabled} onClick={() => onChange(o.value)}
-          className={`relative h-9 cursor-pointer border-0 bg-transparent p-0 font-sans text-[14px] transition-colors duration-base disabled:cursor-default disabled:opacity-45
-            after:absolute after:inset-x-0 after:bottom-0 after:h-[2px] after:rounded-full after:bg-text after:transition-opacity after:duration-base
+        <button key={o.value} type="button" role="tab" data-tab={o.value} aria-selected={o.value === value} aria-controls={panel} tabIndex={o.value === value ? 0 : -1}
+          disabled={o.disabled} onClick={() => onChange(o.value)}
+          className={`relative h-[38px] cursor-pointer border-0 bg-transparent px-2 font-sans text-[16px] font-normal transition-colors duration-base disabled:cursor-default disabled:opacity-45
+            after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-text after:content-[''] after:transition-opacity after:duration-base
             ${o.value === value ? "text-text after:opacity-100" : "text-fg-2 after:opacity-0 hover:text-text"}`}>{o.label}</button>
       ))}
     </div>

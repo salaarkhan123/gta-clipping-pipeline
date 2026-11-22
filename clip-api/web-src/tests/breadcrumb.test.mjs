@@ -35,7 +35,7 @@ test("project page trail is Home then the project name", () => {
 
 test("library and templates trail Home then the current page", () => {
   const library = source("app/dashboard/library/page.tsx");
-  assert.match(library, /<BackTitle title="Library" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Library" \}\]\} \/>/);
+  assert.match(library, /<h1 [^>]*>My projects<\/h1>/);     // a sidebar page: its own title, no trail
   const templates = source("app/dashboard/templates/page.tsx");
   assert.match(templates, /<BackTitle title="Game templates" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Game templates" \}\]\} \/>/);
 });

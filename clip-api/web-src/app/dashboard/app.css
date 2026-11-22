@@ -407,3 +407,8 @@
   border-radius: 999px; padding-left: 16px; padding-right: 16px; background-color: theme('colors.surface'); border-color: theme('colors.line'); }
 .dash select:focus, .dash input:focus { border-color: theme('colors.line-strong'); }
 
+/* Home's start card: the selected tab is part of the card, joined to it by a concave corner on its right. */
+.start-tab::after { content: ""; position: absolute; right: -20px; bottom: 0; width: 20px; height: 20px; pointer-events: none;
+  background: radial-gradient(circle at 100% 0, transparent 19.5px, var(--card) 20px); }
+.start-tab:not(:first-child)::before { content: ""; position: absolute; left: -20px; bottom: 0; width: 20px; height: 20px; pointer-events: none;
+  background: radial-gradient(circle at 0 0, transparent 19.5px, var(--card) 20px); }

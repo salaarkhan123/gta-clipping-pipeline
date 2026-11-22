@@ -6,10 +6,12 @@ import { api, ApiError } from "@/lib/api";
 import { DeletedUpload, uploadDeletePath } from "@/lib/uploads";
 import { Icon } from "./Icon";
 
-export function DeleteUploadControl({ uploadId, name, onDeleted, compact }: {
-  uploadId: string; name?: string; onDeleted: (uploadId: string) => void; compact?: boolean;
+// `asking`: opened from a menu (a project card's "…"), so it starts on the question and has no button of its own;
+// `onClose` is called when the question is answered with Keep.
+export function DeleteUploadControl({ uploadId, name, onDeleted, compact, asking, onClose }: {
+  uploadId: string; name?: string; onDeleted: (uploadId: string) => void; compact?: boolean; asking?: boolean; onClose?: () => void;
 }) {
-  const [ask, setAsk] = useState(false), [busy, setBusy] = useState(false), [problem, setProblem] = useState("");
+  const [ask, setAsk] = useState(!!asking), [busy, setBusy] = useState(false), [problem, setProblem] = useState("");
 
   async function confirm() {
     setProblem(""); setBusy(true);
@@ -32,7 +34,7 @@ export function DeleteUploadControl({ uploadId, name, onDeleted, compact }: {
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" className="btn small ghost danger" disabled={busy} onClick={confirm}>
             {busy ? "Deleting…" : "Delete"}</button>
-          <button type="button" className="btn small ghost" disabled={busy} onClick={() => { setAsk(false); setProblem(""); }}>
+          <button type="button" className="btn small ghost" disabled={busy} onClick={() => { setAsk(false); setProblem(""); onClose?.(); }}>
             Keep</button>
         </div>
         {problem && <p className="error m-0" role="alert">{problem}</p>}
@@ -40,6 +42,7 @@ export function DeleteUploadControl({ uploadId, name, onDeleted, compact }: {
     );
   }
 
+  if (asking) return null;
   return (
     <div className="grid gap-1" onClick={(e) => e.preventDefault()}>
       <button type="button" className={compact ? "icon-btn h-8 w-8 border-0" : "btn small ghost danger gap-1"}
