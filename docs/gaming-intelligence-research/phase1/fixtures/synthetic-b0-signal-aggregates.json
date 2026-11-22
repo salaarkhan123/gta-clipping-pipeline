@@ -1,0 +1,55 @@
+{
+  "fixture": "synthetic-burst-40s",
+  "b0_fingerprint": "d37bc724c29c2b436977beff0e29a42b078c08576ccabd8ab100579fe36767d2",
+  "b0_clips": [
+    {
+      "rank": 1,
+      "start_sec": 18.0,
+      "end_sec": 28.0,
+      "score": 1.0,
+      "kind": null,
+      "signals": {
+        "audio": 0.443,
+        "audio_flux": 0.288,
+        "audio_bursts": 0.269
+      }
+    }
+  ],
+  "paid_model_calls": 0,
+  "signals": {
+    "source": "s.mp4",
+    "duration_sec": 40.0,
+    "range_sec": {
+      "start": 0.0,
+      "end": 40.0
+    },
+    "wall_sec": {
+      "audio_timeline": 0.112,
+      "scene_keyframes": 0.084,
+      "chat_motion": 0.0
+    },
+    "peak_rss_mb": 46.9,
+    "series_lengths": {
+      "audio_rms": 40,
+      "audio_flux": 40,
+      "audio_bursts": 40,
+      "scene_keyframes": 3,
+      "chat_motion": 0
+    },
+    "active_weights": {
+      "chat_motion": 1.0,
+      "audio": 0.7,
+      "audio_flux": 0.35,
+      "audio_bursts": 0.35
+    },
+    "zero_weight_skipped": [
+      "scene"
+    ],
+    "notes": [
+      "scene/keyframe decode measured in shadow mode; production WEIGHTS['scene']=0 skips this path.",
+      "chat_region=none (production default); chat motion not computed.",
+      "Named sound (YAMNet) and HUD OCR adapters are not on this research head; evaluate offline after #231/#232 integrate at weight zero.",
+      "Transcript/judge arms require authorized ASR/judge caches (B1); not run here."
+    ]
+  }
+}
