@@ -38,8 +38,10 @@ export function ImportField({ id, placeholder, cta, onLink, onFile, accept, prob
           className={`grid flex-none cursor-pointer place-items-center rounded-pill border-0 bg-transparent text-fg-2 transition-colors duration-base hover:bg-white/[.07] hover:text-fg ${size === "xl" ? "h-12 w-12 narrow:h-10 narrow:w-10" : "h-10 w-10"}`}>
           <Icon name="plus" size={size === "xl" ? 22 : 18} /></button>
         <label htmlFor={`${id}-link`} className="sr-only">Video link</label>
+        {/* w-0: the field's width comes from flex-1 alone. Without it WebKit counts the input's default width in
+            the page's minimum width and the hero field runs past the gutter on a phone. */}
         <input id={`${id}-link`} value={text} onChange={(e) => setText(e.target.value)} inputMode="url" autoComplete="off" spellCheck={false} placeholder={placeholder}
-          className={`h-full min-w-0 flex-1 truncate rounded-none border-0 bg-transparent p-0 font-sans ${type} text-text placeholder:text-fg-2 focus:outline-none`} />
+          className={`h-full w-0 min-w-0 flex-1 truncate rounded-none border-0 bg-transparent p-0 font-sans ${type} text-text placeholder:text-fg-2 focus:outline-none`} />
         <button type="submit" className={`btn primary flex-none !rounded-pill ${cta_}`}>{cta}</button>
       </div>
       {problem && <p role="alert" className={`m-0 px-5 text-left text-[13px] text-danger ${tone === "bar" ? "absolute bottom-full mb-2 rounded-12 bg-card px-4 py-2 shadow-pop" : ""}`}>{problem}</p>}
