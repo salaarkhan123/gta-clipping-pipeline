@@ -24,6 +24,11 @@ const HOOK_BACKS = ["linear-gradient(170deg,#3a2a1f,#0f0d0c)", "linear-gradient(
 // saved (a new kit's starting look until then): Reset puts a picker's settings back to it.
 export type KitActions = { saveNew: () => void; save: () => void; canSave: boolean; busy: boolean; baseline: Kit };
 type Props = { kit: Kit; listed: Listed; set: (patch: Partial<Kit>) => void; actions: KitActions };
+// The caption and hook rows read and write only these, so job setup can use them for one job's look.
+// Without `actions` (job setup: nothing to save, the job takes what is on screen) the picker ends in Done.
+// `title` and `hint` let the row sit under a setting that already has its own name and switch.
+export type StyleLook = Pick<Kit, "captions" | "caption_style" | "caption_position" | "caption_accent" | "caption_emoji" | "censor" | "hook_overlay" | "hook_style">;
+type StyleProps = { kit: StyleLook; listed: Listed; set: (patch: Partial<StyleLook>) => void; actions?: KitActions; title?: string; hint?: string };
 
 const FIELD = "h-[38px] rounded-8 border border-solid border-line bg-transparent font-sans text-[14px] text-text";
 const ICON_TOGGLE = "grid h-9 w-9 cursor-pointer place-items-center rounded-8 border-0 bg-transparent text-text transition-colors duration-base hover:bg-control-hover aria-pressed:bg-btn aria-pressed:text-btn-ink";
@@ -66,7 +71,7 @@ function StyleRow({ title, hint, off, preview, children }: { title: string; hint
 
 // The picker's frame: choices left, preview and controls right, the three actions along the bottom right.
 function Picker({ choices, preview, controls, onReset, actions, close }: { choices: React.ReactNode; preview: React.ReactNode; controls: React.ReactNode;
-  onReset: () => void; actions: KitActions; close: () => void }) {
+  onReset: () => void; actions?: KitActions; close: () => void }) {
   return (
     <div className="grid grid-cols-[244px_1px_minmax(0,1fr)] gap-x-7 narrow:grid-cols-1 narrow:gap-y-4">
       <div className="-mr-3 max-h-[409px] overflow-y-auto pr-3 narrow:max-h-[240px]">{choices}</div>
@@ -76,9 +81,11 @@ function Picker({ choices, preview, controls, onReset, actions, close }: { choic
         <div className="grid gap-4">{controls}</div>
         <span />
         <div className="flex items-center justify-end gap-2">
-          <button type="button" data-item onClick={onReset} className="mr-auto h-[38px] cursor-pointer rounded-control border-0 bg-transparent px-4 font-sans text-[14px] text-fg-2 hover:text-text">Reset</button>
-          <button type="button" data-item disabled={actions.busy} onClick={() => { close(); actions.saveNew(); }} className="btn ghost !h-[38px] !bg-control-hover !px-4 !text-[14px]">Save as new</button>
-          <button type="button" data-item disabled={actions.busy || !actions.canSave} onClick={() => { close(); actions.save(); }} className="btn ghost !h-[38px] min-w-[96px] !bg-control-hover !px-4 !text-[14px]">Save</button>
+          {actions ? <>
+            <button type="button" data-item onClick={onReset} className="mr-auto h-[38px] cursor-pointer rounded-control border-0 bg-transparent px-4 font-sans text-[14px] text-fg-2 hover:text-text">Reset</button>
+            <button type="button" data-item disabled={actions.busy} onClick={() => { close(); actions.saveNew(); }} className="btn ghost !h-[38px] !bg-control-hover !px-4 !text-[14px]">Save as new</button>
+            <button type="button" data-item disabled={actions.busy || !actions.canSave} onClick={() => { close(); actions.save(); }} className="btn ghost !h-[38px] min-w-[96px] !bg-control-hover !px-4 !text-[14px]">Save</button>
+          </> : <button type="button" data-item onClick={close} className="btn ghost !h-[38px] min-w-[96px] !bg-control-hover !px-4 !text-[14px]">Done</button>}
         </div>
       </div>
     </div>
@@ -103,13 +110,13 @@ const ControlRow = ({ label, hint, children }: { label: string; hint?: string; c
   </div>
 );
 
-export function CaptionRow({ kit, listed, set, actions }: Props) {
+export function CaptionRow({ kit, listed, set, actions, title = "Captions", hint = "Word-by-word captions, timed to the voice." }: StyleProps) {
   const has = (k: string) => k in listed;
   const styles: string[] = listed.caption_style?.values || [];
   const impact = kit.caption_style === "impact";
-  const reset = () => { const b = actions.baseline; set({ captions: b.captions, caption_style: b.caption_style, caption_position: b.caption_position, caption_accent: b.caption_accent, caption_emoji: b.caption_emoji, censor: b.censor }); };
+  const reset = () => { const b = actions?.baseline; if (b) set({ captions: b.captions, caption_style: b.caption_style, caption_position: b.caption_position, caption_accent: b.caption_accent, caption_emoji: b.caption_emoji, censor: b.censor }); };
   return (
-    <StyleRow title="Captions" hint="Word-by-word captions, timed to the voice." off={!kit.captions}
+    <StyleRow title={title} hint={hint} off={!kit.captions}
       preview={kit.captions ? <CaptionSample style={kit.caption_style} accent={kit.caption_accent} size="text-[11px]" /> : <span className="font-sans text-[13px] text-fg-2">Off</span>}>
       {(close) => <Picker close={close} actions={actions} onReset={reset}
         choices={<div role="radiogroup" aria-label="Caption style" className="grid grid-cols-2 gap-x-3 gap-y-4 p-[2px]">
@@ -147,12 +154,12 @@ export function CaptionRow({ kit, listed, set, actions }: Props) {
   );
 }
 
-export function HookRow({ kit, listed, set, actions }: Props) {
+export function HookRow({ kit, listed, set, actions, title = "Hook", hint = "A short opening line over the first seconds." }: StyleProps) {
   const tones: string[] = listed.hook_style?.values || [], entries = hookCatalogueOf(listed.hook_style?.catalogue);
-  const reset = () => set({ hook_overlay: actions.baseline.hook_overlay, hook_style: actions.baseline.hook_style });
+  const reset = () => { const b = actions?.baseline; if (b) set({ hook_overlay: b.hook_overlay, hook_style: b.hook_style }); };
   const about = hookToneDescription(kit.hook_style, entries);
   return (
-    <StyleRow title="Hook" hint="A short opening line over the first seconds." off={!kit.hook_overlay}
+    <StyleRow title={title} hint={hint} off={!kit.hook_overlay}
       preview={kit.hook_overlay ? <span className="px-2"><HookSample tone={kit.hook_style} size="block px-[5px] py-[3px] text-[8px]" /></span> : <span className="font-sans text-[13px] text-fg-2">Off</span>}>
       {(close) => <Picker close={close} actions={actions} onReset={reset}
         choices={<div role="radiogroup" aria-label="Hook tone" className="grid grid-cols-2 gap-x-3 gap-y-4 p-[2px]">
