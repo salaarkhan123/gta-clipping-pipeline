@@ -206,6 +206,7 @@ def _ai_score(meta: dict | None) -> int | float | None:
 
 
 def clip_json(c: Clip, storage) -> dict:
+    rated = rating_of(c.meta) or {}
     return {"id": c.id, "job_id": c.job_id, "index": c.idx, "start_sec": c.start_sec, "end_sec": c.end_sec,
             "start_ms": int(round(c.start_sec * 1000)), "end_ms": int(round(c.end_sec * 1000)),
             "virality_score": _ai_score(c.meta),
@@ -217,10 +218,12 @@ def clip_json(c: Clip, storage) -> dict:
             **{k: (c.meta or {}).get(k) for k in ("title", "description", "hashtags", "virality", "reason")},
             "titles": (c.meta or {}).get("titles") or ([c.meta["title"]] if (c.meta or {}).get("title") else []),
             "hook": (c.meta or {}).get("hook"),
-            # (U4) judge v2's five sub-scores and which judge made the rating (ai.rating_of: the one reader). Clips
-            # judged before v2 have no `scores` and say "judge-v1"; a clip the AI did not rate has neither.
-            "scores": (rating_of(c.meta) or {}).get("scores"),
-            "scoring_version": (rating_of(c.meta) or {}).get("scoring_version"),
+            # (U4 / AS-1) AI quality sub-scores (ai.rating_of): gaming components when present, else editorial five.
+            # Clips judged before v2 have no `scores` and say "judge-v1"; unrated clips have neither.
+            "scores": rated.get("scores"),
+            "editorial_scores": rated.get("editorial_scores"),
+            "gaming_scores": rated.get("gaming_scores"),
+            "scoring_version": rated.get("scoring_version"),
             "hook_on_screen": bool(((c.features or {}).get("edit") or {}).get("hook")),   # burned into the video
             "suggestion": (c.meta or {}).get("suggestion"),
             # (render, agent B) the best render there is: the latest export, else the job's own, else its preview.

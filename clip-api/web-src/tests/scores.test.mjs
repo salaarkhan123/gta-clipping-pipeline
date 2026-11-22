@@ -4,13 +4,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCORE_LABELS, scoreLabel, V2_SCORES } from "../lib/scores.ts";
+import { GAMING_SCORES, SCORE_LABELS, scoreLabel, V2_SCORES } from "../lib/scores.ts";
 
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 
-test("every judge v2 score has a label", () => {
+test("every judge v2 and gaming score has a label", () => {
   for (const k of V2_SCORES) assert.ok(SCORE_LABELS[k] && SCORE_LABELS[k] !== k, `no label for ${k}`);
+  for (const k of GAMING_SCORES) assert.ok(SCORE_LABELS[k], `no gaming label for ${k}`);
   assert.equal(scoreLabel("payoff"), "Payoff");
+  assert.equal(scoreLabel("kills_clutches"), "Kills / clutches");
   assert.equal(scoreLabel("new_part"), "New part");
 });
 
@@ -25,6 +27,12 @@ test("the labels cover the scores app/ai.py names", (t) => {
   if (!m) return t.skip("this backend has no judge v2 SCORES yet");
   const keys = [...m[1].matchAll(/"([a-z_]+)"/g)].map((x) => x[1]);
   assert.deepEqual(keys, [...V2_SCORES]);
+  const gaming = here("../../app/gaming_rating.py");
+  if (!existsSync(gaming)) return;
+  const g = readFileSync(gaming, "utf8").match(/GAMING_COMPONENTS[^=]*=\s*\(([^)]*)\)/m);
+  assert.ok(g, "gaming_rating.py should define GAMING_COMPONENTS");
+  const gKeys = [...g[1].matchAll(/"([a-z_]+)"/g)].map((x) => x[1]);
+  assert.deepEqual(gKeys, [...GAMING_SCORES]);
 });
 
 test("score views use the shared map", () => {

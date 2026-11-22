@@ -56,6 +56,46 @@ const COPY: Record<string, BandCopy> = {
     mid: "Somewhat timely; lean into the more recognisable beat.",
     weak: "Feels dated or niche — frame the moment for a wider gaming crowd.",
   },
+  intensity: {
+    strong: "High stakes energy — the peak feels urgent.",
+    mid: "Some heat; tighten around the most intense beat.",
+    weak: "Low intensity — cut filler so the peak hits harder.",
+  },
+  kills_clutches: {
+    strong: "Clear skilled play or clutch landing — the win reads cleanly.",
+    mid: "Skilled play is there; make the clutch or wipe more obvious.",
+    weak: "Little skilled-play payoff — lead with the decisive action or drop the claim.",
+  },
+  funny: {
+    strong: "The comedy lands — punchline and timing work.",
+    mid: "Mildly funny; trim to the joke and reaction.",
+    weak: "Not reading as comedy — cut or reframe if humour is the hook.",
+  },
+  reactions: {
+    strong: "Reaction is the star — timed tightly to the payoff.",
+    mid: "Reaction helps; keep more of the peak response.",
+    weak: "Weak or missing reaction — hold for the response or cut sooner.",
+  },
+  audio: {
+    strong: "Sound sells the moment — voice and mix carry the beat.",
+    mid: "Audio is fine; lift the loudest or clearest beat.",
+    weak: "Audio underplays it — favour the clearest line or burst.",
+  },
+  chat: {
+    strong: "Chat energy backs the moment without drowning it.",
+    mid: "Some chat heat; keep the spike near the payoff.",
+    weak: "Little chat contribution — do not lean on chat for this cut.",
+  },
+  unexpected: {
+    strong: "Genuine surprise or reversal for this game.",
+    mid: "Mildly unusual; frame the twist earlier.",
+    weak: "Feels routine — find a fresher angle or shorter cut.",
+  },
+  game_context: {
+    strong: "Cold viewers can read the game situation.",
+    mid: "Mostly clear; trim jargon-heavy setup.",
+    weak: "Needs stream context — open on a readable game beat.",
+  },
 };
 
 const FALLBACK: BandCopy = {

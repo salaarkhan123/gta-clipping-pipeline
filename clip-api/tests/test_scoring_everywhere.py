@@ -14,7 +14,8 @@ FIVE = {"hook": 82, "payoff": 91, "clarity": 64, "emotion": 77, "pacing": 56}   
 REPLY = {"content": [{"type": "tool_use", "name": "clip_meta", "input": {
     "titles": ["a", "b", "c"], "hook": "He never saw it", "hashtags": ["gta"], "reason": "r", "kind": "clutch",
     "virality": FIVE}}]}
-EXPECTED = {"rating": 74, "scores": FIVE, "scoring_version": SCORING_VERSION}
+EXPECTED = {"rating": 74, "scores": FIVE, "editorial_scores": FIVE, "gaming_scores": None,
+            "scoring_version": SCORING_VERSION}
 
 
 def real_ai(seen=None):
@@ -38,18 +39,23 @@ def test_a_v2_rating_is_five_sub_scores_their_plain_mean_and_a_version():
 
 def test_a_clip_judged_before_v2_still_reads_and_an_unrated_one_has_no_rating():
     old = parse_meta({"titles": ["a"], "hashtags": [], "virality": {"hook": 90, "flow": 80, "value": 70, "trend": 60}})
-    assert rating_of(old) == {"rating": 75, "scores": None, "scoring_version": LEGACY_VERSION}
+    assert rating_of(old) == {"rating": 75, "scores": None, "editorial_scores": None, "gaming_scores": None,
+                              "scoring_version": LEGACY_VERSION}
     stored_long_ago = {"title": "t", "virality": {"score": 61, "hook": 70, "flow": 60, "value": 60, "trend": 54}}
-    assert rating_of(stored_long_ago) == {"rating": 61, "scores": None, "scoring_version": LEGACY_VERSION}
+    assert rating_of(stored_long_ago) == {"rating": 61, "scores": None, "editorial_scores": None,
+                                          "gaming_scores": None, "scoring_version": LEGACY_VERSION}
     assert rating_of(signal_meta(0.8)) is None and rating_of(None) is None and rating_of({"title": "t"}) is None
-    assert rating_of({"virality": {"score": 70}, "scores": {"hook": 1}}) == {"rating": 70, "scores": None,
-                                                                             "scoring_version": LEGACY_VERSION}
+    assert rating_of({"virality": {"score": 70}, "scores": {"hook": 1}}) == {
+        "rating": 70, "scores": None, "editorial_scores": None, "gaming_scores": None,
+        "scoring_version": LEGACY_VERSION}
 
 
 # ---------- the same function for every kind of clip ----------
 
 def shown(clip):
-    return {"rating": clip["virality_score"], "scores": clip["scores"], "scoring_version": clip["scoring_version"]}
+    return {"rating": clip["virality_score"], "scores": clip["scores"],
+            "editorial_scores": clip.get("editorial_scores"), "gaming_scores": clip.get("gaming_scores"),
+            "scoring_version": clip["scoring_version"]}
 
 
 def test_clip_maker_clips_carry_the_v2_rating(client, user, video):
@@ -62,7 +68,9 @@ def test_clip_maker_clips_carry_the_v2_rating(client, user, video):
     clip = client.get(f"/v1/jobs/{r.json()['job_id']}", headers=headers).json()["clips"][0]
     assert shown(clip) == EXPECTED and clip["virality"] == {"score": 74, **FIVE}
     assert clip["tier"] == "strong" and clip["display_score"] is not None            # made from the same rating
+    assert clip["gaming_scores"] is None and clip["editorial_scores"] == FIVE
     assert seen and all(b["tools"][0]["input_schema"]["properties"]["virality"]["required"] == list(SCORES) for b in seen)
+    assert seen and all("gaming" in b["tools"][0]["input_schema"]["required"] for b in seen)
 
 
 def test_find_moments_clips_carry_the_same_rating(client, user, video, transcriber):
@@ -100,6 +108,7 @@ def test_older_stored_clips_still_show(client, user, video):
                      "source": "ai"}
         db.commit()
     got = client.get(f"/v1/jobs/{job_id}", headers=headers).json()["clips"][0]
-    assert shown(got) == {"rating": 75, "scores": None, "scoring_version": LEGACY_VERSION}
+    assert shown(got) == {"rating": 75, "scores": None, "editorial_scores": None, "gaming_scores": None,
+                          "scoring_version": LEGACY_VERSION}
     assert got["virality"]["flow"] == 80 and got["tier"] == "top"
 

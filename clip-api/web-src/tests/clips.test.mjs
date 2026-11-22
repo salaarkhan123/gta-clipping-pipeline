@@ -6,7 +6,15 @@ import { arrange, aspectFromOptions, aspectRatioOf, ASPECT_FRAME, isLowResPrevie
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("the AI rating shows judge v2's five sub-scores, else judge v1's four, and never a probability", () => {
+test("AI quality shows gaming components when present, else v2 five, else v1 four — never a probability", () => {
+  const gaming = ratingOf({
+    display_score: 91, virality_score: 70, gaming_scores: {
+      hook: 80, intensity: 70, kills_clutches: 60, funny: 40, reactions: 75, audio: 65, chat: 20, unexpected: 55, game_context: 70,
+    }, scores: { hook: 90, payoff: 80, clarity: 70, emotion: 60, pacing: 50 }, rank_index: 0, rank_of: 12,
+  });
+  assert.equal(gaming.version, "gaming");
+  assert.equal(gaming.parts.length, 9);
+  assert.equal(gaming.parts[2].label, "Kills / clutches");
   const v2 = ratingOf({ display_score: 93.4, virality_score: 81, scores: { hook: 90, payoff: 80, clarity: 70, emotion: 60, pacing: 50 }, virality: { hook: 1, flow: 2 }, rank_index: 0, rank_of: 12, why: "Big turn." });
   assert.equal(v2.shown, 93);
   assert.equal(v2.version, "v2");
@@ -21,6 +29,8 @@ test("the AI rating shows judge v2's five sub-scores, else judge v1's four, and 
   assert.equal(none.rank, 4);
   for (const f of ["components/clips/Rating.tsx", "components/clips/ClipTile.tsx", "components/clips/ClipPlayer.tsx"])
     assert.doesNotMatch(source(f), /virality probability|chance to go viral|% viral/i);
+  assert.match(source("components/clips/Rating.tsx"), /highlight rating|AI quality/i);
+  assert.match(source("components/clips/Rating.tsx"), /not a forecast of views or a virality percentage/i);
 });
 
 test("the why line is the AI's first sentence, else this clip's strongest signal, never a claim about the whole stream", () => {
