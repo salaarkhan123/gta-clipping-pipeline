@@ -19,11 +19,15 @@ test("job setup: tools we don't have are marked Coming soon and can't be turned 
   assert.match(setup, /Upload SRT <ComingSoonBadge short \/>/);
 });
 
-test("job setup: the price only comes from the server, and Create waits for consent and enough credits", () => {
+test("job setup: the price only comes from the server, and Generate Highlights waits for consent and enough credits", () => {
   // No credit amount is written into the screen: the total is the caller's server quote.
   assert.doesNotMatch(setup, /credits:\s*\d/);
   assert.match(setup, /const credits = price\.state === "ok" \? price\.credits : null;/);
   assert.match(setup, /const ready = [^;]*!short[^;]*\(!consent \|\| consent\.checked\);/);
+  assert.match(setup, /: "Generate Highlights"\}<\/button>/);
+  assert.match(setup, /One click: analyse, rank, clip, captions and framing/);
+  assert.match(setup, /import \{ suggestWant \} from "@\/lib\/highlights"/);
+  assert.match(setup, /Up to ~\$\{autoCap\} ranked highlights/);
   const chooser = source("components/dash/LinkChooser.tsx");
   assert.match(chooser, /price=\{quoted \? \{ state: "ok", credits: quoted\.credits/);       // the API's estimate for the link
   assert.match(chooser, /consent=\{\{ checked: consent, onChange: setConsent, text: CONSENT \}\}/);

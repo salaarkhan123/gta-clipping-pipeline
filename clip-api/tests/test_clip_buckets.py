@@ -237,13 +237,16 @@ def test_without_a_limit_a_bucket_returns_every_moment_that_passes_the_judges_fl
     assert near(top) == [0, 1]                                               # the two best by score
     six = run_pipeline(long, PipelineOptions(limit=6, **opts), tmp_path / "six", transcriber=Marked(), judge=ranked_judge(SCORES))
     assert near(six) == [0, 1, 2, 4, 5]                                      # a top N is filled with unrated ones, never junk
+    # 700 s → suggest_want ≈ 4; judge down: signals pick the loudest within that Auto cap.
     down = run_pipeline(long, PipelineOptions(**opts), tmp_path / "down", transcriber=Marked(), judge=lambda t, f, c: None)
-    assert near(down) == [0, 1, 2, 3, 4, 5]                                  # judge down: the signals decide, as without one
+    assert near(down) == [0, 1, 2, 3]
 
 
 def test_the_limit_without_a_judge_and_without_a_bucket(long, tmp_path, no_render):
-    assert near(run_pipeline(long, PipelineOptions(duration="0-30", **FAST), tmp_path / "a")) == [0, 1, 2, 3, 4, 5]
+    # Auto on ~700 s → suggest_want ≈ 4 (loudest); an explicit limit still overrides.
+    assert near(run_pipeline(long, PipelineOptions(duration="0-30", **FAST), tmp_path / "a")) == [0, 1, 2, 3]
     assert near(run_pipeline(long, PipelineOptions(duration="0-30", limit=3, **FAST), tmp_path / "b")) == [0, 1, 2]
+    assert near(run_pipeline(long, PipelineOptions(duration="0-30", limit=6, **FAST), tmp_path / "a6")) == [0, 1, 2, 3, 4, 5]
     # `limit` alone: clips keep clip_length, and it decides the count whatever max_clips says.
     five = run_pipeline(long, PipelineOptions(max_clips=1, clip_length=20, limit=5, **FAST), tmp_path / "c")
     assert near(five) == [0, 1, 2, 3, 4] and all(length_ms(c) == 20000 for c in five)
@@ -255,8 +258,10 @@ def test_the_limit_without_a_judge_and_without_a_bucket(long, tmp_path, no_rende
 
 def test_a_run_never_returns_more_than_50_clips(many, tmp_path, no_render):
     timer = Timer()
-    clips = run_pipeline(many, PipelineOptions(duration="0-30", **FAST), tmp_path / "all", transcriber=Marked(),
-                         judge=lambda t, f, c: {"title": "t", "virality": {"score": 80}}, timer=timer)
+    # Explicit limit=50: Auto alone would suggest_want(80 min) ≈ 27; this asserts the hard MAX_CLIPS ceiling.
+    clips = run_pipeline(many, PipelineOptions(duration="0-30", limit=50, **FAST), tmp_path / "all",
+                         transcriber=Marked(), judge=lambda t, f, c: {"title": "t", "virality": {"score": 80}},
+                         timer=timer)
     counts = timer.as_dict()["counts"]
     assert counts["candidates"] > 50 and counts["judged"] == counts["candidates"] <= pipeline.MAX_POOL     # one AI call each
     assert len(clips) == 50 and [c.index for c in clips] == list(range(1, 51))
@@ -265,6 +270,19 @@ def test_a_run_never_returns_more_than_50_clips(many, tmp_path, no_render):
     assert starts == sorted(starts) and all(b - a >= 60 for a, b in zip(starts, starts[1:]))       # distinct moments
     asked = run_pipeline(many, PipelineOptions(duration="0-30", limit=80, **FAST), tmp_path / "80")
     assert len(asked) == 50                                                  # a larger limit is capped too
+
+
+def test_auto_discovery_caps_want_by_source_length(many, tmp_path, no_render):
+    """AS-2: duration + null limit uses suggest_want(span), not always MAX_CLIPS."""
+    from app.pipeline.highlights import suggest_want
+    timer = Timer()
+    clips = run_pipeline(many, PipelineOptions(duration="0-30", **FAST), tmp_path / "auto",
+                         transcriber=Marked(), judge=lambda t, f, c: {"title": "t", "virality": {"score": 80}},
+                         timer=timer)
+    want = suggest_want(4800)
+    assert want == 27 and 3 <= want < MAX_CLIPS
+    assert timer.as_dict()["counts"]["suggest_want"] == want
+    assert len(clips) == want
 
 
 def test_the_candidate_pool_grows_with_the_count_and_is_unchanged_up_to_10_clips():
