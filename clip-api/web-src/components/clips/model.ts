@@ -45,10 +45,11 @@ export function ratingOf(c: any): Rating {
 // ---- Why this clip ---------------------------------------------------------------------------------------------
 
 // What made the engine pick a moment when the AI gave no reason: the strongest of the signals the API reports for
-// the clip (`clip.signals`, app/pipeline WEIGHTS), in a gamer's words. Nothing here is a new number.
+// the clip (`clip.signals`, app/pipeline WEIGHTS), in a gamer's words. Nothing here is a new number. The signals are
+// this clip's own shares, so each line speaks about this moment only, never about the whole stream.
 const SIGNAL_LINES: Record<string, string> = {
   chat_motion: "Chat sped up here.",
-  audio: "The loudest stretch of the stream.",
+  audio: "Loud reaction here.",
   audio_bursts: "Sudden shouts and bursts of noise.",
   audio_flux: "The sound changes fast here: action on screen.",
   transcript: "What was said stood out.",
