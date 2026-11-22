@@ -1,6 +1,7 @@
 "use client";
 import { useRef } from "react";
 import { PlatformBadge, PlatformId } from "@/components/ui/PlatformGlyph";
+import { ComingSoonBadge } from "../../ComingSoonBadge";
 import { LinkIcon } from "../demos/Bits";
 import { Credits, Footage, Item, useItems } from "../demos/Footage";
 import { useInView, useReducedMotion } from "../demos/motion";
@@ -10,8 +11,9 @@ import { EyebrowIcon } from "./EyebrowIcon";
 // Import, auto editing, scheduling: three columns in one warm card, each a picture of the step on approved footage
 // over its title and a line about it, joined by dashed arrows with a slowly turning sync mark in the logo's green.
 // Step 1 is what the product does today (a pasted link or an upload; nothing is pulled from a channel by itself).
-// Step 2 names only what one run does today. Step 3 shows the platforms the publishing code targets
-// (app/publish/platforms.py: YouTube, TikTok, Instagram, Facebook); the owner decided to show scheduling in full.
+// Step 2 names only what one run does today. Step 3, scheduling, is not live: it carries the Coming soon badge, is
+// written in the future tense and its picture shows no time or repeat, only the platforms the publishing code
+// targets (app/publish/platforms.py: YouTube, TikTok, Instagram, Facebook). Downloading each clip is what works today.
 const PLATFORMS: PlatformId[] = ["youtube", "tiktok", "instagram", "facebook"];
 const clock = (sec: number) => {
   const t = Math.round(sec), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), x = t % 60;
@@ -85,18 +87,18 @@ export function WorkflowSection() {
           {front && <Footage section="captions" item={front} play={play} />}
         </span>
       </div> },
-    { title: "Scheduling", icon: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 10h16M9 3v4M15 3v4" /></>,
-      text: "Pick a time and your clips go out to the platforms you post to, every day if you want, so your channels never go quiet.",
+    { title: "Scheduling", soon: true, icon: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 10h16M9 3v4M15 3v4" /></>,
+      text: "ClutchClips will post your clips to the platforms you post to, at the times you pick. Until then, download each clip and post it yourself.",
       visual: <div className="flex h-[170px] items-center gap-4">
         <span className="relative aspect-[9/16] h-[160px] flex-none overflow-hidden rounded-[12px] bg-black shadow-[0_12px_30px_rgba(0,0,0,.45)] ring-1 ring-white/15"
           style={settle(on, "translateY(10px)", 0)}>
-          {posted && <Footage section="hero-clean" item={posted} play={play} />}
+          {posted && <Footage section="hero-clean" item={posted} play={false} className="opacity-70" />}
         </span>
         <span className="grid gap-3" style={settle(on, "translateX(-8px)", 200)}>
           <span className="text-[15px] font-medium text-fg">New clip</span>
-          <span className="flex">{PLATFORMS.map((p, i) => <span key={p} className="-ml-2 h-9 w-9 rounded-full ring-2 ring-[#2a231d] first:ml-0" style={{ zIndex: PLATFORMS.length - i }}>
+          <span className="flex opacity-60">{PLATFORMS.map((p, i) => <span key={p} className="-ml-2 h-9 w-9 rounded-full ring-2 ring-[#2a231d] first:ml-0" style={{ zIndex: PLATFORMS.length - i }}>
             <PlatformBadge id={p} className="h-full w-full" /></span>)}</span>
-          <span className="grid leading-tight"><span className="text-[17px] font-semibold tabular-nums text-fg">6:00 PM</span><span className="text-[14px] text-fg-2">every day</span></span>
+          <ComingSoonBadge className="justify-self-start" />
         </span>
       </div> },
   ];
@@ -109,7 +111,7 @@ export function WorkflowSection() {
         <Eyebrow icon={<EyebrowIcon name="loop" />}>Stream to post</Eyebrow>
         <h2 className="m-0 text-[clamp(28px,3.4vw,48px)] font-semibold leading-[1.1] tracking-[-0.03em] text-fg">Stream once,<br /> post all week</h2>
         <p className="m-0 max-w-[700px] text-[clamp(15px,1.4vw,20px)] leading-[1.5] tracking-[-0.01em] text-fg-2">
-          Drop in last night&apos;s stream. ClutchClips cuts the clips, captions and frames them, and lines them up for every platform you post to.</p>
+          Drop in last night&apos;s stream. ClutchClips cuts the clips, captions every word and frames each one for the shape of every platform you post to, ready to download.</p>
       </header>
       <div ref={box} className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-x-4 rounded-stage px-12 pb-14 pt-16 shadow-card mid:gap-x-2 mid:px-8 narrow:grid-cols-1 narrow:justify-items-center narrow:gap-y-6 narrow:px-5 narrow:py-10"
         style={{ background: "radial-gradient(70% 90% at 22% 18%, rgba(160,120,86,.38), transparent 70%), radial-gradient(60% 80% at 85% 90%, rgba(120,92,70,.32), transparent 70%), linear-gradient(160deg, #3a3029, #241f1b 60%, #1c1917)" }}>
@@ -118,9 +120,9 @@ export function WorkflowSection() {
             {i > 0 && <span className="flex h-[170px] items-center narrow:h-auto">{<Arrow still={still} />}</span>}
             <article className="grid max-w-[330px] content-start gap-3 narrow:max-w-[360px]">
               <div className="mb-6 flex h-[170px] items-center justify-center mid:scale-[.82] narrow:scale-100" aria-hidden="true">{st.visual}</div>
-              <h3 className="m-0 flex items-center gap-2.5 text-[20px] font-semibold leading-tight tracking-[-0.01em] text-fg">
+              <h3 className="m-0 flex flex-wrap items-center gap-2.5 text-[20px] font-semibold leading-tight tracking-[-0.01em] text-fg">
                 <svg viewBox="0 0 24 24" className="h-[22px] w-[22px] flex-none" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{st.icon}</svg>
-                {st.title}
+                {st.title}{st.soon && <ComingSoonBadge />}
               </h3>
               <p className="m-0 text-[15px] leading-[1.55] text-fg-2">{st.text}</p>
             </article>
