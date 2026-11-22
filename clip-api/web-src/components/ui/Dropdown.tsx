@@ -56,10 +56,15 @@ export function Dropdown({ trigger, children, label, kind = "menu", align = "sta
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); button.current?.focus(); } };
     document.addEventListener("pointerdown", away);
     document.addEventListener("keydown", key);
-    const list = items();
-    (list.find((el) => el.getAttribute("aria-checked") === "true" || el.getAttribute("aria-selected") === "true") || list[0])?.focus({ preventScroll: true });
     return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", key); };
   }, [open, close]);
+  // Focus moves into the panel once it is placed (it is hidden until then): the chosen item, else the first.
+  const placed = at !== null;
+  useEffect(() => {
+    if (!placed) return;
+    const list = items();
+    (list.find((el) => el.getAttribute("aria-checked") === "true" || el.getAttribute("aria-selected") === "true") || list[0])?.focus({ preventScroll: true });
+  }, [placed]);
 
   function onKey(e: React.KeyboardEvent) {
     const move = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
