@@ -23,6 +23,11 @@ services:
       DATA_DIR: /srv/data
     volumes:
       - data:/srv/data
+    # SEC-010 / SEC-003: drop privileges; API must not be published (only Caddy reaches it).
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       db:
         condition: service_healthy
@@ -40,8 +45,22 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://clip:${POSTGRES_PASSWORD}@db:5432/clip
       DATA_DIR: /srv/data
+      # SEC-005: worker parses untrusted media — do not give it billing webhook secrets.
+      STRIPE_SECRET_KEY: ""
+      STRIPE_WEBHOOK_SECRET: ""
+      RESEND_API_KEY: ""
+      SMTP_PASSWORD: ""
     volumes:
       - data:/srv/data
+    # SEC-005 / SEC-010: untrusted yt-dlp/ffmpeg stay non-root, no new privileges, capped resources.
+    # Residual: still shares the `data` volume and DB role with the API; full sandbox (gVisor/Firecracker)
+    # needs infra beyond this compose file.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 6g
+    cpus: 3.0
     depends_on:
       api:
         condition: service_healthy   # api creates the tables first

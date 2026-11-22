@@ -1,9 +1,10 @@
 """Accounts, login, email verification, password reset and API keys."""
-import hashlib
 import secrets
+import time
 import uuid
 from datetime import timedelta
 
+import pyotp
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -17,12 +18,17 @@ from .db import get_db
 from .deps import ApiError, Principal, client_ip, current_principal, rate_limit, session_principal
 from .emailer import send_email
 from .models import Account, ApiKey, new_id, utcnow
-from .security import hash_password, make_token, new_api_key, read_token, verify_password
+from .security import hash_password, make_token, new_api_key, password_version, read_token, verify_password
 
 router = APIRouter()
 
 DISPOSABLE = {"mailinator.com", "guerrillamail.com", "10minutemail.com", "tempmail.com", "yopmail.com",
               "trashmail.com", "sharklasers.com", "getnada.com", "temp-mail.org", "throwawaymail.com"}
+
+
+def _password_ok(password: str) -> bool:
+    """SEC-008: length already enforced by Field; also require a letter and a digit."""
+    return any(c.isalpha() for c in password) and any(c.isdigit() for c in password)
 
 
 class Credentials(BaseModel):
@@ -48,9 +54,14 @@ class ResetRequest(BaseModel):
     password: str = Field(min_length=8, max_length=200)
 
 
+class MfaCode(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str = Field(min_length=6, max_length=8)
+
+
 def _pw_version(a: Account) -> str:
-    """Changes whenever the password changes, which makes reset links single-use."""
-    return hashlib.sha256(a.password_hash.encode()).hexdigest()[:16]
+    """Changes whenever the password changes: reset links are single-use; session JWTs bind to it (SEC-002)."""
+    return password_version(a.password_hash)
 
 
 class KeyCreate(BaseModel):
@@ -72,8 +83,12 @@ def account_json(db: Session, a: Account) -> dict:
             "subscription_cancel_at": a.subscription_cancel_at.isoformat() + "Z" if a.subscription_cancel_at else None}
 
 
-def session_token(a: Account) -> str:
-    return make_token(a.id, "session", timedelta(hours=get_settings().jwt_ttl_hours))
+def session_token(a: Account, *, amfa: int | None = None) -> str:
+    """Session JWT bound to the current password version so a reset voids every outstanding session."""
+    claims: dict = {"v": _pw_version(a)}
+    if amfa is not None:
+        claims["amfa"] = amfa  # unix time of last admin MFA step-up (SEC-004)
+    return make_token(a.id, "session", timedelta(hours=get_settings().jwt_ttl_hours), **claims)
 
 
 def mark_verified(db: Session, a: Account) -> None:
@@ -110,6 +125,8 @@ def signup(body: SignupRequest, request: Request, db: Session = Depends(get_db))
     if s.require_terms_acceptance and body.accept_policies is not True:
         raise ApiError(422, "terms_required", "Send accept_policies: true to accept the Terms of Service, Privacy "
                                               "Policy and Acceptable Use Policy (GET /v1/legal/policies).")
+    if not _password_ok(body.password):
+        raise ApiError(422, "weak_password", "Password must include at least one letter and one digit.")
     email = body.email.strip().lower()
     if email.rsplit("@", 1)[-1] in DISPOSABLE:
         raise ApiError(422, "email_not_allowed", "Please sign up with a permanent email address.")
@@ -184,9 +201,40 @@ def reset(body: ResetRequest, db: Session = Depends(get_db)):
     account = db.get(Account, data["sub"]) if data else None
     if not account or data.get("v") != _pw_version(account):
         raise ApiError(400, "invalid_token", "This reset link is invalid, expired or already used.")
+    if not _password_ok(body.password):
+        raise ApiError(422, "weak_password", "Password must include at least one letter and one digit.")
     account.password_hash = hash_password(body.password)
     db.commit()
     return {"reset": True}
+
+
+@router.post("/v1/auth/mfa/enroll", summary="Enroll admin TOTP")
+def mfa_enroll(p: Principal = Depends(session_principal), db: Session = Depends(get_db)):
+    """Generate a TOTP secret for an admin account. Secret returned once; required when ADMIN_MFA_REQUIRED."""
+    if not p.account.is_admin:
+        raise ApiError(403, "admin_required", "MFA enrollment is for ClutchClips admins.")
+    account = db.get(Account, p.account.id)
+    if account.mfa_secret:
+        raise ApiError(409, "mfa_already_enrolled", "MFA is already enrolled. Use scripts/admin.py reset-mfa to rotate.")
+    secret = pyotp.random_base32()
+    account.mfa_secret = secret
+    db.commit()
+    uri = pyotp.TOTP(secret).provisioning_uri(name=account.email, issuer_name="ClutchClips Admin")
+    return {"enrolled": True, "secret": secret, "otpauth_url": uri}
+
+
+@router.post("/v1/auth/mfa/verify", summary="Verify admin TOTP step-up")
+def mfa_verify(body: MfaCode, p: Principal = Depends(session_principal), db: Session = Depends(get_db)):
+    """Exchange a valid TOTP code for a session token with an admin MFA claim (SEC-004)."""
+    if not p.account.is_admin:
+        raise ApiError(403, "admin_required", "MFA verify is for ClutchClips admins.")
+    account = db.get(Account, p.account.id)
+    if not account.mfa_secret:
+        raise ApiError(400, "mfa_not_enrolled", "Enroll MFA first (POST /v1/auth/mfa/enroll).")
+    rate_limit(f"mfa:{account.id}", 10, 60)
+    if not pyotp.TOTP(account.mfa_secret).verify(body.code.strip(), valid_window=1):
+        raise ApiError(401, "invalid_mfa", "Invalid or expired MFA code.")
+    return {"token": session_token(account, amfa=int(time.time())), "account": account_json(db, account)}
 
 
 @router.get("/v1/me", summary="Current account")
@@ -195,6 +243,11 @@ def me(p: Principal = Depends(current_principal), db: Session = Depends(get_db))
     out = account_json(db, p.account)
     if p.via == "session":
         out["webhook_secret"] = p.account.webhook_secret
+        out["mfa_enrolled"] = bool(p.account.mfa_secret) if p.account.is_admin else False
+        out["mfa_ok"] = bool(
+            p.account.is_admin and isinstance(p.claims.get("amfa"), (int, float))
+            and (time.time() - float(p.claims["amfa"])) <= get_settings().admin_mfa_ttl_sec
+        )
     return out
 
 

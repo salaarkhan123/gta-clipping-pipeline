@@ -30,4 +30,7 @@ RUN chmod -R a+rX /srv/app /srv/scripts /srv/templates \
 USER app
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
+# SEC-003: trust X-Forwarded-* only from Docker private peers (Caddy on the compose network), never "*".
+# Override with FORWARDED_ALLOW_IPS when the edge IP is narrower (comma-separated CIDRs/IPs).
+ENV FORWARDED_ALLOW_IPS=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=${FORWARDED_ALLOW_IPS}"]

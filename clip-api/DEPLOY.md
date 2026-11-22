@@ -349,6 +349,16 @@ every admin account when it is empty. A report changes no content.
 - Make an account an admin (its website login can then read `/v1/admin/trust/cases`):
   `docker compose exec -T api python scripts/admin.py make-admin you@yourdomain.com` (`revoke-admin` undoes it).
   API keys never reach admin routes, even an admin's.
+- **Admin MFA (SEC-004):** with `ADMIN_MFA_REQUIRED=true` (required when `ENV=prod`), enroll TOTP before
+  admin routes work: `docker compose exec -T api python scripts/admin.py enroll-mfa you@yourdomain.com`
+  (prints the secret once; `reset-mfa` rotates). The website/API then calls `POST /v1/auth/mfa/verify` with a
+  code; the returned session carries a short-lived `amfa` claim (`ADMIN_MFA_TTL_SEC`, default 15 minutes).
+- **Proxy trust (SEC-003):** uvicorn trusts `X-Forwarded-*` only from `FORWARDED_ALLOW_IPS` (Docker private
+  CIDRs by default). Do not publish the API port; only Caddy should reach it.
+- **Worker isolation (SEC-005 residual):** the worker drops capabilities, has `no-new-privileges`, CPU/mem
+  caps, and does not receive Stripe/email secrets. It still shares the `data` volume and DB role with the API;
+  full media sandboxing (gVisor/Firecracker/separate host) is a follow-on infra ticket. Keep `yt-dlp` pinned
+  and review its options on every upgrade.
 - Limits: `TRUST_REPORTS_PER_IP_PER_HOUR` (5), `TRUST_REPORTS_PER_IP_PER_DAY` (20),
   `TRUST_REPORTS_PER_EMAIL_PER_DAY` (3); 32 KB per report.
 - Decide with `POST /v1/admin/trust/cases/{reference}/decisions {"action": ...}`. Each decision is one event in
@@ -360,7 +370,7 @@ every admin account when it is empty. A report changes no content.
   - `withdraw`, or `restore` after a counter-notice, cancels the case's strikes.
   - `delete_content`: removes the files, only on a case already decided `remove`.
   - `terminate {account_id, note}`: suspends an account at once for a serious violation.
-- Links handed out before a `disable` keep working until they expire (`SIGNED_URL_TTL_SEC`, 1 hour).
+- Links handed out before a `disable` keep working until they expire (`SIGNED_URL_TTL_SEC`, default 30 minutes).
 - The reported user sees their cases at `GET /v1/trust/my-cases`, without the claimant's contact details. They can
   send a counter-notice there; a copy goes to the claimant, and the admin decides on `restore` after 10 business
   days.

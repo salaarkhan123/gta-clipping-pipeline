@@ -8,6 +8,7 @@
   suspend EMAIL / unsuspend EMAIL               block or unblock an account
   stuck                                         list WAITING/QUEUED/RUNNING jobs
   make-admin EMAIL / revoke-admin EMAIL         let an account use the admin routes (/v1/admin/...) from its login
+  enroll-mfa EMAIL / reset-mfa EMAIL            TOTP for admin step-up (SEC-004); prints secret once
   ops-status                                    queue and worker health as key=value lines (read-only; ops.sh status)
   send-test-email --to ADDRESS                  send one email through the configured provider, Resend or SMTP
                                                 (exit 2: not configured, 1: failed)
@@ -312,6 +313,8 @@ def main() -> None:
     c = sub.add_parser("unsuspend"); c.add_argument("email")
     c = sub.add_parser("make-admin"); c.add_argument("email")
     c = sub.add_parser("revoke-admin"); c.add_argument("email")
+    c = sub.add_parser("enroll-mfa"); c.add_argument("email")
+    c = sub.add_parser("reset-mfa"); c.add_argument("email")
     sub.add_parser("stuck")
     sub.add_parser("ops-status")
     sub.add_parser("selftest")
@@ -399,8 +402,22 @@ def main() -> None:
         elif args.cmd in ("make-admin", "revoke-admin"):
             account = find(db, args.email)
             account.is_admin = args.cmd == "make-admin"
+            if args.cmd == "revoke-admin":
+                account.mfa_secret = None
             db.commit()
             print(f"{account.email}: {'admin' if account.is_admin else 'not an admin'}")
+        elif args.cmd in ("enroll-mfa", "reset-mfa"):
+            import pyotp
+            account = find(db, args.email)
+            if not account.is_admin:
+                sys.exit(f"{account.email} is not an admin (make-admin first)")
+            if args.cmd == "enroll-mfa" and account.mfa_secret:
+                sys.exit(f"{account.email} already has MFA; use reset-mfa to rotate")
+            secret = pyotp.random_base32()
+            account.mfa_secret = secret
+            db.commit()
+            uri = pyotp.TOTP(secret).provisioning_uri(name=account.email, issuer_name="ClutchClips Admin")
+            print(f"{account.email}: MFA secret (shown once):\n{secret}\n{uri}")
         elif args.cmd == "stuck":
             jobs = db.execute(select(Job).where(Job.status.in_(("WAITING", "QUEUED", "RUNNING"))).order_by(Job.created_at)).scalars()
             for j in jobs:

@@ -1,15 +1,13 @@
 import hashlib
-import ipaddress
 import secrets
-import socket
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlparse
 
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, InvalidHashError
 
 from .config import get_settings
+from .pinned_http import is_public_https_url  # noqa: F401  — re-export for callers
 
 _ph = PasswordHasher()
 API_KEY_PREFIX = "gck_"
@@ -55,17 +53,6 @@ def hash_api_key(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def is_public_https_url(url: str) -> bool:
-    """Webhook targets must be https and must not resolve to private or local addresses (SSRF guard)."""
-    try:
-        parsed = urlparse(url)
-        if parsed.scheme != "https" or not parsed.hostname:
-            return False
-        infos = socket.getaddrinfo(parsed.hostname, parsed.port or 443, type=socket.SOCK_STREAM)
-        for info in infos:
-            ip = ipaddress.ip_address(info[4][0])
-            if not ip.is_global:
-                return False
-        return bool(infos)
-    except (OSError, ValueError):
-        return False
+def password_version(password_hash: str) -> str:
+    """Short fingerprint of the current password hash; embedded in session JWTs so a reset voids them."""
+    return hashlib.sha256(password_hash.encode()).hexdigest()[:16]
