@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "purpose": "IDs that must never enter training or calibration for gaming intelligence models.",
+  "evaluation_only_vod_ids": [
+    "gta-online-1",
+    "gta-rp-1",
+    "zias-iceman",
+    "gta5",
+    "gta6",
+    "gta-online",
+    "valorant",
+    "fortnite",
+    "forza"
+  ],
+  "evaluation_sheet_stems": [
+    "labels-v2",
+    "benchmark-2h-labels",
+    "wayin-zias-iceman"
+  ],
+  "caption_geometry_sources": [
+    "forza",
+    "gta6",
+    "valorant",
+    "fortnite",
+    "gta5",
+    "gta-online"
+  ],
+  "notes": [
+    "Public PR keeps IDs and aggregates only; raw media stays outside Git.",
+    "Any near-duplicate of these sessions travels with the same exclusion."
+  ]
+}

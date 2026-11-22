@@ -1,0 +1,8 @@
+vod,t,classes,pov,annotator,uncertain,notes
+synth-burst-40s,19,none,unknown,a1,false,pre-burst quiet
+synth-burst-40s,20,gunshot,unknown,a1,true,synthetic loud onset stands in for an impulse class in harness tests only
+synth-burst-40s,21,gunshot,unknown,a1,true,
+synth-burst-40s,22,gunshot,unknown,a1,true,
+synth-burst-40s,23,gunshot,unknown,a1,true,
+synth-burst-40s,24,none,unknown,a1,false,post-burst
+synth-burst-40s,25,ordinary,unknown,a1,false,

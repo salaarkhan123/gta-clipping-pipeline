@@ -129,6 +129,8 @@ clip-api 2/
 !/docs/live-clipping.md
 !/docs/publishing.md
 !/docs/parity-opusclip.md
+!/docs/gaming-intelligence-research/
+!/docs/gaming-intelligence-research/**
 /gta-clipping-pipeline.pdf
 /screenshots/
 # Personal YouTube-link CLI; the service is uploads-only.
