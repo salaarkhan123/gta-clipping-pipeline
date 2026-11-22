@@ -1,40 +1,52 @@
 "use client";
+import { Icon } from "@/components/dash/Icon";
+import { Dropdown, MenuItem, MenuLabel, MenuRule } from "@/components/ui/Dropdown";
 import { kindName, Mark, MARK_NAMES, Sort, View } from "./model";
 
-const SEG = "h-8 cursor-pointer rounded-pill border-0 px-4 font-sans text-[13px] font-medium transition-colors duration-base";
-const CHIP = "inline-flex h-8 cursor-pointer items-center gap-[6px] rounded-pill border-0 px-4 font-sans text-[13px] font-medium whitespace-nowrap transition-colors duration-base";
+// [value, the row in the menu, the word on the button]
+const SORTS: [Sort, string, string][] = [["rating", "AI rating", "AI rating"], ["duration", "Duration", "Duration"], ["time", "Time in the video", "Time"]];
+const TRIGGER = "btn small ghost aria-expanded:bg-control-hover";
 
-// Sort (AI rating or where the moment is in the video), filter by kind (only the kinds the API gave these clips)
-// and by your own marks.
-export function ResultsBar({ view, onView, kinds, total, children }: {
-  view: View; onView: (v: View) => void; kinds: { kind: string; count: number }[]; total: number; children?: React.ReactNode;
+// One row above the clips. Left: grid or list (`children`) and how many are showing. Right: Select (the bulk bar),
+// Filter (your own marks, and the kinds the API gave these clips) and Sort, each a dropdown.
+export function ResultsBar({ view, onView, kinds, total, shown, selecting, onSelecting, children }: {
+  view: View; onView: (v: View) => void; kinds: { kind: string; count: number }[]; total: number;
+  shown?: number; selecting?: boolean; onSelecting?: (on: boolean) => void; children?: React.ReactNode;
 }) {
+  const filters = (view.kind ? 1 : 0) + (view.mark !== "all" ? 1 : 0);
+  const showing = shown ?? total;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex min-w-0 flex-wrap items-center gap-[6px] narrow:-mx-4 narrow:w-[calc(100%+32px)] narrow:flex-nowrap narrow:overflow-x-auto narrow:px-4 narrow:pb-1 narrow:[scrollbar-width:none]" role="group" aria-label="Filter by kind">
-        <button type="button" aria-pressed={view.kind === null} onClick={() => onView({ ...view, kind: null })}
-          className={`${CHIP} ${view.kind === null ? "bg-btn text-btn-ink" : "bg-control text-text hover:bg-control-hover"}`}>
-          All <span className="font-mono text-[11.5px] tabular-nums opacity-60">{total}</span></button>
-        {kinds.map(({ kind, count }) => (
-          <button key={kind} type="button" aria-pressed={view.kind === kind} onClick={() => onView({ ...view, kind: view.kind === kind ? null : kind })}
-            className={`${CHIP} ${view.kind === kind ? "bg-btn text-btn-ink" : "bg-control text-text hover:bg-control-hover"}`}>
-            {kindName(kind)} <span className="font-mono text-[11.5px] tabular-nums opacity-60">{count}</span></button>))}
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <div className="flex min-w-0 items-center gap-3">
+        {children}
+        <p className="m-0 text-[14px] tabular-nums text-fg-2" aria-live="polite">
+          {showing === total ? `${total} clip${total === 1 ? "" : "s"}` : `${showing} of ${total} clips`}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <label className="relative inline-flex items-center">
-          <span className="sr-only">Show</span>
-          <select value={view.mark} onChange={(e) => onView({ ...view, mark: e.target.value as Mark })}
-            className="h-8 cursor-pointer appearance-none rounded-pill border-0 bg-control py-0 pl-4 pr-8 font-sans text-[13px] text-text">
-            {(Object.keys(MARK_NAMES) as Mark[]).map((m) => <option key={m} value={m} className="bg-card">{m === "all" ? "All clips" : MARK_NAMES[m]}</option>)}
-          </select>
-          <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" className="pointer-events-none absolute right-3 fill-none stroke-current stroke-2 text-fg-2"><path d="m7 10 5 5 5-5" /></svg>
-        </label>
-        <div role="radiogroup" aria-label="Sort" className="inline-flex gap-2">
-          {([["rating", "AI rating"], ["duration", "Duration"], ["time", "Time"]] as [Sort, string][]).map(([s, label]) => (
-            <button key={s} type="button" role="radio" aria-checked={view.sort === s} onClick={() => onView({ ...view, sort: s })}
-              className={`${SEG} ${view.sort === s ? "bg-btn text-btn-ink" : "bg-control text-text hover:bg-control-hover"}`}>{label}</button>))}
-        </div>
-        {children}
+        {onSelecting && <button type="button" className="btn small ghost" aria-pressed={!!selecting} onClick={() => onSelecting(!selecting)}>
+          <Icon name="check" size={15} />Select</button>}
+        <Dropdown label="Filter clips" align="end" panelClass="w-[220px] rounded-[16px] p-2"
+          trigger={(t) => <button {...t} type="button" className={TRIGGER}><Icon name="sliders" size={15} />Filter
+            {filters > 0 && <span className="grid h-[18px] min-w-[18px] place-items-center rounded-pill bg-btn px-1 text-[11px] font-medium tabular-nums text-btn-ink">{filters}</span>}</button>}>
+          {(close) => <>
+            <MenuLabel>Show</MenuLabel>
+            {(Object.keys(MARK_NAMES) as Mark[]).map((m) => <MenuItem key={m} checked={view.mark === m} onSelect={() => { onView({ ...view, mark: m }); close(); }}>
+              {m === "all" ? "All clips" : MARK_NAMES[m]}</MenuItem>)}
+            {kinds.length > 0 && <>
+              <MenuRule />
+              <MenuLabel>Kind</MenuLabel>
+              <MenuItem checked={view.kind === null} onSelect={() => { onView({ ...view, kind: null }); close(); }}>Every kind</MenuItem>
+              {kinds.map(({ kind, count }) => <MenuItem key={kind} checked={view.kind === kind} onSelect={() => { onView({ ...view, kind }); close(); }}
+                after={<span className="text-[12px] tabular-nums text-fg-2">{count}</span>}>{kindName(kind)}</MenuItem>)}
+            </>}
+          </>}
+        </Dropdown>
+        <Dropdown label="Sort clips" align="end" panelClass="w-[220px] rounded-[16px] p-2"
+          trigger={(t) => <button {...t} type="button" className={TRIGGER}>
+            <span className="text-fg-2 narrow:hidden">Sort</span>{SORTS.find(([s]) => s === view.sort)?.[2]}
+            <Icon name="chevron" size={15} className="text-fg-2" /></button>}>
+          {(close) => SORTS.map(([s, label]) => <MenuItem key={s} checked={view.sort === s} onSelect={() => { onView({ ...view, sort: s }); close(); }}>{label}</MenuItem>)}
+        </Dropdown>
       </div>
     </div>
   );

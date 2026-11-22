@@ -123,7 +123,7 @@ test("results chrome shares Library's grid/list toggle; list rows still open the
   const results = source("components/clips/Results.tsx");
   const tile = source("components/clips/ClipTile.tsx");
   assert.match(results, /import \{ CLIP_LIST, LayoutToggle, nameOf, numbering, useClipLayout \} from "@\/components\/dash\/ClipCard"/);
-  assert.match(results, /<ResultsBar view=\{view\} onView=\{setView\} kinds=\{kinds\} total=\{clips\.length\}>/);
+  assert.match(results, /<ResultsBar view=\{view\} onView=\{setView\} kinds=\{kinds\} total=\{clips\.length\}/);
   assert.match(results, /<LayoutToggle value=\{layout\} onChange=\{setLayout\} \/>/);
   assert.match(results, /layout === "list" \? CLIP_LIST : GRID\[shape\]/);
   assert.match(results, /onOpen=\{\(\) => setPlaying\(c\.id\)\}/);

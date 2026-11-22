@@ -63,10 +63,10 @@ export function useClipLayout(): [ClipLayout, (v: ClipLayout) => void] {
 
 export function LayoutToggle({ value, onChange }: { value: ClipLayout; onChange: (v: ClipLayout) => void }) {
   return (
-    <div role="group" aria-label="Clip layout" className="inline-flex gap-[2px] rounded-12 border border-solid border-line-soft bg-panel p-[3px]">
+    <div role="group" aria-label="Clip layout" className="inline-flex gap-1">
       {([["grid", "Grid layout"], ["list", "List layout"]] as const).map(([mode, label]) => (
         <button key={mode} type="button" aria-pressed={value === mode} aria-label={label} title={label} onClick={() => onChange(mode)}
-          className={`grid h-8 w-8 cursor-pointer place-items-center rounded-8 border-0 ${value === mode ? "bg-chip-hover text-lime" : "bg-transparent text-muted hover:text-text"}`}>
+          className={`grid h-9 w-9 cursor-pointer place-items-center rounded-control border-0 transition-colors duration-base ${value === mode ? "bg-control text-text" : "bg-transparent text-fg-2 hover:text-text"}`}>
           <Icon name={mode} size={16} />
         </button>
       ))}
