@@ -35,7 +35,9 @@ def make_clip(account_id: str, options: dict | None = None, deleted: bool = Fals
         clip = Clip(id=new_id("clip"), job_id=job.id, idx=0, start_sec=5.0, end_sec=27.5, score=0.5, signals={},
                     features={}, video_key="k/clip.mp4", thumb_key="k/clip.jpg", meta={"title": "A clutch"},
                     deleted_at=now if deleted else None)
-        db.add_all([up, job, clip])
+        for row in (up, job, clip):        # the models carry no relationships, so the flush order is ours to set
+            db.add(row)
+            db.flush()
         db.commit()
         return clip.id
 
