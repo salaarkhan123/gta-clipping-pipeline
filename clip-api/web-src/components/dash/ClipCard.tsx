@@ -7,7 +7,7 @@ import { Icon, IconName, Soon } from "./Icon";
 import { BACKDROP, CARD_ROW, MEDIA, Shape, thumbVar, useShape } from "./ProjectCard";
 import { useDash } from "./Shell";
 import { CLIP_LAYOUT_KEY, ClipLayout, parseClipLayout } from "@/lib/clip-layout";
-import { scoreLabel } from "@/lib/scores";
+import { RatingBadge } from "@/components/clips/Rating";
 
 export type { ClipLayout };
 export { CLIP_LAYOUT_KEY, parseClipLayout };
@@ -146,10 +146,7 @@ export function ClipCard({ clip, onChange, project, uploadId, lit, number, selec
         </div>
         {onSelect && <input type="checkbox" checked={!!selected} aria-label={`Select ${name}`} onChange={(e) => onSelect(clip.id, e.target.checked)}
           className="absolute left-2 top-2 z-[3] h-5 w-5 cursor-pointer p-0 accent-lime narrow:h-6 narrow:w-6" />}
-        {!play && <div className="absolute bottom-2 left-[10px] z-[3] grid leading-none">
-          <span className="font-body text-[9.5px] font-semibold uppercase tracking-[.08em] text-soft" aria-hidden="true">{typeof clip.display_score === "number" ? "AI rating" : "Rank"}</span>
-          <ScoreBadge clip={clip} />
-        </div>}
+        {!play && <div className="absolute bottom-2 left-2 z-[3]"><ScoreBadge clip={clip} /></div>}
       </div>
       <div className="grid min-w-0 gap-1 px-[2px]">
         <h3 title={name} className="m-0 line-clamp-2 min-h-[2.6em] font-body text-[14px] font-semibold leading-[1.3] tracking-[-0.005em]">
@@ -246,47 +243,6 @@ export function useSteadyOrder(clips: any[], sort: ClipSort, filter: ClipFilter,
   return ids.map((id) => by.get(id));
 }
 
-const TIER_NAMES: Record<string, string> = { top: "Top pick", strong: "Strong", solid: "Solid", long_shot: "Long shot" };
-const SIGNAL_NAMES: Record<string, string> = { audio: "Loud reaction", chat_motion: "Chat activity", transcript: "What was said" };
-
-// The score on the card: "N /100" once the API sends a calibrated `display_score`, the rank and tier until then.
-// The numbers behind it open on hover, on keyboard focus and on a tap or click; Escape or a tap elsewhere closes them.
-export function ScoreBadge({ clip }: { clip: any }) {
-  const [mode, setMode] = useState<"" | "open" | "shut">("");
-  const box = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (mode !== "open") return;
-    const away = (e: Event) => { if (!box.current?.contains(e.target as Node)) setMode(""); };
-    document.addEventListener("pointerdown", away);
-    return () => document.removeEventListener("pointerdown", away);
-  }, [mode]);
-  const rank = rankOf(clip), shown = typeof clip.display_score === "number" ? Math.round(clip.display_score) : null;
-  if (shown === null && !rank) return null;
-  const v = clip.virality || {}, tip = `score-${clip.id}`;
-  const raw = typeof v.score === "number" ? v.score : null;
-  // Sub-scores: the five dimensions under `scores` once the API sends them, today's four under `virality` until then.
-  const parts = Object.entries({ ...v, ...(clip.scores && typeof clip.scores === "object" ? clip.scores : {}) })
-    .filter(([k, n]) => k !== "score" && typeof n === "number") as [string, number][];
-  const signals = Object.entries(clip.signals || {}).filter(([, share]) => (share as number) >= 0.05).sort((a, b) => (b[1] as number) - (a[1] as number));
-  const rated = shown !== null || !!clip.tier;
-  return (
-    <span ref={box} className={`score-badge ${mode}`} onKeyDown={(e) => { if (e.key === "Escape") setMode("shut"); }}>
-      <button type="button" className={shown !== null ? "rank score" : `rank ${clip.tier || "unrated"}`} aria-describedby={tip} aria-expanded={mode === "open"}
-        aria-label={shown !== null ? `Score ${shown} out of 100. Show the numbers behind it.` : undefined}
-        onClick={() => setMode(mode === "open" ? "shut" : "open")} onBlur={() => setMode("")}>
-        {shown !== null ? <><b>{shown}</b><small>/100</small></>
-          : <><b>#{rank}</b>{clip.rank_of ? <> of {clip.rank_of}</> : null}{clip.tier && <> · {TIER_NAMES[clip.tier]}</>}</>}
-      </button>
-      <span role="tooltip" id={tip} className="score-tip">
-        {rated
-          ? <><strong>{raw !== null ? `AI rating ${raw} of 100` : "Rated by the AI"}{rank ? ` · #${rank}${clip.rank_of ? ` of ${clip.rank_of}` : ""}` : ""}</strong>
-              {parts.length > 0 && <span className="parts">{parts.map(([k, n]) => <span key={k}>{scoreLabel(k)} <b>{n}</b></span>)}</span>}</>
-          : <strong>Ranked by how strongly this moment stood out in the video. It has no AI rating.</strong>}
-        {shown !== null && <span>The {shown} on the card is the AI rating scaled across this video's clips, so the best one lands in the 90s. The order is the AI's own.</span>}
-        {signals.length > 0 && <span>Picked for: {signals.map(([k, share]) => `${SIGNAL_NAMES[k] || k} ${Math.round((share as number) * 100)}%`).join(", ")}</span>}
-        {(clip.reason || clip.why) && <span>{clip.reason || clip.why}</span>}
-        {rated && <span className="muted">The rating is the AI's opinion of the clip. It does not say how many views a clip will get.</span>}
-      </span>
-    </span>
-  );
-}
+// The score on a dashboard clip card: the one shared score mark (components/ui/Score, through RatingBadge), with
+// its sub-scores on hover, focus or a tap. A clip the AI did not rate shows its place in the run.
+export const ScoreBadge = ({ clip }: { clip: any }) => <RatingBadge clip={clip} size="sm" />;
