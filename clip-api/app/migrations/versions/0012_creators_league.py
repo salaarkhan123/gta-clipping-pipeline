@@ -1,15 +1,18 @@
 """Creators League: creator profiles, competitions, entries, view observations and the audit log.
 
-Revision ID: 0012
+Revision ID: 0012_league
 Revises: 0011
 Create Date: 2026-11-22
 
 Additive only: five new tables. No DROP/RENAME, no change to an existing table.
+
+The id carries a name because another open change (#273, 0012_admin_mfa) also revises 0011. Whichever of the
+two merges second must point its down_revision at the other, or the chain has two heads.
 """
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0012"
+revision = "0012_league"
 down_revision = "0011"      # 0011_social_publishing (#266)
 branch_labels = None
 depends_on = None

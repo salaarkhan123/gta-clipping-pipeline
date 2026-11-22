@@ -12,17 +12,17 @@ from tests.test_migrations import db, diffs  # noqa: F401
 TABLES = {"creator_profiles", "league_competitions", "league_entries", "league_view_observations", "league_events"}
 
 
-def test_migration_0012_is_the_head_and_builds_the_league_tables(db):  # noqa: F811
+def test_migration_0012_league_is_the_head_and_builds_the_league_tables(db):  # noqa: F811
     e = db("league")
     migrate(e)
-    assert head() == "0012"
+    assert head() == "0012_league"
     assert TABLES <= set(inspect(e).get_table_names())
     assert diffs(e) == []
     uniques = {tuple(u["column_names"]) for u in inspect(e).get_unique_constraints("league_entries")}
     assert {("competition_id", "account_id"), ("competition_id", "url_key")} <= uniques
 
 
-def test_migration_0012_downgrades_to_0011_and_leaves_the_older_tables(db):  # noqa: F811
+def test_migration_0012_league_downgrades_to_0011_and_leaves_the_older_tables(db):  # noqa: F811
     from alembic import command
 
     from app.migrate import config, current
