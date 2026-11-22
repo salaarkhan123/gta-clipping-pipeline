@@ -366,7 +366,8 @@ def test_every_id_route_has_an_access_case():
     assert gets == set(LISTINGS) | set(PUBLIC_GETS), "a GET route needs a place in LISTINGS or PUBLIC_GETS"
     from tests.test_league_admin import ADMIN_ROUTES
     from tests.test_trust_reports import ADMIN_BODIES
-    league = {(m.upper(), p.replace("{cup}", "{slug}").replace("{entry}", "{entry_id}")) for m, p, _ in ADMIN_ROUTES}
+    league = {(m.upper(), p.replace("{cup}", "{slug}").replace("{entry}", "{entry_id}").replace("{account}", "{account_id}"))
+              for m, p, _ in ADMIN_ROUTES}
     admin = {(m, p) for m, p, _ in all_operations() if p.startswith(ADMIN)}
     assert admin == set(ADMIN_BODIES) | league, \
         "an admin route needs an entry in test_trust_reports.ADMIN_BODIES or test_league_admin.ADMIN_ROUTES"
