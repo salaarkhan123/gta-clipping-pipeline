@@ -64,6 +64,10 @@ A job from before stage timing existed has only the coarse stages shown in the d
 uses those. Without a server: `python scripts/bench_pipeline.py <video> --max-clips 10` runs the pipeline locally
 (no AI judge) and prints the same stages.
 
+**Transcript reuse (U1).** Repeat jobs on the same upload report `transcript_reused` /
+`transcript_transcribed` / `transcript_reuse_rate` in the rates line (and `transcript_cached` for Finder /
+transcript tools). How to confirm a hit on a re-run: [docs/transcript-reuse.md](docs/transcript-reuse.md).
+
 ## Transcription settings
 
 - `TRANSCRIPTION_PROVIDER=local` (the only provider so far): whole recordings are transcribed by the local Whisper
@@ -168,6 +172,51 @@ Default: one job at a time. Two ways to add capacity:
 
 After either change, run the 10-clip benchmark twice at the same time and compare with SPEC.md §10 B before
 relying on it.
+
+## Dedicated render worker (setup B / S4) — optional
+
+SPEC section 14 setup B puts analysis on the current droplet and clip encodes on a second, larger
+CPU-optimized host. That split is ticket **S4 / #98** (`WORKER_STAGES` per process). Until that role code
+ships, every worker process still runs the whole pipeline (download, transcribe, render, store). A second
+container on a bigger box therefore still loads Whisper and CLIP; it only helps as extra job slots, not as a
+true render-only machine. See `docs/render-worker.md` for the full ops note.
+
+**When to split (owner decision).** Keep one droplet while queue time and export SLOs are acceptable. Add a
+dedicated render host only when:
+
+1. Render dominates wall time (historically ~60% of a 2 h job on the 4 vCPU box — `measured` 2026-11-15 in
+   SPEC.md §10 B; re-check with `scripts/job_timings.py` on your footage).
+2. You need more parallel preview encodes than one box can hold without thrashing.
+3. You accept the fixed monthly cost of a second machine (owner provisions and pays; agents never sign up or
+   deploy paid infra, and must not enable paid cloud GPUs).
+
+**Env knobs** (same `.env` on every app container; restart with `docker compose up -d` for the services that
+changed, when no job is RUNNING):
+
+| Knob | Default | What it does |
+|---|---|---|
+| `WORKER_CONCURRENCY` | `1` (max `2` in code) | Jobs one worker *process* runs at once. Shares one model load. Cap stays 2 until a bigger-host benchmark and a code change raise `le=2`. |
+| `RENDER_WORKERS` | `1` (max `8`) | Clip encodes *inside one Clip Maker job*. `1` = serial — **required default on the 8 GB droplet** (historical ffmpeg OOM at ~5.5–5.8 GB RSS). Raise only after measuring peak RSS + wall with `scripts/job_timings.py` on a larger host. |
+
+Total in-flight jobs ≈ worker containers × `WORKER_CONCURRENCY`. Parallel encodes per job ≈ `RENDER_WORKERS`.
+Those knobs are independent. Do **not** assume `RENDER_WORKERS>1` is safe on 8 GB without a measured soak.
+
+**Hardware sizing (hypotheses, not measured).** Public DigitalOcean list prices read for research on
+2026-11-20; throughput on these shapes for ClutchClips is **not measured** until the owner runs a timing job.
+
+| Shape | Role | List price (public) | Hypothesis |
+|---|---|---|---|
+| Basic 4 vCPU / 8 GiB | API, DB, analysis (today) | ~$48 / month | Keep as the always-on box. |
+| CPU-Optimized 16 vCPU / 32 GiB | Setup B render worker | ~$336 / month (~$0.50 / hour) | Candidate for many parallel `RENDER_WORKERS` and/or several worker containers. Speed-up vs the 4 vCPU box is **not measured**. Idle all month costs ~7× the small droplet. Prefer create-for-backlog / destroy-after if the cloud bills per second. |
+| GPU droplet / cloud GPU | S5 (#99) only | higher $/hour | Out of scope here. Do not provision. Benchmark only with owner OK. |
+
+**Compose stub.** `docker-compose.yml` includes a fully commented `render-worker` service example. Default
+`docker compose up` behaviour is unchanged. Uncomment and start it only on a host the owner already
+provisions, with shared storage (`STORAGE_BACKEND=s3` or equivalent) so both machines see the same uploads and
+clips. Prefer waiting for S4 role split before treating it as render-only.
+
+**No API change.** This section and the compose stub document an ops option. They do not change public routes,
+credits, or job contracts.
 
 ## Plans and Stripe Prices
 

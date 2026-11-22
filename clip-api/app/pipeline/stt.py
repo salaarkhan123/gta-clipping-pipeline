@@ -1,9 +1,9 @@
 """Speech-to-text over a whole recording: the audio is extracted once, then a provider transcribes the file.
 
 - `extract_audio` decodes the source's audio a single time into a 16 kHz mono WAV and, in the same pass, measures
-  the loudness per second. Measured on a 2-hour recording it costs a few seconds more than measuring the levels
-  alone, and cutting candidates from the WAV saves nothing over ffmpeg's seeks, so the clip pipeline does not
-  extract by default: a caller that already has the audio passes it in.
+  the loudness per second. The clip *pipeline* still takes `source_audio` as an optional argument (no extract
+  inside `run_pipeline`). The Clip Maker *worker* always extracts once when the upload has audio, so levels,
+  candidate windows, silence edits, and optional whole-file STT share that decode (research A2 / S3).
 - `slice_wav` cuts a piece out of that WAV by seeking in the file: no ffmpeg, no second decode.
 - A provider turns the whole WAV into a `Transcript` with absolute times. `LocalProvider` runs the local Whisper
   model over chunks that are cut at quiet points, several at once when the machine has the cores for it.

@@ -30,8 +30,9 @@ import time
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
+import threading
 
 import numpy as np
 
@@ -46,8 +47,9 @@ from .timing import Timer
 from .stt import SourceAudio, slice_wav
 from .heard import Heard, model_of
 from .signals import CHAT_LAG, audio_rms_db, baseline_z, normalise, onscreen_chat_motion
-from .timeline import AUDIO as TIMELINE_AUDIO, STANDBY_REJECT, audio_timeline, keyframes, scene_changes, \
-    standby_seconds, wav_timeline
+from .timeline import AUDIO as TIMELINE_AUDIO, HUD as TIMELINE_HUD, STANDBY_REJECT, audio_timeline, keyframes, \
+    scene_changes, standby_seconds, wav_timeline
+from .sound_events import EVENTS as SOUND_EVENTS, score_wav as score_sound_events
 from .transcribe import (Transcriber, Transcript, exclamation_hits, extract_wav, in_language, snap_to_sentences,
                          snap_to_speech)
 from .edit import FLASH_LEN, KEEP_PAUSE, MAX_REMOVED, avoid_words, cut, duration as kept_duration, filler_spans, remap_words, silences, speech_gaps, select_cuts, to_output, with_flash_forward, zoom_expr, zoom_peaks
@@ -59,9 +61,13 @@ from .llm_pass import PASS_BUDGET_SEC, PassResult, Proposal, Proposer, mix, run_
 from .variety import HORIZON, min_gap_for, pick_distinct, picture_hash
 from .windows import fits, pick_spread, pick_windows
 
-# Hand-set; the learned ranker replaces these later. The timeline signals (timeline.py) are computed only when their
-# weight is above 0; their defaults come from the U2 check against the labelled tuning moments.
-WEIGHTS = {"chat_motion": 1.0, "audio": 0.7, "audio_flux": 0.35, "audio_bursts": 0.35, "scene": 0.0}
+# Hand-set; the learned ranker replaces these later. The timeline signals (timeline.py) and the named
+# sound events (sound_events.py) are computed only when their weight is above 0. The U2 defaults come from
+# the check against the labelled tuning moments. Each sound event stays at 0 until that class is measured.
+# HUD OCR (#202): observation only until eval/labels-hud-ocr.csv ≥ 0.9 — weights stay 0.
+WEIGHTS = {"chat_motion": 1.0, "audio": 0.7, "audio_flux": 0.35, "audio_bursts": 0.35, "scene": 0.0,
+           "hud_killfeed": 0.0, "hud_banner": 0.0,
+           **{name: 0.0 for name in SOUND_EVENTS}}
 TRANSCRIPT_BONUS = 0.15                        # max re-rank bonus from exclamation phrases
 PAD = 4.0                                      # seconds of audio transcribed either side of a candidate
 JUDGE_PAD = 15.0                               # ... when a judge chooses the cut: room to grow a 30 s window to 60 s
@@ -97,6 +103,7 @@ class PipelineOptions:
     aspect: str = "9:16"          # 9:16 | 4:5 | 1:1 | 16:9 (used when vertical/reframing is on)
     max_side: int | None = None   # plan resolution cap: short side in pixels
     chat_region: str = "none"     # "none" or a key of CHAT_REGIONS
+    chat_motion_sample: str = "dense"  # dense|sparse|coarse|lite — see signals.CHAT_MOTION_SAMPLES
     zoom: float = 1.0
     captions: bool = True
     caption_font: str = "DejaVu Sans"
@@ -133,6 +140,9 @@ class PipelineOptions:
     caption_display: str = "original"     # original | translation | both (recorded: burned captions are the original)
     # (render, agent B)
     render: str = "full"                  # full | preview (fast and small) | none (no video: times, copy, thumbnail)
+    # (render, Wave B1) how many clip encodes may run at once. 1 = previous serial behaviour (default).
+    # Cap is applied against the number of chosen clips; progress and on_clip stay serial under a lock.
+    render_workers: int = 1
     hook_style: str = "serious"           # the tone the judge writes the hook in (render_options.HookStyle)
     hook_position: str = "beginning"      # beginning | end: where the burned hook shows
     hook_duration_ms: int | None = None   # how long it shows; None = 2.5 s
@@ -140,6 +150,7 @@ class PipelineOptions:
     score_weights: dict | None = None     # the game's weights for the five sub-scores (ranking.py); None: equal
     score_weights_version: str = EQUAL    # ... and their name, recorded on every clip they ranked
     moment_layout: bool = False           # auto: draw each moment for what it shows (PROVISIONAL; off: one layout)
+    observe_hud_ocr: bool = False         # #202: run HUD OCR for logs/eval only; never ranks while weights stay 0
 
 
 @dataclass
@@ -294,7 +305,8 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     if options.chat_region != "none":
         progress("chat_motion", 5)
         with timer.stage("chat_motion"):
-            motion = onscreen_chat_motion(input_path, options.chat_region, deadline, **part)
+            motion = onscreen_chat_motion(input_path, options.chat_region, deadline, **part,
+                                          sample=options.chat_motion_sample)
         if motion:
             floor = max(float(np.std(motion)) * 0.1, 1e-6)
             series["chat_motion"] = normalise(baseline_z(motion, floor=floor), n, shift=CHAT_LAG)
@@ -325,6 +337,35 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
     if weights.get("scene", 0) > 0:
         with timer.stage("scene"):
             series["scene"] = _scored(scene_changes(input_path, deadline, **part), n)
+    # Named sounds are a separate model. Weight 0 skips the call, so the default job never loads it.
+    active_sounds = [name for name in SOUND_EVENTS if weights.get(name, 0) > 0]
+    if active_sounds and info.has_audio:
+        with timer.stage("sound_events"):
+            if audio is not None:
+                raw = score_sound_events(audio, **part)
+            else:
+                dest = out_dir / "sound-events.wav"
+                try:
+                    extract_wav(input_path, float(base) if ranged else 0.0,
+                                span if ranged else info.duration, dest, deadline)
+                    raw = score_sound_events(dest)
+                finally:
+                    dest.unlink(missing_ok=True)
+        for name in active_sounds:
+            series[name] = _scored(list(raw.get(name) or []), n)
+    # HUD OCR (#202): computed only when a hud_* weight is above 0, or when observe_hud_ocr is on for logs/eval.
+    # Default weights are 0, so ranking never decodes HUD frames (timeline.py rule).
+    hud_events = []
+    hud_live = any(weights.get(k, 0) > 0 for k in TIMELINE_HUD)
+    if hud_live or options.observe_hud_ocr:
+        from .screen_text import read_hud, series_from_events
+        with timer.stage("hud_ocr"):
+            hud_events = read_hud(input_path, _template_game(options.template), t0, t1,
+                                  width=info.width, height=info.height, deadline=deadline)
+        if hud_live:
+            for name, vals in series_from_events(hud_events, n, base).items():
+                if weights.get(name, 0) > 0:
+                    series[name] = _scored(vals, n)
     if not series:
         raise PipelineError("no_signal", "This video has no audio track and no chat region was set, "
                                          "so there is nothing to score moments with.")
@@ -400,6 +441,7 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         made = _transcribe(c, i, rough, input_path, t1, out_dir, deadline, pad=pad, audio=audio, floor=t0,
                            heard=heard, any_model=second_pass, timed=timer.stage("transcribe_rough"))
         if made:
+            timer.count("transcript_transcribed")
             timer.count("transcribed_rough_sec", round(c.end - c.start + 2 * pad, 1))
         else:
             timer.count("transcript_reused")
@@ -459,6 +501,11 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         if dropped:
             timer.count("repeat_" + reason.split()[1], dropped)
     chosen = sorted(distinct, key=lambda c: c.start)
+    if hud_events:
+        for c in chosen:
+            hits = [e.as_dict() for e in hud_events if c.start <= e.t < c.end]
+            if hits:
+                c.features["scene"] = {**(c.features.get("scene") or {}), "text_events": hits}
     if judge is not None:
         for i, c in enumerate(chosen):
             progress("transcribing", 62 + int(8 * i / len(chosen)))
@@ -466,6 +513,7 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                 made = _transcribe(c, 100 + i, transcriber, input_path, t1, out_dir, deadline, audio=audio,
                                    floor=t0, heard=heard, timed=timer.stage("transcribe_final"))
                 if made:
+                    timer.count("transcript_transcribed")
                     timer.count("transcribed_final_sec", round(c.end - c.start + 2 * PAD, 1))
                 else:
                     timer.count("transcript_reused")
@@ -490,9 +538,16 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
 
     # 4. Render, best first: with `on_clip` each clip is handed over the moment it is done, so the strongest
     #    ones can be watched while the rest are still rendering. Clip numbers stay in the order of the video.
+    #    render_workers > 1 runs several encodes at once; progress and on_clip stay serial under a lock so the
+    #    worker's DB hand-off cannot race. Default workers=1 keeps the historical serial, score-ordered hand-off.
+    jobs = list(sorted(enumerate(chosen, 1), key=lambda ic: -ic[1].final))
+    workers = max(1, min(int(options.render_workers or 1), len(jobs) or 1))
+    handoff = threading.Lock()
     results: list[ClipResult] = []
-    for done, (i, c) in enumerate(sorted(enumerate(chosen, 1), key=lambda ic: -ic[1].final)):
-        progress("rendering", 70 + int(28 * done / len(chosen)))
+    handed = [0]
+    first_marked = [False]
+
+    def finish_one(i: int, c) -> ClipResult | None:
         spoken = [(s + c.offset, e + c.offset, w) for s, e, w in c.transcript.words
                   if c.start <= s + c.offset < c.end]                     # source seconds
         segments = [(round(c.start, 3), round(c.end, 3))]
@@ -557,7 +612,7 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
                 # One bad encode must not wipe clips already handed over (progressive results).
                 log.warning("skipping clip %s at %.1f-%.1fs: %s %s", i, c.start, c.end, e.code, e.message[:200])
                 timer.count("render_failed")
-                continue
+                return None
         # (U7) The thumbnail is drawn from the source in the clip's layout, so a clip with no video yet has one too.
         thumb = frame = None
         try:
@@ -576,14 +631,38 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         if words:
             caps = out_dir / f"clip-{i}.captions.json"
             caps.write_text(json.dumps({"words": [{"start": s, "end": e, "text": t} for s, e, t in words]}))
-        results.append(ClipResult(start=round(c.start, 3), end=round(c.end, 3), score=round(c.final, 4),
-                                  signals=c.signals, features=c.features, video_path=video,
-                                  thumb_path=thumb, captions_path=caps, meta=c.meta, index=i,
-                                  frame_path=frame))
-        if done == 0:
-            timer.count("first_clip_sec", round(time.monotonic() - t_begin, 1))
-        if on_clip is not None:
-            on_clip(results[-1])
+        return ClipResult(start=round(c.start, 3), end=round(c.end, 3), score=round(c.final, 4),
+                          signals=c.signals, features=c.features, video_path=video,
+                          thumb_path=thumb, captions_path=caps, meta=c.meta, index=i,
+                          frame_path=frame)
+
+    def hand_over(result: ClipResult | None) -> None:
+        if result is None:
+            return
+        with handoff:
+            results.append(result)
+            n = handed[0]
+            handed[0] = n + 1
+            progress("rendering", 70 + int(28 * n / len(jobs)))
+            if not first_marked[0]:
+                first_marked[0] = True
+                timer.count("first_clip_sec", round(time.monotonic() - t_begin, 1))
+            if on_clip is not None:
+                on_clip(result)
+
+    # Enter "rendering" before the first encode so the worker's coarse `timings` bill encode
+    # wall to rendering (main called progress at the top of each serial iteration; B1's
+    # hand_over-only progress ran after finish and left rendering ≈ 0 for a single clip).
+    if jobs:
+        progress("rendering", 70)
+    if workers == 1:
+        for i, c in jobs:
+            hand_over(finish_one(i, c))
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futs = [pool.submit(finish_one, i, c) for i, c in jobs]
+            for fut in as_completed(futs):
+                hand_over(fut.result())
     if chosen and not results:
         raise PipelineError("render_failed",
                             "None of the selected moments could be rendered. Your credits were refunded.")

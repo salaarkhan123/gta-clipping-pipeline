@@ -161,6 +161,12 @@ class Settings(BaseSettings):
     # Pipeline
     whisper_model: str = "small.en"   # captions. "none" disables transcription and captions
     whisper_index_model: str = "base.en"   # full-video search index: smaller and several times faster
+    # S5 / #99 GPU plug-in points. Defaults keep the CPU path. Do not flip in production without an
+    # owner-OK measured bench (scripts/bench_nvenc.py) and a provisioned GPU worker. Agents never
+    # provision paid GPUs. See docs/ops/gpu-bench-recommendations.md.
+    video_encoder: str = "libx264"    # libx264 (default) | h264_nvenc (bench / future only)
+    whisper_device: str = "cpu"       # cpu (default) | cuda (faster-whisper CUDA stub)
+    nvdec: bool = False               # optional -hwaccel cuda; not wired into render_clip yet
     # Whole-recording transcription. "local" runs the Whisper models above; hosted providers are added with
     # their adapters. TRANSCRIBE_PARALLEL chunks run at once: leave it at 1 on a 4 vCPU server (one model already
     # uses every core) and raise it on a machine with 8 or more (see DEPLOY.md, "Measuring speed").
@@ -190,6 +196,15 @@ class Settings(BaseSettings):
     # Jobs one worker process runs at once. 2 is the most a 4 vCPU / 8 GB server holds (ffmpeg and Whisper
     # both use every core); raise the limit only with a bigger server and a new benchmark.
     worker_concurrency: int = Field(1, ge=1, le=2)
+    # Chat-band sample mode for onscreen_chat_motion (signals.CHAT_MOTION_SAMPLES).
+    # Default "dense" (fps=2) keeps historical behaviour. For preview latency with chat_region set,
+    # prefer "coarse" (fps=0.5 + interpolate, parallel on long VODs) or "sparse" (fps=1); "lite" is
+    # sparse-rate at scale=240. Measured on synth-30min: coarse ≈1.8× faster than sparse at equal
+    # chat-burst ranking quality; H.264 decode is the floor so density alone cannot reach 2×.
+    chat_motion_sample: str = "dense"
+    # How many clip encodes one Clip Maker job may run at once (Wave B1). 1 = serial (default, safe on 4 vCPU).
+    # Raise on a machine with spare cores after measuring with scripts/job_timings.py; cap 8.
+    render_workers: int = Field(1, ge=1, le=8)
     sentry_dsn: str = ""
 
     # Social publishing (docs/publishing.md). Off by default: routes answer 404 publishing_disabled.
