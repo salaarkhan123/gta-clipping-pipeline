@@ -430,6 +430,8 @@ def render_clip(src: Path, start: float, end: float, out: Path, *, src_w: int, s
             vf += ["-map", "0:a?"]
         if not pieces and level:
             vf += ["-af", level]
+        # Encoder stays libx264 here (CPU default). S5 plug-in: app.pipeline.gpu.video_codec_and_encode
+        # + Settings.video_encoder / nvdec_input_args — only after a measured bench_nvenc.py go decision.
         run(["ffmpeg", "-loglevel", "error", "-y", "-ss", f"{lo:.3f}", "-t", f"{hi - lo:.3f}",
              *SAFE_IN, "-i", src, *vf, *scale,
              "-c:v", "libx264", *(PREVIEW_ENCODE if preview else FULL_ENCODE), "-pix_fmt", "yuv420p",

@@ -161,6 +161,12 @@ class Settings(BaseSettings):
     # Pipeline
     whisper_model: str = "small.en"   # captions. "none" disables transcription and captions
     whisper_index_model: str = "base.en"   # full-video search index: smaller and several times faster
+    # S5 / #99 GPU plug-in points. Defaults keep the CPU path. Do not flip in production without an
+    # owner-OK measured bench (scripts/bench_nvenc.py) and a provisioned GPU worker. Agents never
+    # provision paid GPUs. See docs/ops/gpu-bench-recommendations.md.
+    video_encoder: str = "libx264"    # libx264 (default) | h264_nvenc (bench / future only)
+    whisper_device: str = "cpu"       # cpu (default) | cuda (faster-whisper CUDA stub)
+    nvdec: bool = False               # optional -hwaccel cuda; not wired into render_clip yet
     # Whole-recording transcription. "local" runs the Whisper models above; hosted providers are added with
     # their adapters. TRANSCRIBE_PARALLEL chunks run at once: leave it at 1 on a 4 vCPU server (one model already
     # uses every core) and raise it on a machine with 8 or more (see DEPLOY.md, "Measuring speed").

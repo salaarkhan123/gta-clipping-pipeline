@@ -33,34 +33,40 @@ def in_language(transcriber, language: str | None):
 
 
 class FasterWhisperTranscriber:
-    """Lazy-loaded faster-whisper model, CPU int8. One model per process.
+    """Lazy-loaded faster-whisper model. Default: CPU int8. One model per process.
 
     `language` is the language it transcribes: English unless told otherwise, as it always was. `multilingual` is
-    the name of the model to use for any other language (None: there is none, and every request stays here)."""
+    the name of the model to use for any other language (None: there is none, and every request stays here).
+    `device` is the S5 plug-in point (`cpu` default, or `cuda` on an owner-OK GPU worker)."""
     _lock = threading.Lock()
     _models: dict = {}
     workers = 1      # transcriptions one model runs at once (set before first use; see TRANSCRIBE_PARALLEL)
 
     def __init__(self, model_name: str, beam_size: int = 5, words: bool = True, language: str = "en",
-                 multilingual: str | None = None):
+                 multilingual: str | None = None, device: str = "cpu"):
         self.model_name, self.beam_size, self.words = model_name, beam_size, words
         self.language, self.multilingual = language, multilingual
+        self.device = device or "cpu"
         self._others: dict[str, "FasterWhisperTranscriber"] = {}
 
     def _load(self, name: str | None = None):
         name = name or self.model_name
+        # Key includes device so a future CUDA load does not reuse a CPU model handle.
+        key = (name, self.device)
         with self._lock:
-            if name not in self._models:
+            if key not in self._models:
                 from faster_whisper import WhisperModel
+                from .gpu import whisper_model_kwargs
                 try:
-                    self._models[name] = WhisperModel(name, device="cpu", compute_type="int8",
-                                                      num_workers=max(1, FasterWhisperTranscriber.workers))
+                    kw = whisper_model_kwargs(self.device)
+                    self._models[key] = WhisperModel(name, num_workers=max(1, FasterWhisperTranscriber.workers),
+                                                     **kw)
                 except Exception as e:
                     if name.endswith(".en"):
                         raise                    # the English models: as before
                     raise PipelineError("language_unavailable", "The speech model for this language could not be "
                                         "loaded on this server. Try again later, or use English.") from e
-        return self._models[name]
+        return self._models[key]
 
     def for_language(self, language: str | None) -> "FasterWhisperTranscriber":
         """The transcriber for speech in `language`: this one for its own language (English stays on the model and
@@ -69,14 +75,16 @@ class FasterWhisperTranscriber:
             return self
         if language not in self._others:
             self._others[language] = FasterWhisperTranscriber(self.multilingual, self.beam_size, self.words,
-                                                              language=language, multilingual=self.multilingual)
+                                                              language=language, multilingual=self.multilingual,
+                                                              device=self.device)
         return self._others[language]
 
     def timing_words(self) -> "FasterWhisperTranscriber":
         """The same model, language and settings, timing every word (what a stored whole transcript needs)."""
         if self.words:
             return self
-        out = FasterWhisperTranscriber(self.model_name, self.beam_size, True, self.language, self.multilingual)
+        out = FasterWhisperTranscriber(self.model_name, self.beam_size, True, self.language, self.multilingual,
+                                       device=self.device)
         out._others = {code: t.timing_words() for code, t in self._others.items()}
         return out
 
