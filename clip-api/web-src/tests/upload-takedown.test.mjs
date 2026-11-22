@@ -45,7 +45,7 @@ test("ProjectCard and assets wire delete then refresh the list", () => {
   const library = source("app/dashboard/library/page.tsx");
   assert.match(library, /onDeleted=\{\(id\) => setProjects/);
   const assets = source("app/dashboard/assets/page.tsx");
-  assert.match(assets, /DeleteUploadControl/);
+  assert.match(assets, /<ProjectGrid projects=\{list\}/);     // the shared card carries the delete control
   assert.match(assets, /onDeleted=\{\(id\) => setList/);
 });
 

@@ -54,7 +54,7 @@ const TYPE: Record<VideoType, string> = { video: "Video", short: "Short", live_r
 const STATUS: Record<string, string> = { not_live: "Not live", was_live: "Was live", recording: "Live now, still recording", live: "Live now", upcoming: "Not started" };
 const LIVE = ["live_channel", "live_stream"];
 const when = (iso: string) => { const d = new Date(iso); return Number.isNaN(+d) ? null : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }); };
-const CHIP = "inline-flex min-h-[40px] items-center gap-2 rounded-full border border-solid px-4 font-body text-[14px] font-medium leading-[normal] disabled:opacity-60 narrow:min-h-[36px] narrow:px-3 narrow:text-[13px]";
+const CHIP = "inline-flex h-9 items-center gap-2 rounded-control border-0 px-[14px] font-sans text-[14px] font-medium leading-[normal] transition-colors duration-base disabled:opacity-60 narrow:px-3 narrow:text-[13px]";
 // The template step reuses the job form's pre-edit panel (presets, saved looks, "Add template"), laid out as tall cards.
 const TEMPLATES = "w-full [&_section.preedit]:bg-panel [&_section.preedit]:p-[18px] [&_.looks]:max-h-[640px] [&_.looks]:grid-cols-4 [&_.looks]:gap-x-[14px] [&_.looks]:gap-y-[18px] "
   + "narrow:[&_.looks]:max-h-[520px] narrow:[&_.looks]:grid-cols-2 [&_.look-art]:aspect-[9/16] [&_.look-art]:rounded-12 [&_.look-art]:[background:theme(colors.bg)] [&_.look-art_img]:object-contain "
@@ -287,8 +287,8 @@ export function LinkChooser() {
           const sel = ok && k === kind && t.id !== "templates";
           return <li key={t.id}>{ok
             ? <button type="button" aria-pressed={sel} disabled={busy} onClick={() => { setKind(k!); if (t.id === "templates") document.getElementById("chooser-templates")?.scrollIntoView({ block: "start" }); }}
-                className={`${CHIP} cursor-pointer ${sel ? "border-text bg-text text-bg" : "border-transparent bg-chip text-text hover:bg-chip-hover"}`}><Icon name={t.icon} size={18} />{t.name}</button>
-            : <span className={`${CHIP} cursor-default border-dashed border-line bg-transparent text-dim`} aria-disabled="true"><Icon name={t.icon} size={18} />{t.name}<ComingSoonBadge short /></span>}</li>;
+                className={`${CHIP} cursor-pointer ${sel ? "bg-btn text-btn-ink" : "bg-control text-text hover:bg-control-hover"}`}><Icon name={t.icon} size={18} />{t.name}</button>
+            : <span className={`${CHIP} cursor-default bg-transparent text-fg-3`} aria-disabled="true"><Icon name={t.icon} size={18} />{t.name}<ComingSoonBadge short /></span>}</li>;
         })}
       </ul>);
 
@@ -319,10 +319,10 @@ export function LinkChooser() {
   if (live && preview) return (
     <div className="mx-auto grid w-full max-w-[720px] gap-5">
       <header className="flex items-center gap-2">
-        <Link href="/dashboard/" aria-label="Back to Home" className="grid h-9 w-9 place-items-center rounded-full text-muted hover:bg-chip hover:text-text"><Icon name="back" size={20} /></Link>
+        <Link href="/dashboard/" aria-label="Back to Home" className="grid h-9 w-9 place-items-center rounded-control text-fg-2 transition-colors duration-base hover:bg-control hover:text-text"><Icon name="back" size={20} /></Link>
         <h1 className="m-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[20px] font-semibold">{preview.title || preview.channel || hostOf(url)}</h1>
       </header>
-      <section className="grid gap-4 rounded-[24px] border border-solid border-line-soft bg-card p-6">
+      <section className="grid gap-4 rounded-card bg-card p-6">
         {preview.thumbnail_url && <img src={preview.thumbnail_url} alt="" className="aspect-video w-full rounded-16 object-cover" />}
         <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-[14px]">{facts.map(([k, v]) => <div key={k} className="contents"><dt className="text-muted">{k}</dt><dd className="m-0">{v}</dd></div>)}</dl>
         <p className="m-0 text-[14px] text-label">{refusalText(preview.refusal) || "This channel is live right now. A live stream can't be imported until its broadcast is saved."}</p>
@@ -358,9 +358,9 @@ export function LinkChooser() {
 
       {toolChips}
 
-      <p className="inline-flex max-w-[min(100%,420px)] items-center gap-2 rounded-full bg-chip px-4 py-[9px] text-[14px] text-muted" title={url}>
+      <p className="inline-flex max-w-[min(100%,420px)] items-center gap-2 rounded-control bg-control px-4 py-[9px] text-[14px] text-fg-2" title={url}>
         <Icon name="link" size={16} /><span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{url}</span></p>
-      <article className="grid w-[min(100%,400px)] gap-[6px] rounded-16 border border-solid border-line bg-panel p-[10px]" aria-label="The video">
+      <article className="grid w-[min(100%,400px)] gap-[6px] rounded-16 bg-card p-[10px]" aria-label="The video">
         {preview === undefined ? <p className="px-1 py-6 text-center text-muted">Looking at the link…</p> : <>
           <span className="relative block aspect-video overflow-hidden rounded-12 bg-black">
             {preview?.thumbnail_url ? <img src={preview.thumbnail_url} alt="" className="h-full w-full object-cover" />
@@ -368,7 +368,7 @@ export function LinkChooser() {
                   <Icon name={preview?.platform === "kick" || preview?.platform === "twitch" ? "live" : "film"} size={30} className="text-lime" />
                   <b className="font-display text-[15px] text-text">{PLATFORM[preview?.platform || ""] || hostOf(url)}</b>
                   <small className="text-[12px] text-muted">{preview ? "No picture for this link" : "Details show once it is in"}</small></span>}
-            {duration && <span className="absolute bottom-2 right-2 rounded-full bg-[rgba(7,8,10,.85)] px-2 py-[2px] font-body text-[12px] font-semibold tabular-nums">{clock(duration)}</span>}
+            {duration && <span className="absolute bottom-2 right-2 rounded-[6px] bg-black/70 px-[6px] py-[2px] font-sans text-[12px] font-medium tabular-nums">{clock(duration)}</span>}
           </span>
           <strong className="overflow-hidden text-ellipsis whitespace-nowrap px-1 font-body text-[15px] font-semibold leading-[1.3]">{preview?.title || hostOf(url)}</strong>
           <span className="px-1 pb-[2px] text-[13px] text-muted">{[KIND[preview?.kind || ""], PLATFORM[preview?.platform || ""] || preview?.platform, preview?.channel]
@@ -418,7 +418,7 @@ export function LinkChooser() {
           picked={picked} onPick={pick} templates={templates} saved={saved} onSavedChange={() => loadCustom().then(setSaved).catch(fail)} />
       </section>}
 
-      {!refused && <div className="sticky bottom-0 z-20 grid w-[min(100%,720px)] gap-[10px] rounded-t-16 border border-b-0 border-solid border-line bg-[rgba(13,15,18,.96)] px-[18px] pb-4 pt-[14px]
+      {!refused && <div className="sticky bottom-0 z-20 grid w-[min(100%,720px)] gap-[10px] rounded-t-16 bg-card px-[18px] shadow-pop pb-4 pt-[14px]
         shadow-[0_-20px_40px_rgba(0,0,0,.45)] [backdrop-filter:blur(10px)] narrow:bottom-[calc(var(--app-bottom-bar,theme(spacing.tabbar))+env(safe-area-inset-bottom))] narrow:px-[14px] narrow:py-3">
         {confirm ? <>
           <p className="muted">The video is in: {clock(confirm.upload.duration_sec)} long. {perMinute(kind)

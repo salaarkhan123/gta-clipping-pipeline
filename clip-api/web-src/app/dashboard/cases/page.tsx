@@ -2,6 +2,7 @@
 // Reports about my content: GET /v1/trust/my-cases. `?ref=` opens one case, with the counter-notice form when the
 // API says one may be sent (`can_counter_notice`). The claimant's contact details are never in this response.
 import Link from "next/link";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { ImportTakedown } from "@/components/dash/ImportTakedown";
@@ -39,14 +40,14 @@ function Cases() {
             focusSoon("case-sent");
           }} />
           : <section className="panel"><p role="alert">No case {ref} on your account.</p><div><Link className={LINK} href="/dashboard/cases/">See all reports</Link></div></section>)
-        : !cases.length ? <section className="panel"><p>No reports about your content. Nothing to do.</p></section>
+        : !cases.length ? <EmptyState icon="check" title="No reports about your content">Nothing to do.</EmptyState>
         : <ul className="grid list-none gap-3" aria-label="Reports">
             {cases.map((c) => (
-              <li key={c.reference} className="grid gap-2 rounded-12 border border-solid border-line bg-card p-4">
+              <li key={c.reference} className="grid gap-2 rounded-16 bg-card p-4">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <Link className="font-display text-[16px] font-semibold text-lime underline" href={`/dashboard/cases/?ref=${c.reference}`}>{c.reference}</Link>
                   <span className="text-[14px] text-muted">{KIND_LABEL[c.kind] || c.kind}</span>
-                  <span className="ml-auto rounded-full bg-chip px-[10px] py-[2px] text-[13px]">{STATUS_LABEL[c.status] || c.status}</span>
+                  <span className="ml-auto rounded-[6px] bg-control px-[8px] py-[3px] text-[12px]">{STATUS_LABEL[c.status] || c.status}</span>
                 </div>
                 <p className="text-[14px]"><span className="text-muted">Reported by</span> {c.reported_by} · <span className="text-muted">{when(c.created_at)}</span></p>
                 <p className="line-clamp-2 text-[14px] text-soft [overflow-wrap:anywhere]">{c.work}</p>
@@ -67,7 +68,7 @@ function CaseDetail({ c, sent, onSent }: { c: MyCase; sent: string; onSent: (c: 
       <section className="panel" aria-labelledby="case-title">
         <div className="flex flex-wrap items-center gap-3">
           <h2 id="case-title" className="!m-0 font-display text-[22px]">{c.reference}</h2>
-          <span className="rounded-full bg-chip px-[10px] py-[2px] text-[13px]">{STATUS_LABEL[c.status] || c.status}</span>
+          <span className="rounded-[6px] bg-control px-[8px] py-[3px] text-[12px]">{STATUS_LABEL[c.status] || c.status}</span>
         </div>
         <dl className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-x-4 gap-y-2 text-[14px] narrow:grid-cols-1 [&_dd]:[overflow-wrap:anywhere] [&_dt]:text-muted narrow:[&_dd]:mb-2">
           <dt>Kind</dt><dd>{KIND_LABEL[c.kind] || c.kind}</dd>

@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useDash } from "@/components/dash/Shell";
-import { PAGE_HEAD, PAGE_TITLE } from "@/components/dash/ui";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import {
   formatWhen, loadPlatforms, loadPosts, localZone, Post, STATUS_LABEL, PostStatus,
 } from "@/lib/publish";
@@ -63,20 +64,14 @@ export default function CalendarPage() {
 
   return (
     <div className="grid gap-6">
-      <div className={PAGE_HEAD}>
-        <div className="grid gap-1">
-          <h1 className={PAGE_TITLE}>Calendar</h1>
-          <p className="m-0 max-w-[56ch] text-[14px] text-muted">
-            Scheduled and published posts in {zone}. Status is live from the job queue — never a fake success.
-          </p>
-        </div>
+      <PageHeader title="Calendar" hint={`Scheduled and published posts in ${zone}. Status is live from the job queue, never a fake success.`}>
         <Link href="/dashboard/social-accounts/" className="btn small ghost">Social accounts</Link>
-      </div>
+      </PageHeader>
 
       {enabled === false && (
-        <p className="m-0 rounded-20 border border-solid border-line-soft bg-card p-5 text-[14px] text-muted">
+        <EmptyState icon="calendar" title="No posts yet">
           {reason || "Publishing is not enabled yet."} When it is on, scheduled and published clips appear here.
-        </p>
+        </EmptyState>
       )}
 
       {enabled && (
@@ -91,10 +86,10 @@ export default function CalendarPage() {
             ))}
           </div>
           {note && <p className="m-0 text-[13px] text-cyan" role="status">{note}</p>}
-          {!shown.length && <p className="m-0 text-[14px] text-muted">No posts in this view.</p>}
+          {!shown.length && <EmptyState icon="calendar" title="No posts in this view" />}
           <ul className="m-0 grid list-none gap-2 p-0">
             {shown.map((p) => (
-              <li key={p.id} className="grid gap-2 rounded-20 border border-solid border-line-soft bg-card p-4">
+              <li key={p.id} className="grid gap-2 rounded-16 bg-card p-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="text-[15px] font-medium">{p.platform} · {STATUS_LABEL[p.status]}</span>
                   <span className="text-[12.5px] tabular-nums text-muted">

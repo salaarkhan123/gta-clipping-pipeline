@@ -1,0 +1,123 @@
+/* ClutchClips design tokens: the one place a colour, size, radius, space or timing is defined.
+   tailwind.config.ts maps its theme names onto these variables, so `bg-card`, `text-fg-2`, `rounded-card` and the
+   classes in app/styles.css and app/dashboard/app.css all read them. /design renders every one.
+   Two themes share the names: the public site (near-black canvas, pill controls) and the signed-in app
+   (`data-theme="app"`: charcoal canvas, one step lighter per layer, rounded-rectangle controls). */
+:root {
+  /* Surfaces, darkest first. */
+  --canvas: #000000;
+  --canvas-2: #0a0a0b;
+  --panel: #0f0f10;
+  --card: #141416;
+  --surface: #19191b;
+  --control: #1c1c1f;
+  --control-hover: #2a2a2e;
+  --raised: #262629;
+  --nav-on: var(--control);
+  /* Hairlines: white at low opacity, so they read the same on every surface. */
+  --line-soft: rgba(255, 255, 255, .06);
+  --line: rgba(255, 255, 255, .1);
+  --line-strong: rgba(255, 255, 255, .18);
+  /* Text. */
+  --fg: #ffffff;
+  --text: #fafafa;
+  --fg-2: rgba(255, 255, 255, .56);
+  --fg-3: rgba(255, 255, 255, .36);
+  /* The one accent (scores, focus, "on" states). Never a large surface. */
+  --accent: #b8ff3c;
+  --accent-ink: #0a0d05;
+  --accent-wash: rgba(184, 255, 60, .12);
+  --danger: #ff5c7a;
+  --warn: #ffb648;
+  /* Primary action: white, black text. */
+  --btn: #fafafa;
+  --btn-hover: #e5e5e5;
+  --btn-ink: #000000;
+  /* Secondary action. */
+  --btn-2: transparent;
+  --btn-2-hover: rgba(255, 255, 255, .06);
+  --btn-2-line: var(--line-strong);
+
+  /* Typeface: Geist on the public site, Inter in the app (both SIL Open Font License, self-hosted). */
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --weight-title: 600;
+  --weight-strong: 600;
+
+  /* Radius. */
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-card: 20px;
+  --radius-stage: 24px;
+  --radius-pill: 1000px;
+  --radius-control: var(--radius-pill);
+
+  /* Type scale (Geist). */
+  --text-display: clamp(30px, 2.2vw + 14px, 48px);
+  --text-h2: clamp(26px, 2.4vw + 8px, 40px);
+  --text-h3: 20px;
+  --text-title: 16px;
+  --text-lead: clamp(15px, .5vw + 11px, 18px);
+  --text-body: 14px;
+  --text-small: 13px;
+  --text-caption: 12px;
+  --text-label: 11px;
+
+  /* Spacing: a 4 px grid. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 72px;
+  --space-9: 112px;
+
+  /* Motion: hover and selection are fast, layout moves are slow. One easing out, one for loops. */
+  --dur-fast: 120ms;
+  --dur: 200ms;
+  --dur-slow: 480ms;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+}
+
+/* The signed-in app. */
+[data-theme="app"] {
+  --canvas: #1a1a1a;
+  --canvas-2: #1a1a1a;
+  --panel: #202020;
+  --card: #262626;
+  --surface: #262626;
+  --control: #303030;
+  --control-hover: #3a3a3a;
+  --raised: #3d3d3d;
+  /* The open page's row in the sidebar: measured #212123 on the #1a1a1a sidebar. */
+  --nav-on: #232325;
+  --line-soft: rgba(255, 255, 255, .05);
+  --line: rgba(255, 255, 255, .09);
+  --line-strong: rgba(255, 255, 255, .16);
+  --btn-2: #303030;
+  --btn-2-hover: #3a3a3a;
+  --btn-2-line: transparent;
+  --radius-control: 10px;
+  --radius-card: 20px;
+  --font-sans: "Inter Variable", var(--font-geist-sans), system-ui, sans-serif;
+  --weight-strong: 500;
+  --weight-bold: 600;
+  --fg: #fafafa;
+  /* App measurements, taken from the reference screens at 2x and halved. */
+  --side-open: 224px;
+  --side-shut: 60px;
+  --topbar: 72px;
+  --text-page-title: 24px;
+  background: var(--canvas);
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur: 0ms; --dur-slow: 0ms; }
+}
+
+/* The page behind the app is the app's canvas too (overscroll, short pages). */
+html:has([data-theme="app"]) body { background: #1a1a1a; }

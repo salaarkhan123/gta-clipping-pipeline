@@ -3,19 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useDash } from "@/components/dash/Shell";
-import { PAGE_HEAD, PAGE_TITLE } from "@/components/dash/ui";
+import { StatCard } from "@/components/ui/Card";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { api } from "@/lib/api";
 import { DayUsage, Ledger, LEDGER_PAGE, totals, usageSeries } from "@/lib/credits";
-
-function Stat({ label, value, hint, tone = "text-text" }: { label: string; value: string; hint?: string; tone?: string }) {
-  return (
-    <div className="grid content-start gap-1 rounded-20 border border-solid border-line-soft bg-card p-5">
-      <span className="text-[13px] font-medium text-muted">{label}</span>
-      <span className={`font-sans text-[28px] font-semibold leading-[1.1] tracking-[-0.02em] tabular-nums ${tone}`}>{value}</span>
-      {hint && <span className="text-[12.5px] text-fg-3">{hint}</span>}
-    </div>
-  );
-}
 
 function Bars({ series }: { series: DayUsage[] }) {
   const peak = Math.max(1, ...series.flatMap((d) => [d.added, d.used]));
@@ -35,10 +26,10 @@ function Bars({ series }: { series: DayUsage[] }) {
               </span>
             </div>
             <div className="grid gap-1">
-              <div className="h-2 overflow-hidden rounded-pill bg-surface" title={`${d.added} credits added`}>
+              <div className="h-2 overflow-hidden rounded-pill bg-control" title={`${d.added} credits added`}>
                 <div className="h-full rounded-pill bg-lime" style={{ width: `${(d.added / peak) * 100}%` }} />
               </div>
-              <div className="h-2 overflow-hidden rounded-pill bg-surface" title={`${d.used} credits used`}>
+              <div className="h-2 overflow-hidden rounded-pill bg-control" title={`${d.used} credits used`}>
                 <div className="h-full rounded-pill bg-cyan" style={{ width: `${(d.used / peak) * 100}%` }} />
               </div>
             </div>
@@ -59,25 +50,17 @@ export default function Analytics() {
 
   return (
     <div className="grid gap-6">
-      <div className={PAGE_HEAD}>
-        <div className="grid gap-1">
-          <h1 className={PAGE_TITLE}>Account usage</h1>
-          <p className="m-0 max-w-[52ch] text-[14px] text-muted">
-            Credits spent and refunded from your ledger. This is not views, virality, or how clips performed after you publish them.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/dashboard/credits/" className="btn small ghost">Credit history</Link>
-          <Link href="/dashboard/pricing/" className="btn small primary">Add credits</Link>
-        </div>
-      </div>
+      <PageHeader title="Analytics" hint="Credits spent and refunded from your ledger. This is not views, virality, or how clips performed after you publish them.">
+        <Link href="/dashboard/credits/" className="btn small ghost">Credit history</Link>
+        <Link href="/dashboard/pricing/" className="btn small primary">Add credits</Link>
+      </PageHeader>
       <section aria-label="Summary" className="grid grid-cols-3 gap-3 narrow:grid-cols-1">
-        <Stat label="Balance" value={(ledger?.balance ?? me.credits).toLocaleString()} tone="text-lime" />
-        <Stat label="Used by jobs" value={ledger ? sum.used.toLocaleString() : "…"} hint={ledger ? "Net of refunds in recent history" : undefined} />
-        <Stat label="Added" value={ledger ? sum.added.toLocaleString() : "…"} hint={ledger ? "Grants, purchases and positive adjustments" : undefined} />
+        <StatCard label="Balance" value={(ledger?.balance ?? me.credits).toLocaleString()} tone="text-lime" />
+        <StatCard label="Used by jobs" value={ledger ? sum.used.toLocaleString() : "…"} hint={ledger ? "Net of refunds in recent history" : undefined} />
+        <StatCard label="Added" value={ledger ? sum.added.toLocaleString() : "…"} hint={ledger ? "Grants, purchases and positive adjustments" : undefined} />
       </section>
-      <section className="grid gap-3 rounded-20 border border-solid border-line-soft bg-card p-5" aria-labelledby="usage-chart-title">
-        <h2 id="usage-chart-title" className="m-0 text-[18px]">Credits by day</h2>
+      <section className="grid gap-4 rounded-card bg-card p-6 narrow:p-5" aria-labelledby="usage-chart-title">
+        <h2 id="usage-chart-title" className="m-0 text-[16px] font-semibold">Credits by day</h2>
         {!ledger ? <p className="m-0 text-muted">Loading…</p>
           : !series.length ? <p className="m-0 text-muted">No credit activity yet.</p>
           : <Bars series={series} />}

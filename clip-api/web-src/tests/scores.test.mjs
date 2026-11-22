@@ -28,7 +28,9 @@ test("the labels cover the scores app/ai.py names", (t) => {
 });
 
 test("score views use the shared map", () => {
-  for (const f of ["../components/dash/ClipCard.tsx", "../components/clips/model.ts"]) {
+  // The dashboard card draws the one shared score mark, so it holds no labels of its own.
+  assert.match(readFileSync(here("../components/dash/ClipCard.tsx"), "utf8"), /export const ScoreBadge = \(\{ clip \}: \{ clip: any \}\) => <RatingBadge clip=\{clip\} size="sm" \/>;/);
+  for (const f of ["../components/clips/model.ts"]) {
     const p = here(f); if (!existsSync(p)) continue;
     const src = readFileSync(p, "utf8");
     assert.match(src, /lib\/scores/, `${f} should import lib/scores`);

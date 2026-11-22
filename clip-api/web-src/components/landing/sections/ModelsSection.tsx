@@ -1,6 +1,6 @@
 "use client";
 import { useRef } from "react";
-import { ScoreOverlay } from "@/components/clips/ScoreOverlay";
+import { Score as ScoreOverlay } from "@/components/ui/Score";
 import { aiRated, Credits, Footage, Item, useItem, useItems, useSignals } from "../demos/Footage";
 import { useInView } from "../demos/motion";
 import { BeforeFrame } from "../demos/Reframe";

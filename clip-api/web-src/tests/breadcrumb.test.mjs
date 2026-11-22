@@ -35,16 +35,17 @@ test("project page trail is Home then the project name", () => {
 
 test("library and templates trail Home then the current page", () => {
   const library = source("app/dashboard/library/page.tsx");
-  assert.match(library, /<BackTitle title="Library" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Library" \}\]\} \/>/);
+  assert.match(library, /<h1 [^>]*>My projects<\/h1>/);     // a sidebar page: its own title, no trail
   const templates = source("app/dashboard/templates/page.tsx");
   assert.match(templates, /<BackTitle title="Game templates" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Game templates" \}\]\} \/>/);
 });
 
 test("remaining dashboard PAGE_TITLE pages trail Home then the current page", () => {
   const brand = source("app/dashboard/brand-kit/page.tsx");
-  assert.match(brand, /<BackTitle title="Brand kit" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Brand kit" \}\]\} \/>/);
+  // Brand kit is a top-level page of the sidebar: its header is the shared PageHeader, without a trail.
+  assert.match(brand, /<h1 [^>]*>Brand kit<\/h1>/);
   const assets = source("app/dashboard/assets/page.tsx");
-  assert.match(assets, /<BackTitle title="Asset library" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Asset library" \}\]\} \/>/);
+  assert.match(assets, /<h1 [^>]*>Asset library<\/h1>/);     // a sidebar page: its own title, no trail
   const billing = source("app/dashboard/billing/page.tsx");
   assert.match(billing, /<BackTitle title="Billing and credits" crumbs=\{\[\{ label: "Home", href: "\/dashboard\/" \}, \{ label: "Billing and credits" \}\]\} \/>/);
   const credits = source("app/dashboard/credits/page.tsx");

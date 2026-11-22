@@ -11,21 +11,21 @@ import { isBuilt, toolHref, TOOLS } from "@/lib/tools";
 import { Icon, IconName } from "../Icon";
 import { useDismiss } from "./useDismiss";
 
-const ITEM = "flex min-h-[38px] w-full cursor-pointer items-center gap-[10px] rounded-8 border-0 bg-transparent px-[10px] py-[6px] text-left font-sans text-[14px] font-medium leading-[normal] text-text no-underline hover:bg-chip-hover";
-const OFF = "flex min-h-[38px] w-full cursor-default items-center gap-[10px] rounded-8 px-[10px] py-[6px] font-sans text-[14px] font-medium leading-[normal] text-fg-2";
+const ITEM = "flex min-h-[38px] w-full cursor-pointer items-center gap-[10px] rounded-8 border-0 bg-transparent px-[10px] py-[6px] text-left font-sans text-[14px] font-normal leading-[normal] text-text no-underline hover:bg-control-hover";
+const OFF = "flex min-h-[38px] w-full cursor-default items-center gap-[10px] rounded-8 px-[10px] py-[6px] font-sans text-[14px] font-normal leading-[normal] text-fg-2";
 // Other ClutchClips products, from the tools list: a link once built, Coming soon until then.
 const PRODUCTS = ["thumbnail", "live"];
 
 export function Avatar({ email, size = 32 }: { email: string; size?: number }) {
   return (
     <span aria-hidden="true" style={{ width: size, height: size, fontSize: size * 0.44 }}
-      className="grid flex-none place-items-center rounded-full bg-[linear-gradient(135deg,theme(colors.lime),theme(colors.cyan))] font-sans font-bold leading-none text-ink">
+      className="grid flex-none place-items-center rounded-full bg-lime font-sans font-semibold leading-none text-ink">
       {(email[0] || "?").toUpperCase()}</span>
   );
 }
 
 export const PlanBadge = ({ name }: { name: string }) => (
-  <span className="inline-flex flex-none items-center rounded-[6px] bg-raised px-[6px] py-[2px] font-sans text-[11.5px] font-medium leading-[1.3] text-label">{name}</span>
+  <span className="inline-flex flex-none items-center rounded-[6px] bg-control-hover px-[6px] py-[2px] font-sans text-[11.5px] font-medium leading-[1.3] text-text">{name}</span>
 );
 
 const Row = ({ href, icon, children }: { href: string; icon: IconName; children: React.ReactNode }) => (
@@ -43,17 +43,17 @@ export function AccountMenu({ me, onLogout, compact }: { me: any; onLogout: () =
   return (
     <div ref={box} className="relative">
       <button ref={btn} type="button" aria-expanded={open} aria-label={`Account: ${name}, ${plan} plan`} onClick={() => setOpen(!open)}
-        className={`flex w-full cursor-pointer items-center rounded-12 border border-solid border-line-soft bg-card font-sans text-text hover:bg-chip aria-expanded:bg-chip
-          ${compact ? "flex-col gap-1 px-1 py-2" : "gap-[10px] px-[10px] py-[9px] text-left"}`}>
-        <Avatar email={me.email} size={compact ? 30 : 34} />
-        {!compact && <span className="grid min-w-0 flex-1 gap-[3px]">
-          <span className="overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-semibold leading-[1.2]" title={me.email}>{name}</span>
+        className={`flex w-full cursor-pointer items-center rounded-control font-sans text-text transition-colors duration-base hover:bg-control aria-expanded:bg-control
+          ${compact ? "h-16 flex-col justify-center gap-[6px] border border-solid border-line bg-transparent px-0" : "h-[62px] gap-[10px] border-0 bg-card px-3 text-left"}`}>
+        <Avatar email={me.email} size={compact ? 24 : 36} />
+        {!compact && <span className="grid min-w-0 flex-1 gap-[5px]">
+          <span className="overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-medium leading-[1.2]" title={me.email}>{name}</span>
           <span className="flex"><PlanBadge name={plan} /></span>
         </span>}
         <Icon name="chevron" size={compact ? 14 : 16} className="text-muted" />
       </button>
       {open && <div aria-label="Account menu" onClick={(e) => { if ((e.target as HTMLElement).closest("a")) close(); }}
-        className="absolute left-0 top-[calc(100%+8px)] z-[70] grid w-[268px] max-w-[calc(100vw-24px)] gap-[2px] rounded-16 border border-solid border-line bg-card-2 p-2 shadow-pop">
+        className="absolute left-0 top-[calc(100%+8px)] z-[70] grid w-[268px] max-w-[calc(100vw-24px)] gap-[2px] rounded-[14px] border-0 bg-control p-2 shadow-pop">
         <p className="m-0 px-[10px] pb-1 pt-[6px] text-[12px] font-medium text-muted">Account</p>
         <div className="mb-1 flex items-center gap-[10px] border-0 border-b border-solid border-line px-[10px] pb-[10px] pt-1">
           <Avatar email={me.email} size={30} />

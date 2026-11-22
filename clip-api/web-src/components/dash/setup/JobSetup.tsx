@@ -20,7 +20,9 @@ import { useDash } from "../Shell";
 import { LayoutPicker } from "./Layout";
 import { CARD, InlineSelect, LABEL, SettingRow, Switch } from "./parts";
 import { RangeStrip } from "./Range";
-import { CaptionStyles, HookTones } from "./Styles";
+import { hookCatalogueOf, hookToneLabel } from "@/lib/hookStyles";
+import { CaptionRow, HookRow, type StyleLook } from "../brand/Pickers";
+import { captionName } from "./Styles";
 
 export type SetupSource = { title: string; duration: number | null; height?: number | null; thumb?: string | null; video?: string | null;
   badge?: string | null; detail?: string | null;
@@ -121,16 +123,17 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
   const create = <button type="button" className={`btn w-full ${afterProblem ? "ghost" : "primary"}`} disabled={!ready} onClick={() => onCreate(options)}>
     {step ? "Working…" : afterProblem ? "Try the link again" : "Create"}</button>;
 
+  // The Brand kit pickers, for this one job: the look lives in `look`, the hook tone in the form.
+  const styleLook: StyleLook = { ...look, hook_style: f.hook_style };
+  const setStyle = ({ hook_style, ...rest }: Partial<StyleLook>) => { if (hook_style !== undefined) set({ hook_style }); if (Object.keys(rest).length) onLook(rest); };
+  const captionFacts = [captionName(look.caption_style), look.caption_style === "impact" && look.caption_position !== "auto" ? tidy(look.caption_position) : null,
+    look.caption_emoji ? "emojis" : null, look.censor ? "swears censored" : null].filter(Boolean).join(" · ");
   return (
     <div className="wide mx-auto grid w-full max-w-[1320px] grid-cols-[minmax(0,1fr)] gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <button type="button" onClick={onRemove} aria-label="Back" className="grid h-9 w-9 flex-none cursor-pointer place-items-center rounded-full border-0 bg-transparent text-muted hover:bg-chip hover:text-text"><Icon name="back" size={20} /></button>
           <h1 title={source.title} className="m-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[20px] font-semibold tracking-[-0.01em]">{source.title}</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 px-2 text-[15px] tabular-nums" title="Your credits"><Icon name="bolt" size={17} className="text-lime" />{me.credits.toLocaleString()}<span className="sr-only"> credits</span></span>
-          <Link href="/dashboard/pricing/" className="btn small ghost">Add credits</Link>
         </div>
       </header>
       {header}
@@ -225,17 +228,12 @@ export function JobSetup({ source, listed, template, preset, price, onOptions, o
                 <Switch on={f.transcribe_whole} label="Whole-recording transcript" onChange={(v) => set({ transcribe_whole: v })} /></SettingRow>}
 
               <h3 className={`m-0 pt-5 ${LABEL}`}>Essentials</h3>
-              {has("captions") ? <SettingRow icon="captions" name="Captions" hint="Word-by-word captions burned into each clip." under={look.captions && <div className="grid gap-3">
-                  {has("caption_style") && <CaptionStyles styles={listed.caption_style.values || [look.caption_style]} value={look.caption_style} onChange={(s) => onLook({ caption_style: s })} />}
-                  <div className="flex flex-wrap items-center gap-1">
-                    {has("caption_position") && <InlineSelect label="Position" value={look.caption_position} shown={tidy(look.caption_position === "auto" ? "Automatic" : look.caption_position)}
-                      onChange={(v) => onLook({ caption_position: v })}>{(listed.caption_position.values || []).map((p: string) => <option key={p} value={p}>{p === "auto" ? "Automatic" : p === "seam" ? "Between the panels" : tidy(p)}</option>)}</InlineSelect>}
-                    {has("censor") && <label className="m-0 inline-flex min-h-[36px] cursor-pointer items-center gap-2 px-3 text-[14px] font-normal text-label"><input type="checkbox" checked={look.censor} onChange={(e) => onLook({ censor: e.target.checked })} />Bleep swears</label>}
-                  </div>
-                </div>}><Switch on={look.captions} label="Captions" onChange={(v) => onLook({ captions: v, ...(v ? {} : { caption_emoji: false }) })} /></SettingRow>
+              {has("captions") ? <SettingRow icon="captions" name="Captions" hint="Word-by-word captions burned into each clip." under={look.captions && has("caption_style") &&
+                  <CaptionRow kit={styleLook} listed={listed} set={setStyle} title="Caption style" hint={captionFacts} />}>
+                  <Switch on={look.captions} label="Captions" onChange={(v) => onLook({ captions: v, ...(v ? {} : { caption_emoji: false }) })} /></SettingRow>
                 : <SettingRow icon="captions" name="Captions" soon />}
               {has("hook_overlay") ? <SettingRow icon="hook" name="Auto hook" hint="A short opening line on screen for the first seconds." under={look.hook_overlay && has("hook_style") &&
-                  <HookTones tones={listed.hook_style.values || []} catalogue={listed.hook_style.catalogue} value={f.hook_style} onChange={(s) => set({ hook_style: s })} />}>
+                  <HookRow kit={styleLook} listed={listed} set={setStyle} title="Hook tone" hint={hookToneLabel(f.hook_style, hookCatalogueOf(listed.hook_style.catalogue))} />}>
                   <Switch on={look.hook_overlay} label="Auto hook" onChange={(v) => onLook({ hook_overlay: v })} /></SettingRow>
                 : <SettingRow icon="hook" name="Auto hook" soon />}
               {has("flash_forward") && <SettingRow icon="rewind" name="Open on the peak" hint="Starts with a flash of the best moment, then plays from the start.">

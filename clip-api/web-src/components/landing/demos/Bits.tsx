@@ -1,11 +1,11 @@
 // Small pieces the demos and sections share.
-import { ScoreOverlay } from "@/components/clips/ScoreOverlay";
+import { Score } from "@/components/ui/Score";
 
-// Landing alias for the shared on-picture chip. Prefer ScoreOverlay directly in new code.
+// Landing alias for the shared score mark (components/ui/Score).
 export function AiRating({ value, className = "", kind = "ai" as const }: {
   value: number; className?: string; kind?: "ai" | "sample";
 }) {
-  return <ScoreOverlay value={value} kind={kind} className={className} />;
+  return <Score value={value} kind={kind} size="sm" className={className} />;
 }
 
 // A label under a frame: "Before", a layout's name.

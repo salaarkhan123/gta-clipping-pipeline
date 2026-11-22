@@ -9,12 +9,15 @@ const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "u
 
 test("sidebar: every built page is a link, every planned one is Coming soon and never a link", () => {
   const nav = source("components/dash/shell/nav.ts");
-  for (const [label, href] of [["Home", "/dashboard/"], ["Projects", "/dashboard/library/"], ["Brand kit", "/dashboard/brand-kit/"],
-    ["Asset library", "/dashboard/assets/"], ["Templates", "/dashboard/templates/"], ["Analytics", "/dashboard/analytics/"],
+  for (const [label, href] of [["Home", "/dashboard/"], ["My projects", "/dashboard/library/"], ["Brand kit", "/dashboard/brand-kit/"],
+    ["Asset library", "/dashboard/assets/"], ["Analytics", "/dashboard/analytics/"],
     ["Calendar", "/dashboard/calendar/"], ["Social accounts", "/dashboard/social-accounts/"],
     ["API access", "/dashboard/keys/"]]) {
     assert.match(nav, new RegExp(`label: "${label}", icon: "[a-zA-Z]+", href: "${href.replace(/\//g, "\\/")}"`), label);
   }
+  // The template gallery is not in the sidebar (templates are picked in job setup); its page stays.
+  assert.doesNotMatch(nav, /label: "Templates"/);
+  assert.match(source("app/dashboard/templates/page.tsx"), /Game templates/);
   for (const label of ["Labs", "Learning centre"]) {
     assert.match(nav, new RegExp(`\\{ label: "${label}", icon: "[a-zA-Z]+" \\}`), label);
   }
@@ -69,7 +72,7 @@ test("brand kit: planned parts are Coming soon and send nothing; saving sends on
   const form = source("components/dash/brand/Sections.tsx");
   for (const part of ["Logos", "Music"]) assert.match(form, new RegExp(`${part} <span[^>]*>[^<]*</span><ComingSoonBadge />`), part);
   assert.match(form, /A short opener and end card for each shape\.<ComingSoonBadge \/>/);
-  assert.match(form, /title="Additional assets"/);
+  assert.match(form, /title="Media"/);
   const kit = source("lib/brandkit.ts");
   // Nothing priced is ever in a kit: the options come from the look keys plus the hook tone.
   assert.match(kit, /const out = lookOptions\(kit, listed\);\n\s+if \("hook_style" in listed\) out\.hook_style = kit\.hook_style;/);
@@ -134,7 +137,7 @@ test("credit usage and assets: numbers only from the API", () => {
   const assets = source("app/dashboard/assets/page.tsx");
   assert.match(assets, /api<\{ projects: Video\[\] \}>\(`\/v1\/projects\?limit=\$\{PAGE\}&offset=\$\{from\}`\)/);
   // Storage, own censor list, vocabulary, fonts, images and audio are planned.
-  assert.equal((assets.match(/<ComingSoonBadge/g) || []).length + (assets.match(/<SoonAdd /g) || []).length >= 6, true);
+  assert.equal((assets.match(/<ComingSoonBadge/g) || []).length + (assets.match(/<SoonAdd /g) || []).length >= 5, true);     // own list, vocabulary, images, audio
 });
 
 test("analytics page: ledger charts only, honest copy, no publish metrics", () => {
