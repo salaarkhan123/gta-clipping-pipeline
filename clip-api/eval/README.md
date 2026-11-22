@@ -9,6 +9,14 @@ selection PR (understanding track U1 to U5) reports precision@20, precision@40 a
 | `labeller.html` | the local page for rating moments (open it in Chrome) |
 | `runs/` | saved runs (moments, best first) that the sheet was filled from, and baselines to compare with |
 | `benchmark-2h-labels.csv`, `wayin-zias-iceman.csv` | eval set v1 (below); still scored the same |
+| `gi-gta-label-sheet.csv` | AS-1 / GI entertainment sheet (30 GTA rows). **0 human ratings** until the owner labels. Not ground truth for Clutch scores. |
+| `score_weights_equal.example.json` | Equal-share `SCORE_WEIGHTS` shape (ranks = plain mean). Do not raise fitted weights without labels. |
+
+Gaming sheet readiness (no NDCG claim while empty):
+
+```bash
+python scripts/gaming_rating_eval.py sheet-stats
+```
 
 ## The three videos
 

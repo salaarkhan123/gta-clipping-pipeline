@@ -38,6 +38,13 @@ def test_the_prompt_asks_for_whole_sentences_and_story_cuts_up_to_60_s():
     assert "30 to 90 second" in system_for((30, 90)) and "15 to 60" not in system_for((30, 90))
 
 
+def test_the_prompt_rates_gaming_highlight_quality_not_view_probability():
+    assert "never a forecast of views" in SYSTEM
+    assert "chance of going viral" in SYSTEM
+    assert "clutch and fail" in SYSTEM and "streamer reaction" in SYSTEM
+    assert "editorial opinion of highlight quality" in SYSTEM
+
+
 def test_a_60_s_cut_is_taken_and_a_longer_one_is_not():
     c = P._Candidate(start=100.0, end=130.0, base=1.0, signals={}, features={}, offset=85.0)
     P._apply_trim(c, {"start": 12.0, "end": 73.0, "peak": 20.0}, 1000.0)          # 61 s

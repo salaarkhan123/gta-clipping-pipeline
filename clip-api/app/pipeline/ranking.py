@@ -9,7 +9,10 @@ Weights are data, not opinion: the table is empty (every game ranks by the plain
 `scripts/fit_score_weights.py` fits it on the owner's labels (tuning videos only) and the result is put in
 SCORE_WEIGHTS. A game without its own weights uses its genre's, then "default", then equal weights.
 
-Neither number is a probability or a forecast of views. No file, network or database code.
+AS-1 scaffolding: `equal_shares()` builds a table entry that `clean()` accepts and that ranks identically to the
+plain mean. Ship equal-share JSON only as a shape example (see `eval/score_weights_equal.example.json`); do not
+raise fitted gaming weights without labelled eval (gi-gta-label-sheet / labels-v2). Neither number is a
+probability or a forecast of views. No file, network or database code.
 """
 import hashlib
 import json
@@ -17,6 +20,15 @@ import json
 SCORES = ("hook", "payoff", "clarity", "emotion", "pacing")
 EQUAL = "equal"                       # the version name of equal weights
 DEFAULT = "default"                   # the table key used when a game and its genre have no weights of their own
+
+
+def equal_shares() -> dict[str, float]:
+    """One equal share per sub-score (sums to 1). Numerically the same ranking as the plain mean."""
+    share = round(1.0 / len(SCORES), 4)
+    # Fix float remainder on the last key so clean() / sum stay 1.0.
+    out = {k: share for k in SCORES[:-1]}
+    out[SCORES[-1]] = round(1.0 - share * (len(SCORES) - 1), 4)
+    return out
 
 
 def clean(weights) -> dict[str, float] | None:

@@ -453,8 +453,9 @@ def run_pipeline(input_path: Path, options: PipelineOptions, out_dir: Path,
         speech=lambda c: " ".join(s[2] for s in c.transcript.segments),
         min_gap=min_gap_for(t1 - t0, min(want, len(ranked)) if many else want),
         horizon=HORIZON if want > 10 else None,
-        picture=lambda c: int(c.features["picture"], 16) if c.features.get("picture") else None)
-    for reason in ("same picture", "same topic", "same speech"):      # repeats dropped, by why (job counts)
+        picture=lambda c: int(c.features["picture"], 16) if c.features.get("picture") else None,
+        kind=lambda c: (c.meta or {}).get("kind") if isinstance(c.meta, dict) else None)
+    for reason in ("same picture", "same topic", "same speech", "same kind"):  # repeats dropped, by why
         dropped = sum(1 for _i, why in skipped if why.startswith(reason))
         if dropped:
             timer.count("repeat_" + reason.split()[1], dropped)

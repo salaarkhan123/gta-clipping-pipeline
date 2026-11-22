@@ -1,0 +1,23 @@
+{
+  "default": {
+    "hook": 0.2,
+    "payoff": 0.2,
+    "clarity": 0.2,
+    "emotion": 0.2,
+    "pacing": 0.2
+  },
+  "gta5": {
+    "hook": 0.2,
+    "payoff": 0.2,
+    "clarity": 0.2,
+    "emotion": 0.2,
+    "pacing": 0.2
+  },
+  "roleplay": {
+    "hook": 0.2,
+    "payoff": 0.2,
+    "clarity": 0.2,
+    "emotion": 0.2,
+    "pacing": 0.2
+  }
+}

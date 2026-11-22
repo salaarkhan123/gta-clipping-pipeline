@@ -1,6 +1,6 @@
 // Fixed ClutchClips coaching lines for AI rating sub-scores. Derived only from the numeric
 // part the API already returns (clip.scores / clip.virality) — no new backend tip fields.
-// Honest AI opinion; never a view forecast or a letter grade.
+// Honest AI opinion of highlight quality for gaming clips; never a view forecast or a letter grade.
 
 export type ScoreBand = "strong" | "mid" | "weak";
 
@@ -14,32 +14,32 @@ export function scoreBand(value: number): ScoreBand {
 
 type BandCopy = Record<ScoreBand, string>;
 
-// One short sentence per known dimension × band. Unknown keys fall back to a generic line.
+// One short sentence per known dimension × band. Gaming verbs; unknown keys fall back.
 const COPY: Record<string, BandCopy> = {
   hook: {
-    strong: "Opens with a clear grab — the AI thinks viewers know why to stay.",
-    mid: "The open is serviceable; a sharper first beat would land harder.",
-    weak: "The open is soft — lead with the punch or a payoff tease.",
+    strong: "Opens hard — crash, kill, yell, or fail lands in the first seconds.",
+    mid: "The open is serviceable; lead sooner with the punch or a payoff tease.",
+    weak: "Soft open — cut the lobby or drive-up and start on the beat.",
   },
   payoff: {
-    strong: "Pays off what it promises — the turn lands cleanly.",
-    mid: "The ending works; tighten the beat so the punch hits sooner.",
-    weak: "The payoff fizzles — cut sooner or make the turn clearer.",
+    strong: "Pays off cleanly — clutch, fail, punchline, or chase ending lands.",
+    mid: "The ending works; tighten so the turn hits sooner.",
+    weak: "Payoff fizzles — cut sooner or make the turn clearer.",
   },
   clarity: {
-    strong: "Easy to follow — the moment reads without explanation.",
-    mid: "Mostly clear; trim dead air or muddy lines that slow the read.",
-    weak: "Hard to follow — cut clutter so the beat is obvious.",
+    strong: "Cold viewers get the stakes — the beat reads without the rest of the VOD.",
+    mid: "Mostly clear; trim muddy lines or missing setup that slow the read.",
+    weak: "Hard to follow cold — keep the line that names who, what, and the turn.",
   },
   emotion: {
-    strong: "Strong reaction energy — the feel of the moment comes through.",
-    mid: "Some heat; lean harder into the biggest reaction.",
+    strong: "Strong reaction energy — laugh, rage, hype, or shock comes through.",
+    mid: "Some heat; lean harder into the biggest streamer reaction.",
     weak: "Flat energy — keep the biggest reaction and cut the quiet.",
   },
   pacing: {
-    strong: "Moves at a clip-friendly pace — little drag between beats.",
-    mid: "Pace is okay; shave the lulls between the peaks.",
-    weak: "Drags — cut pauses so the clip keeps moving.",
+    strong: "Clip-friendly pace — little dead air between gaming beats.",
+    mid: "Pace is okay; shave lulls between the peaks.",
+    weak: "Drags — cut pauses and post-payoff hang so it keeps moving.",
   },
   flow: {
     strong: "Beats connect smoothly — the clip feels continuous.",
@@ -47,12 +47,12 @@ const COPY: Record<string, BandCopy> = {
     weak: "Choppy — re-cut so each beat leads into the next.",
   },
   value: {
-    strong: "Feels worth watching on its own — a complete beat.",
+    strong: "Feels worth watching on its own — a complete gaming beat.",
     mid: "Decent value; make the one reason to watch clearer.",
     weak: "Thin on its own — sharpen what makes this moment matter.",
   },
   trend: {
-    strong: "Fits what travels in gaming clips right now, in the AI's view.",
+    strong: "Fits what travels in gaming Shorts right now, in the AI's view.",
     mid: "Somewhat timely; lean into the more recognisable beat.",
     weak: "Feels dated or niche — frame the moment for a wider gaming crowd.",
   },

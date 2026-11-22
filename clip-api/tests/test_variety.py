@@ -73,6 +73,46 @@ def test_fewer_clips_when_not_enough_distinct_candidates():
     assert names == ["a"] and len(skipped) == 1
 
 
+def test_third_same_kind_within_horizon_is_skipped_for_gaming_mix():
+    def with_kind(c, kind):
+        c.meta = {**(c.meta or {}), "kind": kind}
+        return c
+
+    ranked = [
+        with_kind(cand("f1", 1000, "Fail one ragdoll"), "fail"),
+        with_kind(cand("f2", 2000, "Fail two wallbang"), "fail"),
+        with_kind(cand("f3", 3000, "Fail three dive"), "fail"),
+        with_kind(cand("c1", 4000, "Clutch escape"), "clutch"),
+    ]
+    picked, skipped = pick_distinct(
+        ranked, 4, window=lambda c: (c.start, c.end), meta=lambda c: c.meta,
+        speech=lambda c: c.text, kind=lambda c: (c.meta or {}).get("kind"))
+    assert [c.name for c in picked] == ["f1", "f2", "c1"]
+    assert skipped == [(2, "same kind (fail) as picked clips")]
+
+
+def test_kind_cap_does_not_apply_across_horizon():
+    ranked = [
+        cand("f1", 1000, "Fail early"),
+        cand("f2", 2000, "Fail mid"),
+        cand("f3", 2930, "Fail late"),  # ≥900 s from both earlier fails' windows
+    ]
+    for c, k in zip(ranked, ("fail", "fail", "fail")):
+        c.meta = {**(c.meta or {}), "kind": k}
+    picked, skipped = pick_distinct(
+        ranked, 3, window=lambda c: (c.start, c.end), meta=lambda c: c.meta,
+        speech=lambda c: c.text, horizon=900.0, kind=lambda c: (c.meta or {}).get("kind"))
+    assert [c.name for c in picked] == ["f1", "f2", "f3"] and skipped == []
+
+
+def test_missing_kind_is_not_limited():
+    ranked = [cand("a", 1000, "One"), cand("b", 2000, "Two"), cand("c", 3000, "Three")]
+    picked, skipped = pick_distinct(
+        ranked, 3, window=lambda c: (c.start, c.end), meta=lambda c: c.meta,
+        speech=lambda c: c.text, kind=lambda c: (c.meta or {}).get("kind"))
+    assert [c.name for c in picked] == ["a", "b", "c"] and skipped == []
+
+
 def test_pipeline_drops_a_repeated_topic_and_keeps_distinct_ones(three_bursts, tmp_path, transcriber):
     # Two of the three bursts get the same title; the third is distinct. Asking for 3 gives 2 distinct clips.
     def judge(text, frame, ctx):

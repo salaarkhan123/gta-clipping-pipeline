@@ -26,6 +26,12 @@ between the candidates' frames is under PICTURE_VARIES (a fixed camera: a react 
 frame looks alike and the test is off. Both numbers come from the two tuning videos: the 2-hour GTA benchmark has
 five moments on one screen 0-2 bits apart, the next pair 11 bits apart and a median of 31; the Zias react video
 has a median of 11 and 4 pairs of different moments within 4 bits, which the median rule leaves alone.
+
+A fourth test, on the judge's `kind` (funny / argument / reaction / clutch / fail / story), only when the caller
+passes `kind`: within the topic horizon (or always when horizon is None), keep at most KIND_CAP clips of the same
+label. The third identical fail near two other fails is skipped so a long VOD returns a mix of gaming moments
+instead of one kind dominating. Candidates with no kind are not limited this way. Score order is unchanged:
+better clips are still considered first.
 """
 import re
 from pathlib import Path
@@ -39,6 +45,7 @@ COMMON_POOL = 4
 SAME_PICTURE = 4          # of 64 bits: two frames this close are the same screen
 PICTURE_VARIES = 20       # the picture test is on only when the median distance between frames is at least this
 MIN_PICTURES = 4          # ... and at least this many candidates have a frame
+KIND_CAP = 2              # at most this many of the same judge kind within the kind horizon
 STOPWORDS = frozenset(
     "the and for you this that with are was but not have has had his her they them then than what when where "
     "who why how all any can could would should will just get got its it's into out off over from your our "
@@ -119,16 +126,20 @@ def pictures_differ(pictures: list) -> bool:
 
 
 def pick_distinct(ranked: list, n: int, window, meta, speech, min_gap: float = MIN_GAP,
-                  horizon: float | None = None, picture=None) -> tuple[list, list[tuple[int, str]]]:
+                  horizon: float | None = None, picture=None, kind=None,
+                  kind_cap: int = KIND_CAP) -> tuple[list, list[tuple[int, str]]]:
     """Greedy over `ranked` (best first). `window(c)` -> (start, end), `meta(c)` -> judge dict or None,
     `speech(c)` -> transcript text. Returns (picked, skipped) where skipped is [(index in ranked, reason)].
-    `horizon`: compare topic and speech only between clips less than this many seconds apart (None = always).
+    `horizon`: compare topic, speech and kind only between clips less than this many seconds apart (None = always).
     `picture(c)` -> the candidate's picture_hash or None: with it, the same screen as a picked clip is skipped at
-    any distance (see the module text)."""
+    any distance (see the module text).
+    `kind(c)` -> judge kind label or None: when set, at most `kind_cap` clips of the same kind are kept inside the
+    horizon (gaming highlight mix)."""
     pictures = [picture(c) for c in ranked] if picture is not None else [None] * len(ranked)
     by_picture = pictures_differ(pictures)
     topics = _strip_common([tokens(topic_text(meta(c))) for c in ranked])
     words = [w if len(w) >= MIN_SPEECH_TOKENS else set() for w in (tokens(speech(c)) for c in ranked)]
+    kinds = [kind(c) if kind is not None else None for c in ranked]
     picked: list[int] = []
     skipped: list[tuple[int, str]] = []
     for i, c in enumerate(ranked):
@@ -150,6 +161,17 @@ def pick_distinct(ranked: list, n: int, window, meta, speech, min_gap: float = M
                 reason = "same speech as a picked clip"
             if reason:
                 break
+        if reason is None and kind is not None and kinds[i] and kind_cap > 0:
+            same = 0
+            for j in picked:
+                if kinds[j] != kinds[i]:
+                    continue
+                apart = gap(window(c), window(ranked[j]))
+                if horizon is not None and apart >= horizon:
+                    continue
+                same += 1
+            if same >= kind_cap:
+                reason = f"same kind ({kinds[i]}) as picked clips"
         if reason:
             skipped.append((i, reason))
         else:

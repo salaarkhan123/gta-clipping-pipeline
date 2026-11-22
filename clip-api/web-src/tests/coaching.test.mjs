@@ -51,6 +51,14 @@ test("coaching copy is AI opinion, never a letter grade or view forecast", () =>
   }
 });
 
+test("v2 coaching uses gaming highlight language", () => {
+  assert.match(coachingFor("hook", 90), /crash|kill|yell|fail/i);
+  assert.match(coachingFor("payoff", 90), /clutch|fail|punchline|chase/i);
+  assert.match(coachingFor("clarity", 90), /Cold viewers|stakes/i);
+  assert.match(coachingFor("emotion", 20), /reaction/i);
+  assert.match(coachingFor("pacing", 90), /dead air|gaming beats/i);
+});
+
 test("RatingParts wires coachingFor under each bar and keeps overall why", () => {
   const rating = source("components/clips/Rating.tsx");
   assert.match(rating, /coachingFor/);
