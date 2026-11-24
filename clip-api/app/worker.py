@@ -6,6 +6,7 @@ several worker processes can also share one queue: a job is claimed by exactly o
 """
 import hashlib
 import hmac
+import http.client
 import json
 import logging
 import math
@@ -16,7 +17,6 @@ import time
 from datetime import timedelta
 from pathlib import Path
 
-import httpx
 from sqlalchemy import select, update
 
 from . import ledger
@@ -37,7 +37,7 @@ from .pipeline.thumbs import canvas_of, write_thumbnail
 from .pipeline.transcribe import FasterWhisperTranscriber, Transcriber, Transcript, in_language
 from .pipeline.translate import detect_language, run_text_job, transcript_language, translate_captions
 from .pipeline.visual import FastembedClip
-from .security import is_public_https_url
+from .pinned_http import pinned_https_request
 from .storage import get_storage, transcript_key, transcript_parts_key, vindex_key
 from .thumbnail_jobs import PREFIX as THUMB_PREFIX, is_thumbnail_job, run_thumbnail_job, thumbnail_keys
 from .thumbnails import frame_key_of, words_for
@@ -657,14 +657,15 @@ def send_webhook(job_id: str) -> None:
         body = json.dumps({"job_id": job.id, "status": job.status, "credits_charged": job.credits_charged,
                            "error_code": job.error_code}, separators=(",", ":"))
     sig = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()
+    headers = {"content-type": "application/json", "x-clipapi-signature": f"sha256={sig}",
+               "user-agent": "ClutchClips-Webhook/1.0"}
     for attempt in (1, 2, 3):
         code = None
         try:
-            if is_public_https_url(url):   # re-checked at send time (SSRF guard)
-                resp = httpx.post(url, content=body, timeout=10, follow_redirects=False, headers={
-                    "content-type": "application/json", "x-clipapi-signature": f"sha256={sig}"})
-                code = resp.status_code
-        except httpx.HTTPError:
+            # One resolve + connect to that public address (SEC-001). Do not pre-check with a
+            # separate lookup — that would reintroduce DNS-rebinding TOCTOU.
+            code = pinned_https_request("POST", url, body=body.encode(), headers=headers, timeout=10)
+        except (OSError, ValueError, http.client.HTTPException):
             pass
         with new_session() as db:
             db.add(WebhookDelivery(job_id=job_id, url=url, status_code=code, attempt=attempt))

@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     s3_access_key_id: str = ""
     s3_secret_access_key: str = ""
     s3_region: str = "auto"
-    signed_url_ttl_sec: int = 3600
+    signed_url_ttl_sec: int = 1800    # SEC-013: capability URLs are bearer secrets; keep short
     retention_days: int = 7
 
     # Limits and cost guards
@@ -88,7 +88,10 @@ class Settings(BaseSettings):
     currency: str = "usd"
 
     # Auth and email
-    jwt_ttl_hours: int = 168
+    jwt_ttl_hours: int = 24           # SEC-006: was 168; shorter session reduces XSS/stolen-token blast radius
+    # Admin TOTP step-up (SEC-004). Off in dev/tests so existing admin fixtures keep working; required in prod.
+    admin_mfa_required: bool = False
+    admin_mfa_ttl_sec: int = 900      # how long a verified amfa claim stays valid for admin routes
     auto_verify_email: bool = True    # dev default; set false in prod once email delivery works
     # Email (app/emailer.py): resend | smtp | none. Empty: smtp when SMTP_HOST is set, otherwise none.
     email_provider: str = ""
@@ -248,6 +251,13 @@ class Settings(BaseSettings):
                             "or EMAIL_PROVIDER=smtp with SMTP_HOST")
         if self.publishing and not self.publish_token_key:
             problems.append("PUBLISH_TOKEN_KEY must be set when PUBLISHING is true")
+        if not self.admin_mfa_required:
+            problems.append("ADMIN_MFA_REQUIRED must be true (admin TOTP step-up; SEC-004)")
+        # SEC-016: prod must use object storage and a coherent Stripe pair (or neither until billing is live).
+        if self.storage_backend != "s3":
+            problems.append("STORAGE_BACKEND must be s3 in production (local disk is for dev only)")
+        if bool(self.stripe_secret_key) ^ bool(self.stripe_webhook_secret):
+            problems.append("STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET must both be set, or both empty")
         if problems:
             raise RuntimeError("Unsafe production config: " + "; ".join(problems))
 

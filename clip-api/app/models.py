@@ -34,6 +34,8 @@ class Account(Base):
     signup_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Can use the admin routes (/v1/admin/...) from a website login. Set with scripts/admin.py make-admin.
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # TOTP secret for admin step-up (SEC-004). Null until enrolled; never returned by the API after enroll.
+    mfa_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

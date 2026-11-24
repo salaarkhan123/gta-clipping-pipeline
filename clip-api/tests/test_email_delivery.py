@@ -188,8 +188,13 @@ def test_tokens_from_before_the_epoch_existed_die_on_the_first_bump(client):
 
 
 def prod(**over) -> Settings:
+    # Explicit empty Stripe pair so conftest's webhook env does not trip SEC-016 coherence check.
     base = dict(env="prod", secret_key="x" * 40, database_url="postgresql+psycopg://u:p@db/clip",
-                auto_verify_email=False, email_provider="resend", resend_api_key=KEY, smtp_host="")
+                auto_verify_email=False, email_provider="resend", resend_api_key=KEY, smtp_host="",
+                admin_mfa_required=True, storage_backend="s3",
+                s3_endpoint_url="https://example.r2.cloudflarestorage.com", s3_bucket="clips",
+                s3_access_key_id="id", s3_secret_access_key="secret",
+                stripe_secret_key="", stripe_webhook_secret="")
     return Settings(**{**base, **over})
 
 
@@ -202,6 +207,10 @@ def test_production_accepts_resend_with_a_key():
     ({"email_provider": "none"}, "email delivery must be configured"),
     ({"email_provider": ""}, "email delivery must be configured"),          # no SMTP_HOST either
     ({"auto_verify_email": True}, "AUTO_VERIFY_EMAIL must be false"),
+    ({"admin_mfa_required": False}, "ADMIN_MFA_REQUIRED must be true"),
+    ({"storage_backend": "local"}, "STORAGE_BACKEND must be s3"),
+    ({"stripe_secret_key": "only-one-side-set", "stripe_webhook_secret": ""},
+     "STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET"),
 ])
 def test_production_refuses_without_working_email(over, problem):
     with pytest.raises(RuntimeError, match=problem):

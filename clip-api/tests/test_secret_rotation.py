@@ -73,7 +73,10 @@ def test_api_keys_do_not_depend_on_the_secret_key(client, user, monkeypatch):
 
 def test_production_refuses_a_short_previous_key():
     prod = dict(env="prod", secret_key=NEW, database_url="postgresql://x/y", auto_verify_email=False,
-                email_provider="smtp", smtp_host="smtp.example.invalid")
+                email_provider="smtp", smtp_host="smtp.example.invalid", admin_mfa_required=True,
+                storage_backend="s3", s3_bucket="clips", s3_access_key_id="id", s3_secret_access_key="secret",
+                s3_endpoint_url="https://example.r2.cloudflarestorage.com",
+                stripe_secret_key="", stripe_webhook_secret="")
     with pytest.raises(RuntimeError, match="SECRET_KEY_PREVIOUS"):
         Settings(**prod, secret_key_previous="short").check_production()
     Settings(**prod, secret_key_previous=OLD).check_production()
